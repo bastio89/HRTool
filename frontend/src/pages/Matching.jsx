@@ -11,7 +11,7 @@ export default function Matching() {
   const [jobDescription, setJobDescription] = useState('')
   const [candidates, setCandidates] = useState([])
   const [selectedIds, setSelectedIds] = useState([])
-  const [selectAll, setSelectAll] = useState(true)
+  const [selectAll, setSelectAll] = useState(false)
   const [loading, setLoading] = useState(true)
   const [matching, setMatching] = useState(false)
   const [error, setError] = useState('')
@@ -26,7 +26,7 @@ export default function Matching() {
       jobsApi.getAll().catch(() => ({ data: [] })),
     ]).then(([candidateData, jobsData]) => {
         setCandidates(candidateData.data || [])
-        setSelectedIds((candidateData.data || []).map(c => c.id))
+        setSelectedIds([])
         setJobs(jobsData.data || [])
       })
       .catch(err => setError(err.message))
@@ -72,12 +72,15 @@ export default function Matching() {
       setError('Bitte füge eine Stellenbeschreibung ein.')
       return
     }
-    const idsToMatch = selectedIds.length > 0 ? selectedIds : undefined
+    if (selectedIds.length === 0) {
+      setError('Bitte wähle mindestens einen Bewerber aus.')
+      return
+    }
     setError('')
     setMatching(true)
 
     try {
-      const result = await matchingApi.run(jobDescription, jobTitle, idsToMatch)
+      const result = await matchingApi.run(jobDescription, jobTitle, selectedIds)
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
       setError(err.message)
@@ -297,7 +300,7 @@ export default function Matching() {
           <Button
             className="w-full py-5 text-[18px]"
             variant="dark"
-            disabled={matching || !jobDescription.trim() || candidates.length === 0}
+            disabled={matching || !jobDescription.trim() || selectedIds.length === 0}
             onClick={handleMatch}
           >
             {matching ? (

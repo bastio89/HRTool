@@ -63,7 +63,16 @@ router.post('/run', async (req, res) => {
 
     const matchingResults = await response.json();
 
-    // Save results
+    // De-Anonymisierung: echte Namen wieder einsetzen anhand der candidateId
+    const candidateMap = new Map(candidates.map(c => [c.id, c.name]));
+    if (matchingResults.results) {
+      matchingResults.results = matchingResults.results.map(r => ({
+        ...r,
+        candidateName: candidateMap.get(r.candidateId) || r.candidateName
+      }));
+    }
+
+    // Save results (mit echten Namen)
     const saveResult = db.prepare(`
       INSERT INTO matching_results (job_description, job_title, results)
       VALUES (?, ?, ?)

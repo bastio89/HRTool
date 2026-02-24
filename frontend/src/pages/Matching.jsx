@@ -23,11 +23,11 @@ export default function Matching() {
   useEffect(() => {
     Promise.all([
       candidatesApi.getAll(),
-      jobsApi.getAll().catch(() => ({ jobs: [] })),
+      jobsApi.getAll().catch(() => ({ data: [] })),
     ]).then(([candidateData, jobsData]) => {
         setCandidates(candidateData.data || [])
         setSelectedIds((candidateData.data || []).map(c => c.id))
-        setJobs(jobsData.jobs || [])
+        setJobs(jobsData.data || [])
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))

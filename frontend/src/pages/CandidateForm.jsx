@@ -8,7 +8,8 @@ const emptyCandidate = {
   name: '', email: '', phone: '', location: '',
   experience: '', skills: '', education: '',
   desired_salary: '', availability: '', languages: '',
-  certificates: '', drivers_license: '', mobility: '', notes: ''
+  certificates: '', drivers_license: '', mobility: '', notes: '',
+  status: 'Aktiv', tags: ''
 }
 
 export default function CandidateForm() {
@@ -27,8 +28,7 @@ export default function CandidateForm() {
           name: data.name || '', email: data.email || '', phone: data.phone || '', location: data.location || '',
           experience: data.experience || '', skills: data.skills || '', education: data.education || '',
           desired_salary: data.desired_salary || '', availability: data.availability || '', languages: data.languages || '',
-          certificates: data.certificates || '', drivers_license: data.drivers_license || '', mobility: data.mobility || '', notes: data.notes || '',
-        }))
+          certificates: data.certificates || '', drivers_license: data.drivers_license || '', mobility: data.mobility || '', notes: data.notes || '',          status: data.status || 'Aktiv', tags: data.tags || '',        }))
         .catch(err => setError(err.message))
         .finally(() => setLoading(false))
     }
@@ -143,6 +143,32 @@ export default function CandidateForm() {
             onChange={handleChange('notes')}
             rows={3}
           />
+        </Card>
+
+        <Card className="p-12">
+          <h2 className="text-[22px] font-semibold tracking-tight text-black mb-8">Weitere Einstellungen</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="flex flex-col gap-3">
+              <label className="text-[15px] font-semibold text-gray-500">Status</label>
+              <select
+                value={form.status}
+                onChange={handleChange('status')}
+                className="w-full px-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black appearance-none cursor-pointer
+                  focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+              >
+                <option value="Aktiv">Aktiv</option>
+                <option value="Passiv">Passiv</option>
+                <option value="In Prozess">In Prozess</option>
+                <option value="Blacklist">Blacklist</option>
+              </select>
+            </div>
+            <Input
+              label="Tags"
+              placeholder="Top-Kandidat, Remote, Senior (kommagetrennt)"
+              value={form.tags}
+              onChange={handleChange('tags')}
+            />
+          </div>
         </Card>
 
         <div className="flex items-center justify-end gap-5 pt-6 pb-12">

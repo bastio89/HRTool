@@ -1,9 +1,10 @@
 import { NavLink, Outlet, Link } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase } from 'lucide-react'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Übersicht' },
   { to: '/candidates', icon: Users, label: 'Bewerber' },
+  { to: '/jobs', icon: Briefcase, label: 'Stellen' },
   { to: '/matching', icon: GitCompare, label: 'Matching' },
   { to: '/history', icon: History, label: 'Historie' },
 ]

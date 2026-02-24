@@ -1,23 +1,26 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity } from 'lucide-react'
-import { candidatesApi, matchingApi } from '../api'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase } from 'lucide-react'
+import { candidatesApi, matchingApi, jobsApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
+  const [openJobsCount, setOpenJobsCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [statsData, historyData] = await Promise.all([
+        const [statsData, historyData, jobsData] = await Promise.all([
           candidatesApi.getStats().catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
-          matchingApi.getHistory().catch(() => ({ data: [] }))
+          matchingApi.getHistory().catch(() => ({ data: [] })),
+          jobsApi.getAll('Offen').catch(() => ({ jobs: [] }))
         ])
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
+        setOpenJobsCount((jobsData.jobs || []).length)
       } catch (err) {
         console.error(err)
       } finally {
@@ -72,13 +75,13 @@ export default function Dashboard() {
         </Card>
 
         <Card className="p-10">
-          <p className="text-[16px] font-medium text-gray-500 mb-6">Standorte</p>
-          <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{stats?.topLocations?.length || 0}</h3>
+          <p className="text-[16px] font-medium text-gray-500 mb-6">Offene Stellen</p>
+          <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{openJobsCount}</h3>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#0071e3]/10 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-[#0071e3]" />
+            <div className="w-8 h-8 rounded-full bg-[#8b5cf6]/10 flex items-center justify-center">
+              <Briefcase className="w-4 h-4 text-[#8b5cf6]" />
             </div>
-            <span className="text-[15px] font-medium text-[#0071e3]">Aktiv</span>
+            <Link to="/jobs" className="text-[15px] font-medium text-[#8b5cf6] hover:opacity-70 transition-opacity">Stellen verwalten</Link>
           </div>
         </Card>
       </div>

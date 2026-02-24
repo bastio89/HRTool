@@ -33,6 +33,8 @@ db.exec(`
     drivers_license TEXT,
     mobility TEXT,
     notes TEXT,
+    status TEXT DEFAULT 'Aktiv',
+    tags TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -44,6 +46,49 @@ db.exec(`
     results TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT,
+    requirements TEXT,
+    location TEXT,
+    type TEXT DEFAULT 'Vollzeit',
+    status TEXT DEFAULT 'Offen',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS pipeline_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    candidate_id INTEGER NOT NULL,
+    stage TEXT NOT NULL DEFAULT 'Beworben',
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    UNIQUE(job_id, candidate_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'Notiz',
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+  );
 `);
+
+// Safe migrations for existing databases
+const migrations = [
+  `ALTER TABLE candidates ADD COLUMN status TEXT DEFAULT 'Aktiv'`,
+  `ALTER TABLE candidates ADD COLUMN tags TEXT`,
+];
+for (const sql of migrations) {
+  try { db.exec(sql); } catch (_) { /* column already exists */ }
+}
 
 module.exports = db;

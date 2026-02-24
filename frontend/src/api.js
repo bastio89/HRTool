@@ -36,6 +36,33 @@ export const matchingApi = {
   deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),
 };
 
+// Jobs API
+export const jobsApi = {
+  getAll: (status = '') => request(`/jobs${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  getById: (id) => request(`/jobs/${id}`),
+  create: (data) => request('/jobs', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => request(`/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id) => request(`/jobs/${id}`, { method: 'DELETE' }),
+};
+
+// Pipeline API
+export const pipelineApi = {
+  getByJob: (jobId) => request(`/pipeline/job/${jobId}`),
+  addCandidate: (jobId, candidateId, stage) =>
+    request(`/pipeline/job/${jobId}/add`, { method: 'POST', body: JSON.stringify({ candidate_id: candidateId, stage }) }),
+  updateStage: (entryId, stage) =>
+    request(`/pipeline/${entryId}/stage`, { method: 'PUT', body: JSON.stringify({ stage }) }),
+  removeEntry: (entryId) => request(`/pipeline/${entryId}`, { method: 'DELETE' }),
+};
+
+// Activities API
+export const activitiesApi = {
+  getByCandidate: (candidateId) => request(`/activities/candidate/${candidateId}`),
+  create: (candidateId, type, content) =>
+    request(`/activities/candidate/${candidateId}`, { method: 'POST', body: JSON.stringify({ type, content }) }),
+  delete: (id) => request(`/activities/${id}`, { method: 'DELETE' }),
+};
+
 // Health
 export const healthApi = {
   check: () => request('/health'),

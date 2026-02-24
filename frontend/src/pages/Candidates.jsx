@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 
@@ -109,7 +109,16 @@ export default function Candidates() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-[24px] font-semibold tracking-tight text-black truncate">{candidate.name}</h3>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <h3 className="text-[24px] font-semibold tracking-tight text-black truncate">{candidate.name}</h3>
+                      {candidate.status && candidate.status !== 'Aktiv' && (
+                        <span className={`px-3 py-1 rounded-full text-[13px] font-semibold ${
+                          candidate.status === 'Passiv' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' :
+                          candidate.status === 'In Prozess' ? 'bg-[#0071e3]/10 text-[#0071e3]' :
+                          candidate.status === 'Blacklist' ? 'bg-[#ff3b30]/10 text-[#ff3b30]' :
+                          'bg-[#34c759]/10 text-[#34c759]'}`}>{candidate.status}</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-6 mt-3 flex-wrap">
                       {candidate.location && (
                         <span className="flex items-center gap-2 text-[15px] font-medium text-gray-500">
@@ -119,6 +128,9 @@ export default function Candidates() {
                       {candidate.availability && (
                         <span className="text-[15px] font-medium text-[#34c759]">{candidate.availability}</span>
                       )}
+                      {candidate.tags && candidate.tags.split(',').filter(Boolean).slice(0, 2).map((tag, i) => (
+                        <span key={i} className="px-3 py-1 rounded-full bg-[#0071e3]/10 text-[13px] font-semibold text-[#0071e3]">{tag.trim()}</span>
+                      ))}
                     </div>
                   </div>
 
@@ -140,6 +152,15 @@ export default function Candidates() {
                 </div>
 
                 <div className="flex items-center gap-3 ml-8">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-12 h-12 !p-0 rounded-full hover:bg-[#0071e3]/10 hover:text-[#0071e3]"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/candidates/${candidate.id}/detail`) }}
+                    title="Aktivitätslog"
+                  >
+                    <Activity className="w-5 h-5" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

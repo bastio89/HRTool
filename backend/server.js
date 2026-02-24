@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const candidatesRouter = require('./src/routes/candidates');
 const matchingRouter = require('./src/routes/matching');
+const jobsRouter = require('./src/routes/jobs');
+const pipelineRouter = require('./src/routes/pipeline');
+const activitiesRouter = require('./src/routes/activities');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,6 +17,9 @@ app.use(express.json({ limit: '10mb' }));
 // Routes
 app.use('/api/candidates', candidatesRouter);
 app.use('/api/matching', matchingRouter);
+app.use('/api/jobs', jobsRouter);
+app.use('/api/pipeline', pipelineRouter);
+app.use('/api/activities', activitiesRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

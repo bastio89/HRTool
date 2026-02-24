@@ -72,7 +72,7 @@ router.post('/', (req, res) => {
     const {
       name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages,
-      certificates, drivers_license, mobility, notes
+      certificates, drivers_license, mobility, notes, status, tags
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -82,14 +82,14 @@ router.post('/', (req, res) => {
     const result = db.prepare(`
       INSERT INTO candidates (name, email, phone, location, experience, skills,
         education, desired_salary, availability, languages, certificates,
-        drivers_license, mobility, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        drivers_license, mobility, notes, status, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
-      notes || null
+      notes || null, status || 'Aktiv', tags || null
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(result.lastInsertRowid);
@@ -111,7 +111,7 @@ router.put('/:id', (req, res) => {
     const {
       name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages,
-      certificates, drivers_license, mobility, notes
+      certificates, drivers_license, mobility, notes, status, tags
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -123,14 +123,14 @@ router.put('/:id', (req, res) => {
         name = ?, email = ?, phone = ?, location = ?, experience = ?,
         skills = ?, education = ?, desired_salary = ?, availability = ?,
         languages = ?, certificates = ?, drivers_license = ?, mobility = ?,
-        notes = ?, updated_at = CURRENT_TIMESTAMP
+        notes = ?, status = ?, tags = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
-      notes || null, req.params.id
+      notes || null, status || 'Aktiv', tags || null, req.params.id
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);

@@ -132,7 +132,7 @@ export default function MatchingResults() {
                     <h3 className="text-[26px] font-semibold tracking-tight text-black">{result.candidateName}</h3>
                     <ScoreBadge score={result.score} />
                   </div>
-                  <p className="text-[16px] font-medium text-gray-500 mt-3 line-clamp-2 leading-relaxed">
+                  <p className="text-[16px] font-medium text-gray-500 mt-3 leading-relaxed">
                     {result.summary}
                   </p>
                 </div>

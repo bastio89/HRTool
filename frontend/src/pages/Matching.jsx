@@ -240,7 +240,7 @@ export default function Matching() {
               <div>
                 <h2 className="text-[22px] font-semibold tracking-tight text-black">Bewerberauswahl</h2>
                 <p className="text-[15px] font-medium text-gray-500 mt-1">
-                  {selectedIds.length} / {candidates.length} ausgewählt
+                  {selectedIds.length} von {candidates.length} ausgewählt
                 </p>
               </div>
             </div>

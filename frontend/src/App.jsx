@@ -8,6 +8,7 @@ import Matching from './pages/Matching'
 import MatchingResults from './pages/MatchingResults'
 import History from './pages/History'
 import Jobs from './pages/Jobs'
+import JobForm from './pages/JobForm'
 import Pipeline from './pages/Pipeline'
 
 export default function App() {
@@ -20,6 +21,8 @@ export default function App() {
         <Route path="candidates/:id/edit" element={<CandidateForm />} />
         <Route path="candidates/:id/detail" element={<CandidateDetail />} />
         <Route path="jobs" element={<Jobs />} />
+        <Route path="jobs/new" element={<JobForm />} />
+        <Route path="jobs/:id/edit" element={<JobForm />} />
         <Route path="pipeline/:jobId" element={<Pipeline />} />
         <Route path="matching" element={<Matching />} />
         <Route path="matching/results/:id" element={<MatchingResults />} />

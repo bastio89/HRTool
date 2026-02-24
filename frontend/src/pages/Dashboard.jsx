@@ -16,11 +16,11 @@ export default function Dashboard() {
         const [statsData, historyData, jobsData] = await Promise.all([
           candidatesApi.getStats().catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
           matchingApi.getHistory().catch(() => ({ data: [] })),
-          jobsApi.getAll('Offen').catch(() => ({ jobs: [] }))
+          jobsApi.getAll('Offen').catch(() => ({ data: [] }))
         ])
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
-        setOpenJobsCount((jobsData.jobs || []).length)
+        setOpenJobsCount((jobsData.data || []).length)
       } catch (err) {
         console.error(err)
       } finally {

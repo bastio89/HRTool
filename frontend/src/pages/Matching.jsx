@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GitCompare, FileText, Users, Search, CheckSquare, Square, Loader2, Zap } from 'lucide-react'
-import { candidatesApi, matchingApi } from '../api'
+import { GitCompare, FileText, Users, Search, CheckSquare, Square, Loader2, Zap, Briefcase, PenLine, ChevronRight } from 'lucide-react'
+import { candidatesApi, matchingApi, jobsApi } from '../api'
 import { Card, Button, Textarea, Input, EmptyState, LoadingSpinner } from '../components/UI'
 
 export default function Matching() {
   const navigate = useNavigate()
+  const [jobMode, setJobMode] = useState('manual') // 'manual' | 'existing'
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [candidates, setCandidates] = useState([])
@@ -15,16 +16,41 @@ export default function Matching() {
   const [matching, setMatching] = useState(false)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [jobs, setJobs] = useState([])
+  const [selectedJobId, setSelectedJobId] = useState(null)
+  const [jobSearch, setJobSearch] = useState('')
 
   useEffect(() => {
-    candidatesApi.getAll()
-      .then(data => {
-        setCandidates(data.data || [])
-        setSelectedIds((data.data || []).map(c => c.id))
+    Promise.all([
+      candidatesApi.getAll(),
+      jobsApi.getAll().catch(() => ({ jobs: [] })),
+    ]).then(([candidateData, jobsData]) => {
+        setCandidates(candidateData.data || [])
+        setSelectedIds((candidateData.data || []).map(c => c.id))
+        setJobs(jobsData.jobs || [])
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
+
+  const handleSelectJob = (job) => {
+    setSelectedJobId(job.id)
+    setJobTitle(job.title || '')
+    // Build description from job fields
+    const parts = []
+    if (job.description) parts.push(job.description)
+    if (job.requirements) parts.push(`Anforderungen:\n${job.requirements}`)
+    if (job.location) parts.push(`Standort: ${job.location}`)
+    if (job.type) parts.push(`Arbeitsmodell: ${job.type}`)
+    setJobDescription(parts.join('\n\n'))
+  }
+
+  const handleModeSwitch = (mode) => {
+    setJobMode(mode)
+    if (mode === 'manual') {
+      setSelectedJobId(null)
+    }
+  }
 
   const toggleCandidate = (id) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -90,6 +116,98 @@ export default function Matching() {
               </div>
               <h2 className="text-[24px] font-semibold tracking-tight text-black">Stellenbeschreibung</h2>
             </div>
+
+            {/* Mode toggle */}
+            <div className="flex gap-3 mb-10 p-1.5 bg-[#f5f5f7] rounded-[20px] w-fit">
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('manual')}
+                className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition-all cursor-pointer ${
+                  jobMode === 'manual' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'
+                }`}
+              >
+                <PenLine className="w-4 h-4" /> Manuell eingeben
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeSwitch('existing')}
+                className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition-all cursor-pointer ${
+                  jobMode === 'existing' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'
+                }`}
+              >
+                <Briefcase className="w-4 h-4" /> Aus Stellen wählen
+                {jobs.length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[12px] font-bold">{jobs.length}</span>
+                )}
+              </button>
+            </div>
+
+            {/* Job picker */}
+            {jobMode === 'existing' && (
+              <div className="mb-10">
+                {jobs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 rounded-[24px] bg-[#f5f5f7]">
+                    <Briefcase className="w-10 h-10 text-gray-300 mb-4" />
+                    <p className="text-[17px] font-semibold text-gray-400">Noch keine Stellen angelegt</p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/jobs')}
+                      className="mt-5 px-6 py-3 rounded-full bg-black text-white text-[15px] font-semibold cursor-pointer hover:bg-gray-800 transition-colors"
+                    >
+                      Stellen verwalten →
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative mb-5">
+                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Stellen durchsuchen..."
+                        value={jobSearch}
+                        onChange={e => setJobSearch(e.target.value)}
+                        className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[15px] font-medium text-black border border-transparent
+                          focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+                      />
+                    </div>
+                    <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
+                      {jobs
+                        .filter(j => !jobSearch || j.title.toLowerCase().includes(jobSearch.toLowerCase()) || (j.location && j.location.toLowerCase().includes(jobSearch.toLowerCase())))
+                        .map(job => (
+                          <button
+                            key={job.id}
+                            type="button"
+                            onClick={() => handleSelectJob(job)}
+                            className={`w-full flex items-center gap-5 p-5 rounded-[20px] text-left transition-all cursor-pointer ${
+                              selectedJobId === job.id
+                                ? 'bg-[#0071e3] text-white shadow-md'
+                                : 'bg-[#f5f5f7] hover:bg-[#e8e8ed] text-black'
+                            }`}
+                          >
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              selectedJobId === job.id ? 'bg-white/20' : 'bg-white'
+                            }`}>
+                              <Briefcase className={`w-5 h-5 ${selectedJobId === job.id ? 'text-white' : 'text-gray-500'}`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[16px] font-semibold truncate">{job.title}</p>
+                              <p className={`text-[13px] font-medium mt-0.5 truncate ${selectedJobId === job.id ? 'text-white/70' : 'text-gray-500'}`}>
+                                {[job.location, job.type, job.status].filter(Boolean).join(' · ')}
+                              </p>
+                            </div>
+                            <ChevronRight className={`w-5 h-5 flex-shrink-0 ${selectedJobId === job.id ? 'text-white' : 'text-gray-400'}`} />
+                          </button>
+                        ))}
+                    </div>
+                    {selectedJobId && (
+                      <p className="mt-4 text-[14px] font-semibold text-[#34c759] flex items-center gap-2">
+                        ✓ Stelle ausgewählt – Felder unten wurden vorausgefüllt
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
             <Input
               label="Stellentitel"

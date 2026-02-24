@@ -34,9 +34,10 @@ router.post('/run', async (req, res) => {
       body: JSON.stringify({
         jobDescription,
         jobTitle: jobTitle || 'Unbenannte Stelle',
-        candidates: candidates.map(c => ({
+        candidates: candidates.map((c, idx) => ({
           id: c.id,
-          name: c.name,
+          // Name und persönliche Daten werden anonymisiert – kein Einfluss auf Bewertung
+          name: `Kandidat ${idx + 1}`,
           experience: c.experience,
           skills: c.skills,
           education: c.education,

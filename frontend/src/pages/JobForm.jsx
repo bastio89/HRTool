@@ -9,7 +9,7 @@ const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
 
 const emptyJob = {
   title: '', description: '', requirements: '',
-  location: '', type: 'Vollzeit', status: 'Offen'
+  location: '', type: 'Vollzeit', status: 'Offen', url: ''
 }
 
 export default function JobForm() {
@@ -31,6 +31,7 @@ export default function JobForm() {
           location: data.location || '',
           type: data.type || 'Vollzeit',
           status: data.status || 'Offen',
+          url: data.url || '',
         }))
         .catch(err => setError(err.message))
         .finally(() => setLoading(false))
@@ -99,6 +100,13 @@ export default function JobForm() {
               placeholder="München / Remote / Hybrid"
               value={form.location}
               onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+            />
+            <Input
+              label="Link zur Stelle"
+              placeholder="https://karriere.unternehmen.de/stelle/..."
+              value={form.url}
+              onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+              type="url"
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col gap-3">

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Briefcase, MapPin, Users,
-  Clock, Trash2, ChevronRight
+  Clock, Trash2, ChevronRight, ExternalLink
 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
@@ -138,6 +138,17 @@ export default function Jobs() {
                         <Clock className="w-4 h-4" />
                         {new Date(job.created_at).toLocaleDateString('de-DE')}
                       </span>
+                      {job.url && (
+                        <a
+                          href={job.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="flex items-center gap-1.5 text-[15px] font-medium text-[#0071e3] hover:opacity-70 transition-opacity"
+                        >
+                          <ExternalLink className="w-4 h-4" /> Zur Stelle
+                        </a>
+                      )}
                     </div>
                   </div>
 

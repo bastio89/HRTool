@@ -44,15 +44,15 @@ router.get('/:id', (req, res) => {
 // POST create job
 router.post('/', (req, res) => {
   try {
-    const { title, description, requirements, location, type, status } = req.body;
+    const { title, description, requirements, location, type, status, url } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
     const result = db.prepare(`
-      INSERT INTO jobs (title, description, requirements, location, type, status)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO jobs (title, description, requirements, location, type, status, url)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       title, description || null, requirements || null,
-      location || null, type || 'Vollzeit', status || 'Offen'
+      location || null, type || 'Vollzeit', status || 'Offen', url || null
     );
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(job);
@@ -64,13 +64,13 @@ router.post('/', (req, res) => {
 // PUT update job
 router.put('/:id', (req, res) => {
   try {
-    const { title, description, requirements, location, type, status } = req.body;
+    const { title, description, requirements, location, type, status, url } = req.body;
     db.prepare(`
-      UPDATE jobs SET title=?, description=?, requirements=?, location=?, type=?, status=?,
+      UPDATE jobs SET title=?, description=?, requirements=?, location=?, type=?, status=?, url=?,
         updated_at=CURRENT_TIMESTAMP
       WHERE id=?
     `).run(title, description || null, requirements || null, location || null,
-      type || 'Vollzeit', status || 'Offen', req.params.id);
+      type || 'Vollzeit', status || 'Offen', url || null, req.params.id);
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     res.json(job);
   } catch (err) {

@@ -1,8 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
+
+const STATUS_OPTIONS = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist']
+const STATUS_STYLE = {
+  'Aktiv':      'bg-[#34c759]/10 text-[#34c759]',
+  'Passiv':     'bg-[#ff9f0a]/10 text-[#ff9f0a]',
+  'In Prozess': 'bg-[#0071e3]/10 text-[#0071e3]',
+  'Blacklist':  'bg-[#ff3b30]/10 text-[#ff3b30]',
+}
+const SORT_OPTIONS = [
+  { value: 'name_asc',   label: 'Name A–Z' },
+  { value: 'name_desc',  label: 'Name Z–A' },
+  { value: 'newest',     label: 'Neueste zuerst' },
+  { value: 'oldest',     label: 'Älteste zuerst' },
+]
 
 export default function Candidates() {
   const [candidates, setCandidates] = useState([])
@@ -10,28 +24,18 @@ export default function Candidates() {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [filterStatus, setFilterStatus] = useState([])   // active status filters
+  const [filterAvail, setFilterAvail] = useState('')     // availability text filter
+  const [sortBy, setSortBy] = useState('newest')
+  const [showFilters, setShowFilters] = useState(false)
   const navigate = useNavigate()
 
-  const loadCandidates = async (searchTerm = '') => {
-    setLoading(true)
-    try {
-      const data = await candidatesApi.getAll(searchTerm)
-      setCandidates(data.data || [])
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    loadCandidates()
+    candidatesApi.getAll()
+      .then(data => setCandidates(data.data || []))
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false))
   }, [])
-
-  useEffect(() => {
-    const timer = setTimeout(() => loadCandidates(search), 300)
-    return () => clearTimeout(timer)
-  }, [search])
 
   const handleDelete = async (id) => {
     try {
@@ -43,6 +47,37 @@ export default function Candidates() {
     }
   }
 
+  const toggleStatus = (s) =>
+    setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
+
+  const clearFilters = () => { setFilterStatus([]); setFilterAvail(''); setSearch('') }
+
+  const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0)
+
+  const filtered = useMemo(() => {
+    let list = [...candidates]
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        (c.skills && c.skills.toLowerCase().includes(q)) ||
+        (c.location && c.location.toLowerCase().includes(q)) ||
+        (c.tags && c.tags.toLowerCase().includes(q))
+      )
+    }
+    if (filterStatus.length > 0)
+      list = list.filter(c => filterStatus.includes(c.status || 'Aktiv'))
+    if (filterAvail)
+      list = list.filter(c => c.availability && c.availability.toLowerCase().includes(filterAvail.toLowerCase()))
+    list.sort((a, b) => {
+      if (sortBy === 'name_asc')  return a.name.localeCompare(b.name)
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name)
+      if (sortBy === 'oldest')    return (a.id || 0) - (b.id || 0)
+      return (b.id || 0) - (a.id || 0) // newest
+    })
+    return list
+  }, [candidates, search, filterStatus, filterAvail, sortBy])
+
   return (
     <div className="fade-in max-w-[1000px] mx-auto">
       {/* Header */}
@@ -50,7 +85,7 @@ export default function Candidates() {
         <div>
           <h1 className="text-[40px] font-semibold tracking-tight text-black">Bewerber</h1>
           <p className="text-[18px] text-gray-500 mt-3">
-            {candidates.length} Profile in der Datenbank
+            {loading ? '...' : `${filtered.length} von ${candidates.length} Profilen`}
           </p>
         </div>
         <Link to="/candidates/new">
@@ -61,39 +96,114 @@ export default function Candidates() {
         </Link>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-12">
-        <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Suche nach Name, Skills, Standort..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-16 pr-8 py-5 bg-[#f5f5f7] border border-transparent rounded-[24px] 
-            text-black text-[18px] placeholder:text-gray-400
-            focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 shadow-sm"
-        />
+      {/* Search + Filter bar */}
+      <div className="mb-8">
+        <div className="flex gap-4 mb-5">
+          <div className="relative flex-1">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Suche nach Name, Skills, Standort, Tags..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-16 pr-8 py-5 bg-[#f5f5f7] border border-transparent rounded-[24px]
+                text-black text-[18px] placeholder:text-gray-400
+                focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 shadow-sm"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full hover:bg-gray-200 flex items-center justify-center cursor-pointer transition-colors">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setShowFilters(v => !v)}
+            className={`flex items-center gap-3 px-7 py-4 rounded-[24px] text-[17px] font-semibold transition-all cursor-pointer border ${
+              showFilters || activeFilterCount > 0
+                ? 'bg-black text-white border-black'
+                : 'bg-[#f5f5f7] text-gray-700 border-transparent hover:bg-[#e8e8ed]'
+            }`}
+          >
+            <SlidersHorizontal className="w-5 h-5" />
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="w-6 h-6 rounded-full bg-white text-black text-[13px] font-bold flex items-center justify-center">{activeFilterCount}</span>
+            )}
+          </button>
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              className="appearance-none pl-12 pr-6 py-4 bg-[#f5f5f7] rounded-[24px] text-[17px] font-semibold text-gray-700 cursor-pointer border border-transparent hover:bg-[#e8e8ed] focus:outline-none transition-all"
+            >
+              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <ArrowUpDown className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+
+        {/* Filter panel */}
+        {showFilters && (
+          <div className="bg-white rounded-[28px] border border-gray-100/80 shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-8 space-y-7">
+            {/* Status filter */}
+            <div>
+              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Status</p>
+              <div className="flex flex-wrap gap-3">
+                {STATUS_OPTIONS.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => toggleStatus(s)}
+                    className={`px-5 py-2.5 rounded-full text-[15px] font-semibold transition-all cursor-pointer border ${
+                      filterStatus.includes(s)
+                        ? `${STATUS_STYLE[s]} border-current`
+                        : 'bg-[#f5f5f7] text-gray-600 border-transparent hover:bg-[#e8e8ed]'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Availability filter */}
+            <div>
+              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Verfügbarkeit</p>
+              <input
+                type="text"
+                placeholder="z.B. sofort, 3 Monate..."
+                value={filterAvail}
+                onChange={e => setFilterAvail(e.target.value)}
+                className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black border border-transparent
+                  focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+              />
+            </div>
+            {activeFilterCount > 0 && (
+              <button onClick={clearFilters} className="flex items-center gap-2 text-[15px] font-semibold text-[#ff3b30] hover:opacity-70 cursor-pointer transition-opacity">
+                <X className="w-4 h-4" /> Alle Filter zurücksetzen
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Candidates List */}
       {loading ? (
         <LoadingSpinner text="Bewerber werden geladen..." />
-      ) : candidates.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card className="p-16">
           <EmptyState
             icon={Briefcase}
             title="Keine Bewerber gefunden"
-            description={search ? 'Passe deine Suche an oder füge neue Bewerber hinzu.' : 'Starte indem du deinen ersten Bewerber anlegst.'}
+            description={candidates.length === 0 ? 'Starte indem du deinen ersten Bewerber anlegst.' : 'Keine Treffer für die gewählten Filter.'}
             action={
-              <Link to="/candidates/new">
-                <Button size="lg" variant="dark"><Plus className="w-5 h-5" /> Bewerber anlegen</Button>
-              </Link>
+              candidates.length === 0
+                ? <Link to="/candidates/new"><Button size="lg" variant="dark"><Plus className="w-5 h-5" /> Bewerber anlegen</Button></Link>
+                : <Button size="lg" variant="secondary" onClick={clearFilters}>Filter zurücksetzen</Button>
             }
           />
         </Card>
       ) : (
         <div className="space-y-6">
-          {candidates.map((candidate) => (
+          {filtered.map((candidate) => (
             <Card key={candidate.id} className="overflow-hidden p-0" hover>
               {/* Main row */}
               <div 

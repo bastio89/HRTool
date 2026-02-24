@@ -1,0 +1,92 @@
+{
+  "name": "HR Bewerber-Matching",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hr-matching",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "hr-matching"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract data from webhook\nconst jobDescription = $input.first().json.body.jobDescription;\nconst jobTitle = $input.first().json.body.jobTitle || 'Unbenannte Stelle';\nconst candidates = $input.first().json.body.candidates || [];\n\n// Create one item per candidate for processing\nconst items = candidates.map(candidate => ({\n  json: {\n    candidate,\n    jobDescription,\n    jobTitle\n  }\n}));\n\nreturn items;"
+      },
+      "id": "prepare-candidates",
+      "name": "Kandidaten vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-oss:20b', prompt: `Du bist ein erfahrener HR-Experte und Recruiting-Spezialist. Bewerte wie gut der folgende Bewerber zu der Stellenbeschreibung passt.\n\nSTELLENBESCHREIBUNG:\n${$json.jobDescription}\n\nBEWERBER-PROFIL:\nName: ${$json.candidate.name}\nBerufserfahrung: ${$json.candidate.experience || 'Nicht angegeben'}\nSkills: ${$json.candidate.skills || 'Nicht angegeben'}\nAusbildung: ${$json.candidate.education || 'Nicht angegeben'}\nSprachen: ${$json.candidate.languages || 'Nicht angegeben'}\nZertifikate: ${$json.candidate.certificates || 'Nicht angegeben'}\nStandort: ${$json.candidate.location || 'Nicht angegeben'}\nGehaltsvorstellung: ${$json.candidate.desired_salary || 'Nicht angegeben'}\nVerfügbarkeit: ${$json.candidate.availability || 'Nicht angegeben'}\nFührerschein: ${$json.candidate.drivers_license || 'Nicht angegeben'}\nMobilität: ${$json.candidate.mobility || 'Nicht angegeben'}\n\nBewerte den Bewerber auf einer Skala von 0.00 bis 1.00 (1.00 = perfekte Übereinstimmung).\n\nAntworte AUSSCHLIESSLICH im folgenden JSON-Format ohne zusätzlichen Text:\n{\"score\": 0.XX, \"summary\": \"Kurze Zusammenfassung in 2-3 Sätzen warum dieser Score vergeben wurde.\", \"strengths\": [\"Stärke 1\", \"Stärke 2\"], \"weaknesses\": [\"Schwäche 1\", \"Schwäche 2\"]}`, stream: false }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "ollama-call",
+      "name": "Ollama Matching",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const candidate = item.json.candidate || {};\n  let ollamaResponse = item.json.response || '';\n  \n  // Try to parse the LLM response\n  let score = 0;\n  let summary = 'Bewertung konnte nicht durchgeführt werden.';\n  let strengths = [];\n  let weaknesses = [];\n  \n  try {\n    // Extract JSON from response (handle markdown code blocks)\n    let jsonStr = ollamaResponse;\n    const jsonMatch = ollamaResponse.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      jsonStr = jsonMatch[0];\n    }\n    const parsed = JSON.parse(jsonStr);\n    score = Math.min(1, Math.max(0, parseFloat(parsed.score) || 0));\n    summary = parsed.summary || summary;\n    strengths = parsed.strengths || [];\n    weaknesses = parsed.weaknesses || [];\n  } catch (e) {\n    // If parsing fails, try to extract score from text\n    const scoreMatch = ollamaResponse.match(/(\\d+\\.\\d+)/);\n    if (scoreMatch) {\n      score = Math.min(1, Math.max(0, parseFloat(scoreMatch[1])));\n    }\n    summary = 'Score wurde aus der LLM-Antwort extrahiert. Details nicht verfügbar.';\n  }\n  \n  results.push({\n    candidateId: candidate.id,\n    candidateName: candidate.name,\n    score: Math.round(score * 100) / 100,\n    summary,\n    strengths,\n    weaknesses\n  });\n}\n\n// Sort by score descending\nresults.sort((a, b) => b.score - a.score);\n\nreturn [{ json: { results, matchedAt: new Date().toISOString() } }];"
+      },
+      "id": "parse-results",
+      "name": "Ergebnisse aufbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Kandidaten vorbereiten", "type": "main", "index": 0 }]
+      ]
+    },
+    "Kandidaten vorbereiten": {
+      "main": [
+        [{ "node": "Ollama Matching", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ollama Matching": {
+      "main": [
+        [{ "node": "Ergebnisse aufbereiten", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ergebnisse aufbereiten": {
+      "main": [
+        [{ "node": "Respond to Webhook", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

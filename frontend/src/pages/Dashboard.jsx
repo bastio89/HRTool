@@ -128,7 +128,8 @@ export default function Dashboard() {
 
         {/* Top Locations */}
         <Card className="p-12">
-          <h2 className="text-[28px] font-semibold tracking-tight text-black mb-12">Top Standorte</h2>
+          <h2 className="text-[28px] font-semibold tracking-tight text-black mb-2">Top Standorte</h2>
+          <p className="text-[15px] text-gray-500 mb-12">Nach Bewerberherkunft</p>
           {stats?.topLocations?.length > 0 ? (
             <div className="space-y-8">
               {stats.topLocations.map(({ location, count }, idx) => (

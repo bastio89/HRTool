@@ -129,6 +129,27 @@ db.exec(`
     value TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS interviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pipeline_entry_id INTEGER NOT NULL,
+    candidate_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+    interview_date TEXT NOT NULL,
+    interview_time TEXT,
+    duration_minutes INTEGER DEFAULT 60,
+    interview_type TEXT DEFAULT 'vor Ort',
+    location TEXT,
+    meeting_link TEXT,
+    participants TEXT,
+    notes TEXT,
+    status TEXT DEFAULT 'geplant',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (pipeline_entry_id) REFERENCES pipeline_entries(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+  );
 `);
 
 // Safe migrations for existing databases
@@ -170,6 +191,11 @@ const indexes = [
   `CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id)`,
+  // Interviews: FK & date lookups
+  `CREATE INDEX IF NOT EXISTS idx_interviews_pipeline_entry ON interviews(pipeline_entry_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_interviews_date ON interviews(interview_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_interviews_candidate ON interviews(candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_interviews_job ON interviews(job_id)`,
 ];
 for (const sql of indexes) {
   try { db.exec(sql); } catch (_) { /* index already exists */ }

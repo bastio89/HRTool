@@ -179,3 +179,20 @@ export const settingsApi = {
   getExpired: () => request('/settings/dsgvo/expired'),
   deleteExpired: () => request('/settings/dsgvo/delete-expired', { method: 'DELETE' }),
 };
+
+// Interviews API
+export const interviewsApi = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.from) q.set('from', params.from);
+    if (params.to) q.set('to', params.to);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return request(`/interviews${qs ? `?${qs}` : ''}`);
+  },
+  getUpcoming: () => request('/interviews/upcoming'),
+  getByPipelineEntry: (entryId) => request(`/interviews/pipeline/${entryId}`),
+  create: (data) => request('/interviews', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id, data) => request(`/interviews/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (id) => request(`/interviews/${id}`, { method: 'DELETE' }),
+};

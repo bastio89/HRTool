@@ -8,6 +8,7 @@ const DEFAULT_WIDGETS = [
   { id: 'locations', label: 'Top Standorte', icon: 'MapPin', visible: true },
   { id: 'sources', label: 'Quellen-Analyse', icon: 'Share2', visible: true },
   { id: 'dsgvo', label: 'DSGVO-Status', icon: 'ShieldAlert', visible: true },
+  { id: 'calendar', label: 'Interviews', icon: 'Calendar', visible: true },
 ]
 
 function getStorageKey(userId) {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert } from 'lucide-react'
-import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi } from '../api'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone } from 'lucide-react'
+import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi, interviewsApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [activePipelines, setActivePipelines] = useState([])
   const [sourceStats, setSourceStats] = useState(null)
   const [dsgvoData, setDsgvoData] = useState(null)
+  const [upcomingInterviews, setUpcomingInterviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [n8nStatus, setN8nStatus] = useState(null)
   const { widgets, visibleWidgets, toggleWidget, reorder, resetToDefault } = useWidgetConfig()
@@ -27,7 +28,9 @@ export default function Dashboard() {
           candidatesApi.getSourceStats().catch(() => ({ sources: [], total: 0 })),
         ])
         const dsgvoResult = await settingsApi.getExpired().catch(() => null)
+        const interviewsResult = await interviewsApi.getUpcoming().catch(() => ({ data: [] }))
         setDsgvoData(dsgvoResult)
+        setUpcomingInterviews(interviewsResult.data || [])
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
         setActivePipelines(pipelineData.data || [])
@@ -79,6 +82,7 @@ export default function Dashboard() {
           case 'locations': return null // rendered inside matches when both visible, standalone otherwise handled below
           case 'sources': return sourceStats?.sources?.length > 0 ? <SourcesWidget key="sources" sourceStats={sourceStats} /> : null
           case 'dsgvo': return dsgvoData ? <DSGVOWidget key="dsgvo" data={dsgvoData} /> : null
+          case 'calendar': return <CalendarWidget key="calendar" interviews={upcomingInterviews} />
           default: return null
         }
       })}
@@ -371,6 +375,67 @@ function DSGVOWidget({ data }) {
               {data.expiredCount} Bewerber haben die Aufbewahrungsfrist von {data.retentionMonths} Monaten überschritten
             </p>
           </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function CalendarWidget({ interviews }) {
+  const typeIcons = { 'Video': Video, 'Telefon': Phone, 'vor Ort': MapPin }
+  const statusColors = {
+    geplant: 'bg-[#0071e3]/10 text-[#0071e3]',
+    bestätigt: 'bg-[#34c759]/10 text-[#34c759]',
+    abgeschlossen: 'bg-gray-100 dark:bg-gray-800 text-gray-500',
+    abgesagt: 'bg-[#ff3b30]/10 text-[#ff3b30]',
+  }
+
+  return (
+    <Card className="p-6 sm:p-10">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <Calendar className="w-5 h-5 text-[#ff9f0a]" />
+          <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">Anstehende Interviews</h2>
+        </div>
+        <span className="px-3 py-1 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[14px] font-bold">
+          {interviews.length}
+        </span>
+      </div>
+
+      {interviews.length === 0 ? (
+        <p className="text-[15px] text-gray-500 dark:text-gray-400 text-center py-8">Keine anstehenden Interviews in den nächsten 14 Tagen</p>
+      ) : (
+        <div className="space-y-3">
+          {interviews.slice(0, 6).map(iv => {
+            const TypeIcon = typeIcons[iv.interview_type] || MapPin
+            return (
+              <div key={iv.id} className="flex items-center gap-4 p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors">
+                <div className="w-12 h-12 rounded-[14px] bg-white dark:bg-[#1c1c1e] flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
+                  <span className="text-[10px] font-bold text-[#ff9f0a] uppercase leading-none">
+                    {new Date(iv.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { month: 'short' })}
+                  </span>
+                  <span className="text-[18px] font-bold text-black dark:text-white leading-tight">
+                    {new Date(iv.interview_date + 'T00:00:00').getDate()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-semibold text-black dark:text-white truncate">{iv.candidate_name}</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                    {iv.job_title}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {iv.interview_time && (
+                    <span className="text-[13px] font-medium text-gray-500">{iv.interview_time}</span>
+                  )}
+                  <TypeIcon className="w-4 h-4 text-gray-400" />
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColors[iv.status] || statusColors.geplant}`}>
+                    {iv.status}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </Card>

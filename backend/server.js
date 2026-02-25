@@ -13,6 +13,7 @@ const authRouter = require('./src/routes/auth');
 const cvParserRouter = require('./src/routes/cv-parser');
 const auditRouter = require('./src/routes/audit');
 const settingsRouter = require('./src/routes/settings');
+const interviewsRouter = require('./src/routes/interviews');
 const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
@@ -43,6 +44,7 @@ app.use('/api/uploads', uploadsRouter);
 app.use('/api/cv-parser', cvParserRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/interviews', interviewsRouter);
 
 /**
  * @swagger

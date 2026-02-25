@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare
+  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone
 } from 'lucide-react'
-import { jobsApi, pipelineApi, candidatesApi, matchingApi } from '../api'
+import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi } from '../api'
+import InterviewScheduler from '../components/InterviewScheduler'
 import { Button, LoadingSpinner } from '../components/UI'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
@@ -37,6 +38,8 @@ export default function Pipeline() {
   const [newNote, setNewNote] = useState('')
   const [loadingNotes, setLoadingNotes] = useState(false)
   const [matchingRunning, setMatchingRunning] = useState(false)
+  const [interviewModal, setInterviewModal] = useState(null) // { entry }
+  const [entryInterviews, setEntryInterviews] = useState({}) // { [entryId]: interview[] }
 
   const loadBoard = async () => {
     const [jobData, pipelineData, candidateData] = await Promise.all([
@@ -50,7 +53,22 @@ export default function Pipeline() {
     setLoading(false)
   }
 
+  const loadInterviews = async (board) => {
+    const allEntries = Object.values(board).flat()
+    const results = {}
+    await Promise.all(allEntries.map(async (e) => {
+      try {
+        const res = await interviewsApi.getByPipelineEntry(e.id)
+        if (res.data?.length > 0) results[e.id] = res.data
+      } catch {}
+    }))
+    setEntryInterviews(results)
+  }
+
   useEffect(() => { loadBoard() }, [jobId])
+  useEffect(() => {
+    if (Object.keys(board).length > 0) loadInterviews(board)
+  }, [board])
 
   // Drag & Drop handlers
   const handleDragStart = (entry) => setDragEntry(entry)
@@ -244,9 +262,11 @@ export default function Pipeline() {
                   <KanbanCard
                     key={entry.id}
                     entry={entry}
+                    interviews={entryInterviews[entry.id] || []}
                     onDragStart={() => handleDragStart(entry)}
                     onRemove={() => handleRemove(entry.id, stage)}
                     onOpenNotes={() => openNotes(entry.id, entry.candidate_name)}
+                    onOpenInterview={() => setInterviewModal({ entry })}
                   />
                 ))}
               </div>
@@ -419,11 +439,21 @@ export default function Pipeline() {
         </div>,
         document.body
       )}
+
+      {/* Interview Scheduler Modal */}
+      {interviewModal && (
+        <InterviewScheduler
+          open={!!interviewModal}
+          onClose={() => setInterviewModal(null)}
+          entry={interviewModal.entry}
+          onSaved={() => loadInterviews(board)}
+        />
+      )}
     </div>
   )
 }
 
-function KanbanCard({ entry, onDragStart, onRemove, onOpenNotes }) {
+function KanbanCard({ entry, interviews, onDragStart, onRemove, onOpenNotes, onOpenInterview }) {
   return (
     <div
       draggable
@@ -458,6 +488,24 @@ function KanbanCard({ entry, onDragStart, onRemove, onOpenNotes }) {
           ))}
         </div>
       )}
+      {/* Interview info */}
+      {interviews.length > 0 && (() => {
+        const next = interviews.find(iv => iv.status === 'geplant' || iv.status === 'bestätigt') || interviews[0]
+        const typeIcon = next.interview_type === 'Video' ? Video : next.interview_type === 'Telefon' ? Phone : MapPin
+        const TypeIcon = typeIcon
+        return (
+          <div className="mt-3 p-2.5 rounded-[12px] bg-[#ff9f0a]/5 border border-[#ff9f0a]/10">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3 h-3 text-[#ff9f0a]" />
+              <span className="text-[12px] font-semibold text-[#ff9f0a]">
+                {new Date(next.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}
+                {next.interview_time && ` · ${next.interview_time}`}
+              </span>
+              <TypeIcon className="w-3 h-3 text-[#ff9f0a] ml-auto" />
+            </div>
+          </div>
+        )
+      })()}
       <Link
         to={`/candidates/${entry.candidate_id}/detail`}
         onClick={e => e.stopPropagation()}
@@ -465,12 +513,23 @@ function KanbanCard({ entry, onDragStart, onRemove, onOpenNotes }) {
       >
         <Activity className="w-3.5 h-3.5" /> Profil & Log
       </Link>
-      <button
-        onClick={(e) => { e.stopPropagation(); onOpenNotes() }}
-        className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
-      >
-        <MessageSquare className="w-3.5 h-3.5" /> Notizen
-      </button>
+      <div className="flex items-center gap-4 mt-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenNotes() }}
+          className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
+        >
+          <MessageSquare className="w-3.5 h-3.5" /> Notizen
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenInterview() }}
+          className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] transition-colors cursor-pointer"
+        >
+          <Calendar className="w-3.5 h-3.5" /> Interview
+          {interviews.length > 0 && (
+            <span className="w-4 h-4 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[10px] font-bold flex items-center justify-center">{interviews.length}</span>
+          )}
+        </button>
+      </div>
     </div>
   )
 }

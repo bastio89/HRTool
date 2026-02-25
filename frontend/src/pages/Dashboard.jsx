@@ -112,7 +112,7 @@ export default function Dashboard() {
                 'Abgesagt': 'bg-[#ff3b30]/10 text-[#ff3b30]',
               }
               return (
-                <Link key={job.id} to={`/jobs/${job.id}/pipeline`}>
+                <Link key={job.id} to={`/pipeline/${job.id}`}>
                   <Card hover className="p-8 h-full">
                     <div className="flex items-start gap-5 mb-6">
                       <div className="w-12 h-12 rounded-full bg-[#0071e3]/10 flex items-center justify-center flex-shrink-0">

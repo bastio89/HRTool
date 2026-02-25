@@ -199,6 +199,15 @@ export const settingsApi = {
   deleteExpired: () => request('/settings/dsgvo/delete-expired', { method: 'DELETE' }),
 };
 
+// Ratings API
+export const ratingsApi = {
+  getByCandidate: (candidateId) => request(`/ratings/candidate/${candidateId}`),
+  getAverage: (candidateId) => request(`/ratings/candidate/${candidateId}/average`),
+  getBatchAverages: (candidateIds) => request('/ratings/candidates/averages', { method: 'POST', body: JSON.stringify({ candidateIds }) }),
+  create: (candidateId, data) => request(`/ratings/candidate/${candidateId}`, { method: 'POST', body: JSON.stringify(data) }),
+  delete: (id) => request(`/ratings/${id}`, { method: 'DELETE' }),
+};
+
 // Interviews API
 export const interviewsApi = {
   getAll: (params = {}) => {

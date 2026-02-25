@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer } from 'lucide-react'
-import { candidatesApi } from '../api'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer, Star } from 'lucide-react'
+import { candidatesApi, ratingsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 import CSVImportDialog from '../components/CSVImportDialog'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
@@ -43,6 +43,7 @@ export default function Candidates() {
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [printCandidate, setPrintCandidate] = useState(null)
+  const [candidateRatings, setCandidateRatings] = useState({})
   const navigate = useNavigate()
 
   // Debounce search input
@@ -83,6 +84,14 @@ export default function Candidates() {
       setCandidates(data.data || [])
       setTotalCount(data.total || 0)
       setTotalPages(data.totalPages || 1)
+      // Load ratings for displayed candidates
+      const ids = (data.data || []).map(c => c.id)
+      if (ids.length > 0) {
+        try {
+          const rRes = await ratingsApi.getBatchAverages(ids)
+          setCandidateRatings(rRes.data || {})
+        } catch (_) {}
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -490,6 +499,12 @@ export default function Candidates() {
                       ))}
                       {candidate.source && (
                         <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-[#8b5cf6]/10 text-[12px] sm:text-[13px] font-semibold text-[#8b5cf6]">{candidate.source}</span>
+                      )}
+                      {candidateRatings[candidate.id] && (
+                        <span className="flex items-center gap-1 text-[13px] sm:text-[14px] font-semibold text-[#ff9f0a]">
+                          <Star className="w-3.5 h-3.5 fill-[#ff9f0a]" />
+                          {candidateRatings[candidate.id].average}
+                        </span>
                       )}
                     </div>
 

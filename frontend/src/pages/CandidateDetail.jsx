@@ -5,7 +5,7 @@ import {
   MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock,
   Upload, Download, File, Image, X, Printer
 } from 'lucide-react'
-import { candidatesApi, activitiesApi, uploadsApi } from '../api'
+import { candidatesApi, activitiesApi, uploadsApi, ratingsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 
@@ -49,20 +49,30 @@ export default function CandidateDetail() {
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
+  const [ratings, setRatings] = useState([])
+  const [ratingAverages, setRatingAverages] = useState({})
+  const [ratingOverall, setRatingOverall] = useState(null)
+  const [newRating, setNewRating] = useState({ category: 'gesamt', rating: 0, comment: '' })
+  const [hoverRating, setHoverRating] = useState(0)
+  const [ratingSubmitting, setRatingSubmitting] = useState(false)
 
   const candidateId = id
 
   const loadData = async () => {
     try {
-      const [cRes, aRes, fRes] = await Promise.all([
+      const [cRes, aRes, fRes, rRes] = await Promise.all([
         candidatesApi.getById(candidateId),
         activitiesApi.getByCandidate(candidateId),
         uploadsApi.getByCandidate(candidateId).catch(() => ({ data: [] })),
+        ratingsApi.getByCandidate(candidateId).catch(() => ({ data: [], averages: {}, overall: null })),
       ])
       // getById returns the candidate object directly
       setCandidate(cRes?.id ? cRes : (cRes.candidate || cRes.data))
       setActivities(aRes.data || [])
       setFiles(fRes.data || [])
+      setRatings(rRes.data || [])
+      setRatingAverages(rRes.averages || {})
+      setRatingOverall(rRes.overall)
     } catch (err) {
       console.error(err)
     } finally {
@@ -133,6 +143,44 @@ export default function CandidateDetail() {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB'
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
+
+  const handleAddRating = async (e) => {
+    e.preventDefault()
+    if (newRating.rating < 1) return
+    setRatingSubmitting(true)
+    try {
+      await ratingsApi.create(candidateId, newRating)
+      setNewRating({ category: 'gesamt', rating: 0, comment: '' })
+      setHoverRating(0)
+      const rRes = await ratingsApi.getByCandidate(candidateId)
+      setRatings(rRes.data || [])
+      setRatingAverages(rRes.averages || {})
+      setRatingOverall(rRes.overall)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setRatingSubmitting(false)
+    }
+  }
+
+  const handleDeleteRating = async (ratingId) => {
+    try {
+      await ratingsApi.delete(ratingId)
+      const rRes = await ratingsApi.getByCandidate(candidateId)
+      setRatings(rRes.data || [])
+      setRatingAverages(rRes.averages || {})
+      setRatingOverall(rRes.overall)
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const RATING_CATEGORIES = [
+    { key: 'gesamt', label: 'Gesamt', color: '#ff9f0a' },
+    { key: 'fachlich', label: 'Fachlich', color: '#0071e3' },
+    { key: 'persönlich', label: 'Persönlich', color: '#34c759' },
+    { key: 'kulturfit', label: 'Kulturfit', color: '#8b5cf6' },
+  ]
 
   const getFileIcon = (mimeType) => {
     if (mimeType?.startsWith('image/')) return Image
@@ -215,6 +263,147 @@ export default function CandidateDetail() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Rating Section */}
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-[22px] font-semibold text-black dark:text-white">Bewertung</h2>
+          {ratingOverall !== null && (
+            <div className="flex items-center gap-2">
+              <div className="flex">
+                {[1, 2, 3, 4, 5].map(s => (
+                  <Star key={s} className={`w-5 h-5 ${s <= Math.round(ratingOverall) ? 'text-[#ff9f0a] fill-[#ff9f0a]' : 'text-gray-200 dark:text-gray-600'}`} />
+                ))}
+              </div>
+              <span className="text-[18px] font-bold text-black dark:text-white">{ratingOverall}</span>
+              <span className="text-[14px] font-medium text-gray-400">({ratings.length})</span>
+            </div>
+          )}
+        </div>
+
+        {/* Category averages */}
+        {Object.keys(ratingAverages).length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+            {RATING_CATEGORIES.map(({ key, label, color }) => {
+              const avg = ratingAverages[key]
+              if (!avg) return null
+              return (
+                <div key={key} className="rounded-[16px] p-4 text-center" style={{ background: `${color}10` }}>
+                  <p className="text-[12px] font-semibold uppercase tracking-wider mb-2" style={{ color }}>{label}</p>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Star className="w-4 h-4 fill-current" style={{ color }} />
+                    <span className="text-[20px] font-bold text-black dark:text-white">{avg}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Add rating form */}
+        <form onSubmit={handleAddRating} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-6 mb-8">
+          <p className="text-[15px] font-semibold text-gray-600 dark:text-gray-400 mb-4">Neue Bewertung</p>
+          <div className="flex flex-col gap-4">
+            {/* Category selector */}
+            <div className="flex gap-2 flex-wrap">
+              {RATING_CATEGORIES.map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setNewRating(prev => ({ ...prev, category: key }))}
+                  className={`px-4 py-2 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${
+                    newRating.category === key
+                      ? 'text-white shadow-md'
+                      : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'
+                  }`}
+                  style={newRating.category === key ? { backgroundColor: color } : {}}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Star selector */}
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onMouseEnter={() => setHoverRating(s)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  onClick={() => setNewRating(prev => ({ ...prev, rating: s }))}
+                  className="p-1 cursor-pointer transition-transform hover:scale-110"
+                >
+                  <Star className={`w-8 h-8 transition-colors ${
+                    s <= (hoverRating || newRating.rating)
+                      ? 'text-[#ff9f0a] fill-[#ff9f0a]'
+                      : 'text-gray-300 dark:text-gray-600'
+                  }`} />
+                </button>
+              ))}
+              {newRating.rating > 0 && (
+                <span className="ml-3 text-[16px] font-bold text-black dark:text-white">{newRating.rating}/5</span>
+              )}
+            </div>
+            {/* Comment */}
+            <textarea
+              value={newRating.comment}
+              onChange={e => setNewRating(prev => ({ ...prev, comment: e.target.value }))}
+              placeholder="Kommentar (optional)..."
+              rows={2}
+              className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none
+                focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+            />
+            <div className="flex justify-end">
+              <Button variant="dark" size="md" disabled={ratingSubmitting || newRating.rating < 1}>
+                <Star className="w-5 h-5" /> Bewerten
+              </Button>
+            </div>
+          </div>
+        </form>
+
+        {/* Rating history */}
+        {ratings.length === 0 ? (
+          <div className="text-center py-8">
+            <Star className="w-10 h-10 text-gray-200 dark:text-gray-600 mx-auto mb-3" />
+            <p className="text-[16px] font-semibold text-gray-400">Noch keine Bewertungen</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {ratings.map(r => {
+              const cat = RATING_CATEGORIES.find(c => c.key === r.category)
+              return (
+                <div key={r.id} className="flex items-start gap-4 p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] group">
+                  <div className="flex-shrink-0">
+                    <div className="flex">
+                      {[1, 2, 3, 4, 5].map(s => (
+                        <Star key={s} className={`w-4 h-4 ${s <= r.rating ? 'fill-[#ff9f0a] text-[#ff9f0a]' : 'text-gray-300 dark:text-gray-600'}`} />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-full text-[12px] font-semibold" style={{ background: `${cat?.color || '#999'}20`, color: cat?.color || '#999' }}>
+                        {cat?.label || r.category}
+                      </span>
+                      <span className="text-[13px] font-medium text-gray-400">{r.created_by}</span>
+                      <span className="text-[13px] font-medium text-gray-400">{formatDate(r.created_at)}</span>
+                    </div>
+                    {r.comment && (
+                      <p className="text-[15px] font-medium text-gray-700 dark:text-gray-300 mt-2">{r.comment}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteRating(r.id)}
+                    className="w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-[#ff3b30]" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Files Section */}

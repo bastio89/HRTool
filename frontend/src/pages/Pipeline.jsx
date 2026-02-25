@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone
+  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone, Star
 } from 'lucide-react'
-import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi } from '../api'
+import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi, ratingsApi } from '../api'
 import InterviewScheduler from '../components/InterviewScheduler'
 import { Button, LoadingSpinner } from '../components/UI'
 
@@ -40,6 +40,7 @@ export default function Pipeline() {
   const [matchingRunning, setMatchingRunning] = useState(false)
   const [interviewModal, setInterviewModal] = useState(null) // { entry }
   const [entryInterviews, setEntryInterviews] = useState({}) // { [entryId]: interview[] }
+  const [candidateRatings, setCandidateRatings] = useState({}) // { [candidateId]: { average, count } }
 
   const loadBoard = async () => {
     const [jobData, pipelineData, candidateData] = await Promise.all([
@@ -50,6 +51,15 @@ export default function Pipeline() {
     setJob(jobData)
     setBoard(pipelineData.board || {})
     setAllCandidates(candidateData.data || [])
+    // Load ratings for all pipeline candidates
+    const allEntries = Object.values(pipelineData.board || {}).flat()
+    const candidateIds = [...new Set(allEntries.map(e => e.candidate_id))]
+    if (candidateIds.length > 0) {
+      try {
+        const rRes = await ratingsApi.getBatchAverages(candidateIds)
+        setCandidateRatings(rRes.data || {})
+      } catch (_) {}
+    }
     setLoading(false)
   }
 
@@ -263,6 +273,7 @@ export default function Pipeline() {
                     key={entry.id}
                     entry={entry}
                     interviews={entryInterviews[entry.id] || []}
+                    rating={candidateRatings[entry.candidate_id]}
                     onDragStart={() => handleDragStart(entry)}
                     onRemove={() => handleRemove(entry.id, stage)}
                     onOpenNotes={() => openNotes(entry.id, entry.candidate_name)}
@@ -453,7 +464,7 @@ export default function Pipeline() {
   )
 }
 
-function KanbanCard({ entry, interviews, onDragStart, onRemove, onOpenNotes, onOpenInterview }) {
+function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview }) {
   return (
     <div
       draggable
@@ -464,7 +475,15 @@ function KanbanCard({ entry, interviews, onDragStart, onRemove, onOpenNotes, onO
         <div className="flex items-center gap-3 min-w-0">
           <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
           <div className="min-w-0">
-            <p className="text-[16px] font-semibold text-black dark:text-white truncate">{entry.candidate_name}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[16px] font-semibold text-black dark:text-white truncate">{entry.candidate_name}</p>
+              {rating && (
+                <span className="flex items-center gap-0.5 flex-shrink-0">
+                  <Star className="w-3.5 h-3.5 text-[#ff9f0a] fill-[#ff9f0a]" />
+                  <span className="text-[13px] font-bold text-[#ff9f0a]">{rating.average}</span>
+                </span>
+              )}
+            </div>
             {entry.location && (
               <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" />{entry.location}

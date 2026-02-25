@@ -130,6 +130,18 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS candidate_ratings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL,
+    category TEXT NOT NULL DEFAULT 'gesamt',
+    rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
+    comment TEXT,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS interviews (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pipeline_entry_id INTEGER NOT NULL,
@@ -191,6 +203,9 @@ const indexes = [
   `CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id)`,
+  // Ratings: FK & category lookups
+  `CREATE INDEX IF NOT EXISTS idx_ratings_candidate ON candidate_ratings(candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_ratings_category ON candidate_ratings(category)`,
   // Interviews: FK & date lookups
   `CREATE INDEX IF NOT EXISTS idx_interviews_pipeline_entry ON interviews(pipeline_entry_id)`,
   `CREATE INDEX IF NOT EXISTS idx_interviews_date ON interviews(interview_date)`,

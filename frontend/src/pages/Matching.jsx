@@ -97,9 +97,9 @@ export default function Matching() {
 
   return (
     <div className="fade-in max-w-[1200px] mx-auto">
-      <div className="mb-14">
-        <h1 className="text-[40px] font-semibold tracking-tight text-black">Stellen-Matching</h1>
-        <p className="text-[18px] text-gray-500 mt-3">
+      <div className="mb-8 sm:mb-14">
+        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Stellen-Matching</h1>
+        <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">
           Füge eine Stellenbeschreibung ein und finde die passendsten Bewerber
         </p>
       </div>

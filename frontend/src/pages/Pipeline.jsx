@@ -175,17 +175,19 @@ export default function Pipeline() {
   return (
     <div className="fade-in flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-8 mb-10">
-        <button onClick={() => navigate('/jobs')} className="w-12 h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer">
-          <ArrowLeft className="w-6 h-6 text-black" />
-        </button>
-        <div className="flex-1">
-          <p className="text-[15px] font-medium text-gray-400 mb-1">Pipeline</p>
-          <h1 className="text-[36px] font-semibold tracking-tight text-black leading-tight">
-            {job?.title}
-          </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-6 sm:mb-10">
+        <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
+          <button onClick={() => navigate('/jobs')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5 sm:mb-1">Pipeline</p>
+            <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black leading-tight truncate">
+              {job?.title}
+            </h1>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap ml-14 sm:ml-0">
           <div className="px-5 py-2.5 rounded-full bg-[#f5f5f7] text-[15px] font-medium text-gray-600">
             {totalInPipeline} Bewerber{totalInPipeline !== 1 ? '' : ''}
           </div>
@@ -201,7 +203,7 @@ export default function Pipeline() {
       </div>
 
       {/* Kanban board — horizontal scroll */}
-      <div className="flex gap-5 overflow-x-auto pb-6 -mx-2 px-2">
+      <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-6 -mx-2 px-2 snap-x snap-mandatory sm:snap-none">
         {STAGES.map(stage => {
           const style = stageStyle[stage]
           const cards = board[stage] || []

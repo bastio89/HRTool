@@ -53,20 +53,20 @@ export default function Jobs() {
   return (
     <div className="fade-in max-w-[1000px] mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-14">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 sm:mb-14 gap-4">
         <div>
-          <h1 className="text-[40px] font-semibold tracking-tight text-black">Stellenverwaltung</h1>
-          <p className="text-[18px] text-gray-500 mt-3">
+          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Stellenverwaltung</h1>
+          <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">
             {openCount} offene Stelle{openCount !== 1 ? 'n' : ''}
           </p>
         </div>
-        <Button size="lg" variant="dark" onClick={() => navigate('/jobs/new')}>
+        <Button size="md" variant="dark" onClick={() => navigate('/jobs/new')}>
           <Plus className="w-5 h-5" /> Neue Stelle
         </Button>
       </div>
 
       {/* Status Filter */}
-      <div className="flex items-center gap-3 mb-10">
+      <div className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-10 flex-wrap">
         {['', ...JOB_STATUSES].map(s => (
           <button
             key={s}
@@ -110,32 +110,32 @@ export default function Jobs() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-8 p-8">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 p-5 sm:p-8">
                   {/* Icon */}
-                  <div className="w-16 h-16 rounded-[20px] bg-[#f5f5f7] flex items-center justify-center flex-shrink-0">
-                    <Briefcase className="w-7 h-7 text-gray-600" />
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-[16px] sm:rounded-[20px] bg-[#f5f5f7] flex items-center justify-center flex-shrink-0">
+                    <Briefcase className="w-6 h-6 sm:w-7 sm:h-7 text-gray-600" />
                   </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <h3 className="text-[22px] font-semibold tracking-tight text-black">{job.title}</h3>
-                      <span className={`px-3 py-1 rounded-full text-[13px] font-semibold ${statusColor[job.status] || 'bg-gray-100 text-gray-500'}`}>
+                    <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                      <h3 className="text-[18px] sm:text-[22px] font-semibold tracking-tight text-black">{job.title}</h3>
+                      <span className={`px-3 py-1 rounded-full text-[12px] sm:text-[13px] font-semibold ${statusColor[job.status] || 'bg-gray-100 text-gray-500'}`}>
                         {job.status}
                       </span>
                     </div>
-                    <div className="flex items-center gap-6 mt-3 flex-wrap">
+                    <div className="flex items-center gap-3 sm:gap-6 mt-2 sm:mt-3 flex-wrap">
                       {job.location && (
-                        <span className="flex items-center gap-2 text-[15px] font-medium text-gray-500">
-                          <MapPin className="w-4 h-4" />{job.location}
+                        <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500">
+                          <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.location}
                         </span>
                       )}
-                      <span className="text-[15px] font-medium text-gray-500">{job.type}</span>
-                      <span className="flex items-center gap-2 text-[15px] font-medium text-gray-500">
-                        <Users className="w-4 h-4" />{job.candidate_count || 0} in Pipeline
+                      <span className="text-[13px] sm:text-[15px] font-medium text-gray-500">{job.type}</span>
+                      <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500">
+                        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.candidate_count || 0} in Pipeline
                       </span>
-                      <span className="flex items-center gap-2 text-[15px] font-medium text-gray-400">
-                        <Clock className="w-4 h-4" />
+                      <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
+                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         {new Date(job.created_at).toLocaleDateString('de-DE')}
                       </span>
                       {job.url && (
@@ -144,7 +144,7 @@ export default function Jobs() {
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
-                          className="flex items-center gap-1.5 text-[15px] font-medium text-[#0071e3] hover:opacity-70 transition-opacity"
+                          className="flex items-center gap-1.5 text-[13px] sm:text-[15px] font-medium text-[#0071e3] hover:opacity-70 transition-opacity"
                         >
                           <ExternalLink className="w-4 h-4" /> Zur Stelle
                         </a>
@@ -153,7 +153,7 @@ export default function Jobs() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3 self-end sm:self-center">
                     <Button variant="secondary" size="sm" onClick={() => navigate(`/jobs/${job.id}/edit`)}>
                       Bearbeiten
                     </Button>

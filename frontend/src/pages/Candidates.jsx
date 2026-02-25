@@ -103,41 +103,41 @@ export default function Candidates() {
   return (
     <div className="fade-in max-w-[1000px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-14">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 sm:mb-14 gap-4">
         <div>
-          <h1 className="text-[40px] font-semibold tracking-tight text-black">Bewerber</h1>
-          <p className="text-[18px] text-gray-500 mt-3">
+          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Bewerber</h1>
+          <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">
             {loading ? '...' : `${filtered.length} von ${candidates.length} Profilen`}
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           {filtered.length > 0 && (
-            <Button size="lg" variant="secondary" onClick={exportCSV}>
+            <Button size="md" variant="secondary" onClick={exportCSV}>
               <Download className="w-5 h-5" />
-              CSV Export
+              <span className="hidden sm:inline">CSV Export</span>
             </Button>
           )}
           <Link to="/candidates/new">
-            <Button size="lg" variant="dark">
+            <Button size="md" variant="dark">
               <Plus className="w-5 h-5" />
-              Neuer Bewerber
+              <span className="hidden sm:inline">Neuer Bewerber</span>
             </Button>
           </Link>
         </div>
       </div>
 
       {/* Search + Filter bar */}
-      <div className="mb-8">
-        <div className="flex gap-4 mb-5">
+      <div className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-5">
           <div className="relative flex-1">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400" />
+            <Search className="absolute left-5 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
             <input
               type="text"
               placeholder="Suche nach Name, Skills, Standort, Tags..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-16 pr-8 py-5 bg-[#f5f5f7] border border-transparent rounded-[24px]
-                text-black text-[18px] placeholder:text-gray-400
+              className="w-full pl-13 sm:pl-16 pr-8 py-4 sm:py-5 bg-[#f5f5f7] border border-transparent rounded-[20px] sm:rounded-[24px]
+                text-black text-[15px] sm:text-[18px] placeholder:text-gray-400
                 focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 shadow-sm"
             />
             {search && (
@@ -146,29 +146,31 @@ export default function Candidates() {
               </button>
             )}
           </div>
-          <button
-            onClick={() => setShowFilters(v => !v)}
-            className={`flex items-center gap-3 px-7 py-4 rounded-[24px] text-[17px] font-semibold transition-all cursor-pointer border ${
-              showFilters || activeFilterCount > 0
-                ? 'bg-black text-white border-black'
-                : 'bg-[#f5f5f7] text-gray-700 border-transparent hover:bg-[#e8e8ed]'
-            }`}
-          >
-            <SlidersHorizontal className="w-5 h-5" />
-            Filter
-            {activeFilterCount > 0 && (
-              <span className="w-6 h-6 rounded-full bg-white text-black text-[13px] font-bold flex items-center justify-center">{activeFilterCount}</span>
-            )}
-          </button>
-          <div className="relative">
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              className="appearance-none pl-12 pr-6 py-4 bg-[#f5f5f7] rounded-[24px] text-[17px] font-semibold text-gray-700 cursor-pointer border border-transparent hover:bg-[#e8e8ed] focus:outline-none transition-all"
+          <div className="flex gap-3 sm:gap-4">
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className={`flex items-center gap-2 sm:gap-3 px-5 sm:px-7 py-3 sm:py-4 rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer border ${
+                showFilters || activeFilterCount > 0
+                  ? 'bg-black text-white border-black'
+                  : 'bg-[#f5f5f7] text-gray-700 border-transparent hover:bg-[#e8e8ed]'
+              }`}
             >
-              {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <ArrowUpDown className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              <SlidersHorizontal className="w-5 h-5" />
+              <span className="hidden sm:inline">Filter</span>
+              {activeFilterCount > 0 && (
+                <span className="w-6 h-6 rounded-full bg-white text-black text-[13px] font-bold flex items-center justify-center">{activeFilterCount}</span>
+              )}
+            </button>
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="appearance-none pl-10 sm:pl-12 pr-4 sm:pr-6 py-3 sm:py-4 bg-[#f5f5f7] rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold text-gray-700 cursor-pointer border border-transparent hover:bg-[#e8e8ed] focus:outline-none transition-all"
+              >
+                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <ArrowUpDown className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+            </div>
           </div>
         </div>
 
@@ -237,91 +239,91 @@ export default function Candidates() {
             <Card key={candidate.id} className="overflow-hidden p-0" hover>
               {/* Main row */}
               <div 
-                className="flex items-center justify-between p-8 cursor-pointer"
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-5 sm:p-8 cursor-pointer gap-4 sm:gap-0"
                 onClick={() => setExpandedId(expandedId === candidate.id ? null : candidate.id)}
               >
-                <div className="flex items-center gap-8 flex-1 min-w-0">
+                <div className="flex items-start sm:items-center gap-4 sm:gap-8 flex-1 min-w-0">
                   {/* Avatar */}
-                  <div className="w-20 h-20 rounded-full bg-[#f5f5f7] flex items-center justify-center flex-shrink-0 border border-gray-200/50">
-                    <span className="text-[22px] font-semibold text-gray-600 tracking-tight">
+                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] flex items-center justify-center flex-shrink-0 border border-gray-200/50">
+                    <span className="text-[16px] sm:text-[22px] font-semibold text-gray-600 tracking-tight">
                       {candidate.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                     </span>
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <h3 className="text-[24px] font-semibold tracking-tight text-black truncate">{candidate.name}</h3>
+                    <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                      <h3 className="text-[18px] sm:text-[24px] font-semibold tracking-tight text-black break-words">{candidate.name}</h3>
                       {candidate.status && candidate.status !== 'Aktiv' && (
-                        <span className={`px-3 py-1 rounded-full text-[13px] font-semibold ${
+                        <span className={`px-3 py-1 rounded-full text-[12px] sm:text-[13px] font-semibold whitespace-nowrap ${
                           candidate.status === 'Passiv' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' :
                           candidate.status === 'In Prozess' ? 'bg-[#0071e3]/10 text-[#0071e3]' :
                           candidate.status === 'Blacklist' ? 'bg-[#ff3b30]/10 text-[#ff3b30]' :
                           'bg-[#34c759]/10 text-[#34c759]'}`}>{candidate.status}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-6 mt-3 flex-wrap">
+                    <div className="flex items-center gap-3 sm:gap-6 mt-2 sm:mt-3 flex-wrap">
                       {candidate.location && (
-                        <span className="flex items-center gap-2 text-[15px] font-medium text-gray-500">
-                          <MapPin className="w-4 h-4" /> {candidate.location}
+                        <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500">
+                          <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {candidate.location}
                         </span>
                       )}
                       {candidate.availability && (
-                        <span className="text-[15px] font-medium text-[#34c759]">{candidate.availability}</span>
+                        <span className="text-[13px] sm:text-[15px] font-medium text-[#34c759]">{candidate.availability}</span>
                       )}
                       {candidate.tags && candidate.tags.split(',').filter(Boolean).slice(0, 2).map((tag, i) => (
-                        <span key={i} className="px-3 py-1 rounded-full bg-[#0071e3]/10 text-[13px] font-semibold text-[#0071e3]">{tag.trim()}</span>
+                        <span key={i} className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-[#0071e3]/10 text-[12px] sm:text-[13px] font-semibold text-[#0071e3]">{tag.trim()}</span>
                       ))}
                       {candidate.source && (
-                        <span className="px-3 py-1 rounded-full bg-[#8b5cf6]/10 text-[13px] font-semibold text-[#8b5cf6]">{candidate.source}</span>
+                        <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-[#8b5cf6]/10 text-[12px] sm:text-[13px] font-semibold text-[#8b5cf6]">{candidate.source}</span>
                       )}
                     </div>
-                  </div>
 
-                  {/* Skills pills */}
-                  {candidate.skills && (
-                    <div className="hidden md:flex items-center gap-3 flex-wrap max-w-md">
-                      {candidate.skills.split(',').slice(0, 3).map((skill, i) => (
-                        <span key={i} className="px-4 py-2 rounded-full bg-[#f5f5f7] text-gray-700 text-[14px] font-medium">
-                          {skill.trim()}
-                        </span>
-                      ))}
-                      {candidate.skills.split(',').length > 3 && (
-                        <span className="text-[14px] font-medium text-gray-400 px-2">
-                          +{candidate.skills.split(',').length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                    {/* Skills pills - always below name/meta */}
+                    {candidate.skills && (
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap mt-3">
+                        {candidate.skills.split(',').slice(0, 4).map((skill, i) => (
+                          <span key={i} className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#f5f5f7] text-gray-700 text-[12px] sm:text-[14px] font-medium">
+                            {skill.trim()}
+                          </span>
+                        ))}
+                        {candidate.skills.split(',').length > 4 && (
+                          <span className="text-[12px] sm:text-[14px] font-medium text-gray-400 px-2">
+                            +{candidate.skills.split(',').length - 4}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3 ml-8">
+                <div className="flex items-center gap-2 sm:gap-3 ml-0 sm:ml-8 self-end sm:self-center flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-12 h-12 !p-0 rounded-full hover:bg-[#0071e3]/10 hover:text-[#0071e3]"
+                    className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#0071e3]/10 hover:text-[#0071e3]"
                     onClick={(e) => { e.stopPropagation(); navigate(`/candidates/${candidate.id}/detail`) }}
                     title="Aktivitätslog"
                   >
-                    <Activity className="w-5 h-5" />
+                    <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-12 h-12 !p-0 rounded-full"
+                    className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full"
                     onClick={(e) => { e.stopPropagation(); navigate(`/candidates/${candidate.id}/edit`) }}
                   >
-                    <Edit3 className="w-5 h-5" />
+                    <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-12 h-12 !p-0 rounded-full hover:bg-[#ff3b30]/10 hover:text-[#ff3b30]"
+                    className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#ff3b30]/10 hover:text-[#ff3b30]"
                     onClick={(e) => { e.stopPropagation(); setDeleteConfirm(candidate.id) }}
                   >
-                    <Trash2 className="w-5 h-5" />
+                    <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
-                  <div className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-[#f5f5f7] transition-colors ml-2">
-                    <ChevronDown className={`w-6 h-6 text-gray-400 transition-transform duration-400 ${expandedId === candidate.id ? 'rotate-180' : ''}`} />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full hover:bg-[#f5f5f7] transition-colors ml-1 sm:ml-2">
+                    <ChevronDown className={`w-5 h-5 sm:w-6 sm:h-6 text-gray-400 transition-transform duration-400 ${expandedId === candidate.id ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
               </div>

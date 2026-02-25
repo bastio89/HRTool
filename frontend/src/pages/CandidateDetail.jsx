@@ -153,20 +153,20 @@ export default function CandidateDetail() {
   return (
     <div className="fade-in max-w-[900px] mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-6 mb-10">
-        <button onClick={() => navigate(-1)} className="w-12 h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
-          <ArrowLeft className="w-6 h-6 text-black" />
+      <div className="flex items-center gap-4 sm:gap-6 mb-6 sm:mb-10">
+        <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
         </button>
         <div>
-          <p className="text-[15px] font-medium text-gray-400 mb-0.5">Bewerberprofil</p>
-          <h1 className="text-[36px] font-semibold tracking-tight text-black leading-tight">{candidate.name}</h1>
+          <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5">Bewerberprofil</p>
+          <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black leading-tight">{candidate.name}</h1>
         </div>
       </div>
 
       {/* Candidate Info Card */}
-      <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 p-10 mb-8">
-        <div className="flex items-start gap-8">
-          <div className="w-20 h-20 rounded-full bg-[#f5f5f7] flex items-center justify-center text-[28px] font-semibold text-gray-600 flex-shrink-0">
+      <div className="bg-white rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 p-5 sm:p-10 mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row items-start gap-5 sm:gap-8">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] flex items-center justify-center text-[22px] sm:text-[28px] font-semibold text-gray-600 flex-shrink-0">
             {candidate.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">

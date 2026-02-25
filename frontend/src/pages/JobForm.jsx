@@ -61,18 +61,18 @@ export default function JobForm() {
   return (
     <div className="fade-in max-w-[800px] mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-8 mb-14">
+      <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <button
           onClick={() => navigate('/jobs')}
-          className="w-12 h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer"
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
         >
-          <ArrowLeft className="w-6 h-6 text-black" />
+          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
         </button>
         <div>
-          <h1 className="text-[40px] font-semibold tracking-tight text-black">
+          <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black">
             {isEdit ? 'Stelle bearbeiten' : 'Neue Stelle anlegen'}
           </h1>
-          <p className="text-[18px] text-gray-500 mt-2">
+          <p className="text-[14px] sm:text-[18px] text-gray-500 mt-1 sm:mt-2">
             {isEdit ? 'Details der Stelle aktualisieren' : 'Neue Stelle in der Stellenverwaltung anlegen'}
           </p>
         </div>

@@ -60,31 +60,33 @@ export default function MatchingResults() {
 
   return (
     <div className="fade-in max-w-[1200px] mx-auto">
-      <div className="flex items-center gap-8 mb-14">
-        <button onClick={() => navigate(-1)} className="w-12 h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer">
-          <ArrowLeft className="w-6 h-6 text-black" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-[40px] font-semibold tracking-tight text-black">Matching-Ergebnisse</h1>
-          <div className="flex items-center gap-6 mt-3">
-            <span className="text-[18px] font-medium text-gray-500">{data?.job_title}</span>
-            {matchedAt && (
-              <span className="flex items-center gap-2 text-[15px] font-medium text-gray-400">
-                <Clock className="w-4 h-4" />
-                {new Date(matchedAt).toLocaleString('de-DE')}
-              </span>
-            )}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
+        <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
+          <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black">Matching-Ergebnisse</h1>
+            <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
+              <span className="text-[14px] sm:text-[18px] font-medium text-gray-500">{data?.job_title}</span>
+              {matchedAt && (
+                <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
+                  <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  {new Date(matchedAt).toLocaleString('de-DE')}
+                </span>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 ml-14 sm:ml-0">
           {results.length > 0 && (
-            <Button size="lg" variant="secondary" onClick={exportCSV}>
+            <Button size="md" variant="secondary" onClick={exportCSV}>
               <Download className="w-5 h-5" />
-              CSV Export
+              <span className="hidden sm:inline">CSV Export</span>
             </Button>
           )}
           <Link to="/matching">
-            <Button size="lg" variant="dark">Neues Matching</Button>
+            <Button size="md" variant="dark">Neues Matching</Button>
           </Link>
         </div>
       </div>

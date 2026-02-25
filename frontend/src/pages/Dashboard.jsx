@@ -33,10 +33,10 @@ export default function Dashboard() {
   if (loading) return <LoadingSpinner text="Dashboard wird geladen..." />
 
   return (
-    <div className="fade-in space-y-14">
+    <div className="fade-in space-y-8 sm:space-y-14">
       <div className="mb-4">
-        <h1 className="text-[40px] font-semibold tracking-tight text-black">Übersicht</h1>
-        <p className="text-[18px] text-gray-500 mt-3">Willkommen zurück. Hier ist der aktuelle Stand.</p>
+        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Übersicht</h1>
+        <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">Willkommen zurück. Hier ist der aktuelle Stand.</p>
       </div>
 
       {/* Stats Row */}

@@ -171,3 +171,11 @@ export const cvParserApi = {
     return response.json();
   },
 };
+
+// Settings API
+export const settingsApi = {
+  getAll: () => request('/settings'),
+  update: (key, value) => request(`/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  getExpired: () => request('/settings/dsgvo/expired'),
+  deleteExpired: () => request('/settings/dsgvo/delete-expired', { method: 'DELETE' }),
+};

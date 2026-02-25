@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2 } from 'lucide-react'
-import { candidatesApi, matchingApi, pipelineApi, healthApi } from '../api'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert } from 'lucide-react'
+import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
   const [sourceStats, setSourceStats] = useState(null)
+  const [dsgvoData, setDsgvoData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [n8nStatus, setN8nStatus] = useState(null)
   const { widgets, visibleWidgets, toggleWidget, reorder, resetToDefault } = useWidgetConfig()
@@ -25,6 +26,8 @@ export default function Dashboard() {
           healthApi.check().catch(() => ({ n8nStatus: 'unreachable' })),
           candidatesApi.getSourceStats().catch(() => ({ sources: [], total: 0 })),
         ])
+        const dsgvoResult = await settingsApi.getExpired().catch(() => null)
+        setDsgvoData(dsgvoResult)
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
         setActivePipelines(pipelineData.data || [])
@@ -75,6 +78,7 @@ export default function Dashboard() {
           case 'matches': return <MatchesAndLocationsWidget key="matches" matches={recentMatches} stats={stats} visibleWidgets={visibleWidgets} />
           case 'locations': return null // rendered inside matches when both visible, standalone otherwise handled below
           case 'sources': return sourceStats?.sources?.length > 0 ? <SourcesWidget key="sources" sourceStats={sourceStats} /> : null
+          case 'dsgvo': return dsgvoData ? <DSGVOWidget key="dsgvo" data={dsgvoData} /> : null
           default: return null
         }
       })}
@@ -330,6 +334,45 @@ function SourcesWidget({ sourceStats }) {
           )
         })}
       </div>
+    </Card>
+  )
+}
+
+function DSGVOWidget({ data }) {
+  const isClean = data.expiredCount === 0
+  return (
+    <Card className="p-6 sm:p-10">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <ShieldAlert className={`w-5 h-5 ${isClean ? 'text-[#34c759]' : 'text-[#ff9f0a]'}`} />
+          <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">DSGVO-Status</h2>
+        </div>
+        <Link to="/admin/dsgvo" className="text-[15px] font-medium text-[#0071e3] hover:underline flex items-center gap-1">
+          Verwalten <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+
+      {isClean ? (
+        <div className="flex items-center gap-4 p-5 rounded-[16px] bg-[#34c759]/5">
+          <CheckCircle className="w-8 h-8 text-[#34c759]" />
+          <div>
+            <p className="text-[16px] font-semibold text-[#34c759]">Alles konform</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">Keine Bewerber mit abgelaufener Aufbewahrungsfrist ({data.retentionMonths} Monate)</p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-4 p-5 rounded-[16px] bg-[#ff9f0a]/5 border border-[#ff9f0a]/10">
+          <div className="w-14 h-14 rounded-full bg-[#ff9f0a]/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-[22px] font-bold text-[#ff9f0a]">{data.expiredCount}</span>
+          </div>
+          <div>
+            <p className="text-[16px] font-semibold text-[#ff9f0a]">Handlungsbedarf</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">
+              {data.expiredCount} Bewerber haben die Aufbewahrungsfrist von {data.retentionMonths} Monaten überschritten
+            </p>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }

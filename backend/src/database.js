@@ -123,6 +123,12 @@ db.exec(`
     details TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Safe migrations for existing databases
@@ -178,6 +184,15 @@ if (userCount.count === 0) {
     'admin', hash, 'Sebastian Oczachowski', 'admin'
   );
   console.log('📋 Default Admin erstellt: admin / admin123');
+}
+
+// Seed default settings
+const defaultSettings = [
+  ['dsgvo_retention_months', '6'],
+];
+const upsertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+for (const [key, value] of defaultSettings) {
+  upsertSetting.run(key, value);
 }
 
 module.exports = db;

@@ -124,6 +124,35 @@ for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }
 }
 
+// Performance-Indizes
+const indexes = [
+  // Candidates: Suche, Filter, Sortierung
+  `CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_name ON candidates(name)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_created_at ON candidates(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_source ON candidates(source)`,
+  // Jobs: Filter nach Status
+  `CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at)`,
+  // Pipeline: FK-Lookups & Stage-Filter
+  `CREATE INDEX IF NOT EXISTS idx_pipeline_job_id ON pipeline_entries(job_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_pipeline_candidate_id ON pipeline_entries(candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_pipeline_stage ON pipeline_entries(stage)`,
+  // Pipeline Notes: FK-Lookup
+  `CREATE INDEX IF NOT EXISTS idx_pipeline_notes_entry_id ON pipeline_notes(pipeline_entry_id)`,
+  // Activities: FK-Lookup & Sortierung
+  `CREATE INDEX IF NOT EXISTS idx_activities_candidate_id ON activities(candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at)`,
+  // Files: FK-Lookup
+  `CREATE INDEX IF NOT EXISTS idx_files_candidate_id ON candidate_files(candidate_id)`,
+  // Matching: Sortierung
+  `CREATE INDEX IF NOT EXISTS idx_matching_created_at ON matching_results(created_at)`,
+];
+for (const sql of indexes) {
+  try { db.exec(sql); } catch (_) { /* index already exists */ }
+}
+
 // Seed default admin user if no users exist
 const bcrypt = require('bcryptjs');
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();

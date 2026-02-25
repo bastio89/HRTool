@@ -190,7 +190,7 @@ export default function Pipeline() {
       {/* Add Candidate Modal */}
       {addPanelOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setAddPanelOpen(false)} />
+          <div className="absolute inset-0 bg-black/30" onClick={() => setAddPanelOpen(false)} />
           <div className="relative w-[520px] max-h-[80vh] bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/80 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-10 pt-10 pb-8">
               <h2 className="text-[24px] font-semibold tracking-tight text-black">Bewerber hinzufügen</h2>

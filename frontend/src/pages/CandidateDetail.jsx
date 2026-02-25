@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, Phone, Mail, Users, GitBranch, FileText,
   MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock,
-  Upload, Download, File, Image, X
+  Upload, Download, File, Image, X, Printer
 } from 'lucide-react'
 import { candidatesApi, activitiesApi, uploadsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
+import CandidatePrintProfile from '../components/CandidatePrintProfile'
 
 const ACTIVITY_TYPES = ['Notiz', 'Anruf', 'E-Mail', 'Interview', 'Angebot', 'Absage', 'Pipeline']
 
@@ -47,6 +48,7 @@ export default function CandidateDetail() {
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [showPrint, setShowPrint] = useState(false)
 
   const candidateId = id
 
@@ -157,10 +159,17 @@ export default function CandidateDetail() {
         <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
-        <div>
+        <div className="flex-1">
           <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5">Bewerberprofil</p>
           <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black dark:text-white leading-tight">{candidate.name}</h1>
         </div>
+        <button
+          onClick={() => setShowPrint(true)}
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
+          title="Profil drucken"
+        >
+          <Printer className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
+        </button>
       </div>
 
       {/* Candidate Info Card */}
@@ -385,6 +394,12 @@ export default function CandidateDetail() {
           </div>
         )}
       </div>
+
+      <CandidatePrintProfile
+        candidate={candidate}
+        open={showPrint}
+        onClose={() => setShowPrint(false)}
+      />
     </div>
   )
 }

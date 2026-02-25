@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 import CSVImportDialog from '../components/CSVImportDialog'
+import CandidatePrintProfile from '../components/CandidatePrintProfile'
 
 const STATUS_OPTIONS = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist']
 const STATUS_STYLE = {
@@ -41,6 +42,7 @@ export default function Candidates() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [printCandidate, setPrintCandidate] = useState(null)
   const navigate = useNavigate()
 
   // Debounce search input
@@ -522,6 +524,15 @@ export default function Candidates() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#34c759]/10 hover:text-[#34c759]"
+                    onClick={(e) => { e.stopPropagation(); setPrintCandidate(candidate) }}
+                    title="Profil drucken"
+                  >
+                    <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full"
                     onClick={(e) => { e.stopPropagation(); navigate(`/candidates/${candidate.id}/edit`) }}
                   >
@@ -635,6 +646,12 @@ export default function Candidates() {
         open={showImport}
         onClose={() => setShowImport(false)}
         onImported={loadCandidates}
+      />
+
+      <CandidatePrintProfile
+        candidate={printCandidate}
+        open={!!printCandidate}
+        onClose={() => setPrintCandidate(null)}
       />
     </div>
   )

@@ -41,8 +41,13 @@ async function extractText(filePath, mimetype) {
   if (mimetype === 'application/pdf') {
     const pdfParse = require('pdf-parse');
     const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer);
-    return data.text;
+    try {
+      const data = await pdfParse(buffer);
+      return data.text || '';
+    } catch (pdfErr) {
+      console.error('PDF parse error:', pdfErr.message);
+      throw new Error('PDF konnte nicht gelesen werden. Möglicherweise ist die Datei beschädigt oder passwortgeschützt.');
+    }
   } else if (
     mimetype === 'application/msword' ||
     mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

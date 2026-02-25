@@ -152,6 +152,38 @@ router.get('/download/:fileId', (req, res) => {
 
 /**
  * @swagger
+ * /uploads/preview/{fileId}:
+ *   get:
+ *     summary: Datei-Vorschau (inline)
+ *     tags: [Uploads]
+ *     parameters:
+ *       - in: path
+ *         name: fileId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Datei inline anzeigen }
+ */
+router.get('/preview/:fileId', (req, res) => {
+  try {
+    const file = db.prepare('SELECT * FROM candidate_files WHERE id = ?').get(req.params.fileId);
+    if (!file) return res.status(404).json({ error: 'Datei nicht gefunden' });
+
+    const filePath = path.join(uploadsDir, file.filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Datei nicht auf Festplatte gefunden' });
+
+    const mimeType = file.mime_type || 'application/octet-stream';
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${file.original_name}"`);
+    fs.createReadStream(filePath).pipe(res);
+  } catch (error) {
+    console.error('Preview error:', error);
+    res.status(500).json({ error: 'Fehler bei der Vorschau' });
+  }
+});
+
+/**
+ * @swagger
  * /uploads/{fileId}:
  *   delete:
  *     summary: Datei löschen

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, Phone, Mail, Users, GitBranch, FileText,
   MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock,
-  Upload, Download, File, Image, X, Printer
+  Upload, Download, File, Image, X, Printer, Eye
 } from 'lucide-react'
 import { candidatesApi, activitiesApi, uploadsApi, ratingsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
@@ -49,6 +49,7 @@ export default function CandidateDetail() {
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
+  const [previewFile, setPreviewFile] = useState(null)
   const [ratings, setRatings] = useState([])
   const [ratingAverages, setRatingAverages] = useState({})
   const [ratingOverall, setRatingOverall] = useState(null)
@@ -181,6 +182,10 @@ export default function CandidateDetail() {
     { key: 'persönlich', label: 'Persönlich', color: '#34c759' },
     { key: 'kulturfit', label: 'Kulturfit', color: '#8b5cf6' },
   ]
+
+  const canPreview = (mimeType) => {
+    return mimeType?.startsWith('image/') || mimeType === 'application/pdf'
+  }
 
   const getFileIcon = (mimeType) => {
     if (mimeType?.startsWith('image/')) return Image
@@ -450,6 +455,15 @@ export default function CandidateDetail() {
                       {formatFileSize(f.size)} · {new Date(f.created_at).toLocaleDateString('de-DE')}
                     </p>
                   </div>
+                  {canPreview(f.mime_type) && (
+                    <button
+                      onClick={() => setPreviewFile(f)}
+                      className="w-9 h-9 rounded-full hover:bg-[#8b5cf6]/10 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Vorschau"
+                    >
+                      <Eye className="w-4.5 h-4.5 text-[#8b5cf6]" />
+                    </button>
+                  )}
                   <a
                     href={uploadsApi.getDownloadUrl(f.id)}
                     className="w-9 h-9 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors cursor-pointer"
@@ -589,6 +603,58 @@ export default function CandidateDetail() {
         open={showPrint}
         onClose={() => setShowPrint(false)}
       />
+
+      {/* File Preview Modal */}
+      {previewFile && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPreviewFile(null)}>
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/80 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <Eye className="w-5 h-5 text-[#8b5cf6] flex-shrink-0" />
+                <p className="text-[16px] font-semibold text-black dark:text-white truncate">{previewFile.original_name}</p>
+                <span className="text-[13px] text-gray-400 flex-shrink-0">{formatFileSize(previewFile.size)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={uploadsApi.getDownloadUrl(previewFile.id)}
+                  className="px-4 py-2 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[14px] font-semibold hover:bg-[#0071e3]/20 transition-colors"
+                >
+                  <Download className="w-4 h-4 inline mr-1.5" />Download
+                </a>
+                <button
+                  onClick={() => setPreviewFile(null)}
+                  className="w-9 h-9 rounded-full hover:bg-gray-100 dark:hover:bg-[#2c2c2e] flex items-center justify-center cursor-pointer transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-2 min-h-0">
+              {previewFile.mime_type?.startsWith('image/') ? (
+                <div className="flex items-center justify-center h-full">
+                  <img
+                    src={uploadsApi.getPreviewUrl(previewFile.id)}
+                    alt={previewFile.original_name}
+                    className="max-w-full max-h-[75vh] object-contain rounded-[16px]"
+                  />
+                </div>
+              ) : previewFile.mime_type === 'application/pdf' ? (
+                <iframe
+                  src={uploadsApi.getPreviewUrl(previewFile.id)}
+                  className="w-full h-[75vh] rounded-[16px]"
+                  title={previewFile.original_name}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <p className="text-[16px] text-gray-400">Vorschau nicht verfügbar</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

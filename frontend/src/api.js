@@ -169,7 +169,14 @@ export const uploadsApi = {
     }
     return response.json();
   },
-  getDownloadUrl: (fileId) => `${API_BASE}/uploads/download/${fileId}`,
+  getDownloadUrl: (fileId) => {
+    const token = localStorage.getItem('hrtool_token');
+    return `${API_BASE}/uploads/download/${fileId}${token ? `?token=${token}` : ''}`;
+  },
+  getPreviewUrl: (fileId) => {
+    const token = localStorage.getItem('hrtool_token');
+    return `${API_BASE}/uploads/preview/${fileId}${token ? `?token=${token}` : ''}`;
+  },
   delete: (fileId) => request(`/uploads/${fileId}`, { method: 'DELETE' }),
 };
 

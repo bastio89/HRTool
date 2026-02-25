@@ -20,13 +20,15 @@ function authMiddleware(req, res, next) {
   }
 
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const queryToken = req.query?.token;
+  const tokenStr = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : queryToken;
+  
+  if (!tokenStr) {
     return res.status(401).json({ error: 'Authentifizierung erforderlich' });
   }
 
   try {
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(tokenStr, JWT_SECRET);
     req.user = decoded;
     next();
   } catch (err) {

@@ -3,7 +3,26 @@ const db = require('../database');
 
 const router = express.Router();
 
-// POST trigger matching
+/**
+ * @swagger
+ * /matching/run:
+ *   post:
+ *     summary: KI-Matching starten
+ *     tags: [Matching]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               jobDescription: { type: string, description: Stellenbeschreibung }
+ *               jobTitle: { type: string }
+ *               candidateIds: { type: array, items: { type: integer }, description: Optional - sonst alle Bewerber }
+ *     responses:
+ *       200: { description: Matching-Ergebnis mit Scores }
+ *       400: { description: Keine Beschreibung oder keine Bewerber }
+ *       502: { description: n8n Workflow fehlgeschlagen }
+ */
 router.post('/run', async (req, res) => {
   try {
     const { jobDescription, jobTitle, candidateIds } = req.body;
@@ -94,7 +113,15 @@ router.post('/run', async (req, res) => {
   }
 });
 
-// GET matching history
+/**
+ * @swagger
+ * /matching/history:
+ *   get:
+ *     summary: Matching-Historie (letzte 50)
+ *     tags: [Matching]
+ *     responses:
+ *       200: { description: Liste vergangener Matchings }
+ */
 router.get('/history', (req, res) => {
   try {
     const results = db.prepare(
@@ -113,7 +140,21 @@ router.get('/history', (req, res) => {
   }
 });
 
-// GET single matching result
+/**
+ * @swagger
+ * /matching/history/{id}:
+ *   get:
+ *     summary: Einzelnes Matching-Ergebnis
+ *     tags: [Matching]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Matching-Ergebnis }
+ *       404: { description: Nicht gefunden }
+ */
 router.get('/history/:id', (req, res) => {
   try {
     const result = db.prepare('SELECT * FROM matching_results WHERE id = ?').get(req.params.id);
@@ -127,7 +168,20 @@ router.get('/history/:id', (req, res) => {
   }
 });
 
-// DELETE matching result
+/**
+ * @swagger
+ * /matching/history/{id}:
+ *   delete:
+ *     summary: Matching-Ergebnis löschen
+ *     tags: [Matching]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Erfolgreich gelöscht }
+ */
 router.delete('/history/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM matching_results WHERE id = ?').get(req.params.id);

@@ -7,7 +7,25 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'hrtool-secret-key-2025';
 const JWT_EXPIRES = '7d';
 
-// POST login
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Login (JWT Token)
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               username: { type: string }
+ *               password: { type: string }
+ *     responses:
+ *       200: { description: JWT Token + User-Daten }
+ *       401: { description: Ungültige Anmeldedaten }
+ */
 router.post('/login', (req, res) => {
   try {
     const { username, password } = req.body;
@@ -41,7 +59,16 @@ router.post('/login', (req, res) => {
   }
 });
 
-// GET current user (requires auth)
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     summary: Aktueller Benutzer
+ *     tags: [Auth]
+ *     responses:
+ *       200: { description: Benutzer-Profil }
+ *       401: { description: Nicht eingeloggt }
+ */
 router.get('/me', (req, res) => {
   // Auth is checked by middleware
   if (!req.user) return res.status(401).json({ error: 'Nicht angemeldet' });
@@ -50,7 +77,15 @@ router.get('/me', (req, res) => {
   res.json(user);
 });
 
-// GET all users (admin only)
+/**
+ * @swagger
+ * /auth/users:
+ *   get:
+ *     summary: Alle Benutzer (Admin)
+ *     tags: [Auth]
+ *     responses:
+ *       200: { description: Benutzerliste }
+ */
 router.get('/users', (req, res) => {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Nur Admins dürfen Benutzer verwalten' });
@@ -59,7 +94,24 @@ router.get('/users', (req, res) => {
   res.json({ data: users });
 });
 
-// POST create user (admin only)
+/**
+ * @swagger
+ * /auth/users:
+ *   post:
+ *     summary: Benutzer erstellen (Admin)
+ *     tags: [Auth]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               username: { type: string }
+ *               password: { type: string }
+ *               display_name: { type: string }
+ *               role: { type: string, enum: [admin, recruiter] }
+ *     responses:
+ *       201: { description: Erstellter Benutzer }
+ */
 router.post('/users', (req, res) => {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Nur Admins dürfen Benutzer anlegen' });
@@ -92,7 +144,20 @@ router.post('/users', (req, res) => {
   }
 });
 
-// DELETE user (admin only, not self)
+/**
+ * @swagger
+ * /auth/users/{id}:
+ *   delete:
+ *     summary: Benutzer löschen (Admin)
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Gelöscht }
+ */
 router.delete('/users/:id', (req, res) => {
   if (!req.user || req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Nur Admins dürfen Benutzer löschen' });
@@ -113,7 +178,22 @@ router.delete('/users/:id', (req, res) => {
   }
 });
 
-// PUT change password
+/**
+ * @swagger
+ * /auth/change-password:
+ *   put:
+ *     summary: Passwort ändern
+ *     tags: [Auth]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               currentPassword: { type: string }
+ *               newPassword: { type: string }
+ *     responses:
+ *       200: { description: Passwort geändert }
+ */
 router.put('/change-password', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Nicht angemeldet' });
 

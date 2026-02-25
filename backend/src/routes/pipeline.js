@@ -5,7 +5,20 @@ const router = express.Router();
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt'];
 
-// GET full pipeline for a job
+/**
+ * @swagger
+ * /pipeline/job/{jobId}:
+ *   get:
+ *     summary: Pipeline-Board einer Stelle
+ *     tags: [Pipeline]
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Board mit Stages und Kandidaten }
+ */
 router.get('/job/:jobId', (req, res) => {
   try {
     const entries = db.prepare(`
@@ -30,7 +43,27 @@ router.get('/job/:jobId', (req, res) => {
   }
 });
 
-// POST add candidate to pipeline
+/**
+ * @swagger
+ * /pipeline/job/{jobId}/add:
+ *   post:
+ *     summary: Bewerber zur Pipeline hinzufügen
+ *     tags: [Pipeline]
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               candidate_id: { type: integer }
+ *               stage: { type: string }
+ *     responses:
+ *       201: { description: Pipeline-Eintrag erstellt }
+ */
 router.post('/job/:jobId/add', (req, res) => {
   try {
     const { candidate_id, stage = 'Beworben', notes } = req.body;
@@ -62,7 +95,27 @@ router.post('/job/:jobId/add', (req, res) => {
   }
 });
 
-// PUT update stage
+/**
+ * @swagger
+ * /pipeline/{entryId}/stage:
+ *   put:
+ *     summary: Stage aktualisieren
+ *     tags: [Pipeline]
+ *     parameters:
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               stage: { type: string }
+ *               notes: { type: string }
+ *     responses:
+ *       200: { description: Stage aktualisiert }
+ */
 router.put('/:entryId/stage', (req, res) => {
   try {
     const { stage, notes } = req.body;
@@ -103,7 +156,20 @@ router.put('/:entryId/stage', (req, res) => {
   }
 });
 
-// GET notes for a pipeline entry
+/**
+ * @swagger
+ * /pipeline/{entryId}/notes:
+ *   get:
+ *     summary: Notizen eines Pipeline-Eintrags
+ *     tags: [Pipeline]
+ *     parameters:
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Liste der Notizen }
+ */
 router.get('/:entryId/notes', (req, res) => {
   try {
     const notes = db.prepare(
@@ -115,7 +181,26 @@ router.get('/:entryId/notes', (req, res) => {
   }
 });
 
-// POST add note to pipeline entry (without stage change)
+/**
+ * @swagger
+ * /pipeline/{entryId}/notes:
+ *   post:
+ *     summary: Notiz hinzufügen
+ *     tags: [Pipeline]
+ *     parameters:
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               content: { type: string }
+ *     responses:
+ *       201: { description: Notiz erstellt }
+ */
 router.post('/:entryId/notes', (req, res) => {
   try {
     const { content } = req.body;
@@ -135,7 +220,15 @@ router.post('/:entryId/notes', (req, res) => {
   }
 });
 
-// GET active pipelines (jobs with candidates in pipeline)
+/**
+ * @swagger
+ * /pipeline/active-jobs:
+ *   get:
+ *     summary: Aktive Pipelines (Jobs mit Kandidaten)
+ *     tags: [Pipeline]
+ *     responses:
+ *       200: { description: Liste aktiver Pipeline-Jobs }
+ */
 router.get('/active-jobs', (req, res) => {
   try {
     const rows = db.prepare(`
@@ -173,7 +266,20 @@ router.get('/active-jobs', (req, res) => {
   }
 });
 
-// DELETE remove from pipeline
+/**
+ * @swagger
+ * /pipeline/{entryId}:
+ *   delete:
+ *     summary: Pipeline-Eintrag entfernen
+ *     tags: [Pipeline]
+ *     parameters:
+ *       - in: path
+ *         name: entryId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Entfernt }
+ */
 router.delete('/:entryId', (req, res) => {
   try {
     db.prepare('DELETE FROM pipeline_entries WHERE id = ?').run(req.params.entryId);

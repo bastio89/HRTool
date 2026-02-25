@@ -3,7 +3,25 @@ const db = require('../database');
 
 const router = express.Router();
 
-// GET all jobs (with pagination)
+/**
+ * @swagger
+ * /jobs:
+ *   get:
+ *     summary: Alle Stellen (paginiert)
+ *     tags: [Jobs]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [Offen, Besetzt, Pausiert, Archiviert] }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Paginierte Stellenliste }
+ */
 router.get('/', (req, res) => {
   try {
     const { status, page, limit } = req.query;
@@ -47,7 +65,20 @@ router.get('/', (req, res) => {
   }
 });
 
-// GET single job
+/**
+ * @swagger
+ * /jobs/{id}:
+ *   get:
+ *     summary: Einzelne Stelle laden
+ *     tags: [Jobs]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Stellen-Objekt }
+ */
 router.get('/:id', (req, res) => {
   try {
     const job = db.prepare(`
@@ -62,7 +93,20 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// POST create job
+/**
+ * @swagger
+ * /jobs:
+ *   post:
+ *     summary: Stelle anlegen
+ *     tags: [Jobs]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/Job' }
+ *     responses:
+ *       201: { description: Erstellte Stelle }
+ */
 router.post('/', (req, res) => {
   try {
     const { title, description, requirements, location, type, status, url } = req.body;
@@ -82,7 +126,20 @@ router.post('/', (req, res) => {
   }
 });
 
-// PUT update job
+/**
+ * @swagger
+ * /jobs/{id}:
+ *   put:
+ *     summary: Stelle aktualisieren
+ *     tags: [Jobs]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Aktualisierte Stelle }
+ */
 router.put('/:id', (req, res) => {
   try {
     const { title, description, requirements, location, type, status, url } = req.body;
@@ -99,7 +156,20 @@ router.put('/:id', (req, res) => {
   }
 });
 
-// DELETE job
+/**
+ * @swagger
+ * /jobs/{id}:
+ *   delete:
+ *     summary: Stelle löschen
+ *     tags: [Jobs]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Erfolgreich gelöscht }
+ */
 router.delete('/:id', (req, res) => {
   try {
     db.prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);

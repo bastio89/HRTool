@@ -45,7 +45,26 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10 MB
 });
 
-// POST upload file for a candidate
+/**
+ * @swagger
+ * /uploads/candidate/{candidateId}:
+ *   post:
+ *     summary: Datei hochladen
+ *     tags: [Uploads]
+ *     parameters:
+ *       - in: path
+ *         name: candidateId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             properties:
+ *               file: { type: string, format: binary }
+ *     responses:
+ *       201: { description: Datei hochgeladen }
+ */
 router.post('/candidate/:candidateId', upload.single('file'), (req, res) => {
   try {
     if (!req.file) {
@@ -76,7 +95,20 @@ router.post('/candidate/:candidateId', upload.single('file'), (req, res) => {
   }
 });
 
-// GET files for a candidate
+/**
+ * @swagger
+ * /uploads/candidate/{candidateId}:
+ *   get:
+ *     summary: Dateien eines Bewerbers
+ *     tags: [Uploads]
+ *     parameters:
+ *       - in: path
+ *         name: candidateId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Dateiliste }
+ */
 router.get('/candidate/:candidateId', (req, res) => {
   try {
     const files = db.prepare(
@@ -89,7 +121,20 @@ router.get('/candidate/:candidateId', (req, res) => {
   }
 });
 
-// GET download a file
+/**
+ * @swagger
+ * /uploads/download/{fileId}:
+ *   get:
+ *     summary: Datei herunterladen
+ *     tags: [Uploads]
+ *     parameters:
+ *       - in: path
+ *         name: fileId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Datei-Download }
+ */
 router.get('/download/:fileId', (req, res) => {
   try {
     const file = db.prepare('SELECT * FROM candidate_files WHERE id = ?').get(req.params.fileId);
@@ -105,7 +150,20 @@ router.get('/download/:fileId', (req, res) => {
   }
 });
 
-// DELETE a file
+/**
+ * @swagger
+ * /uploads/{fileId}:
+ *   delete:
+ *     summary: Datei löschen
+ *     tags: [Uploads]
+ *     parameters:
+ *       - in: path
+ *         name: fileId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Gelöscht }
+ */
 router.delete('/:fileId', (req, res) => {
   try {
     const file = db.prepare('SELECT * FROM candidate_files WHERE id = ?').get(req.params.fileId);

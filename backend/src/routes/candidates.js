@@ -3,7 +3,16 @@ const db = require('../database');
 
 const router = express.Router();
 
-// GET candidate stats (must be before /:id route)
+/**
+ * @swagger
+ * /candidates/stats/overview:
+ *   get:
+ *     summary: Dashboard-Statistiken
+ *     tags: [Candidates]
+ *     responses:
+ *       200:
+ *         description: Statistische Übersicht
+ */
 router.get('/stats/overview', (req, res) => {
   try {
     const total = db.prepare('SELECT COUNT(*) as count FROM candidates').get();
@@ -57,7 +66,43 @@ router.get('/stats/overview', (req, res) => {
   }
 });
 
-// GET all candidates (with pagination)
+/**
+ * @swagger
+ * /candidates:
+ *   get:
+ *     summary: Alle Bewerber (paginiert)
+ *     tags: [Candidates]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Volltextsuche (Name, Skills, Standort, Erfahrung, Bildung)
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1 }
+ *         description: Seitennummer
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1 }
+ *         description: Einträge pro Seite
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [name, location, created_at, updated_at, availability] }
+ *       - in: query
+ *         name: order
+ *         schema: { type: string, enum: [asc, desc] }
+ *     responses:
+ *       200:
+ *         description: Paginierte Bewerberliste
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - properties:
+ *                     data:
+ *                       items: { $ref: '#/components/schemas/Candidate' }
+ */
 router.get('/', (req, res) => {
   try {
     const { search, sort = 'created_at', order = 'desc', page, limit } = req.query;
@@ -103,7 +148,21 @@ router.get('/', (req, res) => {
   }
 });
 
-// GET single candidate
+/**
+ * @swagger
+ * /candidates/{id}:
+ *   get:
+ *     summary: Einzelnen Bewerber laden
+ *     tags: [Candidates]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Bewerber-Objekt, content: { application/json: { schema: { $ref: '#/components/schemas/Candidate' } } } }
+ *       404: { description: Nicht gefunden }
+ */
 router.get('/:id', (req, res) => {
   try {
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);
@@ -117,7 +176,23 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// POST check for duplicates
+/**
+ * @swagger
+ * /candidates/check-duplicate:
+ *   post:
+ *     summary: Duplikat-Prüfung (Name/E-Mail)
+ *     tags: [Candidates]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               name: { type: string }
+ *               email: { type: string }
+ *               excludeId: { type: integer }
+ *     responses:
+ *       200: { description: Liste gefundener Duplikate }
+ */
 router.post('/check-duplicate', (req, res) => {
   try {
     const { name, email, excludeId } = req.body;
@@ -145,7 +220,21 @@ router.post('/check-duplicate', (req, res) => {
   }
 });
 
-// POST create candidate
+/**
+ * @swagger
+ * /candidates:
+ *   post:
+ *     summary: Bewerber anlegen
+ *     tags: [Candidates]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/Candidate' }
+ *     responses:
+ *       201: { description: Erstellter Bewerber }
+ *       400: { description: Validierungsfehler }
+ */
 router.post('/', (req, res) => {
   try {
     const {
@@ -179,7 +268,26 @@ router.post('/', (req, res) => {
   }
 });
 
-// PUT update candidate
+/**
+ * @swagger
+ * /candidates/{id}:
+ *   put:
+ *     summary: Bewerber aktualisieren
+ *     tags: [Candidates]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/Candidate' }
+ *     responses:
+ *       200: { description: Aktualisierter Bewerber }
+ *       404: { description: Nicht gefunden }
+ */
 router.put('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);
@@ -220,7 +328,21 @@ router.put('/:id', (req, res) => {
   }
 });
 
-// DELETE candidate
+/**
+ * @swagger
+ * /candidates/{id}:
+ *   delete:
+ *     summary: Bewerber löschen
+ *     tags: [Candidates]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Erfolgreich gelöscht }
+ *       404: { description: Nicht gefunden }
+ */
 router.delete('/:id', (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);

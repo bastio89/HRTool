@@ -141,7 +141,22 @@ async function extractText(filePath, mimetype) {
   throw new Error('Nicht unterstütztes Dateiformat');
 }
 
-// POST parse CV - extracts text and sends to n8n for AI processing
+/**
+ * @swagger
+ * /cv-parser/parse:
+ *   post:
+ *     summary: CV parsen (PDF/Word → KI-Extraktion)
+ *     tags: [CV Parser]
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             properties:
+ *               file: { type: string, format: binary, description: PDF oder Word-Datei }
+ *     responses:
+ *       200: { description: Extrahierte Bewerberdaten (Name, E-Mail, Skills etc.) }
+ *       400: { description: Keine Datei oder ungültiges Format }
+ */
 router.post('/parse', upload.single('file'), async (req, res) => {
   let tempFilePath = null;
 

@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./src/swagger');
 const candidatesRouter = require('./src/routes/candidates');
 const matchingRouter = require('./src/routes/matching');
 const jobsRouter = require('./src/routes/jobs');
@@ -20,6 +22,13 @@ app.use(express.json({ limit: '10mb' }));
 
 // Auth middleware (parses token, sets req.user)
 app.use(authMiddleware);
+
+// API Documentation (Swagger UI)
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'HR-Tool API Docs',
+}));
+app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
 
 // Routes
 app.use('/api/auth', authRouter);

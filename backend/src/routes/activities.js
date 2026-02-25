@@ -5,7 +5,20 @@ const router = express.Router();
 
 const ACTIVITY_TYPES = ['Notiz', 'Anruf', 'E-Mail', 'Interview', 'Angebot', 'Absage', 'Pipeline'];
 
-// GET activities for a candidate
+/**
+ * @swagger
+ * /activities/candidate/{candidateId}:
+ *   get:
+ *     summary: Aktivitäten eines Bewerbers
+ *     tags: [Activities]
+ *     parameters:
+ *       - in: path
+ *         name: candidateId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Aktivitätenliste }
+ */
 router.get('/candidate/:candidateId', (req, res) => {
   try {
     const activities = db.prepare(`
@@ -19,7 +32,27 @@ router.get('/candidate/:candidateId', (req, res) => {
   }
 });
 
-// POST create activity
+/**
+ * @swagger
+ * /activities/candidate/{candidateId}:
+ *   post:
+ *     summary: Aktivität anlegen
+ *     tags: [Activities]
+ *     parameters:
+ *       - in: path
+ *         name: candidateId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               type: { type: string, enum: [Notiz, Anruf, 'E-Mail', Interview, Angebot, Absage] }
+ *               content: { type: string }
+ *     responses:
+ *       201: { description: Aktivität erstellt }
+ */
 router.post('/candidate/:candidateId', (req, res) => {
   try {
     const { type, content } = req.body;
@@ -37,7 +70,20 @@ router.post('/candidate/:candidateId', (req, res) => {
   }
 });
 
-// DELETE activity
+/**
+ * @swagger
+ * /activities/{id}:
+ *   delete:
+ *     summary: Aktivität löschen
+ *     tags: [Activities]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Gelöscht }
+ */
 router.delete('/:id', (req, res) => {
   try {
     db.prepare('DELETE FROM activities WHERE id = ?').run(req.params.id);

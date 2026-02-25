@@ -69,10 +69,27 @@ router.post('/job/:jobId/add', (req, res) => {
     const { candidate_id, stage = 'Beworben', notes } = req.body;
     if (!candidate_id) return res.status(400).json({ error: 'Bewerber-ID erforderlich' });
 
-    const result = db.prepare(`
-      INSERT OR REPLACE INTO pipeline_entries (job_id, candidate_id, stage, notes, updated_at)
-      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(req.params.jobId, candidate_id, stage, notes || null);
+    // Check if entry already exists
+    const existing = db.prepare(
+      'SELECT id FROM pipeline_entries WHERE job_id = ? AND candidate_id = ?'
+    ).get(req.params.jobId, candidate_id);
+
+    let entryId;
+    if (existing) {
+      // Update existing entry (preserves pipeline_notes via CASCADE)
+      db.prepare(`
+        UPDATE pipeline_entries SET stage = ?, notes = COALESCE(?, notes), updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(stage, notes || null, existing.id);
+      entryId = existing.id;
+    } else {
+      // Insert new entry
+      const result = db.prepare(`
+        INSERT INTO pipeline_entries (job_id, candidate_id, stage, notes, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(req.params.jobId, candidate_id, stage, notes || null);
+      entryId = result.lastInsertRowid;
+    }
 
     // Auto-log activity
     const candidate = db.prepare('SELECT name FROM candidates WHERE id = ?').get(candidate_id);
@@ -86,7 +103,7 @@ router.post('/job/:jobId/add', (req, res) => {
       SELECT pe.*, c.name as candidate_name FROM pipeline_entries pe
       JOIN candidates c ON c.id = pe.candidate_id
       WHERE pe.id = ?
-    `).get(result.lastInsertRowid || db.prepare('SELECT id FROM pipeline_entries WHERE job_id=? AND candidate_id=?').get(req.params.jobId, candidate_id).id);
+    `).get(entryId);
 
     res.status(201).json(entry);
   } catch (err) {

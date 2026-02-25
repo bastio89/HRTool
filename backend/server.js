@@ -8,6 +8,7 @@ const pipelineRouter = require('./src/routes/pipeline');
 const activitiesRouter = require('./src/routes/activities');
 const uploadsRouter = require('./src/routes/uploads');
 const authRouter = require('./src/routes/auth');
+const cvParserRouter = require('./src/routes/cv-parser');
 const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
@@ -28,6 +29,7 @@ app.use('/api/jobs', jobsRouter);
 app.use('/api/pipeline', pipelineRouter);
 app.use('/api/activities', activitiesRouter);
 app.use('/api/uploads', uploadsRouter);
+app.use('/api/cv-parser', cvParserRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

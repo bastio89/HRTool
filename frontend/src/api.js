@@ -112,3 +112,21 @@ export const uploadsApi = {
   getDownloadUrl: (fileId) => `${API_BASE}/uploads/download/${fileId}`,
   delete: (fileId) => request(`/uploads/${fileId}`, { method: 'DELETE' }),
 };
+
+// CV Parser API
+export const cvParserApi = {
+  parse: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/cv-parser/parse`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'CV-Analyse fehlgeschlagen' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    return response.json();
+  },
+};

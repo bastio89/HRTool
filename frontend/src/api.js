@@ -6,10 +6,29 @@ function authHeaders() {
 }
 
 async function request(url, options = {}) {
-  const response = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers },
-    ...options,
-  });
+  const { timeout, ...fetchOptions } = options;
+  let controller, timeoutId;
+  if (timeout) {
+    controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), timeout);
+  }
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${url}`, {
+      headers: { 'Content-Type': 'application/json', ...authHeaders(), ...fetchOptions.headers },
+      ...fetchOptions,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+  } catch (err) {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Zeitüberschreitung — die Anfrage hat zu lange gedauert. Bitte erneut versuchen.');
+    }
+    throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }));
@@ -88,7 +107,7 @@ export const jobsApi = {
   create: (data) => request('/jobs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/jobs/${id}`, { method: 'DELETE' }),
-  generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data) }),
+  generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data), timeout: 200000 }),
 };
 
 // Pipeline API

@@ -214,60 +214,123 @@ router.post('/generate-description', async (req, res) => {
     const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
     const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
 
-    const prompt = `Du bist ein erfahrener HR-Experte. Erstelle eine professionelle Stellenausschreibung auf Deutsch.
+    const prompt = `Du bist ein HR-Experte. Erstelle eine Stellenausschreibung auf Deutsch.
 
 Jobtitel: ${title || 'Nicht angegeben'}
 ${type ? `Anstellungsart: ${type}` : ''}
 ${location ? `Standort: ${location}` : ''}
-${keywords ? `Stichpunkte/Anforderungen: ${keywords}` : ''}
+${keywords ? `Stichpunkte: ${keywords}` : ''}
 
-Erstelle zwei Abschnitte im folgenden JSON-Format (nur reines JSON, kein Markdown):
-{
-  "description": "Fließtext-Stellenbeschreibung (3-5 Absätze, professionell, ansprechend)",
-  "requirements": "Anforderungen als Aufzählung mit Bullets (•), eine pro Zeile"
-}
+Antworte NUR mit diesem exakten JSON-Format (ohne Markdown, ohne Erklärung):
+{"description": "HIER die Stellenbeschreibung als Fließtext (3-4 Absätze)", "requirements": "HIER die Anforderungen, jeweils mit • am Anfang, getrennt durch Zeilenumbruch"}
 
-Wichtig:
-- Beschreibung: professionell, einladend, modern, neutral formuliert
-- Anforderungen: konkrete Punkte, mit • Aufzählungszeichen  
-- Nur valides JSON ausgeben, keine weiteren Erklärungen`;
+Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Werte sind Strings.`;
 
-    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        prompt,
-        stream: false,
-        options: { temperature: 0.7, num_predict: 2048 }
-      })
-    });
+    // First check if Ollama is reachable at all (quick 5s check)
+    try {
+      const pingController = new AbortController();
+      setTimeout(() => pingController.abort(), 5000);
+      await fetch(`${OLLAMA_URL}/`, { signal: pingController.signal });
+    } catch (pingErr) {
+      console.error('Ollama not reachable:', pingErr.message);
+      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+    }
+
+    // Send generation request with 180s timeout (large models need time to load)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+    let response;
+    try {
+      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          prompt,
+          stream: false,
+          options: { temperature: 0.7, num_predict: 2048 }
+        }),
+        signal: controller.signal
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      if (fetchErr.name === 'AbortError') {
+        return res.status(504).json({ error: 'Ollama-Timeout: Die Generierung hat zu lange gedauert (> 3 Min). Versuche es erneut — das Modell wird beim ersten Aufruf geladen.' });
+      }
+      throw fetchErr;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errText = await response.text();
       console.error('Ollama error:', errText);
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+      return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
     }
 
     const data = await response.json();
     const responseText = data.response || '';
 
-    // Parse JSON from response (handle potential markdown wrapping)
-    let parsed;
+    // Parse JSON from response (handle markdown wrapping, German keys, nested structures)
+    let parsed = { description: '', requirements: '' };
     try {
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      // Strip markdown code blocks if present
+      let cleanText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
+        const raw = JSON.parse(jsonMatch[0]);
+        
+        // Handle both English and German keys
+        const desc = raw.description || raw.Beschreibung || raw.beschreibung || '';
+        let req = raw.requirements || raw.Anforderungen || raw.anforderungen || '';
+        
+        // If description is itself a nested JSON string, parse it
+        if (typeof desc === 'string' && desc.trim().startsWith('{')) {
+          try {
+            const inner = JSON.parse(desc);
+            parsed.description = inner.description || inner.Beschreibung || desc;
+            parsed.requirements = inner.requirements || inner.Anforderungen || req;
+          } catch { parsed.description = desc; }
+        } else {
+          parsed.description = typeof desc === 'string' ? desc : JSON.stringify(desc);
+        }
+        
+        // Handle requirements as array or object
+        if (Array.isArray(req)) {
+          parsed.requirements = req.map(r => typeof r === 'string' ? `• ${r}` : `• ${JSON.stringify(r)}`).join('\n');
+        } else if (typeof req === 'object' && req !== null) {
+          // Flatten nested requirement object
+          const items = [];
+          for (const [key, val] of Object.entries(req)) {
+            if (Array.isArray(val)) val.forEach(v => items.push(`• ${v}`));
+            else items.push(`• ${key}: ${val}`);
+          }
+          parsed.requirements = items.join('\n');
+        } else {
+          parsed.requirements = req || '';
+        }
       } else {
         throw new Error('Kein JSON in Antwort');
       }
     } catch (parseErr) {
-      // Fallback: use raw text
-      parsed = {
-        description: responseText.trim(),
-        requirements: ''
-      };
+      console.warn('JSON parse fallback:', parseErr.message);
+      // Fallback: split raw text
+      const parts = responseText.split(/anforderungen|requirements/i);
+      parsed.description = (parts[0] || responseText).replace(/[{}"\[\]]/g, '').trim();
+      parsed.requirements = (parts[1] || '').replace(/[{}"\[\]:]/g, '').trim();
     }
+
+    // Clean up the final output
+    const cleanText = (text) => {
+      if (!text) return '';
+      return text
+        .replace(/^(description|requirements|beschreibung|anforderungen)\s*:\s*/i, '') // strip key prefixes
+        .replace(/\\n/g, '\n')  // convert literal \n to real newlines
+        .replace(/,\s*$/, '')   // trailing comma
+        .trim();
+    };
 
     logAudit(req, 'ki-generierung', 'Job', null, title, {
       model: OLLAMA_MODEL,
@@ -275,8 +338,8 @@ Wichtig:
     });
 
     res.json({
-      description: parsed.description || '',
-      requirements: parsed.requirements || '',
+      description: cleanText(parsed.description),
+      requirements: cleanText(parsed.requirements),
       model: OLLAMA_MODEL
     });
   } catch (error) {

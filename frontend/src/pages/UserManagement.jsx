@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../AuthContext'
 import { authApi } from '../api'
-import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle, Key, Lock } from 'lucide-react'
+import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle, Key, Lock, Database, Download } from 'lucide-react'
 
 export default function UserManagement() {
   const { user: currentUser, isAdmin } = useAuth()
@@ -16,6 +16,37 @@ export default function UserManagement() {
   const [resetPassword, setResetPassword] = useState('')
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [changeForm, setChangeForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [backupLoading, setBackupLoading] = useState(false)
+
+  const handleBackup = async () => {
+    setBackupLoading(true)
+    setError('')
+    setSuccess('')
+    try {
+      const token = localStorage.getItem('hrtool_token')
+      const response = await fetch('/api/auth/admin/backup', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Backup fehlgeschlagen' }))
+        throw new Error(err.error)
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `hrtool-backup-${new Date().toISOString().slice(0, 10)}.db`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      a.remove()
+      setSuccess('Backup erfolgreich heruntergeladen')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBackupLoading(false)
+    }
+  }
 
   const loadUsers = async () => {
     try {
@@ -117,6 +148,14 @@ export default function UserManagement() {
           <p className="text-[16px] text-gray-500 dark:text-gray-400 mt-1">{users.length} Benutzer registriert</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleBackup}
+            disabled={backupLoading}
+            className="flex items-center gap-2 px-6 py-3.5 bg-[#34c759]/10 hover:bg-[#34c759]/20 text-[#34c759] rounded-2xl text-[15px] font-semibold transition-all duration-300 cursor-pointer disabled:opacity-50"
+          >
+            <Database className="w-4 h-4" />
+            {backupLoading ? 'Wird erstellt...' : 'Backup'}
+          </button>
           <button
             onClick={() => { setShowChangePassword(!showChangePassword); setShowForm(false); setResetUserId(null); setError(''); setSuccess('') }}
             className="flex items-center gap-2 px-6 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-700 dark:text-gray-300 rounded-2xl text-[15px] font-semibold transition-all duration-300 cursor-pointer"

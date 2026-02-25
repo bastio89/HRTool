@@ -1,6 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const path = require('path');
+const fs = require('fs');
 const db = require('../database');
 
 const router = express.Router();
@@ -263,6 +265,51 @@ router.put('/users/:id/reset-password', (req, res) => {
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Fehler beim Zurücksetzen des Passworts' });
+  }
+});
+
+/**
+ * @swagger
+ * /auth/admin/backup:
+ *   get:
+ *     summary: Datenbank-Backup herunterladen (Admin)
+ *     tags: [Auth]
+ *     responses:
+ *       200: { description: SQLite-Datenbankdatei als Download }
+ *       403: { description: Keine Berechtigung }
+ */
+router.get('/admin/backup', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Nur Admins dürfen Backups erstellen' });
+  }
+
+  try {
+    const dbPath = path.join(__dirname, '..', '..', 'data', 'hrtool.db');
+    const backupDir = path.join(__dirname, '..', '..', 'data', 'backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupFilename = `hrtool-backup-${timestamp}.db`;
+    const backupPath = path.join(backupDir, backupFilename);
+
+    // Use SQLite backup API for safe copy (even while DB is in use)
+    db.backup(backupPath).then(() => {
+      res.download(backupPath, backupFilename, (err) => {
+        // Clean up backup file after download
+        try { fs.unlinkSync(backupPath); } catch {}
+        if (err && !res.headersSent) {
+          res.status(500).json({ error: 'Fehler beim Download' });
+        }
+      });
+    }).catch(err => {
+      console.error('Backup error:', err);
+      res.status(500).json({ error: 'Fehler beim Erstellen des Backups' });
+    });
+  } catch (error) {
+    console.error('Backup error:', error);
+    res.status(500).json({ error: 'Fehler beim Erstellen des Backups' });
   }
 });
 

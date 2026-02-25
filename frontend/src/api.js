@@ -28,6 +28,8 @@ export const authApi = {
   createUser: (data) =>
     request('/auth/users', { method: 'POST', body: JSON.stringify(data) }),
   deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
+  resetPassword: (id, newPassword) =>
+    request(`/auth/users/${id}/reset-password`, { method: 'PUT', body: JSON.stringify({ newPassword }) }),
   changePassword: (currentPassword, newPassword) =>
     request('/auth/change-password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
 };

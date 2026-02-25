@@ -220,5 +220,51 @@ router.put('/change-password', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /auth/users/{id}/reset-password:
+ *   put:
+ *     summary: Passwort eines Benutzers zurücksetzen (Admin)
+ *     tags: [Auth]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               newPassword: { type: string, minLength: 4 }
+ *     responses:
+ *       200: { description: Passwort zurückgesetzt }
+ *       403: { description: Keine Berechtigung }
+ *       404: { description: Benutzer nicht gefunden }
+ */
+router.put('/users/:id/reset-password', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Nur Admins dürfen Passwörter zurücksetzen' });
+  }
+
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ error: 'Neues Passwort muss mindestens 4 Zeichen lang sein' });
+    }
+
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+
+    const hash = bcrypt.hashSync(newPassword, 10);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.params.id);
+    res.json({ message: 'Passwort wurde zurückgesetzt' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Fehler beim Zurücksetzen des Passworts' });
+  }
+});
+
 module.exports = router;
 module.exports.JWT_SECRET = JWT_SECRET;

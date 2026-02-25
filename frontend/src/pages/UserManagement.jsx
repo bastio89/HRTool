@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../AuthContext'
 import { authApi } from '../api'
-import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle } from 'lucide-react'
+import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle, Key, Lock } from 'lucide-react'
 
 export default function UserManagement() {
   const { user: currentUser, isAdmin } = useAuth()
@@ -12,6 +12,10 @@ export default function UserManagement() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [saving, setSaving] = useState(false)
+  const [resetUserId, setResetUserId] = useState(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [changeForm, setChangeForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
 
   const loadUsers = async () => {
     try {
@@ -57,6 +61,45 @@ export default function UserManagement() {
     }
   }
 
+  const handleResetPassword = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    setSaving(true)
+    try {
+      const user = users.find(u => u.id === resetUserId)
+      await authApi.resetPassword(resetUserId, resetPassword)
+      setSuccess(`Passwort von "${user?.display_name}" wurde zurückgesetzt`)
+      setResetUserId(null)
+      setResetPassword('')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleChangeOwnPassword = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    if (changeForm.newPassword !== changeForm.confirmPassword) {
+      setError('Die neuen Passwörter stimmen nicht überein')
+      return
+    }
+    setSaving(true)
+    try {
+      await authApi.changePassword(changeForm.currentPassword, changeForm.newPassword)
+      setSuccess('Dein Passwort wurde erfolgreich geändert')
+      setShowChangePassword(false)
+      setChangeForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div className="text-center py-20">
@@ -73,13 +116,22 @@ export default function UserManagement() {
           <h1 className="text-[34px] font-bold tracking-tight text-black">Benutzer</h1>
           <p className="text-[16px] text-gray-500 mt-1">{users.length} Benutzer registriert</p>
         </div>
-        <button
-          onClick={() => { setShowForm(!showForm); setError(''); setSuccess('') }}
-          className="flex items-center gap-2 px-6 py-3.5 bg-[#0071e3] hover:bg-[#0077ED] text-white rounded-2xl text-[15px] font-semibold transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 duration-300"
-        >
-          <UserPlus className="w-5 h-5" />
-          Neuer Benutzer
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { setShowChangePassword(!showChangePassword); setShowForm(false); setResetUserId(null); setError(''); setSuccess('') }}
+            className="flex items-center gap-2 px-6 py-3.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-gray-700 rounded-2xl text-[15px] font-semibold transition-all duration-300 cursor-pointer"
+          >
+            <Lock className="w-4 h-4" />
+            Mein Passwort
+          </button>
+          <button
+            onClick={() => { setShowForm(!showForm); setShowChangePassword(false); setResetUserId(null); setError(''); setSuccess('') }}
+            className="flex items-center gap-2 px-6 py-3.5 bg-[#0071e3] hover:bg-[#0077ED] text-white rounded-2xl text-[15px] font-semibold transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 duration-300 cursor-pointer"
+          >
+            <UserPlus className="w-5 h-5" />
+            Neuer Benutzer
+          </button>
+        </div>
       </div>
 
       {/* Feedback messages */}
@@ -166,6 +218,105 @@ export default function UserManagement() {
         </div>
       )}
 
+      {/* Change own password form */}
+      {showChangePassword && (
+        <div className="bg-[#f5f5f7] rounded-[24px] p-8 mb-8 border border-gray-200/60">
+          <h2 className="text-[20px] font-semibold text-black mb-6 flex items-center gap-3">
+            <Lock className="w-5 h-5 text-[#0071e3]" />
+            Mein Passwort ändern
+          </h2>
+          <form onSubmit={handleChangeOwnPassword} className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div>
+              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Aktuelles Passwort</label>
+              <input
+                type="password"
+                value={changeForm.currentPassword}
+                onChange={(e) => setChangeForm({ ...changeForm, currentPassword: e.target.value })}
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Neues Passwort</label>
+              <input
+                type="password"
+                value={changeForm.newPassword}
+                onChange={(e) => setChangeForm({ ...changeForm, newPassword: e.target.value })}
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                placeholder="Mindestens 4 Zeichen"
+                required
+                minLength={4}
+              />
+            </div>
+            <div>
+              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Passwort bestätigen</label>
+              <input
+                type="password"
+                value={changeForm.confirmPassword}
+                onChange={(e) => setChangeForm({ ...changeForm, confirmPassword: e.target.value })}
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                required
+                minLength={4}
+              />
+            </div>
+            <div className="sm:col-span-3 flex justify-end gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => setShowChangePassword(false)}
+                className="px-6 py-3 text-[15px] font-medium text-gray-600 hover:text-black transition-colors cursor-pointer"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-6 py-3 bg-[#0071e3] hover:bg-[#0077ED] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition-all duration-300 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {saving ? 'Wird geändert...' : 'Passwort ändern'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Admin reset password form */}
+      {resetUserId && (
+        <div className="bg-[#fff8f0] rounded-[24px] p-8 mb-8 border border-[#ff9f0a]/20">
+          <h2 className="text-[20px] font-semibold text-black mb-6 flex items-center gap-3">
+            <Key className="w-5 h-5 text-[#ff9f0a]" />
+            Passwort zurücksetzen für {users.find(u => u.id === resetUserId)?.display_name}
+          </h2>
+          <form onSubmit={handleResetPassword} className="flex items-end gap-4">
+            <div className="flex-1 max-w-md">
+              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Neues Passwort</label>
+              <input
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition-all"
+                placeholder="Mindestens 4 Zeichen"
+                required
+                minLength={4}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => { setResetUserId(null); setResetPassword('') }}
+              className="px-6 py-3.5 text-[15px] font-medium text-gray-600 hover:text-black transition-colors cursor-pointer"
+            >
+              Abbrechen
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-6 py-3.5 bg-[#ff9f0a] hover:bg-[#e8900a] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition-all duration-300 disabled:cursor-not-allowed cursor-pointer"
+            >
+              {saving ? 'Wird zurückgesetzt...' : 'Zurücksetzen'}
+            </button>
+          </form>
+        </div>
+      )}
+
       {/* Users list */}
       {loading ? (
         <div className="flex justify-center py-20">
@@ -196,13 +347,22 @@ export default function UserManagement() {
                   {u.role === 'admin' ? 'Admin' : 'Recruiter'}
                 </span>
                 {u.id !== currentUser.id && (
-                  <button
-                    onClick={() => handleDelete(u.id, u.username)}
+                  <>
+                    <button
+                      onClick={() => { setResetUserId(u.id); setResetPassword(''); setShowForm(false); setShowChangePassword(false); setError(''); setSuccess('') }}
+                      className="p-2.5 text-gray-400 hover:text-[#ff9f0a] hover:bg-orange-50 rounded-xl transition-all cursor-pointer"
+                      title="Passwort zurücksetzen"
+                    >
+                      <Key className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(u.id, u.username)}
                     className="p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all"
                     title="Benutzer löschen"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                  </>
                 )}
               </div>
             </div>

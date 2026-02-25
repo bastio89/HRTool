@@ -6,6 +6,7 @@ const matchingRouter = require('./src/routes/matching');
 const jobsRouter = require('./src/routes/jobs');
 const pipelineRouter = require('./src/routes/pipeline');
 const activitiesRouter = require('./src/routes/activities');
+const uploadsRouter = require('./src/routes/uploads');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +21,7 @@ app.use('/api/matching', matchingRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/pipeline', pipelineRouter);
 app.use('/api/activities', activitiesRouter);
+app.use('/api/uploads', uploadsRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

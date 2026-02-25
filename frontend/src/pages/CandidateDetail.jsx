@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, Phone, Mail, Users, GitBranch, FileText,
-  MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock
+  MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock,
+  Upload, Download, File, Image, X
 } from 'lucide-react'
-import { candidatesApi, activitiesApi } from '../api'
+import { candidatesApi, activitiesApi, uploadsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
 
 const ACTIVITY_TYPES = ['Notiz', 'Anruf', 'E-Mail', 'Interview', 'Angebot', 'Absage', 'Pipeline']
@@ -43,18 +44,23 @@ export default function CandidateDetail() {
   const [newText, setNewText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [files, setFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
 
   const candidateId = id
 
   const loadData = async () => {
     try {
-      const [cRes, aRes] = await Promise.all([
+      const [cRes, aRes, fRes] = await Promise.all([
         candidatesApi.getById(candidateId),
         activitiesApi.getByCandidate(candidateId),
+        uploadsApi.getByCandidate(candidateId).catch(() => ({ data: [] })),
       ])
       // getById returns the candidate object directly
       setCandidate(cRes?.id ? cRes : (cRes.candidate || cRes.data))
       setActivities(aRes.activities || [])
+      setFiles(fRes.data || [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -88,6 +94,47 @@ export default function CandidateDetail() {
     } catch (err) {
       alert(err.message)
     }
+  }
+
+  const handleFileUpload = async (fileList) => {
+    if (!fileList || fileList.length === 0) return
+    setUploading(true)
+    try {
+      for (const file of fileList) {
+        await uploadsApi.upload(candidateId, file)
+      }
+      const fRes = await uploadsApi.getByCandidate(candidateId)
+      setFiles(fRes.data || [])
+      // Reload activities to show upload activity
+      const aRes = await activitiesApi.getByCandidate(candidateId)
+      setActivities(aRes.activities || [])
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setUploading(false)
+      setDragOver(false)
+    }
+  }
+
+  const handleDeleteFile = async (fileId) => {
+    try {
+      await uploadsApi.delete(fileId)
+      setFiles(prev => prev.filter(f => f.id !== fileId))
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
+  const getFileIcon = (mimeType) => {
+    if (mimeType?.startsWith('image/')) return Image
+    return File
   }
 
   if (loading) return <LoadingSpinner text="Profil wird geladen..." />
@@ -159,6 +206,75 @@ export default function CandidateDetail() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Files Section */}
+      <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 p-10 mb-8">
+        <h2 className="text-[22px] font-semibold text-black mb-6">Dokumente</h2>
+
+        {/* Drop zone */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); handleFileUpload(e.dataTransfer.files) }}
+          className={`border-2 border-dashed rounded-[24px] p-8 text-center transition-all cursor-pointer mb-6 ${
+            dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 hover:border-gray-300'
+          }`}
+          onClick={() => {
+            const input = document.createElement('input')
+            input.type = 'file'
+            input.multiple = true
+            input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png'
+            input.onchange = (e) => handleFileUpload(e.target.files)
+            input.click()
+          }}
+        >
+          <Upload className={`w-8 h-8 mx-auto mb-3 ${dragOver ? 'text-[#0071e3]' : 'text-gray-300'}`} />
+          <p className="text-[15px] font-medium text-gray-500">
+            {uploading ? 'Wird hochgeladen...' : 'Dateien hierher ziehen oder klicken'}
+          </p>
+          <p className="text-[13px] text-gray-400 mt-1">PDF, Word, JPG, PNG — max. 10 MB</p>
+        </div>
+
+        {/* File list */}
+        {files.length > 0 && (
+          <div className="space-y-3">
+            {files.map(f => {
+              const FileIcon = getFileIcon(f.mime_type)
+              return (
+                <div key={f.id} className="flex items-center gap-4 p-4 bg-[#f5f5f7] rounded-[16px] group">
+                  <div className="w-10 h-10 rounded-[12px] bg-white flex items-center justify-center flex-shrink-0">
+                    <FileIcon className="w-5 h-5 text-gray-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[15px] font-semibold text-black truncate">{f.original_name}</p>
+                    <p className="text-[12px] text-gray-400 mt-0.5">
+                      {formatFileSize(f.size)} · {new Date(f.created_at).toLocaleDateString('de-DE')}
+                    </p>
+                  </div>
+                  <a
+                    href={uploadsApi.getDownloadUrl(f.id)}
+                    className="w-9 h-9 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors cursor-pointer"
+                    title="Herunterladen"
+                  >
+                    <Download className="w-4.5 h-4.5 text-[#0071e3]" />
+                  </a>
+                  <button
+                    onClick={() => handleDeleteFile(f.id)}
+                    className="w-9 h-9 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                    title="Löschen"
+                  >
+                    <X className="w-4 h-4 text-[#ff3b30]" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {files.length === 0 && !uploading && (
+          <p className="text-[15px] text-gray-400 text-center">Noch keine Dokumente hochgeladen.</p>
+        )}
       </div>
 
       {/* Activity Log */}

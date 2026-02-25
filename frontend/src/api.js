@@ -73,3 +73,23 @@ export const activitiesApi = {
 export const healthApi = {
   check: () => request('/health'),
 };
+
+// Uploads API
+export const uploadsApi = {
+  getByCandidate: (candidateId) => request(`/uploads/candidate/${candidateId}`),
+  upload: async (candidateId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/uploads/candidate/${candidateId}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload fehlgeschlagen' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+    return response.json();
+  },
+  getDownloadUrl: (fileId) => `${API_BASE}/uploads/download/${fileId}`,
+  delete: (fileId) => request(`/uploads/${fileId}`, { method: 'DELETE' }),
+};

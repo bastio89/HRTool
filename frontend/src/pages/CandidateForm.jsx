@@ -147,14 +147,14 @@ export default function CandidateForm() {
     <div className="fade-in max-w-[800px] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
-        <button onClick={() => navigate('/candidates')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
-          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+        <button onClick={() => navigate('/candidates')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
         <div>
-          <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black">
+          <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">
             {isEdit ? 'Bewerber bearbeiten' : 'Neuer Bewerber'}
           </h1>
-          <p className="text-[14px] sm:text-[18px] text-gray-500 mt-1 sm:mt-2">
+          <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-2">
             {isEdit ? 'Daten des Bewerbers aktualisieren' : 'Neuen Bewerber in der Kartei anlegen'}
           </p>
         </div>
@@ -174,10 +174,10 @@ export default function CandidateForm() {
           </div>
           <div className="space-y-2">
             {duplicates.map(d => (
-              <div key={d.id} className="flex items-center justify-between bg-white/60 rounded-[14px] px-5 py-3">
+              <div key={d.id} className="flex items-center justify-between bg-white/6 dark:bg-[#1c1c1e]/60 dark:bg-[#1c1c1e]/60 rounded-[14px] px-5 py-3">
                 <div>
-                  <span className="text-[15px] font-semibold text-black">{d.name}</span>
-                  {d.email && <span className="text-[14px] text-gray-500 ml-3">{d.email}</span>}
+                  <span className="text-[15px] font-semibold text-black dark:text-white">{d.name}</span>
+                  {d.email && <span className="text-[14px] text-gray-500 dark:text-gray-400 ml-3">{d.email}</span>}
                   {d.location && <span className="text-[14px] text-gray-400 ml-3">{d.location}</span>}
                 </div>
                 <span className="text-[12px] font-semibold text-[#ff9f0a] bg-[#ff9f0a]/10 px-3 py-1 rounded-full">
@@ -199,8 +199,8 @@ export default function CandidateForm() {
                 <Sparkles className="w-5 h-5 text-[#0071e3]" />
               </div>
               <div>
-                <h2 className="text-[20px] font-semibold tracking-tight text-black">KI-Bewerbungsanalyse</h2>
-                <p className="text-[14px] text-gray-500">Lade einen Lebenslauf hoch — die KI füllt die Felder automatisch aus</p>
+                <h2 className="text-[20px] font-semibold tracking-tight text-black dark:text-white">KI-Bewerbungsanalyse</h2>
+                <p className="text-[14px] text-gray-500 dark:text-gray-400">Lade einen Lebenslauf hoch — die KI füllt die Felder automatisch aus</p>
               </div>
             </div>
 
@@ -217,11 +217,11 @@ export default function CandidateForm() {
                 onClick={() => fileInputRef.current?.click()}
                 className="flex flex-col items-center py-10 gap-4 cursor-pointer rounded-[20px] border-2 border-dashed border-gray-300 hover:border-[#0071e3]/40 hover:bg-[#0071e3]/5 transition-all"
               >
-                <div className="w-16 h-16 bg-white rounded-[20px] shadow-sm flex items-center justify-center border border-gray-200">
+                <div className="w-16 h-16 bg-white dark:bg-[#1c1c1e] rounded-[20px] shadow-sm flex items-center justify-center border border-gray-200 dark:border-gray-700">
                   <Upload className="w-7 h-7 text-[#0071e3]" />
                 </div>
                 <div className="text-center">
-                  <p className="text-[16px] font-semibold text-black">PDF oder Word-Datei hierhin ziehen</p>
+                  <p className="text-[16px] font-semibold text-black dark:text-white">PDF oder Word-Datei hierhin ziehen</p>
                   <p className="text-[14px] text-gray-400 mt-1">oder klicken zum Auswählen</p>
                 </div>
                 <input
@@ -244,12 +244,12 @@ export default function CandidateForm() {
             {/* Attached files list */}
             {attachedFiles.length > 0 && (
               <div className="mt-6 space-y-2">
-                <p className="text-[13px] font-semibold text-gray-500 uppercase tracking-wider">Angehängte Dateien</p>
+                <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Angehängte Dateien</p>
                 {attachedFiles.map((f, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-white rounded-2xl px-5 py-3 border border-gray-100">
+                  <div key={idx} className="flex items-center justify-between bg-white dark:bg-[#1c1c1e] rounded-2xl px-5 py-3 border border-gray-100 dark:border-gray-700">
                     <div className="flex items-center gap-3">
                       <FileText className="w-4 h-4 text-[#0071e3]" />
-                      <span className="text-[14px] font-medium text-black">{f.name}</span>
+                      <span className="text-[14px] font-medium text-black dark:text-white">{f.name}</span>
                       <span className="text-[12px] text-gray-400">{(f.size / 1024).toFixed(0)} KB</span>
                     </div>
                     <button type="button" onClick={() => removeAttachedFile(idx)} className="p-1 text-gray-400 hover:text-[#ff3b30] transition-colors">
@@ -263,7 +263,7 @@ export default function CandidateForm() {
         )}
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black mb-8">Persönliche Daten</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Persönliche Daten</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <Input label="Name *" placeholder="Max Mustermann" value={form.name} onChange={handleChange('name')} required />
             <Input label="E-Mail" type="email" placeholder="max@example.com" value={form.email} onChange={handleChange('email')} />
@@ -273,7 +273,7 @@ export default function CandidateForm() {
         </Card>
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black mb-8">Berufliches Profil</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Berufliches Profil</h2>
           <div className="space-y-8">
             <Textarea 
               label="Berufserfahrung" 
@@ -304,7 +304,7 @@ export default function CandidateForm() {
         </Card>
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black mb-8">Erweiterte Informationen</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Erweiterte Informationen</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <Input label="Sprachen" placeholder="Deutsch (C2), Englisch (C1)" value={form.languages} onChange={handleChange('languages')} />
             <Input label="Führerschein" placeholder="B, BE" value={form.drivers_license} onChange={handleChange('drivers_license')} />
@@ -325,15 +325,15 @@ export default function CandidateForm() {
         </Card>
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black mb-8">Weitere Einstellungen</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Weitere Einstellungen</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500">Status</label>
+              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">Status</label>
               <select
                 value={form.status}
                 onChange={handleChange('status')}
-                className="w-full px-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black appearance-none cursor-pointer
-                  focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
+                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
               >
                 <option value="Aktiv">Aktiv</option>
                 <option value="Passiv">Passiv</option>
@@ -342,12 +342,12 @@ export default function CandidateForm() {
               </select>
             </div>
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500">Quelle</label>
+              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">Quelle</label>
               <select
                 value={form.source}
                 onChange={handleChange('source')}
-                className="w-full px-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black appearance-none cursor-pointer
-                  focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
+                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
               >
                 <option value="">– Bitte wählen –</option>
                 {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}

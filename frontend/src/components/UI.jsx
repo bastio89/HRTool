@@ -1,7 +1,7 @@
 export function Card({ children, className = '', hover = false, ...props }) {
   return (
     <div 
-      className={`bg-white rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 p-5 sm:p-10 ${hover ? 'hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-500' : ''} ${className}`}
+      className={`bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/40 p-5 sm:p-10 ${hover ? 'hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-500' : ''} ${className}`}
       {...props}
     >
       {children}
@@ -12,10 +12,10 @@ export function Card({ children, className = '', hover = false, ...props }) {
 export function Button({ children, variant = 'primary', size = 'md', className = '', disabled, ...props }) {
   const variants = {
     primary: 'bg-[#0071e3] hover:bg-[#0077ed] text-white shadow-sm',
-    secondary: 'bg-[#f5f5f7] hover:bg-[#e8e8ed] text-black',
+    secondary: 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-black dark:text-white',
     danger: 'bg-[#ff3b30]/10 hover:bg-[#ff3b30]/20 text-[#ff3b30]',
-    ghost: 'hover:bg-[#f5f5f7] text-gray-500 hover:text-black',
-    dark: 'bg-black hover:bg-gray-800 text-white shadow-sm',
+    ghost: 'hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] text-gray-500 hover:text-black dark:hover:text-white',
+    dark: 'bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black shadow-sm',
   }
 
   const sizes = {
@@ -42,14 +42,14 @@ export function Input({ label, className = '', ...props }) {
   return (
     <div className="space-y-3">
       {label && (
-        <label className="block text-[15px] font-medium text-gray-600 ml-2">
+        <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
           {label}
         </label>
       )}
       <input
-        className={`w-full px-6 py-4 bg-[#f5f5f7] border border-transparent rounded-[20px] 
-          text-black text-[16px] placeholder:text-gray-400
-          focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
+        className={`w-full px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px] 
+          text-black dark:text-white text-[16px] placeholder:text-gray-400
+          focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
           transition-all duration-300 ${className}`}
         {...props}
       />
@@ -61,14 +61,14 @@ export function Textarea({ label, className = '', ...props }) {
   return (
     <div className="space-y-3">
       {label && (
-        <label className="block text-[15px] font-medium text-gray-600 ml-2">
+        <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
           {label}
         </label>
       )}
       <textarea
-        className={`w-full px-6 py-5 bg-[#f5f5f7] border border-transparent rounded-[24px] 
-          text-black text-[16px] placeholder:text-gray-400
-          focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
+        className={`w-full px-6 py-5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[24px] 
+          text-black dark:text-white text-[16px] placeholder:text-gray-400
+          focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
           transition-all duration-300 resize-y min-h-[180px] leading-relaxed ${className}`}
         {...props}
       />
@@ -91,7 +91,7 @@ export function ScoreRing({ score, size = 80, strokeWidth = 6 }) {
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f5f5f7" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--apple-surface)" strokeWidth={strokeWidth} />
         <circle
           cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={getColor(score)}
           strokeWidth={strokeWidth} strokeLinecap="round"
@@ -99,7 +99,7 @@ export function ScoreRing({ score, size = 80, strokeWidth = 6 }) {
           style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1)' }}
         />
       </svg>
-      <span className="absolute font-semibold text-black tracking-tight" style={{ fontSize: size * 0.24 }}>
+      <span className="absolute font-semibold text-black dark:text-white tracking-tight" style={{ fontSize: size * 0.24 }}>
         {(score * 100).toFixed(0)}%
       </span>
     </div>
@@ -125,11 +125,11 @@ export function EmptyState({ icon: Icon, title, description, action }) {
   return (
     <div className="flex flex-col items-center justify-center py-32 text-center">
       {Icon && (
-        <div className="w-24 h-24 rounded-full bg-[#f5f5f7] flex items-center justify-center mb-10">
+        <div className="w-24 h-24 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center mb-10">
           <Icon className="w-10 h-10 text-gray-400" />
         </div>
       )}
-      <h3 className="text-[28px] font-semibold tracking-tight text-black mb-4">{title}</h3>
+      <h3 className="text-[28px] font-semibold tracking-tight text-black dark:text-white mb-4">{title}</h3>
       {description && (
         <p className="text-[18px] text-gray-500 max-w-lg mb-12 leading-relaxed">{description}</p>
       )}
@@ -141,7 +141,7 @@ export function EmptyState({ icon: Icon, title, description, action }) {
 export function LoadingSpinner({ text = 'Laden...' }) {
   return (
     <div className="flex flex-col items-center justify-center py-40">
-      <div className="w-12 h-12 border-4 border-gray-100 border-t-[#0071e3] rounded-full animate-spin mb-8" />
+      <div className="w-12 h-12 border-4 border-gray-100 dark:border-gray-700 border-t-[#0071e3] rounded-full animate-spin mb-8" />
       <p className="text-[17px] font-medium text-gray-500">{text}</p>
     </div>
   )

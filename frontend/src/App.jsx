@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
+import { ThemeProvider } from './ThemeContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -20,8 +21,8 @@ function ProtectedRoutes() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center">
-        <div className="w-10 h-10 border-[3px] border-gray-200 border-t-[#0071e3] rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#f5f5f7] dark:bg-black flex items-center justify-center">
+        <div className="w-10 h-10 border-[3px] border-gray-200 dark:border-gray-700 border-t-[#0071e3] rounded-full animate-spin" />
       </div>
     )
   }
@@ -51,6 +52,7 @@ function ProtectedRoutes() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AuthProvider>
       <ErrorBoundary>
         <Routes>
@@ -59,6 +61,7 @@ export default function App() {
         </Routes>
       </ErrorBoundary>
     </AuthProvider>
+    </ThemeProvider>
   )
 }
 

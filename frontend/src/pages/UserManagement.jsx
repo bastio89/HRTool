@@ -104,7 +104,7 @@ export default function UserManagement() {
     return (
       <div className="text-center py-20">
         <Shield className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-        <p className="text-[18px] text-gray-500 font-medium">Nur Administratoren haben Zugriff auf die Benutzerverwaltung.</p>
+        <p className="text-[18px] text-gray-500 dark:text-gray-400 font-medium">Nur Administratoren haben Zugriff auf die Benutzerverwaltung.</p>
       </div>
     )
   }
@@ -113,13 +113,13 @@ export default function UserManagement() {
     <div>
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h1 className="text-[34px] font-bold tracking-tight text-black">Benutzer</h1>
-          <p className="text-[16px] text-gray-500 mt-1">{users.length} Benutzer registriert</p>
+          <h1 className="text-[34px] font-bold tracking-tight text-black dark:text-white">Benutzer</h1>
+          <p className="text-[16px] text-gray-500 dark:text-gray-400 mt-1">{users.length} Benutzer registriert</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => { setShowChangePassword(!showChangePassword); setShowForm(false); setResetUserId(null); setError(''); setSuccess('') }}
-            className="flex items-center gap-2 px-6 py-3.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-gray-700 rounded-2xl text-[15px] font-semibold transition-all duration-300 cursor-pointer"
+            className="flex items-center gap-2 px-6 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-700 dark:text-gray-300 rounded-2xl text-[15px] font-semibold transition-all duration-300 cursor-pointer"
           >
             <Lock className="w-4 h-4" />
             Mein Passwort
@@ -150,49 +150,49 @@ export default function UserManagement() {
 
       {/* Create form */}
       {showForm && (
-        <div className="bg-[#f5f5f7] rounded-[24px] p-8 mb-8 border border-gray-200/60">
-          <h2 className="text-[20px] font-semibold text-black mb-6">Neuen Benutzer anlegen</h2>
+        <div className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 mb-8 border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60">
+          <h2 className="text-[20px] font-semibold text-black dark:text-white mb-6">Neuen Benutzer anlegen</h2>
           <form onSubmit={handleCreate} className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Benutzername</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Benutzername</label>
               <input
                 type="text"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder="z.B. jdoe"
                 required
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Passwort</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Passwort</label>
               <input
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder="Mindestens 4 Zeichen"
                 required
                 minLength={4}
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Anzeigename</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Anzeigename</label>
               <input
                 type="text"
                 value={form.display_name}
                 onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder="z.B. Jane Doe"
                 required
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Rolle</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Rolle</label>
               <select
                 value={form.role}
                 onChange={(e) => setForm({ ...form, role: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all appearance-none"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all appearance-none"
               >
                 <option value="recruiter">Recruiter</option>
                 <option value="admin">Admin</option>
@@ -202,7 +202,7 @@ export default function UserManagement() {
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-6 py-3 text-[15px] font-medium text-gray-600 hover:text-black transition-colors"
+                className="px-6 py-3 text-[15px] font-medium text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors"
               >
                 Abbrechen
               </button>
@@ -220,41 +220,41 @@ export default function UserManagement() {
 
       {/* Change own password form */}
       {showChangePassword && (
-        <div className="bg-[#f5f5f7] rounded-[24px] p-8 mb-8 border border-gray-200/60">
-          <h2 className="text-[20px] font-semibold text-black mb-6 flex items-center gap-3">
+        <div className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 mb-8 border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60">
+          <h2 className="text-[20px] font-semibold text-black dark:text-white mb-6 flex items-center gap-3">
             <Lock className="w-5 h-5 text-[#0071e3]" />
             Mein Passwort ändern
           </h2>
           <form onSubmit={handleChangeOwnPassword} className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Aktuelles Passwort</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Aktuelles Passwort</label>
               <input
                 type="password"
                 value={changeForm.currentPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, currentPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 required
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Neues Passwort</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Neues Passwort</label>
               <input
                 type="password"
                 value={changeForm.newPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, newPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder="Mindestens 4 Zeichen"
                 required
                 minLength={4}
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Passwort bestätigen</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Passwort bestätigen</label>
               <input
                 type="password"
                 value={changeForm.confirmPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, confirmPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 required
                 minLength={4}
               />
@@ -263,7 +263,7 @@ export default function UserManagement() {
               <button
                 type="button"
                 onClick={() => setShowChangePassword(false)}
-                className="px-6 py-3 text-[15px] font-medium text-gray-600 hover:text-black transition-colors cursor-pointer"
+                className="px-6 py-3 text-[15px] font-medium text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
               >
                 Abbrechen
               </button>
@@ -282,18 +282,18 @@ export default function UserManagement() {
       {/* Admin reset password form */}
       {resetUserId && (
         <div className="bg-[#fff8f0] rounded-[24px] p-8 mb-8 border border-[#ff9f0a]/20">
-          <h2 className="text-[20px] font-semibold text-black mb-6 flex items-center gap-3">
+          <h2 className="text-[20px] font-semibold text-black dark:text-white mb-6 flex items-center gap-3">
             <Key className="w-5 h-5 text-[#ff9f0a]" />
             Passwort zurücksetzen für {users.find(u => u.id === resetUserId)?.display_name}
           </h2>
           <form onSubmit={handleResetPassword} className="flex items-end gap-4">
             <div className="flex-1 max-w-md">
-              <label className="block text-[14px] font-medium text-gray-700 mb-2 ml-1">Neues Passwort</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Neues Passwort</label>
               <input
                 type="password"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white border border-gray-200/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition-all"
                 placeholder="Mindestens 4 Zeichen"
                 required
                 minLength={4}
@@ -302,7 +302,7 @@ export default function UserManagement() {
             <button
               type="button"
               onClick={() => { setResetUserId(null); setResetPassword('') }}
-              className="px-6 py-3.5 text-[15px] font-medium text-gray-600 hover:text-black transition-colors cursor-pointer"
+              className="px-6 py-3.5 text-[15px] font-medium text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
             >
               Abbrechen
             </button>
@@ -320,21 +320,21 @@ export default function UserManagement() {
       {/* Users list */}
       {loading ? (
         <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-[3px] border-gray-200 border-t-[#0071e3] rounded-full animate-spin" />
+          <div className="w-8 h-8 border-[3px] border-gray-200 dark:border-gray-700 border-t-[#0071e3] rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="bg-white rounded-[24px] border border-gray-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 shadow-[0_2px_10px_rgba(0,0,0,0.04)] overflow-hidden">
           {users.map((u, i) => (
-            <div key={u.id} className={`flex items-center justify-between px-8 py-5 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+            <div key={u.id} className={`flex items-center justify-between px-8 py-5 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''}`}>
               <div className="flex items-center gap-5">
                 <img
                   src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${u.display_name || u.username}`}
                   alt={u.display_name}
-                  className="w-11 h-11 rounded-full bg-gray-100 border border-gray-200"
+                  className="w-11 h-11 rounded-full bg-gray-100 dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700"
                 />
                 <div>
-                  <p className="text-[16px] font-semibold text-black">{u.display_name}</p>
-                  <p className="text-[14px] text-gray-500">@{u.username}</p>
+                  <p className="text-[16px] font-semibold text-black dark:text-white">{u.display_name}</p>
+                  <p className="text-[14px] text-gray-500 dark:text-gray-400">@{u.username}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">

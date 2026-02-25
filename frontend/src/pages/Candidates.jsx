@@ -203,8 +203,8 @@ export default function Candidates() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 sm:mb-14 gap-4">
         <div>
-          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Bewerber</h1>
-          <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">
+          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Bewerber</h1>
+          <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">
             {loading ? '...' : `${filtered.length} von ${totalCount} Profilen`}
           </p>
         </div>
@@ -228,19 +228,19 @@ export default function Candidates() {
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-5">
           <div className="relative flex-1">
-            <Search className="absolute left-5 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-gray-400" />
+            <Search className="absolute left-5 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               placeholder="Suche nach Name, Skills, Standort, Tags..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-13 sm:pl-16 pr-8 py-4 sm:py-5 bg-[#f5f5f7] border border-transparent rounded-[20px] sm:rounded-[24px]
-                text-black text-[15px] sm:text-[18px] placeholder:text-gray-400
-                focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 shadow-sm"
+              className="w-full pl-13 sm:pl-16 pr-8 py-4 sm:py-5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px] sm:rounded-[24px]
+                text-black dark:text-white text-[15px] sm:text-[18px] placeholder:text-gray-400 dark:placeholder:text-gray-500
+                focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 shadow-sm"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full hover:bg-gray-200 flex items-center justify-center cursor-pointer transition-colors">
-                <X className="w-4 h-4 text-gray-400" />
+              <button onClick={() => setSearch('')} className="absolute right-5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition-colors">
+                <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               </button>
             )}
           </div>
@@ -250,35 +250,35 @@ export default function Candidates() {
               className={`flex items-center gap-2 sm:gap-3 px-5 sm:px-7 py-3 sm:py-4 rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer border ${
                 showFilters || activeFilterCount > 0
                   ? 'bg-black text-white border-black'
-                  : 'bg-[#f5f5f7] text-gray-700 border-transparent hover:bg-[#e8e8ed]'
+                  : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-300 border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
               }`}
             >
               <SlidersHorizontal className="w-5 h-5" />
               <span className="hidden sm:inline">Filter</span>
               {activeFilterCount > 0 && (
-                <span className="w-6 h-6 rounded-full bg-white text-black text-[13px] font-bold flex items-center justify-center">{activeFilterCount}</span>
+                <span className="w-6 h-6 rounded-full bg-white dark:bg-[#1c1c1e] text-black dark:text-white text-[13px] font-bold flex items-center justify-center">{activeFilterCount}</span>
               )}
             </button>
             <div className="relative">
               <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                className="appearance-none pl-10 sm:pl-12 pr-4 sm:pr-6 py-3 sm:py-4 bg-[#f5f5f7] rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold text-gray-700 cursor-pointer border border-transparent hover:bg-[#e8e8ed] focus:outline-none transition-all"
+                className="appearance-none pl-10 sm:pl-12 pr-4 sm:pr-6 py-3 sm:py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer border border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] focus:outline-none transition-all"
               >
                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-              <ArrowUpDown className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+              <ArrowUpDown className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
             </div>
           </div>
         </div>
 
         {/* Filter panel */}
         {showFilters && (
-          <div className="bg-white rounded-[28px] border border-gray-100/80 shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-8 space-y-7">
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-[28px] border border-gray-100/80 dark:border-gray-700 shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-8 space-y-7">
             {/* Skills filter with AND logic */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Skills <span className="normal-case font-medium">(UND-Verknüpfung)</span></p>
-              <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] rounded-[20px] min-h-[56px]">
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Skills <span className="normal-case font-medium">(UND-Verknüpfung)</span></p>
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] min-h-[56px]">
                 {filterSkills.map(skill => (
                   <span key={skill} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0071e3] text-white text-[14px] font-semibold">
                     {skill}
@@ -293,16 +293,16 @@ export default function Candidates() {
                   value={skillInput}
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={handleSkillKeyDown}
-                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black placeholder:text-gray-400 focus:outline-none"
+                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none"
                 />
               </div>
               {filterSkills.length >= 2 && (
-                <p className="text-[13px] text-gray-400 mt-2 ml-1">Bewerber müssen <strong>alle</strong> Skills besitzen</p>
+                <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-2 ml-1">Bewerber müssen <strong>alle</strong> Skills besitzen</p>
               )}
             </div>
             {/* Status filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Status</p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Status</p>
               <div className="flex flex-wrap gap-3">
                 {STATUS_OPTIONS.map(s => (
                   <button
@@ -311,7 +311,7 @@ export default function Candidates() {
                     className={`px-5 py-2.5 rounded-full text-[15px] font-semibold transition-all cursor-pointer border ${
                       filterStatus.includes(s)
                         ? `${STATUS_STYLE[s]} border-current`
-                        : 'bg-[#f5f5f7] text-gray-600 border-transparent hover:bg-[#e8e8ed]'
+                        : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
                     }`}
                   >
                     {s}
@@ -321,26 +321,26 @@ export default function Candidates() {
             </div>
             {/* Availability filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Verfügbarkeit</p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Verfügbarkeit</p>
               <input
                 type="text"
                 placeholder="z.B. sofort, 3 Monate..."
                 value={filterAvail}
                 onChange={e => setFilterAvail(e.target.value)}
-                className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black border border-transparent
-                  focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+                className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white border border-transparent
+                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
               />
             </div>
             {/* Location filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Standort</p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Standort</p>
               <input
                 type="text"
                 placeholder="z.B. Berlin, München..."
                 value={filterLocation}
                 onChange={e => setFilterLocation(e.target.value)}
-                className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black border border-transparent
-                  focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+                className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white border border-transparent
+                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
               />
             </div>
             {activeFilterCount > 0 && (
@@ -417,7 +417,7 @@ export default function Candidates() {
           {/* Select All */}
           {filtered.length > 0 && (
             <div className="flex items-center gap-3 px-2">
-              <button onClick={toggleSelectAll} className="cursor-pointer text-gray-400 hover:text-black transition-colors">
+              <button onClick={toggleSelectAll} className="cursor-pointer text-gray-400 dark:text-gray-500 hover:text-black dark:hover:text-white transition-colors">
                 {selectedIds.size === filtered.length ? (
                   <CheckSquare className="w-5 h-5 text-[#0071e3]" />
                 ) : selectedIds.size > 0 ? (
@@ -426,7 +426,7 @@ export default function Candidates() {
                   <Square className="w-5 h-5" />
                 )}
               </button>
-              <span className="text-[14px] text-gray-400 font-medium">
+              <span className="text-[14px] text-gray-400 dark:text-gray-500 font-medium">
                 {selectedIds.size > 0 ? `${selectedIds.size} ausgewählt` : 'Alle auswählen'}
               </span>
             </div>
@@ -451,15 +451,15 @@ export default function Candidates() {
                     )}
                   </button>
                   {/* Avatar */}
-                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] flex items-center justify-center flex-shrink-0 border border-gray-200/50">
-                    <span className="text-[16px] sm:text-[22px] font-semibold text-gray-600 tracking-tight">
+                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center flex-shrink-0 border border-gray-200/50 dark:border-gray-700">
+                    <span className="text-[16px] sm:text-[22px] font-semibold text-gray-600 dark:text-gray-400 tracking-tight">
                       {candidate.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                     </span>
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-                      <h3 className="text-[18px] sm:text-[24px] font-semibold tracking-tight text-black break-words">{candidate.name}</h3>
+                      <h3 className="text-[18px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white break-words">{candidate.name}</h3>
                       {candidate.status && candidate.status !== 'Aktiv' && (
                         <span className={`px-3 py-1 rounded-full text-[12px] sm:text-[13px] font-semibold whitespace-nowrap ${
                           candidate.status === 'Passiv' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' :
@@ -470,7 +470,7 @@ export default function Candidates() {
                     </div>
                     <div className="flex items-center gap-3 sm:gap-6 mt-2 sm:mt-3 flex-wrap">
                       {candidate.location && (
-                        <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500">
+                        <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                           <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {candidate.location}
                         </span>
                       )}
@@ -489,12 +489,12 @@ export default function Candidates() {
                     {candidate.skills && (
                       <div className="flex items-center gap-2 sm:gap-3 flex-wrap mt-3">
                         {candidate.skills.split(',').slice(0, 4).map((skill, i) => (
-                          <span key={i} className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#f5f5f7] text-gray-700 text-[12px] sm:text-[14px] font-medium">
+                          <span key={i} className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-300 text-[12px] sm:text-[14px] font-medium">
                             {skill.trim()}
                           </span>
                         ))}
                         {candidate.skills.split(',').length > 4 && (
-                          <span className="text-[12px] sm:text-[14px] font-medium text-gray-400 px-2">
+                          <span className="text-[12px] sm:text-[14px] font-medium text-gray-400 dark:text-gray-500 px-2">
                             +{candidate.skills.split(',').length - 4}
                           </span>
                         )}
@@ -529,15 +529,15 @@ export default function Candidates() {
                   >
                     <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full hover:bg-[#f5f5f7] transition-colors ml-1 sm:ml-2">
-                    <ChevronDown className={`w-5 h-5 sm:w-6 sm:h-6 text-gray-400 transition-transform duration-400 ${expandedId === candidate.id ? 'rotate-180' : ''}`} />
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors ml-1 sm:ml-2">
+                    <ChevronDown className={`w-5 h-5 sm:w-6 sm:h-6 text-gray-400 dark:text-gray-500 transition-transform duration-400 ${expandedId === candidate.id ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
               </div>
 
               {/* Expanded details */}
               <div className={`overflow-hidden transition-all duration-500 ease-in-out ${expandedId === candidate.id ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                <div className="px-10 pb-10 pt-4 border-t border-gray-100/80">
+                <div className="px-10 pb-10 pt-4 border-t border-gray-100/80 dark:border-gray-700">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pt-8">
                     {candidate.email && <DetailItem label="E-Mail" value={candidate.email} />}
                     {candidate.phone && <DetailItem label="Telefon" value={candidate.phone} />}
@@ -551,16 +551,16 @@ export default function Candidates() {
                   </div>
                   {candidate.experience && (
                     <div className="mt-12">
-                      <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-widest mb-4">Berufserfahrung</p>
-                      <p className="text-[16px] text-gray-700 bg-[#f5f5f7] rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
+                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Berufserfahrung</p>
+                      <p className="text-[16px] text-gray-700 dark:text-gray-300 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
                         {candidate.experience}
                       </p>
                     </div>
                   )}
                   {candidate.notes && (
                     <div className="mt-8">
-                      <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-widest mb-4">Notizen</p>
-                      <p className="text-[16px] text-gray-700 bg-[#ff9f0a]/10 rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
+                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Notizen</p>
+                      <p className="text-[16px] text-gray-700 dark:text-gray-300 bg-[#ff9f0a]/10 rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
                         {candidate.notes}
                       </p>
                     </div>
@@ -585,9 +585,9 @@ export default function Candidates() {
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
-                <ChevronLeft className="w-5 h-5 text-gray-600" />
+                <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
               {Array.from({ length: totalPages }, (_, i) => i + 1)
                 .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
@@ -598,7 +598,7 @@ export default function Candidates() {
                 }, [])
                 .map((p, i) =>
                   p === '...' ? (
-                    <span key={`dots-${i}`} className="px-2 text-gray-400 text-[15px]">...</span>
+                    <span key={`dots-${i}`} className="px-2 text-gray-400 dark:text-gray-500 text-[15px]">...</span>
                   ) : (
                     <button
                       key={p}
@@ -606,7 +606,7 @@ export default function Candidates() {
                       className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer ${
                         p === currentPage
                           ? 'bg-black text-white'
-                          : 'bg-[#f5f5f7] text-gray-600 hover:bg-[#e8e8ed]'
+                          : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
                       }`}
                     >
                       {p}
@@ -616,9 +616,9 @@ export default function Candidates() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
-                <ChevronRight className="w-5 h-5 text-gray-600" />
+                <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
           )}
@@ -631,10 +631,10 @@ export default function Candidates() {
 function DetailItem({ label, value, icon: Icon }) {
   return (
     <div className="flex items-start gap-4">
-      {Icon && <Icon className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />}
+      {Icon && <Icon className="w-5 h-5 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />}
       <div>
-        <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-widest">{label}</p>
-        <p className="text-[16px] font-medium text-black mt-1.5">{value}</p>
+        <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{label}</p>
+        <p className="text-[16px] font-medium text-black dark:text-white mt-1.5">{value}</p>
       </div>
     </div>
   )

@@ -64,15 +64,15 @@ export default function JobForm() {
       <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <button
           onClick={() => navigate('/jobs')}
-          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
         >
-          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
         <div>
-          <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black">
+          <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">
             {isEdit ? 'Stelle bearbeiten' : 'Neue Stelle anlegen'}
           </h1>
-          <p className="text-[14px] sm:text-[18px] text-gray-500 mt-1 sm:mt-2">
+          <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-2">
             {isEdit ? 'Details der Stelle aktualisieren' : 'Neue Stelle in der Stellenverwaltung anlegen'}
           </p>
         </div>
@@ -86,7 +86,7 @@ export default function JobForm() {
 
       <form onSubmit={handleSubmit} className="space-y-10">
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black mb-8">Allgemeine Angaben</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Allgemeine Angaben</h2>
           <div className="space-y-8">
             <Input
               label="Jobtitel *"
@@ -110,23 +110,23 @@ export default function JobForm() {
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col gap-3">
-                <label className="text-[15px] font-semibold text-gray-500 ml-1">Anstellungsart</label>
+                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">Anstellungsart</label>
                 <select
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-                  className="w-full px-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black appearance-none cursor-pointer
-                    focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                  className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
+                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
                 >
                   {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-3">
-                <label className="text-[15px] font-semibold text-gray-500 ml-1">Status</label>
+                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">Status</label>
                 <select
                   value={form.status}
                   onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full px-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black appearance-none cursor-pointer
-                    focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                  className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
+                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
                 >
                   {JOB_STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>
@@ -136,7 +136,7 @@ export default function JobForm() {
         </Card>
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black mb-8">Details</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Details</h2>
           <div className="space-y-8">
             <Textarea
               label="Stellenbeschreibung"

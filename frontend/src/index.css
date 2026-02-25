@@ -1,9 +1,26 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --apple-bg: #f5f5f7;
   --apple-text: #1d1d1f;
   --apple-blue: #0071e3;
+  --apple-card: #ffffff;
+  --apple-surface: #f5f5f7;
+  --apple-border: rgba(0,0,0,0.06);
+  --apple-border-card: rgba(0,0,0,0.04);
+}
+
+.dark {
+  --apple-bg: #000000;
+  --apple-text: #f5f5f7;
+  --apple-blue: #0a84ff;
+  --apple-card: #1c1c1e;
+  --apple-surface: #2c2c2e;
+  --apple-border: rgba(255,255,255,0.1);
+  --apple-border-card: rgba(255,255,255,0.06);
+  color-scheme: dark;
 }
 
 body {

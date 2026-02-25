@@ -98,8 +98,8 @@ export default function Matching() {
   return (
     <div className="fade-in max-w-[1200px] mx-auto">
       <div className="mb-8 sm:mb-14">
-        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Stellen-Matching</h1>
-        <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">
+        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Stellen-Matching</h1>
+        <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">
           Füge eine Stellenbeschreibung ein und finde die passendsten Bewerber
         </p>
       </div>
@@ -114,19 +114,19 @@ export default function Matching() {
         <div className="lg:col-span-2">
           <Card className="p-12 h-full">
             <div className="flex items-center gap-5 mb-10">
-              <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center">
-                <FileText className="w-6 h-6 text-black" />
+              <div className="w-14 h-14 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center">
+                <FileText className="w-6 h-6 text-black dark:text-white" />
               </div>
-              <h2 className="text-[24px] font-semibold tracking-tight text-black">Stellenbeschreibung</h2>
+              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">Stellenbeschreibung</h2>
             </div>
 
             {/* Mode toggle */}
-            <div className="flex gap-3 mb-10 p-1.5 bg-[#f5f5f7] rounded-[20px] w-fit">
+            <div className="flex gap-3 mb-10 p-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] w-fit">
               <button
                 type="button"
                 onClick={() => handleModeSwitch('manual')}
                 className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition-all cursor-pointer ${
-                  jobMode === 'manual' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'
+                  jobMode === 'manual' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
                 <PenLine className="w-4 h-4" /> Manuell eingeben
@@ -135,7 +135,7 @@ export default function Matching() {
                 type="button"
                 onClick={() => handleModeSwitch('existing')}
                 className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition-all cursor-pointer ${
-                  jobMode === 'existing' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'
+                  jobMode === 'existing' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
                 <Briefcase className="w-4 h-4" /> Aus Stellen wählen
@@ -149,7 +149,7 @@ export default function Matching() {
             {jobMode === 'existing' && (
               <div className="mb-10">
                 {jobs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 rounded-[24px] bg-[#f5f5f7]">
+                  <div className="flex flex-col items-center justify-center py-12 rounded-[24px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                     <Briefcase className="w-10 h-10 text-gray-300 mb-4" />
                     <p className="text-[17px] font-semibold text-gray-400">Noch keine Stellen angelegt</p>
                     <button
@@ -169,8 +169,8 @@ export default function Matching() {
                         placeholder="Stellen durchsuchen..."
                         value={jobSearch}
                         onChange={e => setJobSearch(e.target.value)}
-                        className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[15px] font-medium text-black border border-transparent
-                          focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+                        className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[15px] font-medium text-black dark:text-white border border-transparent
+                          focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
                       />
                     </div>
                     <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
@@ -184,17 +184,17 @@ export default function Matching() {
                             className={`w-full flex items-center gap-5 p-5 rounded-[20px] text-left transition-all cursor-pointer ${
                               selectedJobId === job.id
                                 ? 'bg-[#0071e3] text-white shadow-md'
-                                : 'bg-[#f5f5f7] hover:bg-[#e8e8ed] text-black'
+                                : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-black dark:text-white'
                             }`}
                           >
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              selectedJobId === job.id ? 'bg-white/20' : 'bg-white'
+                              selectedJobId === job.id ? 'bg-white/2 dark:bg-[#1c1c1e]/20 dark:bg-[#1c1c1e]/20' : 'bg-white dark:bg-[#1c1c1e]'
                             }`}>
-                              <Briefcase className={`w-5 h-5 ${selectedJobId === job.id ? 'text-white' : 'text-gray-500'}`} />
+                              <Briefcase className={`w-5 h-5 ${selectedJobId === job.id ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="text-[16px] font-semibold truncate">{job.title}</p>
-                              <p className={`text-[13px] font-medium mt-0.5 truncate ${selectedJobId === job.id ? 'text-white/70' : 'text-gray-500'}`}>
+                              <p className={`text-[13px] font-medium mt-0.5 truncate ${selectedJobId === job.id ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`}>
                                 {[job.location, job.type, job.status].filter(Boolean).join(' · ')}
                               </p>
                             </div>
@@ -234,12 +234,12 @@ export default function Matching() {
         <div className="space-y-8">
           <Card className="p-10">
             <div className="flex items-center gap-5 mb-8">
-              <div className="w-14 h-14 rounded-full bg-[#f5f5f7] flex items-center justify-center">
-                <Users className="w-6 h-6 text-black" />
+              <div className="w-14 h-14 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center">
+                <Users className="w-6 h-6 text-black dark:text-white" />
               </div>
               <div>
-                <h2 className="text-[22px] font-semibold tracking-tight text-black">Bewerberauswahl</h2>
-                <p className="text-[15px] font-medium text-gray-500 mt-1">
+                <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">Bewerberauswahl</h2>
+                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-1">
                   {selectedIds.length} von {candidates.length} ausgewählt
                 </p>
               </div>
@@ -261,14 +261,14 @@ export default function Matching() {
                     placeholder="Filtern..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-14 pr-5 py-4 text-[15px] bg-[#f5f5f7] border border-transparent rounded-[20px] 
-                      text-black font-medium focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+                    className="w-full pl-14 pr-5 py-4 text-[15px] bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px] 
+                      text-black dark:text-white font-medium focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
                   />
                 </div>
 
                 <button
                   onClick={toggleAll}
-                  className="flex items-center gap-4 w-full px-5 py-4 rounded-[20px] hover:bg-[#f5f5f7] transition-colors text-[15px] font-semibold text-gray-700 cursor-pointer mb-4"
+                  className="flex items-center gap-4 w-full px-5 py-4 rounded-[20px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors text-[15px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer mb-4"
                 >
                   {selectAll ? <CheckSquare className="w-6 h-6 text-[#0071e3]" /> : <Square className="w-6 h-6 text-gray-300" />}
                   Alle auswählen
@@ -279,13 +279,13 @@ export default function Matching() {
                     <button
                       key={candidate.id}
                       onClick={() => toggleCandidate(candidate.id)}
-                      className="flex items-center gap-5 w-full px-5 py-4 rounded-[20px] hover:bg-[#f5f5f7] transition-colors text-left cursor-pointer"
+                      className="flex items-center gap-5 w-full px-5 py-4 rounded-[20px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors text-left cursor-pointer"
                     >
                       {selectedIds.includes(candidate.id) ? <CheckSquare className="w-6 h-6 text-[#0071e3] flex-shrink-0" /> : <Square className="w-6 h-6 text-gray-300 flex-shrink-0" />}
                       <div className="min-w-0">
-                        <p className="text-[16px] font-semibold text-black truncate">{candidate.name}</p>
+                        <p className="text-[16px] font-semibold text-black dark:text-white truncate">{candidate.name}</p>
                         {candidate.skills && (
-                          <p className="text-[14px] font-medium text-gray-500 truncate mt-1">
+                          <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400 truncate mt-1">
                             {candidate.skills}
                           </p>
                         )}

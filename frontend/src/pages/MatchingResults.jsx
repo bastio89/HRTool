@@ -62,13 +62,13 @@ export default function MatchingResults() {
     <div className="fade-in max-w-[1200px] mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
-          <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
-            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+          <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+            <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black">Matching-Ergebnisse</h1>
+            <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Matching-Ergebnisse</h1>
             <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
-              <span className="text-[14px] sm:text-[18px] font-medium text-gray-500">{data?.job_title}</span>
+              <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
               {matchedAt && (
                 <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
                   <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -95,11 +95,11 @@ export default function MatchingResults() {
         <Card className="p-10">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[48px] leading-none font-semibold tracking-tight text-black">{results.length}</p>
-              <p className="text-[16px] font-medium text-gray-500 mt-4">Geprüft</p>
+              <p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{results.length}</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Geprüft</p>
             </div>
-            <div className="w-12 h-12 rounded-full bg-[#f5f5f7] flex items-center justify-center">
-              <User className="w-6 h-6 text-gray-600" />
+            <div className="w-12 h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center">
+              <User className="w-6 h-6 text-gray-600 dark:text-gray-400" />
             </div>
           </div>
         </Card>
@@ -109,7 +109,7 @@ export default function MatchingResults() {
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">
                 {bestScore ? (bestScore * 100).toFixed(0) + '%' : '-'}
               </p>
-              <p className="text-[16px] font-medium text-gray-500 mt-4">Best Match</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Best Match</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#34c759]/10 flex items-center justify-center">
               <Trophy className="w-6 h-6 text-[#34c759]" />
@@ -122,7 +122,7 @@ export default function MatchingResults() {
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">
                 {results.length > 0 ? (avgScore * 100).toFixed(0) + '%' : '-'}
               </p>
-              <p className="text-[16px] font-medium text-gray-500 mt-4">Durchschnitt</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Durchschnitt</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#0071e3]/10 flex items-center justify-center">
               <BarChart3 className="w-6 h-6 text-[#0071e3]" />
@@ -133,7 +133,7 @@ export default function MatchingResults() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#ff9f0a]">{topCount}</p>
-              <p className="text-[16px] font-medium text-gray-500 mt-4">Top (≥80%)</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Top (≥80%)</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#ff9f0a]/10 flex items-center justify-center">
               <Target className="w-6 h-6 text-[#ff9f0a]" />
@@ -143,7 +143,7 @@ export default function MatchingResults() {
       </div>
 
       <div>
-        <h2 className="text-[28px] font-semibold tracking-tight text-black mb-8">Ranking</h2>
+        <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white mb-8">Ranking</h2>
         <div className="space-y-6">
           {results.map((result, idx) => (
             <Card key={result.candidateId || idx} className="overflow-hidden p-0" hover>
@@ -153,9 +153,9 @@ export default function MatchingResults() {
               >
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 text-[20px] font-semibold
                   ${idx === 0 ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' : 
-                    idx === 1 ? 'bg-gray-100 text-gray-600' : 
+                    idx === 1 ? 'bg-gray-100 dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400' : 
                     idx === 2 ? 'bg-[#ff3b30]/10 text-[#ff3b30]' : 
-                    'bg-[#f5f5f7] text-gray-400'}`
+                    'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-400'}`
                 }>
                   {idx + 1}
                 </div>
@@ -164,21 +164,21 @@ export default function MatchingResults() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-5">
-                    <h3 className="text-[26px] font-semibold tracking-tight text-black">{result.candidateName}</h3>
+                    <h3 className="text-[26px] font-semibold tracking-tight text-black dark:text-white">{result.candidateName}</h3>
                     <ScoreBadge score={result.score} />
                   </div>
-                  <p className="text-[16px] font-medium text-gray-500 mt-3 leading-relaxed">
+                  <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-3 leading-relaxed">
                     {result.summary}
                   </p>
                 </div>
 
-                <div className="flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center hover:bg-[#f5f5f7] transition-colors">
+                <div className="flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors">
                   <ChevronDown className={`w-7 h-7 text-gray-400 transition-transform duration-500 ${expandedIdx === idx ? 'rotate-180' : ''}`} />
                 </div>
               </div>
 
               <div className={`overflow-hidden transition-all duration-500 ease-in-out ${expandedIdx === idx ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                <div className="px-10 pb-10 border-t border-gray-100/80">
+                <div className="px-10 pb-10 border-t border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-10">
                     {result.strengths?.length > 0 && (
                       <div>
@@ -193,7 +193,7 @@ export default function MatchingResults() {
                             const text = typeof s === 'object' ? s.text : s
                             const ref = typeof s === 'object' ? s.reference : ''
                             return (
-                              <li key={i} className="text-[16px] font-medium text-gray-700 leading-relaxed">
+                              <li key={i} className="text-[16px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed">
                                 <div className="flex items-start gap-4">
                                   <span className="w-2 h-2 rounded-full bg-[#34c759] mt-2.5 flex-shrink-0" />
                                   {text}
@@ -224,7 +224,7 @@ export default function MatchingResults() {
                             const text = typeof w === 'object' ? w.text : w
                             const ref = typeof w === 'object' ? w.reference : ''
                             return (
-                              <li key={i} className="text-[16px] font-medium text-gray-700 leading-relaxed">
+                              <li key={i} className="text-[16px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed">
                                 <div className="flex items-start gap-4">
                                   <span className="w-2 h-2 rounded-full bg-[#ff3b30] mt-2.5 flex-shrink-0" />
                                   {text}
@@ -251,7 +251,7 @@ export default function MatchingResults() {
 
       {results.length === 0 && (
         <Card className="p-20 text-center mt-10">
-          <p className="text-[20px] font-medium text-gray-500">Keine Ergebnisse verfügbar.</p>
+          <p className="text-[20px] font-medium text-gray-500 dark:text-gray-400">Keine Ergebnisse verfügbar.</p>
         </Card>
       )}
     </div>

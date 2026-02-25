@@ -11,7 +11,7 @@ import { Button, LoadingSpinner } from '../components/UI'
 const ACTIVITY_TYPES = ['Notiz', 'Anruf', 'E-Mail', 'Interview', 'Angebot', 'Absage', 'Pipeline']
 
 const activityIcon = {
-  Notiz:     { Icon: FileText,     color: 'text-gray-500',    bg: 'bg-gray-100' },
+  Notiz:     { Icon: FileText,     color: 'text-gray-500 dark:text-gray-400',    bg: 'bg-gray-100 dark:bg-[#2c2c2e]' },
   Anruf:     { Icon: Phone,        color: 'text-[#34c759]',   bg: 'bg-[#34c759]/10' },
   'E-Mail':  { Icon: Mail,         color: 'text-[#0071e3]',   bg: 'bg-[#0071e3]/10' },
   Interview: { Icon: Users,        color: 'text-[#ff9f0a]',   bg: 'bg-[#ff9f0a]/10' },
@@ -154,24 +154,24 @@ export default function CandidateDetail() {
     <div className="fade-in max-w-[900px] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-6 mb-6 sm:mb-10">
-        <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
-          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black" />
+        <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+          <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
         <div>
           <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5">Bewerberprofil</p>
-          <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black leading-tight">{candidate.name}</h1>
+          <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black dark:text-white leading-tight">{candidate.name}</h1>
         </div>
       </div>
 
       {/* Candidate Info Card */}
-      <div className="bg-white rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 p-5 sm:p-10 mb-6 sm:mb-8">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row items-start gap-5 sm:gap-8">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] flex items-center justify-center text-[22px] sm:text-[28px] font-semibold text-gray-600 flex-shrink-0">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center text-[22px] sm:text-[28px] font-semibold text-gray-600 dark:text-gray-400 flex-shrink-0">
             {candidate.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-4 flex-wrap mb-4">
-              <h2 className="text-[24px] font-semibold text-black">{candidate.name}</h2>
+              <h2 className="text-[24px] font-semibold text-black dark:text-white">{candidate.name}</h2>
               <span className={`px-4 py-1.5 rounded-full text-[14px] font-semibold ${STATUS_STYLES[status] || STATUS_STYLES['Aktiv']}`}>
                 {status}
               </span>
@@ -189,7 +189,7 @@ export default function CandidateDetail() {
                 <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Skills</p>
                 <div className="flex flex-wrap gap-2">
                   {candidate.skills.split(',').map((s, i) => (
-                    <span key={i} className="px-3.5 py-1.5 bg-[#f5f5f7] rounded-full text-[14px] font-medium text-gray-700">{s.trim()}</span>
+                    <span key={i} className="px-3.5 py-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full text-[14px] font-medium text-gray-700 dark:text-gray-300">{s.trim()}</span>
                   ))}
                 </div>
               </div>
@@ -209,8 +209,8 @@ export default function CandidateDetail() {
       </div>
 
       {/* Files Section */}
-      <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 p-10 mb-8">
-        <h2 className="text-[22px] font-semibold text-black mb-6">Dokumente</h2>
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 p-10 mb-8">
+        <h2 className="text-[22px] font-semibold text-black dark:text-white mb-6">Dokumente</h2>
 
         {/* Drop zone */}
         <div
@@ -218,7 +218,7 @@ export default function CandidateDetail() {
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => { e.preventDefault(); handleFileUpload(e.dataTransfer.files) }}
           className={`border-2 border-dashed rounded-[24px] p-8 text-center transition-all cursor-pointer mb-6 ${
-            dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 hover:border-gray-300'
+            dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
           }`}
           onClick={() => {
             const input = document.createElement('input')
@@ -230,7 +230,7 @@ export default function CandidateDetail() {
           }}
         >
           <Upload className={`w-8 h-8 mx-auto mb-3 ${dragOver ? 'text-[#0071e3]' : 'text-gray-300'}`} />
-          <p className="text-[15px] font-medium text-gray-500">
+          <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">
             {uploading ? 'Wird hochgeladen...' : 'Dateien hierher ziehen oder klicken'}
           </p>
           <p className="text-[13px] text-gray-400 mt-1">PDF, Word, JPG, PNG — max. 10 MB</p>
@@ -242,12 +242,12 @@ export default function CandidateDetail() {
             {files.map(f => {
               const FileIcon = getFileIcon(f.mime_type)
               return (
-                <div key={f.id} className="flex items-center gap-4 p-4 bg-[#f5f5f7] rounded-[16px] group">
-                  <div className="w-10 h-10 rounded-[12px] bg-white flex items-center justify-center flex-shrink-0">
-                    <FileIcon className="w-5 h-5 text-gray-500" />
+                <div key={f.id} className="flex items-center gap-4 p-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] group">
+                  <div className="w-10 h-10 rounded-[12px] bg-white dark:bg-[#1c1c1e] flex items-center justify-center flex-shrink-0">
+                    <FileIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-semibold text-black truncate">{f.original_name}</p>
+                    <p className="text-[15px] font-semibold text-black dark:text-white truncate">{f.original_name}</p>
                     <p className="text-[12px] text-gray-400 mt-0.5">
                       {formatFileSize(f.size)} · {new Date(f.created_at).toLocaleDateString('de-DE')}
                     </p>
@@ -278,12 +278,12 @@ export default function CandidateDetail() {
       </div>
 
       {/* Activity Log */}
-      <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 p-10">
-        <h2 className="text-[22px] font-semibold text-black mb-8">Aktivitätslog</h2>
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 p-10">
+        <h2 className="text-[22px] font-semibold text-black dark:text-white mb-8">Aktivitätslog</h2>
 
         {/* Add activity form */}
-        <form onSubmit={handleAddActivity} className="bg-[#f5f5f7] rounded-[24px] p-6 mb-10">
-          <p className="text-[15px] font-semibold text-gray-600 mb-5">Neue Aktivität</p>
+        <form onSubmit={handleAddActivity} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-6 mb-10">
+          <p className="text-[15px] font-semibold text-gray-600 dark:text-gray-400 mb-5">Neue Aktivität</p>
           <div className="flex flex-col gap-4">
             <div className="flex gap-3 flex-wrap">
               {ACTIVITY_TYPES.map(type => {
@@ -294,7 +294,7 @@ export default function CandidateDetail() {
                     type="button"
                     onClick={() => setNewType(type)}
                     className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${
-                      newType === type ? 'bg-black text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50'
+                      newType === type ? 'bg-black text-white shadow-md' : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
@@ -308,7 +308,7 @@ export default function CandidateDetail() {
               onChange={e => setNewText(e.target.value)}
               placeholder="Details, Notizen, Ergebnisse..."
               rows={3}
-              className="w-full px-5 py-4 bg-white rounded-[20px] text-[16px] font-medium text-black resize-none
+              className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none
                 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
             />
             <div className="flex justify-end">
@@ -322,7 +322,7 @@ export default function CandidateDetail() {
         {/* Timeline */}
         {activities.length === 0 ? (
           <div className="text-center py-16">
-            <div className="w-16 h-16 rounded-full bg-[#f5f5f7] flex items-center justify-center mx-auto mb-5">
+            <div className="w-16 h-16 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center mx-auto mb-5">
               <FileText className="w-8 h-8 text-gray-300" />
             </div>
             <p className="text-[18px] font-semibold text-gray-400">Noch keine Aktivitäten</p>
@@ -340,15 +340,15 @@ export default function CandidateDetail() {
                       <Icon className={`w-5 h-5 ${color}`} />
                     </div>
                     {idx < activities.length - 1 && (
-                      <div className="w-px flex-1 mt-2 bg-gray-100" />
+                      <div className="w-px flex-1 mt-2 bg-gray-100 dark:bg-[#2c2c2e]" />
                     )}
                   </div>
                   <div className="flex-1 pb-6">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-3">
-                        <span className="text-[15px] font-bold text-black">{activity.type}</span>
+                        <span className="text-[15px] font-bold text-black dark:text-white">{activity.type}</span>
                         {activity.auto_generated === 1 && (
-                          <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-[12px] font-medium text-gray-500">Automatisch</span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-[12px] font-medium text-gray-500 dark:text-gray-400">Automatisch</span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -361,7 +361,7 @@ export default function CandidateDetail() {
                             >Löschen</button>
                             <button
                               onClick={() => setDeleteConfirm(null)}
-                              className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-600 text-[13px] font-semibold cursor-pointer hover:opacity-80 transition-opacity"
+                              className="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 text-[13px] font-semibold cursor-pointer hover:opacity-80 transition-opacity"
                             >Abbrechen</button>
                           </div>
                         ) : (
@@ -377,7 +377,7 @@ export default function CandidateDetail() {
                         <span className="text-[13px] font-medium text-gray-400 group-hover:hidden">{formatDate(activity.created_at)}</span>
                       )}
                     </div>
-                    <p className="text-[16px] font-medium text-gray-700 leading-relaxed whitespace-pre-wrap">{activity.text}</p>
+                    <p className="text-[16px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{activity.text}</p>
                   </div>
                 </div>
               )
@@ -391,7 +391,7 @@ export default function CandidateDetail() {
 
 function InfoRow({ icon: Icon, text }) {
   return (
-    <div className="flex items-center gap-3 text-[15px] font-medium text-gray-600">
+    <div className="flex items-center gap-3 text-[15px] font-medium text-gray-600 dark:text-gray-400">
       <Icon className="w-4.5 h-4.5 text-gray-400 flex-shrink-0" />
       <span>{text}</span>
     </div>

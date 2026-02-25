@@ -421,14 +421,14 @@ Bewerber müssen die Möglichkeit haben, eine Bewertung ohne KI-Unterstützung z
 
 ## 6. Prioritätsmatrix & Zeitplan
 
-### P0 — Sofort (bis März 2026)
+### P0 — Sofort (bis März 2026) ✅ IMPLEMENTIERT
 
-| Nr | Maßnahme | Artikel | Aufwand | Typ |
-|----|----------|---------|---------|-----|
-| 1 | KI-Transparenzhinweis formulieren (Bewerber-Text) | Art. 13 | 2h | Text/Legal |
-| 2 | KI-Badges im Frontend bei allen KI-Ergebnissen | Art. 13 | 1 Tag | Code |
-| 3 | KI-Prompt-Logging (`ai_logs` Tabelle implementieren) | Art. 12 | 1 Tag | Code |
-| 4 | JWT-Secret Fallback entfernen | Art. 15 | 1h | Code |
+| Nr | Maßnahme | Artikel | Status | Umsetzung |
+|----|----------|---------|--------|-----------|
+| 1 | KI-Transparenzhinweis formulieren (Bewerber-Text) | Art. 13 | ✅ Erledigt | Eigene Seite `/admin/ki-transparenz` mit vollständiger Bewerber-Information |
+| 2 | KI-Badges im Frontend bei allen KI-Ergebnissen | Art. 13 | ✅ Erledigt | `KiBadge` & `KiDisclaimer` Komponenten in Matching, CV-Parser, Job-Generator |
+| 3 | KI-Prompt-Logging (`ai_logs` Tabelle implementieren) | Art. 12 | ✅ Erledigt | `ai_logs` Tabelle, `aiLogger.js` Modul, Logging in allen 3 KI-Routen |
+| 4 | JWT-Secret Fallback entfernen | Art. 15 | ✅ Erledigt | Startup-Check via `process.exit(1)` wenn `JWT_SECRET` fehlt |
 
 ### P1 — Kurzfristig (bis Mai 2026)
 

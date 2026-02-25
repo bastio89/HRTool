@@ -162,6 +162,24 @@ db.exec(`
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS ai_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    feature TEXT NOT NULL,
+    model TEXT,
+    model_version TEXT,
+    prompt_hash TEXT,
+    prompt TEXT,
+    response TEXT,
+    parsed_result TEXT,
+    duration_ms INTEGER,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    success INTEGER DEFAULT 1,
+    error_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Safe migrations for existing databases
@@ -211,6 +229,10 @@ const indexes = [
   `CREATE INDEX IF NOT EXISTS idx_interviews_date ON interviews(interview_date)`,
   `CREATE INDEX IF NOT EXISTS idx_interviews_candidate ON interviews(candidate_id)`,
   `CREATE INDEX IF NOT EXISTS idx_interviews_job ON interviews(job_id)`,
+  // AI Logs: Feature & Zeitraum-Filter
+  `CREATE INDEX IF NOT EXISTS idx_ai_logs_feature ON ai_logs(feature)`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_logs_created_at ON ai_logs(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_ai_logs_user_id ON ai_logs(user_id)`,
 ];
 for (const sql of indexes) {
   try { db.exec(sql); } catch (_) { /* index already exists */ }

@@ -17,6 +17,7 @@ import Pipeline from './pages/Pipeline'
 import UserManagement from './pages/UserManagement'
 import AuditLog from './pages/AuditLog'
 import DSGVO from './pages/DSGVO'
+import KITransparenz from './pages/KITransparenz'
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth()
@@ -49,6 +50,7 @@ function ProtectedRoutes() {
         <Route path="admin/users" element={<UserManagement />} />
         <Route path="admin/audit" element={<AuditLog />} />
         <Route path="admin/dsgvo" element={<DSGVO />} />
+        <Route path="admin/ki-transparenz" element={<KITransparenz />} />
       </Route>
     </Routes>
   )

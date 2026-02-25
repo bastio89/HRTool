@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { logAiCall } = require('../aiLogger');
 
 const router = express.Router();
 
@@ -240,6 +241,7 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000);
 
+    const startTime = Date.now();
     let response;
     try {
       response = await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -255,6 +257,18 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
       });
     } catch (fetchErr) {
       clearTimeout(timeoutId);
+      const duration = Date.now() - startTime;
+      logAiCall({
+        userId: req.user?.id,
+        feature: 'job-generator',
+        model: OLLAMA_MODEL,
+        prompt,
+        response: null,
+        parsedResult: null,
+        durationMs: duration,
+        success: false,
+        errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >180s' : fetchErr.message,
+      });
       if (fetchErr.name === 'AbortError') {
         return res.status(504).json({ error: 'Ollama-Timeout: Die Generierung hat zu lange gedauert (> 3 Min). Versuche es erneut — das Modell wird beim ersten Aufruf geladen.' });
       }
@@ -266,11 +280,23 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     if (!response.ok) {
       const errText = await response.text();
       console.error('Ollama error:', errText);
+      logAiCall({
+        userId: req.user?.id,
+        feature: 'job-generator',
+        model: OLLAMA_MODEL,
+        prompt,
+        response: errText,
+        parsedResult: null,
+        durationMs: Date.now() - startTime,
+        success: false,
+        errorMessage: `Ollama Status ${response.status}: ${errText}`,
+      });
       return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
     }
 
     const data = await response.json();
     const responseText = data.response || '';
+    const generationDuration = Date.now() - startTime;
 
     // Parse JSON from response (handle markdown wrapping, German keys, nested structures)
     let parsed = { description: '', requirements: '' };
@@ -337,9 +363,26 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
       keywords: keywords?.slice(0, 200)
     });
 
+    const finalDescription = cleanText(parsed.description);
+    const finalRequirements = cleanText(parsed.requirements);
+
+    // AI Act Art. 12: Log the AI call
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'job-generator',
+      model: OLLAMA_MODEL,
+      prompt,
+      response: responseText,
+      parsedResult: { description: finalDescription, requirements: finalRequirements },
+      durationMs: generationDuration,
+      inputTokens: data.prompt_eval_count ?? null,
+      outputTokens: data.eval_count ?? null,
+      success: true,
+    });
+
     res.json({
-      description: cleanText(parsed.description),
-      requirements: cleanText(parsed.requirements),
+      description: finalDescription,
+      requirements: finalRequirements,
       model: OLLAMA_MODEL
     });
   } catch (error) {

@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
+const { logAiCall } = require('../aiLogger');
 
 const router = express.Router();
 
@@ -182,19 +183,31 @@ router.post('/parse', upload.single('file'), async (req, res) => {
     const controller = new AbortController();
     const fetchTimeout = setTimeout(() => controller.abort(), 90000);
 
+    const cvPrompt = JSON.stringify({ cvText: text, filename: req.file.originalname });
+    const startTime = Date.now();
+
     let n8nResponse;
     try {
       n8nResponse = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          cvText: text,
-          filename: req.file.originalname,
-        })
+        body: cvPrompt
       });
     } catch (fetchErr) {
       clearTimeout(fetchTimeout);
+      const duration = Date.now() - startTime;
+      logAiCall({
+        userId: req.user?.id,
+        feature: 'cv-parser',
+        model: process.env.OLLAMA_MODEL || 'llama3.2',
+        prompt: cvPrompt,
+        response: null,
+        parsedResult: null,
+        durationMs: duration,
+        success: false,
+        errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >90s' : fetchErr.message,
+      });
       if (fetchErr.name === 'AbortError') {
         return res.status(504).json({ error: 'n8n Timeout – CV-Analyse dauerte zu lange (>90s)' });
       }
@@ -205,6 +218,17 @@ router.post('/parse', upload.single('file'), async (req, res) => {
     if (!n8nResponse.ok) {
       const errText = await n8nResponse.text();
       console.error('n8n CV-Parse webhook error:', n8nResponse.status, errText);
+      logAiCall({
+        userId: req.user?.id,
+        feature: 'cv-parser',
+        model: process.env.OLLAMA_MODEL || 'llama3.2',
+        prompt: cvPrompt,
+        response: errText,
+        parsedResult: null,
+        durationMs: Date.now() - startTime,
+        success: false,
+        errorMessage: `n8n Status ${n8nResponse.status}`,
+      });
       return res.status(502).json({
         error: 'KI-Extraktion fehlgeschlagen',
         details: `n8n Status ${n8nResponse.status}`
@@ -212,7 +236,20 @@ router.post('/parse', upload.single('file'), async (req, res) => {
     }
 
     const extracted = await n8nResponse.json();
+    const cvDuration = Date.now() - startTime;
     console.log('✅ CV-Parser: KI-Extraktion erfolgreich');
+
+    // AI Act Art. 12: Log the AI call
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'cv-parser',
+      model: process.env.OLLAMA_MODEL || 'llama3.2',
+      prompt: cvPrompt,
+      response: JSON.stringify(extracted),
+      parsedResult: extracted,
+      durationMs: cvDuration,
+      success: true,
+    });
 
     res.json({
       success: true,

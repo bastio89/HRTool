@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Save, AlertTriangle, Upload, FileText, Sparkles, X, Paperclip } from 'lucide-react'
 import { candidatesApi, cvParserApi, uploadsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
+import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 
 const emptyCandidate = {
   name: '', email: '', phone: '', location: '',
@@ -235,9 +236,13 @@ export default function CandidateForm() {
             )}
 
             {parseSuccess && (
-              <div className="flex items-center gap-3 mt-6 bg-[#34c759]/10 text-[#34c759] text-[14px] font-medium px-5 py-3.5 rounded-2xl border border-green-100">
-                <Sparkles className="w-4 h-4 flex-shrink-0" />
-                {parseSuccess}
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center gap-3 bg-[#34c759]/10 text-[#34c759] text-[14px] font-medium px-5 py-3.5 rounded-2xl border border-green-100">
+                  <Sparkles className="w-4 h-4 flex-shrink-0" />
+                  {parseSuccess}
+                  <KiBadge label="KI-extrahiert" className="ml-auto" />
+                </div>
+                <KiDisclaimer feature="cv-parser" />
               </div>
             )}
 

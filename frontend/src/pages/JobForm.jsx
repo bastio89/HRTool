@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Sparkles, Loader2 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
+import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
@@ -169,9 +170,15 @@ export default function JobForm() {
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">Details</h2>
             {aiModel && (
-              <span className="text-[12px] font-medium text-gray-400 dark:text-gray-500">Modell: {aiModel}</span>
+              <div className="flex items-center gap-3">
+                <KiBadge label="KI-generiert" tooltip="Beschreibung und Anforderungen wurden von einer KI generiert. Bitte prüfe den Text." />
+                <span className="text-[12px] font-medium text-gray-400 dark:text-gray-500">Modell: {aiModel}</span>
+              </div>
             )}
           </div>
+
+          {/* AI Act Art. 13: Transparenzhinweis nach KI-Generierung */}
+          {aiModel && <KiDisclaimer feature="job-generator" className="mb-8" />}
 
           {/* KI-Generierung */}
           <div className="mb-8 p-5 sm:p-6 rounded-[20px] bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 dark:from-[#5e5ce6]/10 dark:to-[#0071e3]/10 border border-[#5e5ce6]/10 dark:border-[#5e5ce6]/20">

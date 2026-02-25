@@ -7,7 +7,14 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'hrtool-secret-key-2025';
+
+// AI Act Art. 15: JWT-Secret darf NICHT hardcoded sein
+if (!process.env.JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET Umgebungsvariable ist nicht gesetzt!');
+  console.error('   Bitte in .env setzen: JWT_SECRET=<mindestens-32-zeichen-zufallsstring>');
+  process.exit(1);
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES = '7d';
 
 /**

@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../database');
+const { logAiCall } = require('../aiLogger');
 
 const router = express.Router();
 
@@ -49,34 +50,48 @@ router.post('/run', async (req, res) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
     
+    const matchingPrompt = JSON.stringify({
+      jobDescription,
+      jobTitle: jobTitle || 'Unbenannte Stelle',
+      candidates: candidates.map((c, idx) => ({
+        id: c.id,
+        name: `Kandidat ${idx + 1}`,
+        experience: c.experience,
+        skills: c.skills,
+        education: c.education,
+        languages: c.languages,
+        certificates: c.certificates,
+        location: c.location,
+        desired_salary: c.desired_salary,
+        availability: c.availability,
+        drivers_license: c.drivers_license,
+        mobility: c.mobility
+      }))
+    });
+
+    const startTime = Date.now();
     let response;
     try {
       response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          jobDescription,
-          jobTitle: jobTitle || 'Unbenannte Stelle',
-          candidates: candidates.map((c, idx) => ({
-            id: c.id,
-            // Name und persönliche Daten werden anonymisiert – kein Einfluss auf Bewertung
-            name: `Kandidat ${idx + 1}`,
-            experience: c.experience,
-            skills: c.skills,
-            education: c.education,
-            languages: c.languages,
-            certificates: c.certificates,
-            location: c.location,
-            desired_salary: c.desired_salary,
-            availability: c.availability,
-            drivers_license: c.drivers_license,
-            mobility: c.mobility
-          }))
-        })
+        body: matchingPrompt
       });
     } catch (fetchErr) {
       clearTimeout(timeout);
+      const duration = Date.now() - startTime;
+      logAiCall({
+        userId: req.user?.id,
+        feature: 'matching',
+        model: process.env.OLLAMA_MODEL || 'llama3.2',
+        prompt: matchingPrompt,
+        response: null,
+        parsedResult: null,
+        durationMs: duration,
+        success: false,
+        errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >120s' : fetchErr.message,
+      });
       if (fetchErr.name === 'AbortError') {
         return res.status(504).json({ error: 'n8n Timeout – Matching dauerte zu lange (>120s)' });
       }
@@ -87,6 +102,17 @@ router.post('/run', async (req, res) => {
     if (!response.ok) {
       const errText = await response.text();
       console.error('n8n webhook error:', response.status, errText);
+      logAiCall({
+        userId: req.user?.id,
+        feature: 'matching',
+        model: process.env.OLLAMA_MODEL || 'llama3.2',
+        prompt: matchingPrompt,
+        response: errText,
+        parsedResult: null,
+        durationMs: Date.now() - startTime,
+        success: false,
+        errorMessage: `n8n Status ${response.status}: ${errText}`,
+      });
       return res.status(502).json({ 
         error: 'n8n Workflow fehlgeschlagen',
         details: `Status ${response.status}: ${errText}`
@@ -94,6 +120,19 @@ router.post('/run', async (req, res) => {
     }
 
     const matchingResults = await response.json();
+    const matchingDuration = Date.now() - startTime;
+
+    // AI Act Art. 12: Log the AI call
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'matching',
+      model: process.env.OLLAMA_MODEL || 'llama3.2',
+      prompt: matchingPrompt,
+      response: JSON.stringify(matchingResults),
+      parsedResult: matchingResults,
+      durationMs: matchingDuration,
+      success: true,
+    });
 
     // De-Anonymisierung: echte Namen wieder einsetzen anhand der candidateId
     const candidateMap = new Map(candidates.map(c => [c.id, c.name]));

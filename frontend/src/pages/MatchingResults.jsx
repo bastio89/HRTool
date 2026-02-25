@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
+import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 
 export default function MatchingResults() {
   const { id } = useParams()
@@ -91,6 +92,9 @@ export default function MatchingResults() {
         </div>
       </div>
 
+      {/* AI Act Art. 13: KI-Transparenzhinweis */}
+      <KiDisclaimer feature="matching" className="mb-10" />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
         <Card className="p-10">
           <div className="flex items-start justify-between">
@@ -166,6 +170,7 @@ export default function MatchingResults() {
                   <div className="flex items-center gap-5">
                     <h3 className="text-[26px] font-semibold tracking-tight text-black dark:text-white">{result.candidateName}</h3>
                     <ScoreBadge score={result.score} />
+                    <KiBadge tooltip="Score und Bewertung wurden von einer KI berechnet. Bitte manuell überprüfen." />
                   </div>
                   <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-3 leading-relaxed">
                     {result.summary}

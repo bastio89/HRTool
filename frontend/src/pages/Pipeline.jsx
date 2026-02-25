@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity
@@ -187,12 +188,12 @@ export default function Pipeline() {
         })}
       </div>
 
-      {/* Add Candidate Modal */}
-      {addPanelOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setAddPanelOpen(false)} />
-          <div className="relative w-[520px] max-h-[80vh] bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/80 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-10 pt-10 pb-8">
+      {/* Add Candidate Modal — rendered via Portal to escape overflow-hidden */}
+      {addPanelOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6">
+          <div className="fixed inset-0 bg-black/30" onClick={() => setAddPanelOpen(false)} />
+          <div className="relative z-10 w-[520px] max-h-[80vh] bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/80 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-10 pt-10 pb-8 flex-shrink-0">
               <h2 className="text-[24px] font-semibold tracking-tight text-black">Bewerber hinzufügen</h2>
               <button
                 onClick={() => setAddPanelOpen(false)}
@@ -250,7 +251,8 @@ export default function Pipeline() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

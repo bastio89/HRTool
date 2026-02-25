@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 
@@ -54,6 +54,28 @@ export default function Candidates() {
 
   const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0)
 
+  const exportCSV = () => {
+    const headers = ['Name', 'E-Mail', 'Telefon', 'Standort', 'Status', 'Verfügbarkeit', 'Skills', 'Ausbildung', 'Sprachen', 'Zertifikate', 'Führerschein', 'Mobilität', 'Gehaltsvorstellung', 'Tags', 'Notizen']
+    const escape = (v) => {
+      if (!v) return ''
+      const s = String(v).replace(/"/g, '""')
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s
+    }
+    const rows = filtered.map(c => [
+      c.name, c.email, c.phone, c.location, c.status || 'Aktiv', c.availability,
+      c.skills, c.education, c.languages, c.certificates, c.drivers_license,
+      c.mobility, c.desired_salary, c.tags, c.notes
+    ].map(escape).join(','))
+    const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `bewerber_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const filtered = useMemo(() => {
     let list = [...candidates]
     if (search) {
@@ -88,12 +110,20 @@ export default function Candidates() {
             {loading ? '...' : `${filtered.length} von ${candidates.length} Profilen`}
           </p>
         </div>
-        <Link to="/candidates/new">
-          <Button size="lg" variant="dark">
-            <Plus className="w-5 h-5" />
-            Neuer Bewerber
-          </Button>
-        </Link>
+        <div className="flex items-center gap-4">
+          {filtered.length > 0 && (
+            <Button size="lg" variant="secondary" onClick={exportCSV}>
+              <Download className="w-5 h-5" />
+              CSV Export
+            </Button>
+          )}
+          <Link to="/candidates/new">
+            <Button size="lg" variant="dark">
+              <Plus className="w-5 h-5" />
+              Neuer Bewerber
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search + Filter bar */}

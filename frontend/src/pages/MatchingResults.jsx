@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
 
@@ -33,6 +33,31 @@ export default function MatchingResults() {
   const avgScore = results.length > 0 ? results.reduce((s, r) => s + r.score, 0) / results.length : 0
   const topCount = results.filter(r => r.score >= 0.8).length
 
+  const exportCSV = () => {
+    const escape = (v) => {
+      if (!v) return ''
+      const s = String(v).replace(/"/g, '""')
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s
+    }
+    const headers = ['Rang', 'Kandidat', 'Score (%)', 'Zusammenfassung', 'Stärken', 'Schwächen']
+    const rows = results.map((r, i) => [
+      i + 1,
+      r.candidateName,
+      (r.score * 100).toFixed(0),
+      r.summary,
+      (r.strengths || []).map(s => typeof s === 'object' ? s.text : s).join('; '),
+      (r.weaknesses || []).map(w => typeof w === 'object' ? w.text : w).join('; ')
+    ].map(escape).join(','))
+    const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `matching_${(data?.job_title || 'ergebnis').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="fade-in max-w-[1200px] mx-auto">
       <div className="flex items-center gap-8 mb-14">
@@ -51,9 +76,17 @@ export default function MatchingResults() {
             )}
           </div>
         </div>
-        <Link to="/matching">
-          <Button size="lg" variant="dark">Neues Matching</Button>
-        </Link>
+        <div className="flex items-center gap-4">
+          {results.length > 0 && (
+            <Button size="lg" variant="secondary" onClick={exportCSV}>
+              <Download className="w-5 h-5" />
+              CSV Export
+            </Button>
+          )}
+          <Link to="/matching">
+            <Button size="lg" variant="dark">Neues Matching</Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">

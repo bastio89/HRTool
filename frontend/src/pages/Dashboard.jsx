@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2 } from 'lucide-react'
 import { candidatesApi, matchingApi, pipelineApi, healthApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 
@@ -8,22 +8,25 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
+  const [sourceStats, setSourceStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [n8nStatus, setN8nStatus] = useState(null)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [statsData, historyData, pipelineData, healthData] = await Promise.all([
+        const [statsData, historyData, pipelineData, healthData, sourceData] = await Promise.all([
           candidatesApi.getStats().catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
           matchingApi.getHistory().catch(() => ({ data: [] })),
           pipelineApi.getActiveJobs().catch(() => ({ data: [] })),
           healthApi.check().catch(() => ({ n8nStatus: 'unreachable' })),
+          candidatesApi.getSourceStats().catch(() => ({ sources: [], total: 0 })),
         ])
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
         setActivePipelines(pipelineData.data || [])
         setN8nStatus(healthData.n8nStatus || healthData.services?.n8n || 'unknown')
+        setSourceStats(sourceData)
       } catch (err) {
         console.error(err)
       } finally {
@@ -242,6 +245,51 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
+
+      {/* Source Analysis */}
+      {sourceStats?.sources?.length > 0 && (
+        <Card className="p-12">
+          <div className="flex items-center justify-between mb-10">
+            <div>
+              <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">Quellen-Analyse</h2>
+              <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">Woher kommen die Bewerber? Welche Quelle liefert die besten Ergebnisse?</p>
+            </div>
+            <div className="w-14 h-14 rounded-full bg-[#5856d6]/10 flex items-center justify-center flex-shrink-0">
+              <Share2 className="w-7 h-7 text-[#5856d6]" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {sourceStats.sources.map((s, idx) => {
+              const colors = ['#0071e3', '#34c759', '#ff9500', '#5856d6', '#ff3b30', '#30d158', '#ff2d55', '#007aff', '#af52de'];
+              const color = colors[idx % colors.length];
+              return (
+                <div key={s.source} className="p-6 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/50 dark:border-gray-700/50">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[16px] font-semibold text-black dark:text-white">{s.source}</span>
+                    <span className="px-3 py-1 rounded-full text-[13px] font-bold" style={{ backgroundColor: `${color}15`, color }}>{s.percentage}%</span>
+                  </div>
+
+                  {/* Bar */}
+                  <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-600 mb-5">
+                    <div className="h-full rounded-full transition-all duration-700" style={{ width: `${s.percentage}%`, backgroundColor: color }} />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[14px]">
+                    <span className="text-gray-500 dark:text-gray-400"><span className="font-semibold text-black dark:text-white">{s.count}</span> Bewerber</span>
+                    {s.hired > 0 && (
+                      <span className="text-[#34c759] font-semibold">{s.hired} Hired ({s.hiredRate}%)</span>
+                    )}
+                    {s.hired === 0 && s.inProcess > 0 && (
+                      <span className="text-[#ff9500] font-medium">{s.inProcess} in Prozess</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

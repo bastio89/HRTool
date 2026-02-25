@@ -86,6 +86,64 @@ router.get('/stats/overview', (req, res) => {
 
 /**
  * @swagger
+ * /candidates/stats/sources:
+ *   get:
+ *     summary: Quellen-Analyse (Bewerber pro Quelle, Hired-Rate)
+ *     tags: [Candidates]
+ *     responses:
+ *       200:
+ *         description: Quellen-Statistiken
+ */
+router.get('/stats/sources', (req, res) => {
+  try {
+    // Bewerber pro Quelle
+    const sourceCounts = db.prepare(`
+      SELECT COALESCE(source, 'Unbekannt') as source, COUNT(*) as count
+      FROM candidates
+      GROUP BY COALESCE(source, 'Unbekannt')
+      ORDER BY count DESC
+    `).all();
+
+    const total = sourceCounts.reduce((sum, s) => sum + s.count, 0);
+
+    // Hired-Rate pro Quelle (Kandidaten die in Pipeline auf "Hired" stehen)
+    const hiredBySource = db.prepare(`
+      SELECT COALESCE(c.source, 'Unbekannt') as source, COUNT(DISTINCT c.id) as hired
+      FROM candidates c
+      JOIN pipeline_entries pe ON pe.candidate_id = c.id
+      WHERE pe.stage = 'Hired'
+      GROUP BY COALESCE(c.source, 'Unbekannt')
+    `).all();
+    const hiredMap = new Map(hiredBySource.map(h => [h.source, h.hired]));
+
+    // In-Prozess pro Quelle
+    const inProcessBySource = db.prepare(`
+      SELECT COALESCE(c.source, 'Unbekannt') as source, COUNT(DISTINCT c.id) as in_process
+      FROM candidates c
+      JOIN pipeline_entries pe ON pe.candidate_id = c.id
+      WHERE pe.stage NOT IN ('Hired', 'Abgesagt')
+      GROUP BY COALESCE(c.source, 'Unbekannt')
+    `).all();
+    const processMap = new Map(inProcessBySource.map(p => [p.source, p.in_process]));
+
+    const sources = sourceCounts.map(s => ({
+      source: s.source,
+      count: s.count,
+      percentage: total > 0 ? Math.round((s.count / total) * 100) : 0,
+      hired: hiredMap.get(s.source) || 0,
+      hiredRate: s.count > 0 ? Math.round(((hiredMap.get(s.source) || 0) / s.count) * 100) : 0,
+      inProcess: processMap.get(s.source) || 0,
+    }));
+
+    res.json({ sources, total });
+  } catch (error) {
+    console.error('Error fetching source stats:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Quellen-Statistiken' });
+  }
+});
+
+/**
+ * @swagger
  * /candidates:
  *   get:
  *     summary: Alle Bewerber (paginiert)

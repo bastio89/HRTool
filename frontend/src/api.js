@@ -56,6 +56,7 @@ export const candidatesApi = {
   batchDelete: (ids) => request('/candidates/batch/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   batchStatus: (ids, status) => request('/candidates/batch/status', { method: 'POST', body: JSON.stringify({ ids, status }) }),
   getStats: () => request('/candidates/stats/overview'),
+  getSourceStats: () => request('/candidates/stats/sources'),
   checkDuplicate: (name, email, excludeId) =>
     request('/candidates/check-duplicate', { method: 'POST', body: JSON.stringify({ name, email, excludeId }) }),
 };

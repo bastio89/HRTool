@@ -1,26 +1,29 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase } from 'lucide-react'
-import { candidatesApi, matchingApi, jobsApi } from '../api'
+import { candidatesApi, matchingApi, jobsApi, pipelineApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
   const [openJobsCount, setOpenJobsCount] = useState(0)
+  const [activePipelines, setActivePipelines] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [statsData, historyData, jobsData] = await Promise.all([
+        const [statsData, historyData, jobsData, pipelineData] = await Promise.all([
           candidatesApi.getStats().catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
           matchingApi.getHistory().catch(() => ({ data: [] })),
-          jobsApi.getAll('Offen').catch(() => ({ data: [] }))
+          jobsApi.getAll('Offen').catch(() => ({ data: [] })),
+          pipelineApi.getActiveJobs().catch(() => ({ data: [] }))
         ])
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
         setOpenJobsCount((jobsData.data || []).length)
+        setActivePipelines(pipelineData.data || [])
       } catch (err) {
         console.error(err)
       } finally {
@@ -85,6 +88,62 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Active Pipelines */}
+      {activePipelines.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-[28px] font-semibold tracking-tight text-black">Aktive Pipelines</h2>
+              <p className="text-[15px] text-gray-500 mt-1">Stellen mit Bewerbern in der Pipeline</p>
+            </div>
+            <Link to="/jobs" className="text-[16px] font-medium text-[#0071e3] hover:text-[#0077ed] flex items-center gap-2 transition-colors">
+              Alle Stellen <ArrowRight className="w-5 h-5" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {activePipelines.map(job => {
+              const stageColors = {
+                'Beworben': 'bg-[#007aff]/10 text-[#007aff]',
+                'Vorauswahl': 'bg-[#5856d6]/10 text-[#5856d6]',
+                'Interview': 'bg-[#ff9500]/10 text-[#ff9500]',
+                'Angebot': 'bg-[#34c759]/10 text-[#34c759]',
+                'Hired': 'bg-[#30d158]/10 text-[#30d158]',
+                'Abgesagt': 'bg-[#ff3b30]/10 text-[#ff3b30]',
+              }
+              return (
+                <Link key={job.id} to={`/jobs/${job.id}/pipeline`}>
+                  <Card hover className="p-8 h-full">
+                    <div className="flex items-start gap-5 mb-6">
+                      <div className="w-12 h-12 rounded-full bg-[#0071e3]/10 flex items-center justify-center flex-shrink-0">
+                        <Briefcase className="w-6 h-6 text-[#0071e3]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[18px] font-semibold tracking-tight text-black truncate">{job.title}</p>
+                        {job.location && (
+                          <p className="text-[14px] font-medium text-gray-500 mt-1 flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5" /> {job.location}
+                          </p>
+                        )}
+                      </div>
+                      <span className="flex-shrink-0 px-3.5 py-1.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[14px] font-bold">
+                        {job.total}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(job.stages).map(([stage, count]) => (
+                        <span key={stage} className={`px-3 py-1 rounded-full text-[13px] font-semibold ${stageColors[stage] || 'bg-gray-100 text-gray-600'}`}>
+                          {count} {stage}
+                        </span>
+                      ))}
+                    </div>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Two column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -89,6 +89,44 @@ router.put('/:entryId/stage', (req, res) => {
   }
 });
 
+// GET active pipelines (jobs with candidates in pipeline)
+router.get('/active-jobs', (req, res) => {
+  try {
+    const rows = db.prepare(`
+      SELECT j.id, j.title, j.location, j.type, j.status,
+        pe.stage, COUNT(*) as count
+      FROM pipeline_entries pe
+      JOIN jobs j ON j.id = pe.job_id
+      GROUP BY pe.job_id, pe.stage
+      ORDER BY j.title, pe.stage
+    `).all();
+
+    // Group by job
+    const jobMap = new Map();
+    for (const row of rows) {
+      if (!jobMap.has(row.id)) {
+        jobMap.set(row.id, {
+          id: row.id,
+          title: row.title,
+          location: row.location,
+          type: row.type,
+          status: row.status,
+          stages: {},
+          total: 0
+        });
+      }
+      const job = jobMap.get(row.id);
+      job.stages[row.stage] = row.count;
+      job.total += row.count;
+    }
+
+    res.json({ data: Array.from(jobMap.values()) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Fehler beim Laden der aktiven Pipelines' });
+  }
+});
+
 // DELETE remove from pipeline
 router.delete('/:entryId', (req, res) => {
   try {

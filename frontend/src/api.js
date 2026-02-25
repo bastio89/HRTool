@@ -47,6 +47,7 @@ export const jobsApi = {
 
 // Pipeline API
 export const pipelineApi = {
+  getActiveJobs: () => request('/pipeline/active-jobs'),
   getByJob: (jobId) => request(`/pipeline/job/${jobId}`),
   addCandidate: (jobId, candidateId, stage) =>
     request(`/pipeline/job/${jobId}/add`, { method: 'POST', body: JSON.stringify({ candidate_id: candidateId, stage }) }),

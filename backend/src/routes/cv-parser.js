@@ -2,8 +2,13 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 
 const router = express.Router();
+
+// System OCR tool paths (homebrew on macOS)
+const TESSERACT_BIN = '/opt/homebrew/opt/tesseract/bin/tesseract';
+const PDFTOPPM_BIN = '/opt/homebrew/opt/poppler/bin/pdftoppm';
 
 // Temp uploads directory
 const tmpDir = path.join(__dirname, '..', '..', 'data', 'tmp');
@@ -36,18 +41,95 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
-// Extract text from file
+// Check if OCR tools are available
+function hasOcrTools() {
+  return fs.existsSync(TESSERACT_BIN) && fs.existsSync(PDFTOPPM_BIN);
+}
+
+// OCR fallback for scanned PDFs: convert PDF pages to images, then run tesseract
+async function ocrPdf(filePath) {
+  if (!hasOcrTools()) {
+    console.warn('⚠️ OCR-Tools (tesseract/poppler) nicht gefunden. Scanned PDFs können nicht verarbeitet werden.');
+    return '';
+  }
+
+  const ocrTmpDir = path.join(tmpDir, `ocr-${Date.now()}`);
+  fs.mkdirSync(ocrTmpDir, { recursive: true });
+
+  try {
+    // Convert PDF pages to PNG images (300 DPI for good OCR quality)
+    const imgPrefix = path.join(ocrTmpDir, 'page');
+    console.log('🔍 OCR: Konvertiere PDF-Seiten zu Bildern...');
+    execSync(`"${PDFTOPPM_BIN}" -png -r 300 "${filePath}" "${imgPrefix}"`, {
+      timeout: 60000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // Find all generated page images
+    const pageFiles = fs.readdirSync(ocrTmpDir)
+      .filter(f => f.startsWith('page-') && f.endsWith('.png'))
+      .sort();
+
+    if (pageFiles.length === 0) {
+      console.warn('⚠️ OCR: Keine Seitenbilder erzeugt');
+      return '';
+    }
+
+    console.log(`🔍 OCR: ${pageFiles.length} Seite(n) gefunden, starte Texterkennung (deu+eng)...`);
+
+    // Run tesseract on each page image and collect text
+    let fullText = '';
+    for (const pageFile of pageFiles) {
+      const imgPath = path.join(ocrTmpDir, pageFile);
+      try {
+        const pageText = execSync(
+          `"${TESSERACT_BIN}" "${imgPath}" stdout -l deu+eng --psm 1 2>/dev/null`,
+          { timeout: 30000, encoding: 'utf-8' }
+        );
+        fullText += pageText + '\n';
+      } catch (tessErr) {
+        console.warn(`⚠️ OCR: Fehler bei Seite ${pageFile}:`, tessErr.message);
+      }
+    }
+
+    console.log(`🔍 OCR: ${fullText.trim().length} Zeichen via OCR extrahiert`);
+    return fullText.trim();
+  } finally {
+    // Cleanup OCR temp directory
+    try {
+      fs.rmSync(ocrTmpDir, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+// Extract text from file (with OCR fallback for scanned PDFs)
 async function extractText(filePath, mimetype) {
   if (mimetype === 'application/pdf') {
     const pdfParse = require('pdf-parse');
     const buffer = fs.readFileSync(filePath);
+
+    // First try: direct text extraction
+    let text = '';
     try {
       const data = await pdfParse(buffer);
-      return data.text || '';
+      text = (data.text || '').trim();
     } catch (pdfErr) {
-      console.error('PDF parse error:', pdfErr.message);
-      throw new Error('PDF konnte nicht gelesen werden. Möglicherweise ist die Datei beschädigt oder passwortgeschützt.');
+      console.warn('PDF parse Warnung:', pdfErr.message);
+      // Don't throw — try OCR fallback instead
     }
+
+    // If no usable text found, try OCR fallback
+    if (!text || text.length < 20) {
+      console.log('📄 Kein eingebetteter Text gefunden — versuche OCR...');
+      const ocrText = await ocrPdf(filePath);
+      if (ocrText && ocrText.length >= 20) {
+        return ocrText;
+      }
+      // If OCR also failed, return whatever we have (or empty)
+      return text || ocrText || '';
+    }
+
+    return text;
   } else if (
     mimetype === 'application/msword' ||
     mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

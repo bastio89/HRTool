@@ -55,10 +55,10 @@ export default function Layout() {
         <header className="h-24 flex items-center justify-end px-14 flex-shrink-0 bg-white/80 backdrop-blur-2xl border-b border-gray-100/50 z-10 sticky top-0">
           <div className="flex items-center gap-5 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="text-right">
-              <p className="text-[16px] font-semibold text-black tracking-tight">Marcus White</p>
+              <p className="text-[16px] font-semibold text-black tracking-tight">Sebastian Oczachowski</p>
               <p className="text-[14px] text-gray-500 font-medium">HR Manager</p>
             </div>
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Marcus" alt="Profile" className="w-12 h-12 rounded-full bg-gray-100 border border-gray-200 shadow-sm" />
+            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sebastian" alt="Profile" className="w-12 h-12 rounded-full bg-gray-100 border border-gray-200 shadow-sm" />
           </div>
         </header>
 

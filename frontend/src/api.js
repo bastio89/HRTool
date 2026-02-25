@@ -55,6 +55,7 @@ export const candidatesApi = {
   delete: (id) => request(`/candidates/${id}`, { method: 'DELETE' }),
   batchDelete: (ids) => request('/candidates/batch/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   batchStatus: (ids, status) => request('/candidates/batch/status', { method: 'POST', body: JSON.stringify({ ids, status }) }),
+  importCSV: (rows, skipDuplicates = true) => request('/candidates/import', { method: 'POST', body: JSON.stringify({ rows, skipDuplicates }) }),
   getStats: () => request('/candidates/stats/overview'),
   getSourceStats: () => request('/candidates/stats/sources'),
   checkDuplicate: (name, email, excludeId) =>

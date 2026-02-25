@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
+import CSVImportDialog from '../components/CSVImportDialog'
 
 const STATUS_OPTIONS = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist']
 const STATUS_STYLE = {
@@ -39,6 +40,7 @@ export default function Candidates() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const navigate = useNavigate()
 
   // Debounce search input
@@ -215,6 +217,10 @@ export default function Candidates() {
               <span className="hidden sm:inline">CSV Export</span>
             </Button>
           )}
+          <Button size="md" variant="secondary" onClick={() => setShowImport(true)}>
+            <Upload className="w-5 h-5" />
+            <span className="hidden sm:inline">CSV Import</span>
+          </Button>
           <Link to="/candidates/new">
             <Button size="md" variant="dark">
               <Plus className="w-5 h-5" />
@@ -624,6 +630,12 @@ export default function Candidates() {
           )}
         </div>
       )}
+
+      <CSVImportDialog
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onImported={loadCandidates}
+      />
     </div>
   )
 }

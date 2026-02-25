@@ -560,4 +560,112 @@ router.post('/batch/status', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /candidates/import:
+ *   post:
+ *     summary: Bewerber aus CSV importieren
+ *     tags: [Candidates]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               rows: { type: array, description: 'Array of candidate objects with mapped fields' }
+ *               skipDuplicates: { type: boolean, default: true }
+ *     responses:
+ *       200: { description: Import-Ergebnis mit Statistiken }
+ */
+router.post('/import', (req, res) => {
+  try {
+    const { rows, skipDuplicates = true } = req.body;
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Keine Daten zum Importieren' });
+    }
+
+    const VALID_FIELDS = [
+      'name', 'email', 'phone', 'location', 'experience', 'skills',
+      'education', 'desired_salary', 'availability', 'languages',
+      'certificates', 'drivers_license', 'mobility', 'notes', 'status', 'tags', 'source'
+    ];
+
+    let imported = 0;
+    let skipped = 0;
+    let errors = [];
+    const duplicates = [];
+
+    const insertStmt = db.prepare(`
+      INSERT INTO candidates (name, email, phone, location, experience, skills,
+        education, desired_salary, availability, languages, certificates,
+        drivers_license, mobility, notes, status, tags, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const checkDupByEmail = db.prepare("SELECT id, name FROM candidates WHERE email = ? AND email IS NOT NULL AND email != ''");
+    const checkDupByName = db.prepare('SELECT id, name FROM candidates WHERE LOWER(name) = LOWER(?)');
+
+    const importMany = db.transaction(() => {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 1;
+
+        // Validate name
+        if (!row.name || String(row.name).trim() === '') {
+          errors.push({ row: rowNum, reason: 'Name fehlt' });
+          continue;
+        }
+
+        // Check duplicates
+        if (skipDuplicates) {
+          let dup = null;
+          if (row.email && String(row.email).trim()) {
+            dup = checkDupByEmail.get(String(row.email).trim());
+          }
+          if (!dup && row.name) {
+            dup = checkDupByName.get(String(row.name).trim());
+          }
+          if (dup) {
+            duplicates.push({ row: rowNum, name: row.name, existingName: dup.name });
+            skipped++;
+            continue;
+          }
+        }
+
+        try {
+          insertStmt.run(
+            String(row.name).trim(),
+            row.email || null, row.phone || null, row.location || null,
+            row.experience || null, row.skills || null, row.education || null,
+            row.desired_salary || null, row.availability || null, row.languages || null,
+            row.certificates || null, row.drivers_license || null, row.mobility || null,
+            row.notes || null, row.status || 'Aktiv', row.tags || null, row.source || null
+          );
+          imported++;
+        } catch (err) {
+          errors.push({ row: rowNum, reason: err.message });
+        }
+      }
+    });
+
+    importMany();
+
+    logAudit(req, 'csv-import', 'Candidate', null, null, {
+      total: rows.length, imported, skipped, errors: errors.length
+    });
+
+    res.json({
+      total: rows.length,
+      imported,
+      skipped,
+      errors: errors.length,
+      errorDetails: errors.slice(0, 20),
+      duplicates: duplicates.slice(0, 20)
+    });
+  } catch (error) {
+    console.error('Error importing candidates:', error);
+    res.status(500).json({ error: 'Fehler beim CSV-Import' });
+  }
+});
+
 module.exports = router;

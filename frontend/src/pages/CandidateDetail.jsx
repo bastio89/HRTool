@@ -61,7 +61,7 @@ export default function CandidateDetail() {
       ])
       // getById returns the candidate object directly
       setCandidate(cRes?.id ? cRes : (cRes.candidate || cRes.data))
-      setActivities(aRes.activities || [])
+      setActivities(aRes.data || [])
       setFiles(fRes.data || [])
     } catch (err) {
       console.error(err)
@@ -80,7 +80,7 @@ export default function CandidateDetail() {
       await activitiesApi.create(candidateId, newType, newText.trim())
       setNewText('')
       const aRes = await activitiesApi.getByCandidate(candidateId)
-      setActivities(aRes.activities || [])
+      setActivities(aRes.data || [])
     } catch (err) {
       alert(err.message)
     } finally {
@@ -109,7 +109,7 @@ export default function CandidateDetail() {
       setFiles(fRes.data || [])
       // Reload activities to show upload activity
       const aRes = await activitiesApi.getByCandidate(candidateId)
-      setActivities(aRes.activities || [])
+      setActivities(aRes.data || [])
     } catch (err) {
       alert(err.message)
     } finally {

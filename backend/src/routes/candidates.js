@@ -1,7 +1,25 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const db = require('../database');
 
 const router = express.Router();
+const uploadsDir = path.join(__dirname, '..', '..', 'data', 'uploads');
+
+// Helper: Delete physical files for candidate IDs
+function cleanupCandidateFiles(candidateIds) {
+  const ids = Array.isArray(candidateIds) ? candidateIds : [candidateIds];
+  const placeholders = ids.map(() => '?').join(',');
+  const files = db.prepare(`SELECT filename FROM candidate_files WHERE candidate_id IN (${placeholders})`).all(...ids);
+  for (const file of files) {
+    const filePath = path.join(uploadsDir, file.filename);
+    try {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch (err) {
+      console.error(`Failed to delete file ${filePath}:`, err.message);
+    }
+  }
+}
 
 /**
  * @swagger
@@ -390,6 +408,9 @@ router.delete('/:id', (req, res) => {
       return res.status(404).json({ error: 'Bewerber nicht gefunden' });
     }
 
+    // Clean up physical files before DB deletion (CASCADE deletes candidate_files rows)
+    cleanupCandidateFiles(parseInt(req.params.id));
+
     db.prepare('DELETE FROM candidates WHERE id = ?').run(req.params.id);
     res.json({ message: 'Bewerber erfolgreich gelöscht' });
   } catch (error) {
@@ -422,6 +443,10 @@ router.post('/batch/delete', (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Keine IDs angegeben' });
     }
+
+    // Clean up physical files before DB deletion
+    cleanupCandidateFiles(ids);
+
     const placeholders = ids.map(() => '?').join(',');
     const result = db.prepare(`DELETE FROM candidates WHERE id IN (${placeholders})`).run(...ids);
     res.json({ deleted: result.changes });

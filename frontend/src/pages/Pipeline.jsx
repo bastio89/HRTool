@@ -187,12 +187,12 @@ export default function Pipeline() {
         })}
       </div>
 
-      {/* Add Candidate Panel */}
+      {/* Add Candidate Modal */}
       {addPanelOpen && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={() => setAddPanelOpen(false)} />
-          <div className="w-[480px] bg-white h-full overflow-auto shadow-[0_8px_30px_rgba(0,0,0,0.08)] border-l border-gray-100/80 rounded-l-[32px] flex flex-col">
-            <div className="flex items-center justify-between px-10 py-10 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setAddPanelOpen(false)} />
+          <div className="relative w-[520px] max-h-[80vh] bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/80 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-10 pt-10 pb-8">
               <h2 className="text-[24px] font-semibold tracking-tight text-black">Bewerber hinzufügen</h2>
               <button
                 onClick={() => setAddPanelOpen(false)}
@@ -201,7 +201,7 @@ export default function Pipeline() {
                 <X className="w-5 h-5 text-gray-600" />
               </button>
             </div>
-            <div className="px-10 py-8 flex flex-col gap-6 flex-1">
+            <div className="px-10 pb-10 flex flex-col gap-6 flex-1 overflow-auto">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />

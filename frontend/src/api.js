@@ -51,9 +51,12 @@ export const pipelineApi = {
   getByJob: (jobId) => request(`/pipeline/job/${jobId}`),
   addCandidate: (jobId, candidateId, stage) =>
     request(`/pipeline/job/${jobId}/add`, { method: 'POST', body: JSON.stringify({ candidate_id: candidateId, stage }) }),
-  updateStage: (entryId, stage) =>
-    request(`/pipeline/${entryId}/stage`, { method: 'PUT', body: JSON.stringify({ stage }) }),
+  updateStage: (entryId, stage, notes) =>
+    request(`/pipeline/${entryId}/stage`, { method: 'PUT', body: JSON.stringify({ stage, notes }) }),
   removeEntry: (entryId) => request(`/pipeline/${entryId}`, { method: 'DELETE' }),
+  getNotes: (entryId) => request(`/pipeline/${entryId}/notes`),
+  addNote: (entryId, content) =>
+    request(`/pipeline/${entryId}/notes`, { method: 'POST', body: JSON.stringify({ content }) }),
 };
 
 // Activities API

@@ -80,6 +80,17 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS pipeline_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pipeline_entry_id INTEGER NOT NULL,
+    author TEXT DEFAULT 'System',
+    content TEXT NOT NULL,
+    old_stage TEXT,
+    new_stage TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (pipeline_entry_id) REFERENCES pipeline_entries(id) ON DELETE CASCADE
+  );
 `);
 
 // Safe migrations for existing databases

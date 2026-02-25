@@ -71,21 +71,67 @@ router.put('/:entryId/stage', (req, res) => {
     const entry = db.prepare('SELECT * FROM pipeline_entries WHERE id = ?').get(req.params.entryId);
     if (!entry) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
 
+    const oldStage = entry.stage;
+
     db.prepare(`
       UPDATE pipeline_entries SET stage=?, notes=COALESCE(?, notes), updated_at=CURRENT_TIMESTAMP
       WHERE id=?
     `).run(stage, notes || null, req.params.entryId);
 
+    // Save note to pipeline_notes history
+    if (notes && notes.trim()) {
+      db.prepare(`INSERT INTO pipeline_notes (pipeline_entry_id, content, old_stage, new_stage) VALUES (?, ?, ?, ?)`)
+        .run(req.params.entryId, notes.trim(), oldStage, stage);
+    }
+
+    // Auto note for stage change without explicit note
+    if (oldStage !== stage && (!notes || !notes.trim())) {
+      db.prepare(`INSERT INTO pipeline_notes (pipeline_entry_id, content, old_stage, new_stage, author) VALUES (?, ?, ?, ?, ?)`)
+        .run(req.params.entryId, `Stage gewechselt: "${oldStage}" → "${stage}"`, oldStage, stage, 'System');
+    }
+
     // Log stage change as activity
     if (entry.stage !== stage) {
       const job = db.prepare('SELECT title FROM jobs WHERE id = ?').get(entry.job_id);
       db.prepare(`INSERT INTO activities (candidate_id, type, content) VALUES (?, ?, ?)`)
-        .run(entry.candidate_id, 'Pipeline', `Stage gewechselt: "${entry.stage}" → "${stage}"${job ? ` (${job.title})` : ''}`);
+        .run(entry.candidate_id, 'Pipeline', `Stage gewechselt: "${entry.stage}" → "${stage}"${job ? ` (${job.title})` : ''}${notes ? ` — ${notes}` : ''}`);
     }
 
     res.json(db.prepare('SELECT * FROM pipeline_entries WHERE id = ?').get(req.params.entryId));
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Aktualisieren der Stage' });
+  }
+});
+
+// GET notes for a pipeline entry
+router.get('/:entryId/notes', (req, res) => {
+  try {
+    const notes = db.prepare(
+      'SELECT * FROM pipeline_notes WHERE pipeline_entry_id = ? ORDER BY created_at DESC'
+    ).all(req.params.entryId);
+    res.json({ data: notes });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Laden der Notizen' });
+  }
+});
+
+// POST add note to pipeline entry (without stage change)
+router.post('/:entryId/notes', (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content || !content.trim()) return res.status(400).json({ error: 'Notiz darf nicht leer sein' });
+
+    const entry = db.prepare('SELECT * FROM pipeline_entries WHERE id = ?').get(req.params.entryId);
+    if (!entry) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+
+    const result = db.prepare(
+      'INSERT INTO pipeline_notes (pipeline_entry_id, content, old_stage, new_stage) VALUES (?, ?, ?, ?)'
+    ).run(req.params.entryId, content.trim(), entry.stage, entry.stage);
+
+    const note = db.prepare('SELECT * FROM pipeline_notes WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(note);
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Speichern der Notiz' });
   }
 });
 

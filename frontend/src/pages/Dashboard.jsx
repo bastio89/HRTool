@@ -1,28 +1,25 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase } from 'lucide-react'
-import { candidatesApi, matchingApi, jobsApi, pipelineApi } from '../api'
+import { candidatesApi, matchingApi, pipelineApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
-  const [openJobsCount, setOpenJobsCount] = useState(0)
   const [activePipelines, setActivePipelines] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [statsData, historyData, jobsData, pipelineData] = await Promise.all([
+        const [statsData, historyData, pipelineData] = await Promise.all([
           candidatesApi.getStats().catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
           matchingApi.getHistory().catch(() => ({ data: [] })),
-          jobsApi.getAll('Offen').catch(() => ({ data: [] })),
           pipelineApi.getActiveJobs().catch(() => ({ data: [] }))
         ])
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
-        setOpenJobsCount((jobsData.data || []).length)
         setActivePipelines(pipelineData.data || [])
       } catch (err) {
         console.error(err)
@@ -44,49 +41,72 @@ export default function Dashboard() {
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <Card className="p-10">
-          <p className="text-[16px] font-medium text-gray-500 mb-6">Bewerber gesamt</p>
-          <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{stats?.totalCandidates || 0}</h3>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#34c759]/10 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-[#34c759]" />
-            </div>
-            <span className="text-[15px] font-medium text-[#34c759]">+25% diesen Monat</span>
-          </div>
-        </Card>
+        {(() => {
+          const monthPct = stats?.newLastMonth > 0
+            ? Math.round(((stats?.newThisMonth - stats?.newLastMonth) / stats?.newLastMonth) * 100)
+            : stats?.newThisMonth > 0 ? 100 : 0
+          const weekPct = stats?.newPrevWeek > 0
+            ? Math.round(((stats?.newThisWeek - stats?.newPrevWeek) / stats?.newPrevWeek) * 100)
+            : stats?.newThisWeek > 0 ? 100 : 0
+          const matchPct = stats?.matchingsPrevWeek > 0
+            ? Math.round(((stats?.matchingsThisWeek - stats?.matchingsPrevWeek) / stats?.matchingsPrevWeek) * 100)
+            : stats?.matchingsThisWeek > 0 ? 100 : 0
+          const trend = (pct) => pct >= 0
+            ? { icon: TrendingUp, color: '#34c759', text: `+${pct}%` }
+            : { icon: TrendingDown, color: '#ff3b30', text: `${pct}%` }
+          const mTrend = trend(monthPct)
+          const wTrend = trend(weekPct)
+          const maTrend = trend(matchPct)
+          return <>
+            <Card className="p-10">
+              <p className="text-[16px] font-medium text-gray-500 mb-6">Bewerber gesamt</p>
+              <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{stats?.totalCandidates || 0}</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${mTrend.color}15` }}>
+                  <mTrend.icon className="w-4 h-4" style={{ color: mTrend.color }} />
+                </div>
+                <span className="text-[15px] font-medium" style={{ color: mTrend.color }}>{mTrend.text} diesen Monat</span>
+              </div>
+            </Card>
 
-        <Card className="p-10">
-          <p className="text-[16px] font-medium text-gray-500 mb-6">Neue diese Woche</p>
-          <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{stats?.newThisWeek || 0}</h3>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#34c759]/10 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-[#34c759]" />
-            </div>
-            <span className="text-[15px] font-medium text-[#34c759]">+15% zur Vorwoche</span>
-          </div>
-        </Card>
+            <Card className="p-10">
+              <p className="text-[16px] font-medium text-gray-500 mb-6">Neue diese Woche</p>
+              <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{stats?.newThisWeek || 0}</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${wTrend.color}15` }}>
+                  <wTrend.icon className="w-4 h-4" style={{ color: wTrend.color }} />
+                </div>
+                <span className="text-[15px] font-medium" style={{ color: wTrend.color }}>{wTrend.text} zur Vorwoche</span>
+              </div>
+            </Card>
 
-        <Card className="p-10">
-          <p className="text-[16px] font-medium text-gray-500 mb-6">Matchings</p>
-          <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{recentMatches.length}</h3>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#ff3b30]/10 flex items-center justify-center">
-              <TrendingDown className="w-4 h-4 text-[#ff3b30]" />
-            </div>
-            <span className="text-[15px] font-medium text-[#ff3b30]">-5% zur Vorwoche</span>
-          </div>
-        </Card>
+            <Card className="p-10">
+              <p className="text-[16px] font-medium text-gray-500 mb-6">Matchings</p>
+              <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{stats?.matchingsTotal || 0}</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${maTrend.color}15` }}>
+                  <maTrend.icon className="w-4 h-4" style={{ color: maTrend.color }} />
+                </div>
+                <span className="text-[15px] font-medium" style={{ color: maTrend.color }}>{maTrend.text} zur Vorwoche</span>
+              </div>
+            </Card>
 
-        <Card className="p-10">
-          <p className="text-[16px] font-medium text-gray-500 mb-6">Offene Stellen</p>
-          <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{openJobsCount}</h3>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#8b5cf6]/10 flex items-center justify-center">
-              <Briefcase className="w-4 h-4 text-[#8b5cf6]" />
-            </div>
-            <Link to="/jobs" className="text-[15px] font-medium text-[#8b5cf6] hover:opacity-70 transition-opacity">Stellen verwalten</Link>
-          </div>
-        </Card>
+            <Card className="p-10">
+              <p className="text-[16px] font-medium text-gray-500 mb-6">Offene Stellen</p>
+              <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black mb-8">{stats?.openJobs || 0}</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-[#8b5cf6]/10 flex items-center justify-center">
+                  <Briefcase className="w-4 h-4 text-[#8b5cf6]" />
+                </div>
+                {stats?.closedThisMonth > 0 ? (
+                  <span className="text-[15px] font-medium text-[#34c759]">{stats.closedThisMonth} besetzt diesen Monat</span>
+                ) : (
+                  <Link to="/jobs" className="text-[15px] font-medium text-[#8b5cf6] hover:opacity-70 transition-opacity">Stellen verwalten</Link>
+                )}
+              </div>
+            </Card>
+          </>
+        })()}
       </div>
 
       {/* Active Pipelines */}

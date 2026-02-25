@@ -10,14 +10,46 @@ router.get('/stats/overview', (req, res) => {
     const recentWeek = db.prepare(
       "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', '-7 days')"
     ).get();
+    const prevWeek = db.prepare(
+      "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days')"
+    ).get();
+    const thisMonth = db.prepare(
+      "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', 'start of month')"
+    ).get();
+    const lastMonth = db.prepare(
+      "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', 'start of month', '-1 month') AND created_at < datetime('now', 'start of month')"
+    ).get();
     const locations = db.prepare(
       'SELECT location, COUNT(*) as count FROM candidates WHERE location IS NOT NULL GROUP BY location ORDER BY count DESC LIMIT 5'
     ).all();
-    
+
+    // Matching stats
+    const matchingsThisWeek = db.prepare(
+      "SELECT COUNT(*) as count FROM matching_results WHERE created_at >= datetime('now', '-7 days')"
+    ).get();
+    const matchingsPrevWeek = db.prepare(
+      "SELECT COUNT(*) as count FROM matching_results WHERE created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days')"
+    ).get();
+    const matchingsTotal = db.prepare('SELECT COUNT(*) as count FROM matching_results').get();
+
+    // Jobs stats
+    const openJobs = db.prepare("SELECT COUNT(*) as count FROM jobs WHERE status = 'Offen'").get();
+    const closedThisMonth = db.prepare(
+      "SELECT COUNT(*) as count FROM jobs WHERE status = 'Besetzt' AND updated_at >= datetime('now', 'start of month')"
+    ).get();
+
     res.json({
       totalCandidates: total.count,
       newThisWeek: recentWeek.count,
-      topLocations: locations
+      newPrevWeek: prevWeek.count,
+      newThisMonth: thisMonth.count,
+      newLastMonth: lastMonth.count,
+      topLocations: locations,
+      matchingsTotal: matchingsTotal.count,
+      matchingsThisWeek: matchingsThisWeek.count,
+      matchingsPrevWeek: matchingsPrevWeek.count,
+      openJobs: openJobs.count,
+      closedThisMonth: closedThisMonth.count,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);

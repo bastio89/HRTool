@@ -191,7 +191,7 @@ export default function Pipeline() {
       {addPanelOpen && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={() => setAddPanelOpen(false)} />
-          <div className="w-[480px] bg-white h-full overflow-auto shadow-2xl flex flex-col">
+          <div className="w-[480px] bg-white h-full overflow-auto shadow-[0_8px_30px_rgba(0,0,0,0.08)] border-l border-gray-100/80 rounded-l-[32px] flex flex-col">
             <div className="flex items-center justify-between px-10 py-10 border-b border-gray-100">
               <h2 className="text-[24px] font-semibold tracking-tight text-black">Bewerber hinzufügen</h2>
               <button

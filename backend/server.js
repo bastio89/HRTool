@@ -40,12 +40,38 @@ app.use('/api/activities', activitiesRouter);
 app.use('/api/uploads', uploadsRouter);
 app.use('/api/cv-parser', cvParserRouter);
 
-// Health check
-app.get('/api/health', (req, res) => {
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: System-Status inkl. n8n-Erreichbarkeit
+ *     tags: [System]
+ *     security: []
+ *     responses:
+ *       200: { description: Status aller Services }
+ */
+app.get('/api/health', async (req, res) => {
+  const n8nUrl = process.env.N8N_BASE_URL || 'http://localhost:5678';
+  let n8nStatus = 'unreachable';
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 3000);
+    const resp = await fetch(`${n8nUrl}/healthz`, { signal: ctrl.signal });
+    clearTimeout(timeout);
+    n8nStatus = resp.ok ? 'ok' : `error (${resp.status})`;
+  } catch (_) {
+    n8nStatus = 'unreachable';
+  }
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    n8nUrl: process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/hr-matching'
+    n8nUrl,
+    n8nStatus,
+    services: {
+      backend: 'ok',
+      database: 'ok',
+      n8n: n8nStatus,
+    }
   });
 });
 

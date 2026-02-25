@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase } from 'lucide-react'
-import { candidatesApi, matchingApi, pipelineApi } from '../api'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle } from 'lucide-react'
+import { candidatesApi, matchingApi, pipelineApi, healthApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 
 export default function Dashboard() {
@@ -9,18 +9,21 @@ export default function Dashboard() {
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
   const [loading, setLoading] = useState(true)
+  const [n8nStatus, setN8nStatus] = useState(null)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [statsData, historyData, pipelineData] = await Promise.all([
+        const [statsData, historyData, pipelineData, healthData] = await Promise.all([
           candidatesApi.getStats().catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
           matchingApi.getHistory().catch(() => ({ data: [] })),
-          pipelineApi.getActiveJobs().catch(() => ({ data: [] }))
+          pipelineApi.getActiveJobs().catch(() => ({ data: [] })),
+          healthApi.check().catch(() => ({ n8nStatus: 'unreachable' })),
         ])
         setStats(statsData)
         setRecentMatches(historyData.data?.slice(0, 4) || [])
         setActivePipelines(pipelineData.data || [])
+        setN8nStatus(healthData.n8nStatus || healthData.services?.n8n || 'unknown')
       } catch (err) {
         console.error(err)
       } finally {
@@ -34,6 +37,17 @@ export default function Dashboard() {
 
   return (
     <div className="fade-in space-y-8 sm:space-y-14">
+      {/* n8n Warning */}
+      {n8nStatus && n8nStatus !== 'ok' && (
+        <div className="flex items-center gap-4 p-5 sm:p-6 rounded-[20px] bg-[#ff9f0a]/10 border border-[#ff9f0a]/20">
+          <AlertTriangle className="w-6 h-6 text-[#ff9f0a] flex-shrink-0" />
+          <div>
+            <p className="text-[15px] sm:text-[17px] font-semibold text-[#ff9f0a]">n8n nicht erreichbar</p>
+            <p className="text-[13px] sm:text-[15px] text-gray-500 mt-1">KI-Matching und CV-Analyse sind derzeit nicht verfügbar. Bitte prüfe ob n8n läuft.</p>
+          </div>
+        </div>
+      )}
+
       <div className="mb-4">
         <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Übersicht</h1>
         <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">Willkommen zurück. Hier ist der aktuelle Stand.</p>

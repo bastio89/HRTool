@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Trash2, Phone, Mail, Users, GitBranch, FileText,
   MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock,
-  Upload, Download, File, Image, X, Printer, Eye
+  Upload, Download, File, Image, X, Printer, Eye, Calendar
 } from 'lucide-react'
 import { candidatesApi, activitiesApi, uploadsApi, ratingsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
@@ -56,16 +56,18 @@ export default function CandidateDetail() {
   const [newRating, setNewRating] = useState({ category: 'gesamt', rating: 0, comment: '' })
   const [hoverRating, setHoverRating] = useState(0)
   const [ratingSubmitting, setRatingSubmitting] = useState(false)
+  const [pipelineHistory, setPipelineHistory] = useState({ entries: [], stageChanges: [], interviews: [] })
 
   const candidateId = id
 
   const loadData = async () => {
     try {
-      const [cRes, aRes, fRes, rRes] = await Promise.all([
+      const [cRes, aRes, fRes, rRes, hRes] = await Promise.all([
         candidatesApi.getById(candidateId),
         activitiesApi.getByCandidate(candidateId),
         uploadsApi.getByCandidate(candidateId).catch(() => ({ data: [] })),
         ratingsApi.getByCandidate(candidateId).catch(() => ({ data: [], averages: {}, overall: null })),
+        candidatesApi.getHistory(candidateId).catch(() => ({ entries: [], stageChanges: [], interviews: [] })),
       ])
       // getById returns the candidate object directly
       setCandidate(cRes?.id ? cRes : (cRes.candidate || cRes.data))
@@ -74,6 +76,7 @@ export default function CandidateDetail() {
       setRatings(rRes.data || [])
       setRatingAverages(rRes.averages || {})
       setRatingOverall(rRes.overall)
+      setPipelineHistory(hRes)
     } catch (err) {
       console.error(err)
     } finally {
@@ -597,6 +600,81 @@ export default function CandidateDetail() {
           </div>
         )}
       </div>
+
+      {/* Pipeline History */}
+      {pipelineHistory.entries.length > 0 && (
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+          <h2 className="text-[22px] font-semibold text-black dark:text-white mb-8">
+            <GitBranch className="w-5 h-5 inline mr-2 text-[#0071e3]" />
+            Bewerbungsverlauf
+          </h2>
+          <div className="space-y-4">
+            {pipelineHistory.entries.map(entry => {
+              const stageChanges = pipelineHistory.stageChanges.filter(sc => sc.job_id === entry.job_id)
+              const interviews = pipelineHistory.interviews.filter(iv => iv.job_id === entry.job_id)
+              const stageColor = {
+                Beworben: '#9ca3af', Vorauswahl: '#0071e3', Interview: '#ff9f0a',
+                Angebot: '#8b5cf6', Hired: '#34c759', Abgesagt: '#ff3b30'
+              }[entry.stage] || '#9ca3af'
+              return (
+                <div key={entry.id} className="p-5 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+                  <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+                    <div className="flex items-center gap-3">
+                      <Briefcase className="w-5 h-5 text-gray-400" />
+                      <Link to={`/pipeline/${entry.job_id}`} className="text-[17px] font-bold text-black dark:text-white hover:text-[#0071e3] transition-colors">
+                        {entry.job_title}
+                      </Link>
+                      {entry.job_location && (
+                        <span className="text-[13px] text-gray-400 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5" />{entry.job_location}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-full text-[13px] font-bold text-white" style={{ backgroundColor: stageColor }}>
+                        {entry.stage}
+                      </span>
+                      <span className="px-3 py-1 rounded-full text-[12px] font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                        {entry.job_status}
+                      </span>
+                    </div>
+                  </div>
+                  {/* Stage change timeline */}
+                  {stageChanges.length > 0 && (
+                    <div className="ml-7 mt-3 space-y-1.5">
+                      {stageChanges.slice(0, 5).map(sc => (
+                        <div key={sc.id} className="flex items-center gap-2 text-[13px]">
+                          <span className="font-medium text-gray-400">{new Date(sc.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}</span>
+                          <span className="text-gray-500 dark:text-gray-400">{sc.old_stage}</span>
+                          <span className="text-gray-400">→</span>
+                          <span className="font-semibold text-black dark:text-white">{sc.new_stage}</span>
+                          {sc.content && <span className="text-gray-400 truncate max-w-[200px]">— {sc.content}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Interview dates */}
+                  {interviews.length > 0 && (
+                    <div className="ml-7 mt-3 flex flex-wrap gap-2">
+                      {interviews.map(iv => (
+                        <span key={iv.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ff9f0a]/10 text-[12px] font-semibold text-[#ff9f0a]">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(iv.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}
+                          {iv.interview_time && ` · ${iv.interview_time}`}
+                          <span className="text-[#ff9f0a]/60">({iv.status})</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="ml-7 mt-2 text-[12px] text-gray-400">
+                    Hinzugefügt: {new Date(entry.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <CandidatePrintProfile
         candidate={candidate}

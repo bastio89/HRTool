@@ -68,7 +68,7 @@ export const candidatesApi = {
     const qs = q.toString();
     return request(`/candidates${qs ? `?${qs}` : ''}`);
   },
-  getById: (id) => request(`/candidates/${id}`),
+  getById: (id) => request(`/candidates/${id}`),\n  getHistory: (id) => request(`/candidates/${id}/history`),
   create: (data) => request('/candidates', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/candidates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/candidates/${id}`, { method: 'DELETE' }),

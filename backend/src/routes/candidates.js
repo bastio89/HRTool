@@ -267,6 +267,63 @@ router.get('/', (req, res) => {
 
 /**
  * @swagger
+ * /candidates/{id}/history:
+ *   get:
+ *     summary: Pipeline-Historie eines Bewerbers (alle Jobs/Stages)
+ *     tags: [Candidates]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Pipeline-Verlauf mit Jobs und Stage-Changes }
+ */
+router.get('/:id/history', (req, res) => {
+  try {
+    // Get all pipeline entries for this candidate with job info
+    const entries = db.prepare(`
+      SELECT pe.id, pe.job_id, pe.stage, pe.notes, pe.created_at, pe.updated_at,
+             j.title as job_title, j.status as job_status, j.location as job_location
+      FROM pipeline_entries pe
+      JOIN jobs j ON j.id = pe.job_id
+      WHERE pe.candidate_id = ?
+      ORDER BY pe.updated_at DESC
+    `).all(req.params.id);
+
+    // Get stage change notes for all entries
+    const entryIds = entries.map(e => e.id);
+    let stageChanges = [];
+    if (entryIds.length > 0) {
+      const placeholders = entryIds.map(() => '?').join(',');
+      stageChanges = db.prepare(`
+        SELECT pn.*, pe.job_id
+        FROM pipeline_notes pn
+        JOIN pipeline_entries pe ON pe.id = pn.pipeline_entry_id
+        WHERE pn.pipeline_entry_id IN (${placeholders})
+        AND pn.old_stage IS NOT NULL
+        ORDER BY pn.created_at DESC
+      `).all(...entryIds);
+    }
+
+    // Get interviews for this candidate
+    const interviews = db.prepare(`
+      SELECT i.*, j.title as job_title
+      FROM interviews i
+      JOIN jobs j ON j.id = i.job_id
+      WHERE i.candidate_id = ?
+      ORDER BY i.interview_date DESC
+    `).all(req.params.id);
+
+    res.json({ entries, stageChanges, interviews });
+  } catch (err) {
+    console.error('Error fetching candidate history:', err);
+    res.status(500).json({ error: 'Fehler beim Laden der Historie' });
+  }
+});
+
+/**
+ * @swagger
  * /candidates/{id}:
  *   get:
  *     summary: Einzelnen Bewerber laden

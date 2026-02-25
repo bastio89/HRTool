@@ -398,4 +398,77 @@ router.delete('/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /candidates/batch/delete:
+ *   post:
+ *     summary: Mehrere Bewerber löschen
+ *     tags: [Candidates]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: integer }
+ *     responses:
+ *       200: { description: Anzahl gelöschter Bewerber }
+ */
+router.post('/batch/delete', (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Keine IDs angegeben' });
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const result = db.prepare(`DELETE FROM candidates WHERE id IN (${placeholders})`).run(...ids);
+    res.json({ deleted: result.changes });
+  } catch (error) {
+    console.error('Error batch deleting:', error);
+    res.status(500).json({ error: 'Fehler beim Massen-Löschen' });
+  }
+});
+
+/**
+ * @swagger
+ * /candidates/batch/status:
+ *   post:
+ *     summary: Status mehrerer Bewerber ändern
+ *     tags: [Candidates]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: integer }
+ *               status:
+ *                 type: string
+ *                 enum: [Aktiv, Passiv, In Prozess, Blacklist]
+ *     responses:
+ *       200: { description: Anzahl aktualisierter Bewerber }
+ */
+router.post('/batch/status', (req, res) => {
+  try {
+    const { ids, status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Keine IDs angegeben' });
+    }
+    const validStatuses = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Ungültiger Status' });
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const result = db.prepare(`UPDATE candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(status, ...ids);
+    res.json({ updated: result.changes });
+  } catch (error) {
+    console.error('Error batch status update:', error);
+    res.status(500).json({ error: 'Fehler bei Massen-Statusänderung' });
+  }
+});
+
 module.exports = router;

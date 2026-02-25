@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 
@@ -37,6 +37,8 @@ export default function Candidates() {
   const [debouncedLocation, setDebouncedLocation] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [showFilters, setShowFilters] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
   const navigate = useNavigate()
 
   // Debounce search input
@@ -127,6 +129,44 @@ export default function Candidates() {
   const clearFilters = () => { setFilterStatus([]); setFilterAvail(''); setFilterSkills([]); setSkillInput(''); setFilterLocation(''); setSearch('') }
 
   const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0) + filterSkills.length + (filterLocation ? 1 : 0)
+
+  // Batch selection helpers
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filtered.map(c => c.id)))
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    try {
+      await candidatesApi.batchDelete([...selectedIds])
+      setSelectedIds(new Set())
+      setBatchDeleteConfirm(false)
+      loadCandidates()
+    } catch (err) {
+      alert('Fehler beim Massen-Löschen: ' + err.message)
+    }
+  }
+
+  const handleBatchStatus = async (status) => {
+    try {
+      await candidatesApi.batchStatus([...selectedIds], status)
+      setSelectedIds(new Set())
+      loadCandidates()
+    } catch (err) {
+      alert('Fehler bei Massen-Statusänderung: ' + err.message)
+    }
+  }
 
   const exportCSV = () => {
     const headers = ['Name', 'E-Mail', 'Telefon', 'Standort', 'Status', 'Verfügbarkeit', 'Skills', 'Ausbildung', 'Sprachen', 'Zertifikate', 'Führerschein', 'Mobilität', 'Gehaltsvorstellung', 'Quelle', 'Tags', 'Notizen']
@@ -312,6 +352,50 @@ export default function Candidates() {
         )}
       </div>
 
+      {/* Batch Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-6 bg-black rounded-[20px] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-4">
+            <span className="text-white text-[15px] sm:text-[17px] font-semibold">
+              {selectedIds.size} {selectedIds.size === 1 ? 'Bewerber' : 'Bewerber'} ausgewählt
+            </span>
+            <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white text-[14px] cursor-pointer transition-colors">
+              Auswahl aufheben
+            </button>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            {STATUS_OPTIONS.map(s => (
+              <button
+                key={s}
+                onClick={() => handleBatchStatus(s)}
+                className={`px-4 py-2 rounded-full text-[13px] sm:text-[14px] font-semibold cursor-pointer transition-all ${STATUS_STYLE[s]} hover:opacity-80`}
+              >
+                → {s}
+              </button>
+            ))}
+            <button
+              onClick={() => setBatchDeleteConfirm(true)}
+              className="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition-all flex items-center gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Löschen
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Delete Confirmation */}
+      {batchDeleteConfirm && (
+        <div className="mb-6 bg-[#ff3b30]/5 border border-[#ff3b30]/20 rounded-[20px] p-5 flex items-center justify-between">
+          <span className="text-[16px] font-medium text-[#ff3b30]">
+            {selectedIds.size} Bewerber wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+          </span>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" onClick={() => setBatchDeleteConfirm(false)}>Abbrechen</Button>
+            <Button variant="danger" onClick={handleBatchDelete}>Endgültig löschen</Button>
+          </div>
+        </div>
+      )}
+
       {/* Candidates List */}
       {loading ? (
         <LoadingSpinner text="Bewerber werden geladen..." />
@@ -330,6 +414,23 @@ export default function Candidates() {
         </Card>
       ) : (
         <div className="space-y-6">
+          {/* Select All */}
+          {filtered.length > 0 && (
+            <div className="flex items-center gap-3 px-2">
+              <button onClick={toggleSelectAll} className="cursor-pointer text-gray-400 hover:text-black transition-colors">
+                {selectedIds.size === filtered.length ? (
+                  <CheckSquare className="w-5 h-5 text-[#0071e3]" />
+                ) : selectedIds.size > 0 ? (
+                  <MinusSquare className="w-5 h-5 text-[#0071e3]" />
+                ) : (
+                  <Square className="w-5 h-5" />
+                )}
+              </button>
+              <span className="text-[14px] text-gray-400 font-medium">
+                {selectedIds.size > 0 ? `${selectedIds.size} ausgewählt` : 'Alle auswählen'}
+              </span>
+            </div>
+          )}
           {filtered.map((candidate) => (
             <Card key={candidate.id} className="overflow-hidden p-0" hover>
               {/* Main row */}
@@ -338,6 +439,17 @@ export default function Candidates() {
                 onClick={() => setExpandedId(expandedId === candidate.id ? null : candidate.id)}
               >
                 <div className="flex items-start sm:items-center gap-4 sm:gap-8 flex-1 min-w-0">
+                  {/* Selection checkbox */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleSelect(candidate.id) }}
+                    className="flex-shrink-0 cursor-pointer text-gray-300 hover:text-[#0071e3] transition-colors mt-1 sm:mt-0"
+                  >
+                    {selectedIds.has(candidate.id) ? (
+                      <CheckSquare className="w-5 h-5 text-[#0071e3]" />
+                    ) : (
+                      <Square className="w-5 h-5" />
+                    )}
+                  </button>
                   {/* Avatar */}
                   <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] flex items-center justify-center flex-shrink-0 border border-gray-200/50">
                     <span className="text-[16px] sm:text-[22px] font-semibold text-gray-600 tracking-tight">

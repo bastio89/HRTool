@@ -23,7 +23,7 @@ export default function Matching() {
   useEffect(() => {
     Promise.all([
       candidatesApi.getAll(),
-      jobsApi.getAll().catch(() => ({ data: [] })),
+      jobsApi.getAll({}).catch(() => ({ data: [] })),
     ]).then(([candidateData, jobsData]) => {
         setCandidates(candidateData.data || [])
         setSelectedIds([])

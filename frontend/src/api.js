@@ -34,7 +34,16 @@ export const authApi = {
 
 // Candidates API
 export const candidatesApi = {
-  getAll: (search = '') => request(`/candidates${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  getAll: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.search) q.set('search', params.search);
+    if (params.page) q.set('page', params.page);
+    if (params.limit) q.set('limit', params.limit);
+    if (params.sort) q.set('sort', params.sort);
+    if (params.order) q.set('order', params.order);
+    const qs = q.toString();
+    return request(`/candidates${qs ? `?${qs}` : ''}`);
+  },
   getById: (id) => request(`/candidates/${id}`),
   create: (data) => request('/candidates', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/candidates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -58,7 +67,14 @@ export const matchingApi = {
 
 // Jobs API
 export const jobsApi = {
-  getAll: (status = '') => request(`/jobs${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  getAll: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.page) q.set('page', params.page);
+    if (params.limit) q.set('limit', params.limit);
+    const qs = q.toString();
+    return request(`/jobs${qs ? `?${qs}` : ''}`);
+  },
   getById: (id) => request(`/jobs/${id}`),
   create: (data) => request('/jobs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

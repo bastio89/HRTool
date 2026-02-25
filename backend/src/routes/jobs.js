@@ -3,23 +3,44 @@ const db = require('../database');
 
 const router = express.Router();
 
-// GET all jobs
+// GET all jobs (with pagination)
 router.get('/', (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, page, limit } = req.query;
+    
+    let whereClause = '';
+    const params = [];
+    if (status) {
+      whereClause = ' WHERE j.status = ?';
+      params.push(status);
+    }
+    
+    // Total count
+    const total = db.prepare(`SELECT COUNT(*) as count FROM jobs j${whereClause}`).get(...params).count;
+    
     let query = `
       SELECT j.*, 
         (SELECT COUNT(*) FROM pipeline_entries WHERE job_id = j.id) as candidate_count
-      FROM jobs j
+      FROM jobs j${whereClause}
+      ORDER BY j.created_at DESC
     `;
-    const params = [];
-    if (status) {
-      query += ' WHERE j.status = ?';
-      params.push(status);
+    
+    const queryParams = [...params];
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    if (pageNum > 0 && limitNum > 0) {
+      query += ' LIMIT ? OFFSET ?';
+      queryParams.push(limitNum, (pageNum - 1) * limitNum);
     }
-    query += ' ORDER BY j.created_at DESC';
-    const jobs = db.prepare(query).all(...params);
-    res.json({ data: jobs });
+    
+    const jobs = db.prepare(query).all(...queryParams);
+    res.json({
+      data: jobs,
+      total,
+      page: pageNum > 0 ? pageNum : 1,
+      limit: limitNum > 0 ? limitNum : total,
+      totalPages: limitNum > 0 ? Math.ceil(total / limitNum) : 1,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Fehler beim Laden der Stellen' });

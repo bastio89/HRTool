@@ -57,27 +57,46 @@ router.get('/stats/overview', (req, res) => {
   }
 });
 
-// GET all candidates
+// GET all candidates (with pagination)
 router.get('/', (req, res) => {
   try {
-    const { search, sort = 'created_at', order = 'desc' } = req.query;
+    const { search, sort = 'created_at', order = 'desc', page, limit } = req.query;
     
-    let query = 'SELECT * FROM candidates';
+    let whereClause = '';
     const params = [];
     
     if (search) {
-      query += ` WHERE name LIKE ? OR skills LIKE ? OR location LIKE ? OR experience LIKE ? OR education LIKE ?`;
+      whereClause = ' WHERE name LIKE ? OR skills LIKE ? OR location LIKE ? OR experience LIKE ? OR education LIKE ?';
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
     
+    // Total count for pagination
+    const total = db.prepare(`SELECT COUNT(*) as count FROM candidates${whereClause}`).get(...params).count;
+    
     const allowedSorts = ['name', 'location', 'created_at', 'updated_at', 'availability'];
     const sortCol = allowedSorts.includes(sort) ? sort : 'created_at';
     const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
-    query += ` ORDER BY ${sortCol} ${sortOrder}`;
+    
+    let query = `SELECT * FROM candidates${whereClause} ORDER BY ${sortCol} ${sortOrder}`;
+    
+    // Pagination (optional - if page/limit not provided, return all)
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    if (pageNum > 0 && limitNum > 0) {
+      const offset = (pageNum - 1) * limitNum;
+      query += ` LIMIT ? OFFSET ?`;
+      params.push(limitNum, offset);
+    }
     
     const candidates = db.prepare(query).all(...params);
-    res.json({ data: candidates, total: candidates.length });
+    res.json({
+      data: candidates,
+      total,
+      page: pageNum > 0 ? pageNum : 1,
+      limit: limitNum > 0 ? limitNum : total,
+      totalPages: limitNum > 0 ? Math.ceil(total / limitNum) : 1,
+    });
   } catch (error) {
     console.error('Error fetching candidates:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Bewerber' });

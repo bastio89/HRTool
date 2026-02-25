@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 
@@ -17,31 +17,63 @@ const SORT_OPTIONS = [
   { value: 'newest',     label: 'Neueste zuerst' },
   { value: 'oldest',     label: 'Älteste zuerst' },
 ]
+const PAGE_SIZE = 20
 
 export default function Candidates() {
   const [candidates, setCandidates] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
-  const [filterStatus, setFilterStatus] = useState([])   // active status filters
-  const [filterAvail, setFilterAvail] = useState('')     // availability text filter
+  const [filterStatus, setFilterStatus] = useState([])
+  const [filterAvail, setFilterAvail] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [showFilters, setShowFilters] = useState(false)
   const navigate = useNavigate()
 
+  // Debounce search input
   useEffect(() => {
-    candidatesApi.getAll()
-      .then(data => setCandidates(data.data || []))
-      .catch(err => console.error(err))
-      .finally(() => setLoading(false))
-  }, [])
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setCurrentPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const sortMap = { name_asc: { sort: 'name', order: 'asc' }, name_desc: { sort: 'name', order: 'desc' }, newest: { sort: 'created_at', order: 'desc' }, oldest: { sort: 'created_at', order: 'asc' } }
+
+  const loadCandidates = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { sort, order } = sortMap[sortBy] || sortMap.newest
+      const data = await candidatesApi.getAll({
+        search: debouncedSearch,
+        page: currentPage,
+        limit: PAGE_SIZE,
+        sort,
+        order,
+      })
+      setCandidates(data.data || [])
+      setTotalCount(data.total || 0)
+      setTotalPages(data.totalPages || 1)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [debouncedSearch, currentPage, sortBy])
+
+  useEffect(() => { loadCandidates() }, [loadCandidates])
 
   const handleDelete = async (id) => {
     try {
       await candidatesApi.delete(id)
-      setCandidates(prev => prev.filter(c => c.id !== id))
       setDeleteConfirm(null)
+      loadCandidates()
     } catch (err) {
       alert('Fehler beim Löschen: ' + err.message)
     }
@@ -78,27 +110,13 @@ export default function Candidates() {
 
   const filtered = useMemo(() => {
     let list = [...candidates]
-    if (search) {
-      const q = search.toLowerCase()
-      list = list.filter(c =>
-        c.name.toLowerCase().includes(q) ||
-        (c.skills && c.skills.toLowerCase().includes(q)) ||
-        (c.location && c.location.toLowerCase().includes(q)) ||
-        (c.tags && c.tags.toLowerCase().includes(q))
-      )
-    }
+    // Client-side filters for status and availability (not sent to server)
     if (filterStatus.length > 0)
       list = list.filter(c => filterStatus.includes(c.status || 'Aktiv'))
     if (filterAvail)
       list = list.filter(c => c.availability && c.availability.toLowerCase().includes(filterAvail.toLowerCase()))
-    list.sort((a, b) => {
-      if (sortBy === 'name_asc')  return a.name.localeCompare(b.name)
-      if (sortBy === 'name_desc') return b.name.localeCompare(a.name)
-      if (sortBy === 'oldest')    return (a.id || 0) - (b.id || 0)
-      return (b.id || 0) - (a.id || 0) // newest
-    })
     return list
-  }, [candidates, search, filterStatus, filterAvail, sortBy])
+  }, [candidates, filterStatus, filterAvail])
 
   return (
     <div className="fade-in max-w-[1000px] mx-auto">
@@ -107,7 +125,7 @@ export default function Candidates() {
         <div>
           <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Bewerber</h1>
           <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">
-            {loading ? '...' : `${filtered.length} von ${candidates.length} Profilen`}
+            {loading ? '...' : `${filtered.length} von ${totalCount} Profilen`}
           </p>
         </div>
         <div className="flex items-center gap-3 sm:gap-4">
@@ -371,6 +389,50 @@ export default function Candidates() {
               )}
             </Card>
           ))}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-8">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                <ChevronLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} className="px-2 text-gray-400 text-[15px]">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer ${
+                        p === currentPage
+                          ? 'bg-black text-white'
+                          : 'bg-[#f5f5f7] text-gray-600 hover:bg-[#e8e8ed]'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                <ChevronRight className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Briefcase, MapPin, Users,
-  Clock, Trash2, ChevronRight, ExternalLink
+  Clock, Trash2, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft
 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
+const PAGE_SIZE = 20
 
 const statusColor = {
   Offen: 'bg-[#34c759]/10 text-[#34c759]',
@@ -23,32 +24,36 @@ export default function Jobs() {
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [filterStatus, setFilterStatus] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
-  const loadJobs = async () => {
+  const loadJobs = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await jobsApi.getAll(filterStatus)
+      const data = await jobsApi.getAll({ status: filterStatus, page: currentPage, limit: PAGE_SIZE })
       setJobs(data.data || [])
+      setTotalCount(data.total || 0)
+      setTotalPages(data.totalPages || 1)
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }
+  }, [filterStatus, currentPage])
 
-  useEffect(() => { loadJobs() }, [filterStatus])
+  useEffect(() => { loadJobs() }, [loadJobs])
+  useEffect(() => { setCurrentPage(1) }, [filterStatus])
 
   const handleDelete = async (id) => {
     try {
       await jobsApi.delete(id)
-      setJobs(prev => prev.filter(j => j.id !== id))
       setDeleteConfirm(null)
+      loadJobs()
     } catch (err) {
       alert(err.message)
     }
   }
-
-  const openCount = jobs.filter(j => j.status === 'Offen').length
 
   return (
     <div className="fade-in max-w-[1000px] mx-auto">
@@ -57,7 +62,7 @@ export default function Jobs() {
         <div>
           <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black">Stellenverwaltung</h1>
           <p className="text-[15px] sm:text-[18px] text-gray-500 mt-1 sm:mt-3">
-            {openCount} offene Stelle{openCount !== 1 ? 'n' : ''}
+            {totalCount} Stelle{totalCount !== 1 ? 'n' : ''}{filterStatus ? ` (${filterStatus})` : ''}
           </p>
         </div>
         <Button size="md" variant="dark" onClick={() => navigate('/jobs/new')}>
@@ -163,7 +168,7 @@ export default function Jobs() {
                       className="flex items-center gap-2"
                       onClick={() => navigate(`/pipeline/${job.id}`)}
                     >
-                      Pipeline <ChevronRight className="w-4 h-4" />
+                      Pipeline <ChevronRightIcon className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -178,6 +183,50 @@ export default function Jobs() {
               )}
             </Card>
           ))}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-8">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                <ChevronLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push('...')
+                  acc.push(p)
+                  return acc
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`dots-${i}`} className="px-2 text-gray-400 text-[15px]">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer ${
+                        p === currentPage
+                          ? 'bg-black text-white'
+                          : 'bg-[#f5f5f7] text-gray-600 hover:bg-[#e8e8ed]'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] hover:bg-[#e8e8ed] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                <ChevronRightIcon className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

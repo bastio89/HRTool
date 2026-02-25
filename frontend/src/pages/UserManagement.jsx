@@ -15,8 +15,8 @@ export default function UserManagement() {
 
   const loadUsers = async () => {
     try {
-      const data = await authApi.getUsers()
-      setUsers(data)
+      const res = await authApi.getUsers()
+      setUsers(res.data || res)
     } catch {
       setError('Benutzer konnten nicht geladen werden')
     } finally {

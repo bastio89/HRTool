@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3 } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
 
@@ -154,12 +154,24 @@ export default function MatchingResults() {
                           <h4 className="text-[14px] font-semibold text-[#34c759] uppercase tracking-widest">Stärken</h4>
                         </div>
                         <ul className="space-y-5">
-                          {result.strengths.map((s, i) => (
-                            <li key={i} className="flex items-start gap-4 text-[16px] font-medium text-gray-700 leading-relaxed">
-                              <span className="w-2 h-2 rounded-full bg-[#34c759] mt-2.5 flex-shrink-0" />
-                              {s}
-                            </li>
-                          ))}
+                          {result.strengths.map((s, i) => {
+                            const text = typeof s === 'object' ? s.text : s
+                            const ref = typeof s === 'object' ? s.reference : ''
+                            return (
+                              <li key={i} className="text-[16px] font-medium text-gray-700 leading-relaxed">
+                                <div className="flex items-start gap-4">
+                                  <span className="w-2 h-2 rounded-full bg-[#34c759] mt-2.5 flex-shrink-0" />
+                                  {text}
+                                </div>
+                                {ref && (
+                                  <div className="ml-6 mt-2 flex items-start gap-2.5 px-4 py-2.5 bg-[#34c759]/5 rounded-[14px] border border-[#34c759]/10">
+                                    <Quote className="w-3.5 h-3.5 text-[#34c759] mt-0.5 flex-shrink-0" />
+                                    <span className="text-[13px] font-medium text-[#34c759]/80 italic">{ref}</span>
+                                  </div>
+                                )}
+                              </li>
+                            )
+                          })}
                         </ul>
                       </div>
                     )}
@@ -173,12 +185,24 @@ export default function MatchingResults() {
                           <h4 className="text-[14px] font-semibold text-[#ff3b30] uppercase tracking-widest">Schwächen</h4>
                         </div>
                         <ul className="space-y-5">
-                          {result.weaknesses.map((w, i) => (
-                            <li key={i} className="flex items-start gap-4 text-[16px] font-medium text-gray-700 leading-relaxed">
-                              <span className="w-2 h-2 rounded-full bg-[#ff3b30] mt-2.5 flex-shrink-0" />
-                              {w}
-                            </li>
-                          ))}
+                          {result.weaknesses.map((w, i) => {
+                            const text = typeof w === 'object' ? w.text : w
+                            const ref = typeof w === 'object' ? w.reference : ''
+                            return (
+                              <li key={i} className="text-[16px] font-medium text-gray-700 leading-relaxed">
+                                <div className="flex items-start gap-4">
+                                  <span className="w-2 h-2 rounded-full bg-[#ff3b30] mt-2.5 flex-shrink-0" />
+                                  {text}
+                                </div>
+                                {ref && (
+                                  <div className="ml-6 mt-2 flex items-start gap-2.5 px-4 py-2.5 bg-[#ff3b30]/5 rounded-[14px] border border-[#ff3b30]/10">
+                                    <Quote className="w-3.5 h-3.5 text-[#ff3b30] mt-0.5 flex-shrink-0" />
+                                    <span className="text-[13px] font-medium text-[#ff3b30]/80 italic">{ref}</span>
+                                  </div>
+                                )}
+                              </li>
+                            )
+                          })}
                         </ul>
                       </div>
                     )}

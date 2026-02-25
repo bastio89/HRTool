@@ -386,7 +386,7 @@ export default function CandidateDetail() {
                         <span className="text-[13px] font-medium text-gray-400 group-hover:hidden">{formatDate(activity.created_at)}</span>
                       )}
                     </div>
-                    <p className="text-[16px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{activity.text}</p>
+                    <p className="text-[16px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{activity.content}</p>
                   </div>
                 </div>
               )

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -51,10 +52,12 @@ function ProtectedRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginGuard />} />
-        <Route path="/*" element={<ProtectedRoutes />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/login" element={<LoginGuard />} />
+          <Route path="/*" element={<ProtectedRoutes />} />
+        </Routes>
+      </ErrorBoundary>
     </AuthProvider>
   )
 }

@@ -177,17 +177,30 @@ router.post('/parse', upload.single('file'), async (req, res) => {
 
     console.log(`📄 CV-Parser: ${text.length} Zeichen extrahiert, sende an n8n...`);
 
-    // 2. Send to n8n webhook for AI extraction
+    // 2. Send to n8n webhook for AI extraction (with 90s timeout)
     const webhookUrl = process.env.N8N_CV_WEBHOOK_URL || 'http://localhost:5678/webhook/cv-parse';
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 90000);
 
-    const n8nResponse = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cvText: text,
-        filename: req.file.originalname,
-      })
-    });
+    let n8nResponse;
+    try {
+      n8nResponse = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          cvText: text,
+          filename: req.file.originalname,
+        })
+      });
+    } catch (fetchErr) {
+      clearTimeout(fetchTimeout);
+      if (fetchErr.name === 'AbortError') {
+        return res.status(504).json({ error: 'n8n Timeout – CV-Analyse dauerte zu lange (>90s)' });
+      }
+      throw fetchErr;
+    }
+    clearTimeout(fetchTimeout);
 
     if (!n8nResponse.ok) {
       const errText = await n8nResponse.text();

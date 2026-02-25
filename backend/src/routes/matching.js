@@ -44,32 +44,45 @@ router.post('/run', async (req, res) => {
       return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
     }
 
-    // Call n8n webhook for matching
+    // Call n8n webhook for matching (with 120s timeout for LLM processing)
     const webhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/hr-matching';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
     
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jobDescription,
-        jobTitle: jobTitle || 'Unbenannte Stelle',
-        candidates: candidates.map((c, idx) => ({
-          id: c.id,
-          // Name und persönliche Daten werden anonymisiert – kein Einfluss auf Bewertung
-          name: `Kandidat ${idx + 1}`,
-          experience: c.experience,
-          skills: c.skills,
-          education: c.education,
-          languages: c.languages,
-          certificates: c.certificates,
-          location: c.location,
-          desired_salary: c.desired_salary,
-          availability: c.availability,
-          drivers_license: c.drivers_license,
-          mobility: c.mobility
-        }))
-      })
-    });
+    let response;
+    try {
+      response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          jobDescription,
+          jobTitle: jobTitle || 'Unbenannte Stelle',
+          candidates: candidates.map((c, idx) => ({
+            id: c.id,
+            // Name und persönliche Daten werden anonymisiert – kein Einfluss auf Bewertung
+            name: `Kandidat ${idx + 1}`,
+            experience: c.experience,
+            skills: c.skills,
+            education: c.education,
+            languages: c.languages,
+            certificates: c.certificates,
+            location: c.location,
+            desired_salary: c.desired_salary,
+            availability: c.availability,
+            drivers_license: c.drivers_license,
+            mobility: c.mobility
+          }))
+        })
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeout);
+      if (fetchErr.name === 'AbortError') {
+        return res.status(504).json({ error: 'n8n Timeout – Matching dauerte zu lange (>120s)' });
+      }
+      throw fetchErr;
+    }
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errText = await response.text();

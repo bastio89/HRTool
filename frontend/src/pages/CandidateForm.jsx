@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft, Save, AlertTriangle } from 'lucide-react'
 import { candidatesApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 
@@ -20,6 +20,8 @@ export default function CandidateForm() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [duplicates, setDuplicates] = useState([])
+  const dupTimer = useRef(null)
 
   useEffect(() => {
     if (isEdit) {
@@ -37,6 +39,19 @@ export default function CandidateForm() {
   const handleChange = (field) => (e) => {
     setForm(prev => ({ ...prev, [field]: e.target.value }))
   }
+
+  // Debounced duplicate check
+  useEffect(() => {
+    if (dupTimer.current) clearTimeout(dupTimer.current)
+    if (!form.name.trim() && !form.email.trim()) { setDuplicates([]); return }
+    dupTimer.current = setTimeout(async () => {
+      try {
+        const res = await candidatesApi.checkDuplicate(form.name, form.email, isEdit ? id : undefined)
+        setDuplicates(res.duplicates || [])
+      } catch { setDuplicates([]) }
+    }, 500)
+    return () => clearTimeout(dupTimer.current)
+  }, [form.name, form.email, id, isEdit])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -79,6 +94,30 @@ export default function CandidateForm() {
       {error && (
         <div className="p-6 rounded-[20px] bg-[#ff3b30]/10 text-[#ff3b30] text-[16px] font-medium mb-10">
           {error}
+        </div>
+      )}
+
+      {duplicates.length > 0 && (
+        <div className="p-6 rounded-[20px] bg-[#ff9f0a]/10 border border-[#ff9f0a]/20 mb-10">
+          <div className="flex items-center gap-3 mb-3">
+            <AlertTriangle className="w-5 h-5 text-[#ff9f0a]" />
+            <span className="text-[16px] font-semibold text-[#ff9f0a]">Mögliche Duplikate gefunden</span>
+          </div>
+          <div className="space-y-2">
+            {duplicates.map(d => (
+              <div key={d.id} className="flex items-center justify-between bg-white/60 rounded-[14px] px-5 py-3">
+                <div>
+                  <span className="text-[15px] font-semibold text-black">{d.name}</span>
+                  {d.email && <span className="text-[14px] text-gray-500 ml-3">{d.email}</span>}
+                  {d.location && <span className="text-[14px] text-gray-400 ml-3">{d.location}</span>}
+                </div>
+                <span className="text-[12px] font-semibold text-[#ff9f0a] bg-[#ff9f0a]/10 px-3 py-1 rounded-full">
+                  {d.matchType === 'email' ? 'Gleiche E-Mail' : 'Gleicher Name'}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[13px] text-[#ff9f0a]/80 mt-3">Du kannst trotzdem fortfahren, falls es sich nicht um ein Duplikat handelt.</p>
         </div>
       )}
 

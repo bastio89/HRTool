@@ -98,6 +98,34 @@ router.get('/:id', (req, res) => {
   }
 });
 
+// POST check for duplicates
+router.post('/check-duplicate', (req, res) => {
+  try {
+    const { name, email, excludeId } = req.body;
+    const duplicates = [];
+
+    if (name && name.trim()) {
+      const byName = db.prepare(
+        'SELECT id, name, email, location FROM candidates WHERE LOWER(name) = LOWER(?)' + (excludeId ? ' AND id != ?' : '')
+      ).all(...(excludeId ? [name.trim(), excludeId] : [name.trim()]));
+      duplicates.push(...byName.map(d => ({ ...d, matchType: 'name' })));
+    }
+
+    if (email && email.trim()) {
+      const byEmail = db.prepare(
+        'SELECT id, name, email, location FROM candidates WHERE LOWER(email) = LOWER(?)' + (excludeId ? ' AND id != ?' : '')
+      ).all(...(excludeId ? [email.trim(), excludeId] : [email.trim()]));
+      const existingIds = new Set(duplicates.map(d => d.id));
+      duplicates.push(...byEmail.filter(d => !existingIds.has(d.id)).map(d => ({ ...d, matchType: 'email' })));
+    }
+
+    res.json({ duplicates });
+  } catch (error) {
+    console.error('Error checking duplicates:', error);
+    res.status(500).json({ error: 'Fehler bei der Duplikatprüfung' });
+  }
+});
+
 // POST create candidate
 router.post('/', (req, res) => {
   try {

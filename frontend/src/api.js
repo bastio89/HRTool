@@ -22,6 +22,8 @@ export const candidatesApi = {
   update: (id, data) => request(`/candidates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/candidates/${id}`, { method: 'DELETE' }),
   getStats: () => request('/candidates/stats/overview'),
+  checkDuplicate: (name, email, excludeId) =>
+    request('/candidates/check-duplicate', { method: 'POST', body: JSON.stringify({ name, email, excludeId }) }),
 };
 
 // Matching API

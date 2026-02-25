@@ -9,8 +9,10 @@ const emptyCandidate = {
   experience: '', skills: '', education: '',
   desired_salary: '', availability: '', languages: '',
   certificates: '', drivers_license: '', mobility: '', notes: '',
-  status: 'Aktiv', tags: ''
+  status: 'Aktiv', tags: '', source: ''
 }
+
+const SOURCE_OPTIONS = ['LinkedIn', 'Xing', 'Indeed', 'Stepstone', 'Empfehlung', 'Karriereseite', 'Messe', 'Initiativ', 'Sonstige']
 
 export default function CandidateForm() {
   const { id } = useParams()
@@ -30,7 +32,7 @@ export default function CandidateForm() {
           name: data.name || '', email: data.email || '', phone: data.phone || '', location: data.location || '',
           experience: data.experience || '', skills: data.skills || '', education: data.education || '',
           desired_salary: data.desired_salary || '', availability: data.availability || '', languages: data.languages || '',
-          certificates: data.certificates || '', drivers_license: data.drivers_license || '', mobility: data.mobility || '', notes: data.notes || '',          status: data.status || 'Aktiv', tags: data.tags || '',        }))
+          certificates: data.certificates || '', drivers_license: data.drivers_license || '', mobility: data.mobility || '', notes: data.notes || '',          status: data.status || 'Aktiv', tags: data.tags || '', source: data.source || '',        }))
         .catch(err => setError(err.message))
         .finally(() => setLoading(false))
     }
@@ -199,6 +201,18 @@ export default function CandidateForm() {
                 <option value="Passiv">Passiv</option>
                 <option value="In Prozess">In Prozess</option>
                 <option value="Blacklist">Blacklist</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-3">
+              <label className="text-[15px] font-semibold text-gray-500">Quelle</label>
+              <select
+                value={form.source}
+                onChange={handleChange('source')}
+                className="w-full px-5 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black appearance-none cursor-pointer
+                  focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+              >
+                <option value="">– Bitte wählen –</option>
+                {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <Input

@@ -98,6 +98,7 @@ const migrations = [
   `ALTER TABLE candidates ADD COLUMN status TEXT DEFAULT 'Aktiv'`,
   `ALTER TABLE candidates ADD COLUMN tags TEXT`,
   `ALTER TABLE jobs ADD COLUMN url TEXT`,
+  `ALTER TABLE candidates ADD COLUMN source TEXT`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }

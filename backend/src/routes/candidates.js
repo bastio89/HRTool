@@ -132,7 +132,7 @@ router.post('/', (req, res) => {
     const {
       name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages,
-      certificates, drivers_license, mobility, notes, status, tags
+      certificates, drivers_license, mobility, notes, status, tags, source
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -142,14 +142,14 @@ router.post('/', (req, res) => {
     const result = db.prepare(`
       INSERT INTO candidates (name, email, phone, location, experience, skills,
         education, desired_salary, availability, languages, certificates,
-        drivers_license, mobility, notes, status, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        drivers_license, mobility, notes, status, tags, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
-      notes || null, status || 'Aktiv', tags || null
+      notes || null, status || 'Aktiv', tags || null, source || null
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(result.lastInsertRowid);
@@ -171,7 +171,7 @@ router.put('/:id', (req, res) => {
     const {
       name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages,
-      certificates, drivers_license, mobility, notes, status, tags
+      certificates, drivers_license, mobility, notes, status, tags, source
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -183,14 +183,14 @@ router.put('/:id', (req, res) => {
         name = ?, email = ?, phone = ?, location = ?, experience = ?,
         skills = ?, education = ?, desired_salary = ?, availability = ?,
         languages = ?, certificates = ?, drivers_license = ?, mobility = ?,
-        notes = ?, status = ?, tags = ?, updated_at = CURRENT_TIMESTAMP
+        notes = ?, status = ?, tags = ?, source = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
-      notes || null, status || 'Aktiv', tags || null, req.params.id
+      notes || null, status || 'Aktiv', tags || null, source || null, req.params.id
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);

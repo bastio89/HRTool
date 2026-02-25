@@ -55,16 +55,16 @@ export default function Candidates() {
   const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0)
 
   const exportCSV = () => {
-    const headers = ['Name', 'E-Mail', 'Telefon', 'Standort', 'Status', 'Verfügbarkeit', 'Skills', 'Ausbildung', 'Sprachen', 'Zertifikate', 'Führerschein', 'Mobilität', 'Gehaltsvorstellung', 'Tags', 'Notizen']
+    const headers = ['Name', 'E-Mail', 'Telefon', 'Standort', 'Status', 'Verfügbarkeit', 'Skills', 'Ausbildung', 'Sprachen', 'Zertifikate', 'Führerschein', 'Mobilität', 'Gehaltsvorstellung', 'Quelle', 'Tags', 'Notizen']
     const escape = (v) => {
       if (!v) return ''
-      const s = String(v).replace(/"/g, '""')
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s
+      const s = String(v).replace(/\"/g, '\"\"')
+      return s.includes(',') || s.includes('\"') || s.includes('\n') ? `\"${s}\"` : s
     }
     const rows = filtered.map(c => [
       c.name, c.email, c.phone, c.location, c.status || 'Aktiv', c.availability,
       c.skills, c.education, c.languages, c.certificates, c.drivers_license,
-      c.mobility, c.desired_salary, c.tags, c.notes
+      c.mobility, c.desired_salary, c.source, c.tags, c.notes
     ].map(escape).join(','))
     const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -271,6 +271,9 @@ export default function Candidates() {
                       {candidate.tags && candidate.tags.split(',').filter(Boolean).slice(0, 2).map((tag, i) => (
                         <span key={i} className="px-3 py-1 rounded-full bg-[#0071e3]/10 text-[13px] font-semibold text-[#0071e3]">{tag.trim()}</span>
                       ))}
+                      {candidate.source && (
+                        <span className="px-3 py-1 rounded-full bg-[#8b5cf6]/10 text-[13px] font-semibold text-[#8b5cf6]">{candidate.source}</span>
+                      )}
                     </div>
                   </div>
 
@@ -335,6 +338,7 @@ export default function Candidates() {
                     {candidate.drivers_license && <DetailItem label="Führerschein" value={candidate.drivers_license} icon={Car} />}
                     {candidate.mobility && <DetailItem label="Mobilität" value={candidate.mobility} />}
                     {candidate.desired_salary && <DetailItem label="Gehaltsvorstellung" value={candidate.desired_salary} />}
+                    {candidate.source && <DetailItem label="Quelle" value={candidate.source} />}
                   </div>
                   {candidate.experience && (
                     <div className="mt-12">

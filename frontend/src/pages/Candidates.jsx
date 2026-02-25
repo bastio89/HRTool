@@ -31,6 +31,10 @@ export default function Candidates() {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [filterStatus, setFilterStatus] = useState([])
   const [filterAvail, setFilterAvail] = useState('')
+  const [filterSkills, setFilterSkills] = useState([])
+  const [skillInput, setSkillInput] = useState('')
+  const [filterLocation, setFilterLocation] = useState('')
+  const [debouncedLocation, setDebouncedLocation] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [showFilters, setShowFilters] = useState(false)
   const navigate = useNavigate()
@@ -44,19 +48,32 @@ export default function Candidates() {
     return () => clearTimeout(timer)
   }, [search])
 
+  // Debounce location filter
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedLocation(filterLocation)
+      setCurrentPage(1)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [filterLocation])
+
   const sortMap = { name_asc: { sort: 'name', order: 'asc' }, name_desc: { sort: 'name', order: 'desc' }, newest: { sort: 'created_at', order: 'desc' }, oldest: { sort: 'created_at', order: 'asc' } }
 
   const loadCandidates = useCallback(async () => {
     setLoading(true)
     try {
       const { sort, order } = sortMap[sortBy] || sortMap.newest
-      const data = await candidatesApi.getAll({
+      const params = {
         search: debouncedSearch,
         page: currentPage,
         limit: PAGE_SIZE,
         sort,
         order,
-      })
+      }
+      if (filterSkills.length > 0) params.skills = filterSkills.join(',')
+      if (filterStatus.length > 0) params.status = filterStatus.join(',')
+      if (debouncedLocation) params.location = debouncedLocation
+      const data = await candidatesApi.getAll(params)
       setCandidates(data.data || [])
       setTotalCount(data.total || 0)
       setTotalPages(data.totalPages || 1)
@@ -65,7 +82,7 @@ export default function Candidates() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, currentPage, sortBy])
+  }, [debouncedSearch, currentPage, sortBy, filterSkills, filterStatus, debouncedLocation])
 
   useEffect(() => { loadCandidates() }, [loadCandidates])
 
@@ -79,12 +96,37 @@ export default function Candidates() {
     }
   }
 
-  const toggleStatus = (s) =>
+  const toggleStatus = (s) => {
     setFilterStatus(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
+    setCurrentPage(1)
+  }
 
-  const clearFilters = () => { setFilterStatus([]); setFilterAvail(''); setSearch('') }
+  const addSkill = (skill) => {
+    const s = skill.trim()
+    if (s && !filterSkills.includes(s)) {
+      setFilterSkills(prev => [...prev, s])
+      setCurrentPage(1)
+    }
+    setSkillInput('')
+  }
 
-  const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0)
+  const removeSkill = (skill) => {
+    setFilterSkills(prev => prev.filter(s => s !== skill))
+    setCurrentPage(1)
+  }
+
+  const handleSkillKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addSkill(skillInput)
+    } else if (e.key === 'Backspace' && !skillInput && filterSkills.length > 0) {
+      removeSkill(filterSkills[filterSkills.length - 1])
+    }
+  }
+
+  const clearFilters = () => { setFilterStatus([]); setFilterAvail(''); setFilterSkills([]); setSkillInput(''); setFilterLocation(''); setSearch('') }
+
+  const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0) + filterSkills.length + (filterLocation ? 1 : 0)
 
   const exportCSV = () => {
     const headers = ['Name', 'E-Mail', 'Telefon', 'Standort', 'Status', 'Verfügbarkeit', 'Skills', 'Ausbildung', 'Sprachen', 'Zertifikate', 'Führerschein', 'Mobilität', 'Gehaltsvorstellung', 'Quelle', 'Tags', 'Notizen']
@@ -110,13 +152,11 @@ export default function Candidates() {
 
   const filtered = useMemo(() => {
     let list = [...candidates]
-    // Client-side filters for status and availability (not sent to server)
-    if (filterStatus.length > 0)
-      list = list.filter(c => filterStatus.includes(c.status || 'Aktiv'))
+    // Client-side filter for availability (not sent to server)
     if (filterAvail)
       list = list.filter(c => c.availability && c.availability.toLowerCase().includes(filterAvail.toLowerCase()))
     return list
-  }, [candidates, filterStatus, filterAvail])
+  }, [candidates, filterAvail])
 
   return (
     <div className="fade-in max-w-[1000px] mx-auto">
@@ -195,6 +235,31 @@ export default function Candidates() {
         {/* Filter panel */}
         {showFilters && (
           <div className="bg-white rounded-[28px] border border-gray-100/80 shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-8 space-y-7">
+            {/* Skills filter with AND logic */}
+            <div>
+              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Skills <span className="normal-case font-medium">(UND-Verknüpfung)</span></p>
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] rounded-[20px] min-h-[56px]">
+                {filterSkills.map(skill => (
+                  <span key={skill} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0071e3] text-white text-[14px] font-semibold">
+                    {skill}
+                    <button onClick={() => removeSkill(skill)} className="w-5 h-5 rounded-full hover:bg-white/20 flex items-center justify-center cursor-pointer transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder={filterSkills.length > 0 ? 'Weiterer Skill...' : 'Skill eingeben und Enter drücken...'}
+                  value={skillInput}
+                  onChange={e => setSkillInput(e.target.value)}
+                  onKeyDown={handleSkillKeyDown}
+                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black placeholder:text-gray-400 focus:outline-none"
+                />
+              </div>
+              {filterSkills.length >= 2 && (
+                <p className="text-[13px] text-gray-400 mt-2 ml-1">Bewerber müssen <strong>alle</strong> Skills besitzen</p>
+              )}
+            </div>
             {/* Status filter */}
             <div>
               <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Status</p>
@@ -222,6 +287,18 @@ export default function Candidates() {
                 placeholder="z.B. sofort, 3 Monate..."
                 value={filterAvail}
                 onChange={e => setFilterAvail(e.target.value)}
+                className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black border border-transparent
+                  focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+              />
+            </div>
+            {/* Location filter */}
+            <div>
+              <p className="text-[13px] font-bold text-gray-400 uppercase tracking-wider mb-4">Standort</p>
+              <input
+                type="text"
+                placeholder="z.B. Berlin, München..."
+                value={filterLocation}
+                onChange={e => setFilterLocation(e.target.value)}
                 className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] rounded-[20px] text-[16px] font-medium text-black border border-transparent
                   focus:outline-none focus:bg-white focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
               />

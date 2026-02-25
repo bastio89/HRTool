@@ -41,6 +41,9 @@ export const candidatesApi = {
     if (params.limit) q.set('limit', params.limit);
     if (params.sort) q.set('sort', params.sort);
     if (params.order) q.set('order', params.order);
+    if (params.skills) q.set('skills', params.skills);
+    if (params.status) q.set('status', params.status);
+    if (params.location) q.set('location', params.location);
     const qs = q.toString();
     return request(`/candidates${qs ? `?${qs}` : ''}`);
   },

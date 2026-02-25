@@ -86,6 +86,18 @@ router.get('/stats/overview', (req, res) => {
  *         schema: { type: integer, minimum: 1 }
  *         description: Einträge pro Seite
  *       - in: query
+ *         name: skills
+ *         schema: { type: string }
+ *         description: Komma-getrennte Skills (UND-Logik, alle müssen vorhanden sein)
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *         description: Komma-getrennte Status-Filter
+ *       - in: query
+ *         name: location
+ *         schema: { type: string }
+ *         description: Standort-Filter (Teiltext)
+ *       - in: query
  *         name: sort
  *         schema: { type: string, enum: [name, location, created_at, updated_at, availability] }
  *       - in: query
@@ -105,16 +117,44 @@ router.get('/stats/overview', (req, res) => {
  */
 router.get('/', (req, res) => {
   try {
-    const { search, sort = 'created_at', order = 'desc', page, limit } = req.query;
+    const { search, skills, status, location, sort = 'created_at', order = 'desc', page, limit } = req.query;
     
-    let whereClause = '';
+    const conditions = [];
     const params = [];
     
+    // Full-text search
     if (search) {
-      whereClause = ' WHERE name LIKE ? OR skills LIKE ? OR location LIKE ? OR experience LIKE ? OR education LIKE ?';
+      conditions.push('(name LIKE ? OR skills LIKE ? OR location LIKE ? OR experience LIKE ? OR education LIKE ?)');
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
+    
+    // Skills AND-logic: each skill must be present
+    if (skills) {
+      const skillList = skills.split(',').map(s => s.trim()).filter(Boolean);
+      for (const skill of skillList) {
+        conditions.push('skills LIKE ?');
+        params.push(`%${skill}%`);
+      }
+    }
+    
+    // Status filter (comma-separated, OR-logic within)
+    if (status) {
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length > 0) {
+        const placeholders = statuses.map(() => '?').join(',');
+        conditions.push(`(COALESCE(status, 'Aktiv') IN (${placeholders}))`);
+        params.push(...statuses);
+      }
+    }
+    
+    // Location filter
+    if (location) {
+      conditions.push('location LIKE ?');
+      params.push(`%${location}%`);
+    }
+    
+    const whereClause = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
     
     // Total count for pagination
     const total = db.prepare(`SELECT COUNT(*) as count FROM candidates${whereClause}`).get(...params).count;

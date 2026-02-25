@@ -88,6 +88,7 @@ export const jobsApi = {
   create: (data) => request('/jobs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/jobs/${id}`, { method: 'DELETE' }),
+  generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 // Pipeline API

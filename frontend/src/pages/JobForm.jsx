@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, Loader2 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 
@@ -19,6 +19,9 @@ export default function JobForm() {
   const [form, setForm] = useState(emptyJob)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [aiKeywords, setAiKeywords] = useState('')
+  const [aiModel, setAiModel] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -53,6 +56,33 @@ export default function JobForm() {
       setError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleGenerate = async () => {
+    if (!form.title.trim() && !aiKeywords.trim()) {
+      setError('Bitte zuerst einen Jobtitel oder Stichpunkte eingeben.')
+      return
+    }
+    setError('')
+    setGenerating(true)
+    try {
+      const result = await jobsApi.generateDescription({
+        title: form.title,
+        keywords: aiKeywords,
+        type: form.type,
+        location: form.location
+      })
+      setForm(f => ({
+        ...f,
+        description: result.description || f.description,
+        requirements: result.requirements || f.requirements
+      }))
+      setAiModel(result.model || '')
+    } catch (err) {
+      setError(err.message || 'KI-Generierung fehlgeschlagen')
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -135,22 +165,66 @@ export default function JobForm() {
           </div>
         </Card>
 
-        <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Details</h2>
+        <Card className="p-6 sm:p-12">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">Details</h2>
+            {aiModel && (
+              <span className="text-[12px] font-medium text-gray-400 dark:text-gray-500">Modell: {aiModel}</span>
+            )}
+          </div>
+
+          {/* KI-Generierung */}
+          <div className="mb-8 p-5 sm:p-6 rounded-[20px] bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 dark:from-[#5e5ce6]/10 dark:to-[#0071e3]/10 border border-[#5e5ce6]/10 dark:border-[#5e5ce6]/20">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-full bg-[#5e5ce6]/10 flex items-center justify-center">
+                <Sparkles className="w-4.5 h-4.5 text-[#5e5ce6]" />
+              </div>
+              <div>
+                <p className="text-[15px] font-semibold text-black dark:text-white">KI-Stellenbeschreibung</p>
+                <p className="text-[13px] text-gray-500 dark:text-gray-400">Stichpunkte eingeben — KI generiert Beschreibung & Anforderungen</p>
+              </div>
+            </div>
+            <textarea
+              placeholder="z.B. React, 3+ Jahre Erfahrung, agiles Team, Remote möglich, CI/CD, Code-Reviews, Mentoring ..."
+              value={aiKeywords}
+              onChange={e => setAiKeywords(e.target.value)}
+              rows={3}
+              className="w-full px-5 py-4 bg-white/80 dark:bg-[#1c1c1e]/80 rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#5e5ce6]/10 border border-transparent focus:border-[#5e5ce6]/30 transition-all resize-none"
+            />
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generating || (!form.title.trim() && !aiKeywords.trim())}
+              className="mt-4 flex items-center gap-2.5 px-6 py-3 rounded-full bg-[#5e5ce6] text-white text-[15px] font-semibold hover:bg-[#4b49b6] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                  KI generiert...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4.5 h-4.5" />
+                  KI generieren
+                </>
+              )}
+            </button>
+          </div>
+
           <div className="space-y-8">
             <Textarea
               label="Stellenbeschreibung"
               placeholder="Was sind die Hauptaufgaben und Verantwortlichkeiten dieser Rolle?"
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              rows={5}
+              rows={8}
             />
             <Textarea
               label="Anforderungen"
               placeholder="Welche Skills, Erfahrungen und Qualifikationen werden erwartet?"
               value={form.requirements}
               onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))}
-              rows={5}
+              rows={8}
             />
           </div>
         </Card>

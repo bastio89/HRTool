@@ -184,4 +184,105 @@ router.delete('/:id', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /jobs/generate-description:
+ *   post:
+ *     summary: KI-gestützte Stellenbeschreibung generieren (Ollama)
+ *     tags: [Jobs]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               title: { type: string, description: 'Jobtitel' }
+ *               keywords: { type: string, description: 'Stichpunkte/Keywords für die Stelle' }
+ *               type: { type: string, description: 'Anstellungsart' }
+ *               location: { type: string, description: 'Standort' }
+ *     responses:
+ *       200: { description: Generierte Stellenbeschreibung und Anforderungen }
+ */
+router.post('/generate-description', async (req, res) => {
+  try {
+    const { title, keywords, type, location } = req.body;
+
+    if (!title && !keywords) {
+      return res.status(400).json({ error: 'Jobtitel oder Stichpunkte erforderlich' });
+    }
+
+    const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+
+    const prompt = `Du bist ein erfahrener HR-Experte. Erstelle eine professionelle Stellenausschreibung auf Deutsch.
+
+Jobtitel: ${title || 'Nicht angegeben'}
+${type ? `Anstellungsart: ${type}` : ''}
+${location ? `Standort: ${location}` : ''}
+${keywords ? `Stichpunkte/Anforderungen: ${keywords}` : ''}
+
+Erstelle zwei Abschnitte im folgenden JSON-Format (nur reines JSON, kein Markdown):
+{
+  "description": "Fließtext-Stellenbeschreibung (3-5 Absätze, professionell, ansprechend)",
+  "requirements": "Anforderungen als Aufzählung mit Bullets (•), eine pro Zeile"
+}
+
+Wichtig:
+- Beschreibung: professionell, einladend, modern, neutral formuliert
+- Anforderungen: konkrete Punkte, mit • Aufzählungszeichen  
+- Nur valides JSON ausgeben, keine weiteren Erklärungen`;
+
+    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0.7, num_predict: 2048 }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Ollama error:', errText);
+      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+    }
+
+    const data = await response.json();
+    const responseText = data.response || '';
+
+    // Parse JSON from response (handle potential markdown wrapping)
+    let parsed;
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('Kein JSON in Antwort');
+      }
+    } catch (parseErr) {
+      // Fallback: use raw text
+      parsed = {
+        description: responseText.trim(),
+        requirements: ''
+      };
+    }
+
+    logAudit(req, 'ki-generierung', 'Job', null, title, {
+      model: OLLAMA_MODEL,
+      keywords: keywords?.slice(0, 200)
+    });
+
+    res.json({
+      description: parsed.description || '',
+      requirements: parsed.requirements || '',
+      model: OLLAMA_MODEL
+    });
+  } catch (error) {
+    console.error('Error generating job description:', error);
+    res.status(500).json({ error: 'Fehler bei der KI-Generierung. Ist Ollama gestartet?' });
+  }
+});
+
 module.exports = router;

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone, Star
+  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone, Star, ChevronLeft, ChevronRight, ArrowRight
 } from 'lucide-react'
 import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi, ratingsApi } from '../api'
 import InterviewScheduler from '../components/InterviewScheduler'
@@ -41,6 +41,8 @@ export default function Pipeline() {
   const [interviewModal, setInterviewModal] = useState(null) // { entry }
   const [entryInterviews, setEntryInterviews] = useState({}) // { [entryId]: interview[] }
   const [candidateRatings, setCandidateRatings] = useState({}) // { [candidateId]: { average, count } }
+  const [activeStage, setActiveStage] = useState(0) // Mobile: index into STAGES
+  const touchRef = useRef(null)
 
   const loadBoard = async () => {
     const [jobData, pipelineData, candidateData] = await Promise.all([
@@ -198,6 +200,34 @@ export default function Pipeline() {
 
   const totalInPipeline = Object.values(board).flat().length
 
+  // Mobile swipe
+  const handleTouchStart = (e) => { touchRef.current = e.touches[0].clientX }
+  const handleTouchEnd = (e) => {
+    if (touchRef.current === null) return
+    const diff = touchRef.current - e.changedTouches[0].clientX
+    if (Math.abs(diff) > 60) {
+      setActiveStage(prev => diff > 0 ? Math.min(prev + 1, STAGES.length - 1) : Math.max(prev - 1, 0))
+    }
+    touchRef.current = null
+  }
+
+  // Mobile stage move (no drag & drop on touch)
+  const handleMobileMove = async (entry, targetStage) => {
+    setBoard(prev => {
+      const newBoard = { ...prev }
+      newBoard[entry.stage] = (newBoard[entry.stage] || []).filter(e => e.id !== entry.id)
+      const updatedEntry = { ...entry, stage: targetStage }
+      newBoard[targetStage] = [updatedEntry, ...(newBoard[targetStage] || [])]
+      return newBoard
+    })
+    try {
+      await pipelineApi.updateStage(entry.id, targetStage)
+    } catch (err) {
+      loadBoard()
+      alert('Fehler: ' + err.message)
+    }
+  }
+
   if (loading) return <LoadingSpinner text="Pipeline wird geladen..." />
 
   return (
@@ -230,8 +260,103 @@ export default function Pipeline() {
         </div>
       </div>
 
-      {/* Kanban board — horizontal scroll */}
-      <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-6 -mx-2 px-2 snap-x snap-mandatory sm:snap-none">
+      {/* Mobile Stage Tabs — visible only on small screens */}
+      <div className="md:hidden mb-4">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory scrollbar-none">
+          {STAGES.map((stage, idx) => {
+            const style = stageStyle[stage]
+            const count = (board[stage] || []).length
+            return (
+              <button
+                key={stage}
+                onClick={() => setActiveStage(idx)}
+                className={`snap-center flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition-all cursor-pointer
+                  ${idx === activeStage
+                    ? `${style.col} ${style.header} ring-2 ring-current`
+                    : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-400'}`}
+              >
+                <span className={`w-2 h-2 rounded-full ${idx === activeStage ? style.dot : 'bg-gray-300 dark:bg-gray-600'}`} />
+                {stage}
+                <span className={`ml-0.5 text-[12px] px-1.5 py-0.5 rounded-full ${idx === activeStage ? 'bg-white/50 dark:bg-black/20' : 'bg-gray-200 dark:bg-gray-700'}`}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Mobile Kanban — single column with swipe */}
+      <div
+        className="md:hidden flex-1 min-h-0"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {(() => {
+          const stage = STAGES[activeStage]
+          const style = stageStyle[stage]
+          const cards = board[stage] || []
+          const prevStage = activeStage > 0 ? STAGES[activeStage - 1] : null
+          const nextStage = activeStage < STAGES.length - 1 ? STAGES[activeStage + 1] : null
+          return (
+            <div className={`rounded-[24px] p-4 ${style.col} min-h-[200px]`}>
+              <div className="flex items-center justify-between mb-4 px-1">
+                <button
+                  onClick={() => setActiveStage(Math.max(0, activeStage - 1))}
+                  disabled={!prevStage}
+                  className="w-8 h-8 rounded-full bg-white/60 dark:bg-black/20 flex items-center justify-center disabled:opacity-20 cursor-pointer"
+                >
+                  <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-full ${style.dot}`} />
+                  <span className={`text-[17px] font-bold ${style.header}`}>{stage}</span>
+                  <span className="text-[15px] font-semibold text-gray-400 bg-white dark:bg-[#1c1c1e] px-2.5 py-0.5 rounded-full ml-1">
+                    {cards.length}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setActiveStage(Math.min(STAGES.length - 1, activeStage + 1))}
+                  disabled={!nextStage}
+                  className="w-8 h-8 rounded-full bg-white/60 dark:bg-black/20 flex items-center justify-center disabled:opacity-20 cursor-pointer"
+                >
+                  <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                </button>
+              </div>
+              {/* Stage dots indicator */}
+              <div className="flex items-center justify-center gap-1.5 mb-4">
+                {STAGES.map((_, i) => (
+                  <span key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === activeStage ? 'bg-gray-600 dark:bg-gray-300 w-4' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                ))}
+              </div>
+              <div className="flex flex-col gap-3">
+                {cards.length === 0 && (
+                  <div className="flex items-center justify-center h-24 rounded-[20px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-400">
+                    Keine Bewerber
+                  </div>
+                )}
+                {cards.map(entry => (
+                  <MobileKanbanCard
+                    key={entry.id}
+                    entry={entry}
+                    interviews={entryInterviews[entry.id] || []}
+                    rating={candidateRatings[entry.candidate_id]}
+                    prevStage={prevStage}
+                    nextStage={nextStage}
+                    onMove={(targetStage) => handleMobileMove(entry, targetStage)}
+                    onRemove={() => handleRemove(entry.id, stage)}
+                    onOpenNotes={() => openNotes(entry.id, entry.candidate_name)}
+                    onOpenInterview={() => setInterviewModal({ entry })}
+                  />
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* Desktop Kanban board — horizontal scroll (hidden on mobile) */}
+      <div className="hidden md:flex gap-4 sm:gap-5 overflow-x-auto pb-6 -mx-2 px-2 snap-x snap-mandatory sm:snap-none">
         {STAGES.map(stage => {
           const style = stageStyle[stage]
           const cards = board[stage] || []
@@ -542,6 +667,109 @@ function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNo
         <button
           onClick={(e) => { e.stopPropagation(); onOpenInterview() }}
           className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] transition-colors cursor-pointer"
+        >
+          <Calendar className="w-3.5 h-3.5" /> Interview
+          {interviews.length > 0 && (
+            <span className="w-4 h-4 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[10px] font-bold flex items-center justify-center">{interviews.length}</span>
+          )}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function MobileKanbanCard({ entry, interviews, rating, prevStage, nextStage, onMove, onRemove, onOpenNotes, onOpenInterview }) {
+  const stageColor = (stage) => ({
+    Beworben: '#9ca3af', Vorauswahl: '#0071e3', Interview: '#ff9f0a',
+    Angebot: '#8b5cf6', Hired: '#34c759', Abgesagt: '#ff3b30'
+  }[stage] || '#9ca3af')
+  return (
+    <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-[17px] font-semibold text-black dark:text-white truncate">{entry.candidate_name}</p>
+            {rating && (
+              <span className="flex items-center gap-0.5 flex-shrink-0">
+                <Star className="w-3.5 h-3.5 text-[#ff9f0a] fill-[#ff9f0a]" />
+                <span className="text-[13px] font-bold text-[#ff9f0a]">{rating.average}</span>
+              </span>
+            )}
+          </div>
+          {entry.location && (
+            <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5" />{entry.location}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={onRemove}
+          className="w-8 h-8 rounded-full bg-[#ff3b30]/10 flex items-center justify-center cursor-pointer flex-shrink-0"
+        >
+          <X className="w-4 h-4 text-[#ff3b30]" />
+        </button>
+      </div>
+      {entry.skills && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {entry.skills.split(',').slice(0, 3).map((skill, i) => (
+            <span key={i} className="px-2.5 py-1 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full text-[12px] font-medium text-gray-600 dark:text-gray-400">
+              {skill.trim()}
+            </span>
+          ))}
+        </div>
+      )}
+      {interviews.length > 0 && (() => {
+        const next = interviews.find(iv => iv.status === 'geplant' || iv.status === 'bestätigt') || interviews[0]
+        return (
+          <div className="mb-3 p-2.5 rounded-[12px] bg-[#ff9f0a]/5 border border-[#ff9f0a]/10">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3 h-3 text-[#ff9f0a]" />
+              <span className="text-[12px] font-semibold text-[#ff9f0a]">
+                {new Date(next.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}
+                {next.interview_time && ` · ${next.interview_time}`}
+              </span>
+            </div>
+          </div>
+        )
+      })()}
+      {/* Mobile move buttons */}
+      <div className="flex items-center gap-2 mb-3">
+        {prevStage && (
+          <button
+            onClick={() => onMove(prevStage)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] active:scale-95 transition-transform cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" style={{ color: stageColor(prevStage) }} />
+            <span className="text-[12px] font-bold text-gray-600 dark:text-gray-400">{prevStage}</span>
+          </button>
+        )}
+        {nextStage && (
+          <button
+            onClick={() => onMove(nextStage)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] active:scale-95 transition-transform cursor-pointer"
+          >
+            <span className="text-[12px] font-bold text-gray-600 dark:text-gray-400">{nextStage}</span>
+            <ChevronRight className="w-4 h-4" style={{ color: stageColor(nextStage) }} />
+          </button>
+        )}
+      </div>
+      {/* Action row */}
+      <div className="flex items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-700/50">
+        <Link
+          to={`/candidates/${entry.candidate_id}/detail`}
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-[#0071e3]"
+        >
+          <Activity className="w-3.5 h-3.5" /> Profil
+        </Link>
+        <button
+          onClick={onOpenNotes}
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500 dark:text-gray-400 cursor-pointer"
+        >
+          <MessageSquare className="w-3.5 h-3.5" /> Notizen
+        </button>
+        <button
+          onClick={onOpenInterview}
+          className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500 dark:text-gray-400 cursor-pointer"
         >
           <Calendar className="w-3.5 h-3.5" /> Interview
           {interviews.length > 0 && (

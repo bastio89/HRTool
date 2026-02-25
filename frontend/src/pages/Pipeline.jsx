@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send
+  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare
 } from 'lucide-react'
-import { jobsApi, pipelineApi, candidatesApi } from '../api'
+import { jobsApi, pipelineApi, candidatesApi, matchingApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
@@ -36,6 +36,7 @@ export default function Pipeline() {
   const [notes, setNotes] = useState([])
   const [newNote, setNewNote] = useState('')
   const [loadingNotes, setLoadingNotes] = useState(false)
+  const [matchingRunning, setMatchingRunning] = useState(false)
 
   const loadBoard = async () => {
     const [jobData, pipelineData, candidateData] = await Promise.all([
@@ -145,6 +146,20 @@ export default function Pipeline() {
     }
   }
 
+  const startMatchingFromPipeline = async () => {
+    if (!job?.description || totalInPipeline === 0) return
+    setMatchingRunning(true)
+    try {
+      const candidateIds = Object.values(board).flat().map(e => e.candidate_id)
+      const result = await matchingApi.run(job.description, job.title, candidateIds)
+      navigate(`/matching/results/${result.id}`)
+    } catch (err) {
+      alert('Matching fehlgeschlagen: ' + err.message)
+    } finally {
+      setMatchingRunning(false)
+    }
+  }
+
   // Candidates not yet in this pipeline
   const pipelineIds = Object.values(board).flat().map(e => e.candidate_id)
   const availableCandidates = allCandidates.filter(c =>
@@ -174,6 +189,11 @@ export default function Pipeline() {
           <div className="px-5 py-2.5 rounded-full bg-[#f5f5f7] text-[15px] font-medium text-gray-600">
             {totalInPipeline} Bewerber{totalInPipeline !== 1 ? '' : ''}
           </div>
+          {totalInPipeline > 0 && job?.description && (
+            <Button variant="secondary" size="md" onClick={startMatchingFromPipeline} disabled={matchingRunning}>
+              <GitCompare className="w-5 h-5" /> {matchingRunning ? 'Matching läuft...' : 'Matching starten'}
+            </Button>
+          )}
           <Button variant="dark" size="md" onClick={() => setAddPanelOpen(true)}>
             <UserPlus className="w-5 h-5" /> Bewerber hinzufügen
           </Button>

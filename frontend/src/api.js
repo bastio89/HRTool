@@ -1,8 +1,13 @@
 const API_BASE = '/api';
 
+function authHeaders() {
+  const token = localStorage.getItem('hrtool_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request(url, options = {}) {
   const response = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers },
     ...options,
   });
 
@@ -13,6 +18,19 @@ async function request(url, options = {}) {
 
   return response.json();
 }
+
+// Auth API
+export const authApi = {
+  login: (username, password) =>
+    request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  getMe: () => request('/auth/me'),
+  getUsers: () => request('/auth/users'),
+  createUser: (data) =>
+    request('/auth/users', { method: 'POST', body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
+  changePassword: (currentPassword, newPassword) =>
+    request('/auth/change-password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
+};
 
 // Candidates API
 export const candidatesApi = {
@@ -82,6 +100,7 @@ export const uploadsApi = {
     formData.append('file', file);
     const response = await fetch(`${API_BASE}/uploads/candidate/${candidateId}`, {
       method: 'POST',
+      headers: authHeaders(),
       body: formData,
     });
     if (!response.ok) {

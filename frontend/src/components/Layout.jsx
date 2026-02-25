@@ -1,5 +1,6 @@
 import { NavLink, Outlet, Link } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield } from 'lucide-react'
+import { useAuth } from '../AuthContext'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Übersicht' },
@@ -10,6 +11,7 @@ const navItems = [
 ]
 
 export default function Layout() {
+  const { user, logout, isAdmin } = useAuth()
   return (
     <div className="flex h-screen bg-[#f5f5f7] overflow-hidden selection:bg-[#0071e3] selection:text-white">
       {/* Sidebar */}
@@ -39,6 +41,21 @@ export default function Layout() {
               {label}
             </NavLink>
           ))}
+          {isAdmin && (
+            <NavLink
+              to="/admin/users"
+              className={({ isActive }) =>
+                `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
+                  isActive
+                    ? 'bg-white text-[#0071e3] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60'
+                    : 'text-gray-500 hover:bg-gray-200/50 hover:text-black border border-transparent'
+                }`
+              }
+            >
+              <Shield className="w-5 h-5" />
+              Benutzer
+            </NavLink>
+          )}
         </nav>
 
         <div className="mt-auto pt-10">
@@ -53,12 +70,15 @@ export default function Layout() {
       <main className="flex-1 bg-white rounded-l-[48px] my-4 mr-4 shadow-[0_0_40px_rgba(0,0,0,0.03)] border border-gray-200/50 overflow-hidden flex flex-col relative">
         {/* Top Bar */}
         <header className="h-24 flex items-center justify-end px-14 flex-shrink-0 bg-white/80 backdrop-blur-2xl border-b border-gray-100/50 z-10 sticky top-0">
-          <div className="flex items-center gap-5 cursor-pointer hover:opacity-80 transition-opacity">
+          <div className="flex items-center gap-5">
             <div className="text-right">
-              <p className="text-[16px] font-semibold text-black tracking-tight">Sebastian Oczachowski</p>
-              <p className="text-[14px] text-gray-500 font-medium">HR Manager</p>
+              <p className="text-[16px] font-semibold text-black tracking-tight">{user?.display_name || user?.username}</p>
+              <p className="text-[14px] text-gray-500 font-medium">{user?.role === 'admin' ? 'Administrator' : 'Recruiter'}</p>
             </div>
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sebastian" alt="Profile" className="w-12 h-12 rounded-full bg-gray-100 border border-gray-200 shadow-sm" />
+            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.display_name || user?.username}`} alt="Profile" className="w-12 h-12 rounded-full bg-gray-100 border border-gray-200 shadow-sm" />
+            <button onClick={logout} className="p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title="Abmelden">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
 

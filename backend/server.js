@@ -7,6 +7,8 @@ const jobsRouter = require('./src/routes/jobs');
 const pipelineRouter = require('./src/routes/pipeline');
 const activitiesRouter = require('./src/routes/activities');
 const uploadsRouter = require('./src/routes/uploads');
+const authRouter = require('./src/routes/auth');
+const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,7 +17,11 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'] }));
 app.use(express.json({ limit: '10mb' }));
 
+// Auth middleware (parses token, sets req.user)
+app.use(authMiddleware);
+
 // Routes
+app.use('/api/auth', authRouter);
 app.use('/api/candidates', candidatesRouter);
 app.use('/api/matching', matchingRouter);
 app.use('/api/jobs', jobsRouter);

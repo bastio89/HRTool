@@ -1,5 +1,7 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './AuthContext'
 import Layout from './components/Layout'
+import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Candidates from './pages/Candidates'
 import CandidateForm from './pages/CandidateForm'
@@ -10,8 +12,21 @@ import History from './pages/History'
 import Jobs from './pages/Jobs'
 import JobForm from './pages/JobForm'
 import Pipeline from './pages/Pipeline'
+import UserManagement from './pages/UserManagement'
 
-export default function App() {
+function ProtectedRoutes() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f5f5f7] flex items-center justify-center">
+        <div className="w-10 h-10 border-[3px] border-gray-200 border-t-[#0071e3] rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!user) return <Navigate to="/login" replace />
+
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
@@ -27,7 +42,26 @@ export default function App() {
         <Route path="matching" element={<Matching />} />
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />
+        <Route path="admin/users" element={<UserManagement />} />
       </Route>
     </Routes>
   )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginGuard />} />
+        <Route path="/*" element={<ProtectedRoutes />} />
+      </Routes>
+    </AuthProvider>
+  )
+}
+
+function LoginGuard() {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  if (user) return <Navigate to="/" replace />
+  return <Login />
 }

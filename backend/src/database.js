@@ -102,6 +102,15 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'recruiter',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Safe migrations for existing databases
@@ -113,6 +122,17 @@ const migrations = [
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }
+}
+
+// Seed default admin user if no users exist
+const bcrypt = require('bcryptjs');
+const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
+if (userCount.count === 0) {
+  const hash = bcrypt.hashSync('admin123', 10);
+  db.prepare('INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)').run(
+    'admin', hash, 'Sebastian Oczachowski', 'admin'
+  );
+  console.log('📋 Default Admin erstellt: admin / admin123');
 }
 
 module.exports = db;

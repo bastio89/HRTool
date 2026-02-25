@@ -116,6 +116,21 @@ export const healthApi = {
   check: () => request('/health'),
 };
 
+// Audit-Log API
+export const auditApi = {
+  getLog: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set('page', params.page);
+    if (params.limit) q.set('limit', params.limit);
+    if (params.entity_type) q.set('entity_type', params.entity_type);
+    if (params.action) q.set('action', params.action);
+    if (params.search) q.set('search', params.search);
+    const qs = q.toString();
+    return request(`/audit${qs ? `?${qs}` : ''}`);
+  },
+  getStats: () => request('/audit/stats'),
+};
+
 // Uploads API
 export const uploadsApi = {
   getByCandidate: (candidateId) => request(`/uploads/candidate/${candidateId}`),

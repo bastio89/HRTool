@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../database');
+const { logAudit } = require('./audit');
 
 const router = express.Router();
 
@@ -120,6 +121,7 @@ router.post('/', (req, res) => {
       location || null, type || 'Vollzeit', status || 'Offen', url || null
     );
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
+    logAudit(req, 'erstellt', 'Job', job.id, job.title);
     res.status(201).json(job);
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Erstellen der Stelle' });
@@ -150,6 +152,7 @@ router.put('/:id', (req, res) => {
     `).run(title, description || null, requirements || null, location || null,
       type || 'Vollzeit', status || 'Offen', url || null, req.params.id);
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
+    logAudit(req, 'aktualisiert', 'Job', job.id, job.title);
     res.json(job);
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Aktualisieren der Stelle' });
@@ -172,7 +175,9 @@ router.put('/:id', (req, res) => {
  */
 router.delete('/:id', (req, res) => {
   try {
+    const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     db.prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);
+    logAudit(req, 'gelöscht', 'Job', req.params.id, job?.title);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Löschen der Stelle' });

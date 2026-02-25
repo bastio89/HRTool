@@ -15,6 +15,7 @@ import Jobs from './pages/Jobs'
 import JobForm from './pages/JobForm'
 import Pipeline from './pages/Pipeline'
 import UserManagement from './pages/UserManagement'
+import AuditLog from './pages/AuditLog'
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth()
@@ -45,6 +46,7 @@ function ProtectedRoutes() {
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />
         <Route path="admin/users" element={<UserManagement />} />
+        <Route path="admin/audit" element={<AuditLog />} />
       </Route>
     </Routes>
   )

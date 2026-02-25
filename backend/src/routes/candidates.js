@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database');
+const { logAudit } = require('./audit');
 
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '..', '..', 'data', 'uploads');
@@ -377,6 +378,7 @@ router.post('/', (req, res) => {
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(result.lastInsertRowid);
+    logAudit(req, 'erstellt', 'Candidate', candidate.id, candidate.name);
     res.status(201).json(candidate);
   } catch (error) {
     console.error('Error creating candidate:', error);
@@ -437,6 +439,7 @@ router.put('/:id', (req, res) => {
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);
+    logAudit(req, 'aktualisiert', 'Candidate', candidate.id, candidate.name);
     res.json(candidate);
   } catch (error) {
     console.error('Error updating candidate:', error);
@@ -469,6 +472,7 @@ router.delete('/:id', (req, res) => {
     // Clean up physical files before DB deletion (CASCADE deletes candidate_files rows)
     cleanupCandidateFiles(parseInt(req.params.id));
 
+    logAudit(req, 'gelöscht', 'Candidate', existing.id, existing.name);
     db.prepare('DELETE FROM candidates WHERE id = ?').run(req.params.id);
     res.json({ message: 'Bewerber erfolgreich gelöscht' });
   } catch (error) {
@@ -507,6 +511,7 @@ router.post('/batch/delete', (req, res) => {
 
     const placeholders = ids.map(() => '?').join(',');
     const result = db.prepare(`DELETE FROM candidates WHERE id IN (${placeholders})`).run(...ids);
+    logAudit(req, 'batch-gelöscht', 'Candidate', null, null, { ids, count: result.changes });
     res.json({ deleted: result.changes });
   } catch (error) {
     console.error('Error batch deleting:', error);
@@ -547,6 +552,7 @@ router.post('/batch/status', (req, res) => {
     }
     const placeholders = ids.map(() => '?').join(',');
     const result = db.prepare(`UPDATE candidates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(status, ...ids);
+    logAudit(req, 'batch-status', 'Candidate', null, null, { ids, status, count: result.changes });
     res.json({ updated: result.changes });
   } catch (error) {
     console.error('Error batch status update:', error);

@@ -111,6 +111,18 @@ db.exec(`
     role TEXT NOT NULL DEFAULT 'recruiter',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    username TEXT,
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id INTEGER,
+    entity_label TEXT,
+    details TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Safe migrations for existing databases
@@ -148,6 +160,10 @@ const indexes = [
   `CREATE INDEX IF NOT EXISTS idx_files_candidate_id ON candidate_files(candidate_id)`,
   // Matching: Sortierung
   `CREATE INDEX IF NOT EXISTS idx_matching_created_at ON matching_results(created_at)`,
+  // Audit Log: Lookup & Sortierung
+  `CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id)`,
 ];
 for (const sql of indexes) {
   try { db.exec(sql); } catch (_) { /* index already exists */ }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, Link } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 
@@ -85,6 +85,22 @@ export default function Layout() {
             >
               <Shield className="w-5 h-5" />
               Benutzer
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink
+              to="/admin/audit"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
+                  isActive
+                    ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                    : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                }`
+              }
+            >
+              <ClipboardList className="w-5 h-5" />
+              Audit-Log
             </NavLink>
           )}
         </nav>

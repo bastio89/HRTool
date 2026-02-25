@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
 const db = require('../database');
+const { logAudit } = require('./audit');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'hrtool-secret-key-2025';
@@ -139,6 +140,7 @@ router.post('/users', (req, res) => {
     ).run(username, hash, display_name, role || 'recruiter');
 
     const user = db.prepare('SELECT id, username, display_name, role, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    logAudit(req, 'benutzer-erstellt', 'User', user.id, user.display_name, { role: user.role });
     res.status(201).json(user);
   } catch (error) {
     console.error('Create user error:', error);
@@ -169,10 +171,11 @@ router.delete('/users/:id', (req, res) => {
   }
 
   try {
-    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    const existing = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
 
     db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+    logAudit(req, 'benutzer-gelöscht', 'User', req.params.id, existing.display_name);
     res.json({ message: 'Benutzer gelöscht' });
   } catch (error) {
     console.error('Delete user error:', error);
@@ -215,6 +218,7 @@ router.put('/change-password', (req, res) => {
 
     const hash = bcrypt.hashSync(newPassword, 10);
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
+    logAudit(req, 'passwort-geändert', 'User', req.user.id, req.user.display_name);
     res.json({ message: 'Passwort geändert' });
   } catch (error) {
     console.error('Change password error:', error);
@@ -256,11 +260,12 @@ router.put('/users/:id/reset-password', (req, res) => {
       return res.status(400).json({ error: 'Neues Passwort muss mindestens 4 Zeichen lang sein' });
     }
 
-    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    const existing = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
 
     const hash = bcrypt.hashSync(newPassword, 10);
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.params.id);
+    logAudit(req, 'passwort-zurückgesetzt', 'User', req.params.id, existing.display_name);
     res.json({ message: 'Passwort wurde zurückgesetzt' });
   } catch (error) {
     console.error('Reset password error:', error);
@@ -296,6 +301,7 @@ router.get('/admin/backup', (req, res) => {
 
     // Use SQLite backup API for safe copy (even while DB is in use)
     db.backup(backupPath).then(() => {
+      logAudit(req, 'backup-erstellt', 'System', null, backupFilename);
       res.download(backupPath, backupFilename, (err) => {
         // Clean up backup file after download
         try { fs.unlinkSync(backupPath); } catch {}

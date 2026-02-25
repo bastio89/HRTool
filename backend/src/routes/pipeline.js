@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../database');
+const { logAudit } = require('./audit');
 
 const router = express.Router();
 
@@ -105,6 +106,7 @@ router.post('/job/:jobId/add', (req, res) => {
       WHERE pe.id = ?
     `).get(entryId);
 
+    logAudit(req, 'pipeline-hinzugefügt', 'Pipeline', entryId, candidate?.name, { job: job?.title, stage });
     res.status(201).json(entry);
   } catch (err) {
     console.error(err);
@@ -165,6 +167,7 @@ router.put('/:entryId/stage', (req, res) => {
       const job = db.prepare('SELECT title FROM jobs WHERE id = ?').get(entry.job_id);
       db.prepare(`INSERT INTO activities (candidate_id, type, content) VALUES (?, ?, ?)`)
         .run(entry.candidate_id, 'Pipeline', `Stage gewechselt: "${entry.stage}" → "${stage}"${job ? ` (${job.title})` : ''}${notes ? ` — ${notes}` : ''}`);
+      logAudit(req, 'stage-geändert', 'Pipeline', req.params.entryId, null, { oldStage, newStage: stage, job: job?.title });
     }
 
     res.json(db.prepare('SELECT * FROM pipeline_entries WHERE id = ?').get(req.params.entryId));
@@ -299,7 +302,9 @@ router.get('/active-jobs', (req, res) => {
  */
 router.delete('/:entryId', (req, res) => {
   try {
+    const entry = db.prepare('SELECT pe.*, c.name as candidate_name FROM pipeline_entries pe JOIN candidates c ON c.id = pe.candidate_id WHERE pe.id = ?').get(req.params.entryId);
     db.prepare('DELETE FROM pipeline_entries WHERE id = ?').run(req.params.entryId);
+    logAudit(req, 'pipeline-entfernt', 'Pipeline', req.params.entryId, entry?.candidate_name, { stage: entry?.stage });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Entfernen aus der Pipeline' });

@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { NavLink, Outlet, Link } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import Breadcrumb from './Breadcrumb'
@@ -13,10 +13,24 @@ const navItems = [
   { to: '/history', icon: History, label: 'Historie' },
 ]
 
+const adminItems = [
+  { to: '/admin/users', icon: Shield, label: 'Benutzer' },
+  { to: '/admin/audit', icon: ClipboardList, label: 'Audit-Log' },
+  { to: '/admin/dsgvo', icon: ShieldAlert, label: 'DSGVO' },
+  { to: '/admin/ki-transparenz', icon: Bot, label: 'KI-Transparenz' },
+]
+
 export default function Layout() {
   const { user, logout, isAdmin } = useAuth()
   const { isDark, toggleTheme } = useTheme()
+  const location = useLocation()
+  const isAdminRoute = location.pathname.startsWith('/admin')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(isAdminRoute)
+
+  useEffect(() => {
+    if (isAdminRoute) setAdminOpen(true)
+  }, [isAdminRoute])
 
   const closeSidebar = () => setSidebarOpen(false)
 
@@ -74,68 +88,43 @@ export default function Layout() {
             </NavLink>
           ))}
           {isAdmin && (
-            <NavLink
-              to="/admin/users"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
-                  isActive
+            <div className="mt-2">
+              <button
+                onClick={() => setAdminOpen(!adminOpen)}
+                className={`flex items-center justify-between w-full px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 cursor-pointer ${
+                  isAdminRoute && !adminOpen
                     ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
                     : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
-                }`
-              }
-            >
-              <Shield className="w-5 h-5" />
-              Benutzer
-            </NavLink>
-          )}
-          {isAdmin && (
-            <NavLink
-              to="/admin/audit"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
-                  isActive
-                    ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
-                    : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
-                }`
-              }
-            >
-              <ClipboardList className="w-5 h-5" />
-              Audit-Log
-            </NavLink>
-          )}
-          {isAdmin && (
-            <NavLink
-              to="/admin/dsgvo"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
-                  isActive
-                    ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
-                    : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
-                }`
-              }
-            >
-              <ShieldAlert className="w-5 h-5" />
-              DSGVO
-            </NavLink>
-          )}
-          {isAdmin && (
-            <NavLink
-              to="/admin/ki-transparenz"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
-                  isActive
-                    ? 'bg-white dark:bg-[#1c1c1e] text-[#5e5ce6] dark:text-[#a5a4f3] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
-                    : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
-                }`
-              }
-            >
-              <Bot className="w-5 h-5" />
-              KI-Transparenz
-            </NavLink>
+                }`}
+              >
+                <span className="flex items-center gap-4">
+                  <Settings className="w-5 h-5" />
+                  Administration
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${adminOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${adminOpen ? 'max-h-[300px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                <div className="space-y-1 pl-4">
+                  {adminItems.map(({ to, icon: Icon, label }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      onClick={closeSidebar}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-300 ${
+                          isActive
+                            ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                            : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                        }`
+                      }
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </nav>
 

@@ -68,7 +68,8 @@ export const candidatesApi = {
     const qs = q.toString();
     return request(`/candidates${qs ? `?${qs}` : ''}`);
   },
-  getById: (id) => request(`/candidates/${id}`),\n  getHistory: (id) => request(`/candidates/${id}/history`),
+  getById: (id) => request(`/candidates/${id}`),
+  getHistory: (id) => request(`/candidates/${id}/history`),
   create: (data) => request('/candidates', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/candidates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/candidates/${id}`, { method: 'DELETE' }),
@@ -150,6 +151,25 @@ export const auditApi = {
     return request(`/audit${qs ? `?${qs}` : ''}`);
   },
   getStats: () => request('/audit/stats'),
+  exportCSV: async (filters = {}) => {
+    const q = new URLSearchParams();
+    if (filters.entity_type) q.set('entity_type', filters.entity_type);
+    if (filters.action) q.set('action', filters.action);
+    if (filters.search) q.set('search', filters.search);
+    const qs = q.toString();
+    const token = localStorage.getItem('token');
+    const resp = await fetch(`/api/audit/export${qs ? `?${qs}` : ''}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!resp.ok) throw new Error('Export fehlgeschlagen');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-log_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // Uploads API

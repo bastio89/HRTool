@@ -144,5 +144,86 @@ router.get('/stats', (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /audit/export:
+ *   get:
+ *     summary: Audit-Log als CSV exportieren (nur Admin)
+ *     tags: [Audit]
+ *     parameters:
+ *       - in: query
+ *         name: entity_type
+ *         schema: { type: string }
+ *       - in: query
+ *         name: action
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: CSV-Datei }
+ *       403: { description: Keine Berechtigung }
+ */
+router.get('/export', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Nur Admins können das Audit-Log exportieren' });
+  }
+
+  try {
+    let where = [];
+    let params = [];
+
+    if (req.query.entity_type) {
+      where.push('entity_type = ?');
+      params.push(req.query.entity_type);
+    }
+    if (req.query.action) {
+      where.push('action LIKE ?');
+      params.push(`%${req.query.action}%`);
+    }
+    if (req.query.search) {
+      where.push('(username LIKE ? OR entity_label LIKE ? OR details LIKE ?)');
+      const s = `%${req.query.search}%`;
+      params.push(s, s, s);
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+    const entries = db.prepare(`
+      SELECT * FROM audit_log ${whereClause}
+      ORDER BY created_at DESC
+    `).all(...params);
+
+    const escape = (v) => {
+      if (v == null) return '';
+      const s = String(v).replace(/"/g, '""');
+      return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes(';') ? `"${s}"` : s;
+    };
+
+    const headers = ['ID', 'Zeitpunkt', 'Benutzer-ID', 'Benutzername', 'Aktion', 'Bereich', 'Objekt-ID', 'Objekt', 'Details'];
+    const rows = entries.map(e => [
+      e.id,
+      e.created_at,
+      e.user_id || '',
+      e.username || '',
+      e.action,
+      e.entity_type,
+      e.entity_id || '',
+      e.entity_label || '',
+      e.details || ''
+    ].map(escape).join(','));
+
+    const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+
+    const filename = `audit-log_${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Audit export error:', error);
+    res.status(500).json({ error: 'Fehler beim Exportieren des Audit-Logs' });
+  }
+});
+
 module.exports = router;
 module.exports.logAudit = logAudit;

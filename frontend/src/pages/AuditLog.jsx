@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../AuthContext'
 import { auditApi } from '../api'
 import { useTheme } from '../ThemeContext'
-import { Shield, Search, ChevronLeft, ChevronRight, Activity, User, Briefcase, Users, GitBranch, Clock, Filter } from 'lucide-react'
+import { Shield, Search, ChevronLeft, ChevronRight, Activity, User, Briefcase, Users, GitBranch, Clock, Filter, Download } from 'lucide-react'
 
 const ENTITY_COLORS = {
   Candidate: { bg: '#e8f5e9', text: '#2e7d32', darkBg: '#1b3a1e', darkText: '#66bb6a' },
@@ -31,6 +31,18 @@ export default function AuditLog() {
   const [total, setTotal] = useState(0)
   const [filters, setFilters] = useState({ entity_type: '', action: '', search: '' })
   const [searchInput, setSearchInput] = useState('')
+  const [exporting, setExporting] = useState(false)
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      await auditApi.exportCSV(filters)
+    } catch (err) {
+      console.error('Export-Fehler:', err)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -100,6 +112,22 @@ export default function AuditLog() {
         <p style={{ margin: '8px 0 0', color: isDark ? '#98989d' : '#86868b', fontSize: 17 }}>
           Systemweites Änderungsprotokoll — Wer hat was wann geändert?
         </p>
+      </div>
+      <div style={{ marginTop: -20, marginBottom: 24, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 20px', borderRadius: 12, border: 'none', cursor: exporting ? 'default' : 'pointer',
+            background: isDark ? '#0a84ff' : '#0071e3', color: '#fff',
+            fontSize: 14, fontWeight: 600, opacity: exporting ? 0.6 : 1,
+            transition: 'opacity 0.2s'
+          }}
+        >
+          <Download size={16} />
+          {exporting ? 'Exportiere...' : 'CSV Export'}
+        </button>
       </div>
 
       {/* Stats Cards */}

@@ -4,6 +4,7 @@ import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, A
 import { candidatesApi, ratingsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 import CSVImportDialog from '../components/CSVImportDialog'
+import { useToast } from '../components/Toast'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 
 const STATUS_OPTIONS = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist']
@@ -45,6 +46,7 @@ export default function Candidates() {
   const [printCandidate, setPrintCandidate] = useState(null)
   const [candidateRatings, setCandidateRatings] = useState({})
   const navigate = useNavigate()
+  const toast = useToast()
 
   // Debounce search input
   useEffect(() => {
@@ -105,9 +107,10 @@ export default function Candidates() {
     try {
       await candidatesApi.delete(id)
       setDeleteConfirm(null)
+      toast.success('Bewerber gelöscht')
       loadCandidates()
     } catch (err) {
-      alert('Fehler beim Löschen: ' + err.message)
+      toast.error('Fehler beim Löschen: ' + err.message)
     }
   }
 
@@ -162,22 +165,26 @@ export default function Candidates() {
 
   const handleBatchDelete = async () => {
     try {
+      const count = selectedIds.size
       await candidatesApi.batchDelete([...selectedIds])
       setSelectedIds(new Set())
       setBatchDeleteConfirm(false)
+      toast.success(`${count} Bewerber gelöscht`)
       loadCandidates()
     } catch (err) {
-      alert('Fehler beim Massen-Löschen: ' + err.message)
+      toast.error('Fehler beim Massen-Löschen: ' + err.message)
     }
   }
 
   const handleBatchStatus = async (status) => {
     try {
+      const count = selectedIds.size
       await candidatesApi.batchStatus([...selectedIds], status)
       setSelectedIds(new Set())
+      toast.success(`${count} Bewerber auf "${status}" gesetzt`)
       loadCandidates()
     } catch (err) {
-      alert('Fehler bei Massen-Statusänderung: ' + err.message)
+      toast.error('Fehler bei Massen-Statusänderung: ' + err.message)
     }
   }
 

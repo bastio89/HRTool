@@ -17,6 +17,17 @@ if (!process.env.JWT_SECRET) {
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES = '7d';
 
+// Password complexity validator
+function validatePassword(password) {
+  const errors = [];
+  if (password.length < 8) errors.push('Mindestens 8 Zeichen');
+  if (!/[A-Z]/.test(password)) errors.push('Mindestens ein Großbuchstabe');
+  if (!/[a-z]/.test(password)) errors.push('Mindestens ein Kleinbuchstabe');
+  if (!/[0-9]/.test(password)) errors.push('Mindestens eine Zahl');
+  if (!/[^A-Za-z0-9]/.test(password)) errors.push('Mindestens ein Sonderzeichen');
+  return errors;
+}
+
 /**
  * @swagger
  * /auth/login:
@@ -136,6 +147,11 @@ router.post('/users', (req, res) => {
       return res.status(400).json({ error: 'Ungültige Rolle' });
     }
 
+    const pwErrors = validatePassword(password);
+    if (pwErrors.length > 0) {
+      return res.status(400).json({ error: 'Passwort unsicher', details: pwErrors });
+    }
+
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
     if (existing) {
       return res.status(409).json({ error: 'Benutzername bereits vergeben' });
@@ -214,8 +230,10 @@ router.put('/change-password', (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: 'Aktuelles und neues Passwort erforderlich' });
     }
-    if (newPassword.length < 4) {
-      return res.status(400).json({ error: 'Neues Passwort muss mindestens 4 Zeichen lang sein' });
+
+    const pwErrors = validatePassword(newPassword);
+    if (pwErrors.length > 0) {
+      return res.status(400).json({ error: 'Neues Passwort unsicher', details: pwErrors });
     }
 
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
@@ -263,8 +281,13 @@ router.put('/users/:id/reset-password', (req, res) => {
 
   try {
     const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 4) {
-      return res.status(400).json({ error: 'Neues Passwort muss mindestens 4 Zeichen lang sein' });
+    if (!newPassword) {
+      return res.status(400).json({ error: 'Neues Passwort erforderlich' });
+    }
+
+    const pwErrors = validatePassword(newPassword);
+    if (pwErrors.length > 0) {
+      return res.status(400).json({ error: 'Neues Passwort unsicher', details: pwErrors });
     }
 
     const existing = db.prepare('SELECT id, display_name FROM users WHERE id = ?').get(req.params.id);

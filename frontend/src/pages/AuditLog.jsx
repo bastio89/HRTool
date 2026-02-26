@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../AuthContext'
 import { auditApi } from '../api'
 import { useTheme } from '../ThemeContext'
-import { Shield, Search, ChevronLeft, ChevronRight, Activity, User, Briefcase, Users, GitBranch, Clock, Filter, Download } from 'lucide-react'
+import { Shield, Search, ChevronLeft, ChevronRight, Activity, User, Briefcase, Users, GitBranch, Clock, Filter, Download, Calendar } from 'lucide-react'
+import { useToast } from '../components/Toast'
 
 const ENTITY_COLORS = {
   Candidate: { bg: '#e8f5e9', text: '#2e7d32', darkBg: '#1b3a1e', darkText: '#66bb6a' },
@@ -23,13 +24,14 @@ const ENTITY_ICONS = {
 export default function AuditLog() {
   const { isAdmin } = useAuth()
   const { isDark } = useTheme()
+  const toast = useToast()
   const [entries, setEntries] = useState([])
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
-  const [filters, setFilters] = useState({ entity_type: '', action: '', search: '' })
+  const [filters, setFilters] = useState({ entity_type: '', action: '', search: '', date_from: '', date_to: '' })
   const [searchInput, setSearchInput] = useState('')
   const [exporting, setExporting] = useState(false)
 
@@ -37,8 +39,10 @@ export default function AuditLog() {
     setExporting(true)
     try {
       await auditApi.exportCSV(filters)
+      toast.success('CSV-Export heruntergeladen')
     } catch (err) {
       console.error('Export-Fehler:', err)
+      toast.error('Export fehlgeschlagen')
     } finally {
       setExporting(false)
     }
@@ -230,6 +234,31 @@ export default function AuditLog() {
           <option value="passwort-zurückgesetzt">Passwort Zurückgesetzt</option>
           <option value="backup-erstellt">Backup Erstellt</option>
         </select>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Calendar size={16} color={isDark ? '#98989d' : '#86868b'} />
+          <input
+            type="date"
+            value={filters.date_from}
+            onChange={e => handleFilterChange('date_from', e.target.value)}
+            style={{
+              padding: '8px 10px', borderRadius: 10, border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
+              background: isDark ? '#2c2c2e' : '#f5f5f7', color: isDark ? '#f5f5f7' : '#1d1d1f',
+              fontSize: 13, outline: 'none', cursor: 'pointer'
+            }}
+          />
+          <span style={{ color: isDark ? '#98989d' : '#86868b', fontSize: 13 }}>–</span>
+          <input
+            type="date"
+            value={filters.date_to}
+            onChange={e => handleFilterChange('date_to', e.target.value)}
+            style={{
+              padding: '8px 10px', borderRadius: 10, border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
+              background: isDark ? '#2c2c2e' : '#f5f5f7', color: isDark ? '#f5f5f7' : '#1d1d1f',
+              fontSize: 13, outline: 'none', cursor: 'pointer'
+            }}
+          />
+        </div>
 
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, flex: 1, minWidth: 200 }}>
           <div style={{ position: 'relative', flex: 1 }}>

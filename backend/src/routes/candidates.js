@@ -34,12 +34,14 @@ function cleanupCandidateFiles(candidateIds) {
  */
 router.get('/stats/overview', (req, res) => {
   try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days) || 30));
+
     const total = db.prepare('SELECT COUNT(*) as count FROM candidates').get();
     const recentWeek = db.prepare(
-      "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', '-7 days')"
+      `SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', '-${days} days')`
     ).get();
     const prevWeek = db.prepare(
-      "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days')"
+      `SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', '-${days * 2} days') AND created_at < datetime('now', '-${days} days')`
     ).get();
     const thisMonth = db.prepare(
       "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', 'start of month')"
@@ -53,10 +55,10 @@ router.get('/stats/overview', (req, res) => {
 
     // Matching stats
     const matchingsThisWeek = db.prepare(
-      "SELECT COUNT(*) as count FROM matching_results WHERE created_at >= datetime('now', '-7 days')"
+      `SELECT COUNT(*) as count FROM matching_results WHERE created_at >= datetime('now', '-${days} days')`
     ).get();
     const matchingsPrevWeek = db.prepare(
-      "SELECT COUNT(*) as count FROM matching_results WHERE created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days')"
+      `SELECT COUNT(*) as count FROM matching_results WHERE created_at >= datetime('now', '-${days * 2} days') AND created_at < datetime('now', '-${days} days')`
     ).get();
     const matchingsTotal = db.prepare('SELECT COUNT(*) as count FROM matching_results').get();
 
@@ -78,6 +80,7 @@ router.get('/stats/overview', (req, res) => {
       matchingsPrevWeek: matchingsPrevWeek.count,
       openJobs: openJobs.count,
       closedThisMonth: closedThisMonth.count,
+      periodDays: days,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);

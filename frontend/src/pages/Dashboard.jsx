@@ -1,10 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone } from 'lucide-react'
 import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi, interviewsApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
+
+const PERIOD_OPTIONS = [
+  { value: 7, label: '7 Tage' },
+  { value: 30, label: '30 Tage' },
+  { value: 90, label: '90 Tage' },
+]
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null)
@@ -15,35 +21,36 @@ export default function Dashboard() {
   const [upcomingInterviews, setUpcomingInterviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [n8nStatus, setN8nStatus] = useState(null)
+  const [periodDays, setPeriodDays] = useState(30)
   const { widgets, visibleWidgets, toggleWidget, reorder, resetToDefault } = useWidgetConfig()
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [statsData, historyData, pipelineData, healthData, sourceData] = await Promise.all([
-          candidatesApi.getStats().catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
-          matchingApi.getHistory().catch(() => ({ data: [] })),
-          pipelineApi.getActiveJobs().catch(() => ({ data: [] })),
-          healthApi.check().catch(() => ({ n8nStatus: 'unreachable' })),
-          candidatesApi.getSourceStats().catch(() => ({ sources: [], total: 0 })),
-        ])
-        const dsgvoResult = await settingsApi.getExpired().catch(() => null)
-        const interviewsResult = await interviewsApi.getUpcoming().catch(() => ({ data: [] }))
-        setDsgvoData(dsgvoResult)
-        setUpcomingInterviews(interviewsResult.data || [])
-        setStats(statsData)
-        setRecentMatches(historyData.data?.slice(0, 4) || [])
-        setActivePipelines(pipelineData.data || [])
-        setN8nStatus(healthData.n8nStatus || healthData.services?.n8n || 'unknown')
-        setSourceStats(sourceData)
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setLoading(false)
-      }
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [statsData, historyData, pipelineData, healthData, sourceData] = await Promise.all([
+        candidatesApi.getStats(periodDays).catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
+        matchingApi.getHistory().catch(() => ({ data: [] })),
+        pipelineApi.getActiveJobs().catch(() => ({ data: [] })),
+        healthApi.check().catch(() => ({ n8nStatus: 'unreachable' })),
+        candidatesApi.getSourceStats().catch(() => ({ sources: [], total: 0 })),
+      ])
+      const dsgvoResult = await settingsApi.getExpired().catch(() => null)
+      const interviewsResult = await interviewsApi.getUpcoming().catch(() => ({ data: [] }))
+      setDsgvoData(dsgvoResult)
+      setUpcomingInterviews(interviewsResult.data || [])
+      setStats(statsData)
+      setRecentMatches(historyData.data?.slice(0, 4) || [])
+      setActivePipelines(pipelineData.data || [])
+      setN8nStatus(healthData.n8nStatus || healthData.services?.n8n || 'unknown')
+      setSourceStats(sourceData)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
-    loadData()
-  }, [])
+  }, [periodDays])
+
+  useEffect(() => { loadData() }, [loadData])
 
   if (loading) return <LoadingSpinner text="Dashboard wird geladen..." />
 
@@ -65,18 +72,35 @@ export default function Dashboard() {
           <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Übersicht</h1>
           <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">Willkommen zurück. Hier ist der aktuelle Stand.</p>
         </div>
-        <WidgetConfigurator
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full p-1">
+            {PERIOD_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setPeriodDays(opt.value)}
+                className={`px-4 py-2 rounded-full text-[13px] font-semibold transition-all duration-300 cursor-pointer ${
+                  periodDays === opt.value
+                    ? 'bg-white dark:bg-[#3a3a3c] text-[#0071e3] dark:text-[#0a84ff] shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <WidgetConfigurator
           widgets={widgets}
           onToggle={toggleWidget}
           onReorder={reorder}
           onReset={resetToDefault}
         />
+        </div>
       </div>
 
       {/* Render widgets in configured order */}
       {visibleWidgets.map(widget => {
         switch (widget.id) {
-          case 'stats': return <StatsWidget key="stats" stats={stats} />
+          case 'stats': return <StatsWidget key="stats" stats={stats} periodDays={periodDays} />
           case 'pipelines': return activePipelines.length > 0 ? <PipelinesWidget key="pipelines" pipelines={activePipelines} /> : null
           case 'matches': return <MatchesAndLocationsWidget key="matches" matches={recentMatches} stats={stats} visibleWidgets={visibleWidgets} />
           case 'locations': return null // rendered inside matches when both visible, standalone otherwise handled below
@@ -99,7 +123,8 @@ export default function Dashboard() {
 
 /* === Widget Components === */
 
-function StatsWidget({ stats }) {
+function StatsWidget({ stats, periodDays }) {
+  const periodLabel = periodDays === 7 ? 'zur Vorwoche' : periodDays === 30 ? 'zum Vormonat' : 'zum Vorzeitraum'
   const monthPct = stats?.newLastMonth > 0
     ? Math.round(((stats?.newThisMonth - stats?.newLastMonth) / stats?.newLastMonth) * 100)
     : stats?.newThisMonth > 0 ? 100 : 0
@@ -130,13 +155,13 @@ function StatsWidget({ stats }) {
       </Card>
 
       <Card className="p-10">
-        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">Neue diese Woche</p>
+        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">Neue ({periodDays} Tage)</p>
         <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black dark:text-white mb-8">{stats?.newThisWeek || 0}</h3>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${wTrend.color}15` }}>
             <wTrend.icon className="w-4 h-4" style={{ color: wTrend.color }} />
           </div>
-          <span className="text-[15px] font-medium" style={{ color: wTrend.color }}>{wTrend.text} zur Vorwoche</span>
+          <span className="text-[15px] font-medium" style={{ color: wTrend.color }}>{wTrend.text} {periodLabel}</span>
         </div>
       </Card>
 
@@ -147,7 +172,7 @@ function StatsWidget({ stats }) {
           <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${maTrend.color}15` }}>
             <maTrend.icon className="w-4 h-4" style={{ color: maTrend.color }} />
           </div>
-          <span className="text-[15px] font-medium" style={{ color: maTrend.color }}>{maTrend.text} zur Vorwoche</span>
+          <span className="text-[15px] font-medium" style={{ color: maTrend.color }}>{maTrend.text} {periodLabel}</span>
         </div>
       </Card>
 

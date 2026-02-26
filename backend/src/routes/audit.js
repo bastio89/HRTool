@@ -78,6 +78,14 @@ router.get('/', (req, res) => {
       const s = `%${req.query.search}%`;
       params.push(s, s, s);
     }
+    if (req.query.date_from) {
+      where.push('created_at >= ?');
+      params.push(req.query.date_from + ' 00:00:00');
+    }
+    if (req.query.date_to) {
+      where.push('created_at <= ?');
+      params.push(req.query.date_to + ' 23:59:59');
+    }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -185,6 +193,14 @@ router.get('/export', (req, res) => {
       where.push('(username LIKE ? OR entity_label LIKE ? OR details LIKE ?)');
       const s = `%${req.query.search}%`;
       params.push(s, s, s);
+    }
+    if (req.query.date_from) {
+      where.push('created_at >= ?');
+      params.push(req.query.date_from + ' 00:00:00');
+    }
+    if (req.query.date_to) {
+      where.push('created_at <= ?');
+      params.push(req.query.date_to + ' 23:59:59');
     }
 
     const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';

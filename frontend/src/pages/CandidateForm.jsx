@@ -4,6 +4,7 @@ import { ArrowLeft, Save, AlertTriangle, Upload, FileText, Sparkles, X, Papercli
 import { candidatesApi, cvParserApi, uploadsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
+import { useToast } from '../components/Toast'
 
 const emptyCandidate = {
   name: '', email: '', phone: '', location: '',
@@ -18,6 +19,7 @@ const SOURCE_OPTIONS = ['LinkedIn', 'Xing', 'Indeed', 'Stepstone', 'Empfehlung',
 export default function CandidateForm() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const toast = useToast()
   const isEdit = Boolean(id)
   const [form, setForm] = useState(emptyCandidate)
   const [loading, setLoading] = useState(isEdit)
@@ -134,6 +136,7 @@ export default function CandidateForm() {
           console.warn('File upload failed:', uploadErr)
         }
       }
+      toast.success(isEdit ? 'Bewerber aktualisiert' : 'Bewerber angelegt')
       navigate('/candidates')
     } catch (err) {
       setError(err.message)

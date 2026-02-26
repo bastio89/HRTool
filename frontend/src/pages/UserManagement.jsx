@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../AuthContext'
 import { authApi } from '../api'
 import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle, Key, Lock, Database, Download } from 'lucide-react'
+import PasswordStrength, { isPasswordValid } from '../components/PasswordStrength'
+import { useToast } from '../components/Toast'
 
 export default function UserManagement() {
   const { user: currentUser, isAdmin } = useAuth()
+  const toast = useToast()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -65,9 +68,14 @@ export default function UserManagement() {
     e.preventDefault()
     setError('')
     setSuccess('')
+    if (!isPasswordValid(form.password)) {
+      setError('Passwort erfüllt nicht die Komplexitätsanforderungen')
+      return
+    }
     setSaving(true)
     try {
       await authApi.createUser(form)
+      toast.success(`Benutzer "${form.username}" wurde erstellt`)
       setSuccess(`Benutzer "${form.username}" wurde erstellt`)
       setForm({ username: '', password: '', display_name: '', role: 'recruiter' })
       setShowForm(false)
@@ -85,6 +93,7 @@ export default function UserManagement() {
     setSuccess('')
     try {
       await authApi.deleteUser(id)
+      toast.success(`Benutzer "${username}" wurde gelöscht`)
       setSuccess(`Benutzer "${username}" wurde gelöscht`)
       loadUsers()
     } catch (err) {
@@ -96,10 +105,15 @@ export default function UserManagement() {
     e.preventDefault()
     setError('')
     setSuccess('')
+    if (!isPasswordValid(resetPassword)) {
+      setError('Passwort erfüllt nicht die Komplexitätsanforderungen')
+      return
+    }
     setSaving(true)
     try {
       const user = users.find(u => u.id === resetUserId)
       await authApi.resetPassword(resetUserId, resetPassword)
+      toast.success(`Passwort von "${user?.display_name}" wurde zurückgesetzt`)
       setSuccess(`Passwort von "${user?.display_name}" wurde zurückgesetzt`)
       setResetUserId(null)
       setResetPassword('')
@@ -118,9 +132,14 @@ export default function UserManagement() {
       setError('Die neuen Passwörter stimmen nicht überein')
       return
     }
+    if (!isPasswordValid(changeForm.newPassword)) {
+      setError('Neues Passwort erfüllt nicht die Komplexitätsanforderungen')
+      return
+    }
     setSaving(true)
     try {
       await authApi.changePassword(changeForm.currentPassword, changeForm.newPassword)
+      toast.success('Passwort erfolgreich geändert')
       setSuccess('Dein Passwort wurde erfolgreich geändert')
       setShowChangePassword(false)
       setChangeForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -210,10 +229,11 @@ export default function UserManagement() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
-                placeholder="Mindestens 4 Zeichen"
+                placeholder="Mind. 8 Zeichen, Groß, Klein, Zahl, Sonderz."
                 required
-                minLength={4}
+                minLength={8}
               />
+              <PasswordStrength password={form.password} />
             </div>
             <div>
               <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Anzeigename</label>
@@ -282,10 +302,11 @@ export default function UserManagement() {
                 value={changeForm.newPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, newPassword: e.target.value })}
                 className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
-                placeholder="Mindestens 4 Zeichen"
+                placeholder="Mind. 8 Zeichen"
                 required
-                minLength={4}
+                minLength={8}
               />
+              <PasswordStrength password={changeForm.newPassword} />
             </div>
             <div>
               <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Passwort bestätigen</label>
@@ -295,7 +316,7 @@ export default function UserManagement() {
                 onChange={(e) => setChangeForm({ ...changeForm, confirmPassword: e.target.value })}
                 className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 required
-                minLength={4}
+                minLength={8}
               />
             </div>
             <div className="sm:col-span-3 flex justify-end gap-3 mt-2">
@@ -325,7 +346,7 @@ export default function UserManagement() {
             <Key className="w-5 h-5 text-[#ff9f0a]" />
             Passwort zurücksetzen für {users.find(u => u.id === resetUserId)?.display_name}
           </h2>
-          <form onSubmit={handleResetPassword} className="flex items-end gap-4">
+          <form onSubmit={handleResetPassword} className="flex flex-col gap-4">
             <div className="flex-1 max-w-md">
               <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Neues Passwort</label>
               <input
@@ -333,11 +354,13 @@ export default function UserManagement() {
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
                 className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition-all"
-                placeholder="Mindestens 4 Zeichen"
+                placeholder="Mind. 8 Zeichen, Groß, Klein, Zahl, Sonderz."
                 required
-                minLength={4}
+                minLength={8}
               />
+              <PasswordStrength password={resetPassword} />
             </div>
+            <div className="flex gap-3">
             <button
               type="button"
               onClick={() => { setResetUserId(null); setResetPassword('') }}
@@ -352,6 +375,7 @@ export default function UserManagement() {
             >
               {saving ? 'Wird zurückgesetzt...' : 'Zurücksetzen'}
             </button>
+            </div>
           </form>
         </div>
       )}

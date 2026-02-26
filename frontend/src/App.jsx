@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import { ThemeProvider } from './ThemeContext'
+import { ToastProvider } from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -60,12 +61,14 @@ export default function App() {
   return (
     <ThemeProvider>
     <AuthProvider>
+      <ToastProvider>
       <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<LoginGuard />} />
           <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </ErrorBoundary>
+      </ToastProvider>
     </AuthProvider>
     </ThemeProvider>
   )

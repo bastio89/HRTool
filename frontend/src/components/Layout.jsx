@@ -3,6 +3,7 @@ import { NavLink, Outlet, Link } from 'react-router-dom'
 import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
+import Breadcrumb from './Breadcrumb'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Übersicht' },
@@ -180,6 +181,7 @@ export default function Layout() {
         {/* Scrollable Content */}
         <div className="flex-1 overflow-auto">
           <div className="max-w-[1200px] mx-auto p-4 sm:p-8 lg:p-14">
+            <Breadcrumb />
             <Outlet />
           </div>
         </div>

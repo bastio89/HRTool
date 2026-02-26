@@ -76,7 +76,7 @@ export const candidatesApi = {
   batchDelete: (ids) => request('/candidates/batch/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   batchStatus: (ids, status) => request('/candidates/batch/status', { method: 'POST', body: JSON.stringify({ ids, status }) }),
   importCSV: (rows, skipDuplicates = true) => request('/candidates/import', { method: 'POST', body: JSON.stringify({ rows, skipDuplicates }) }),
-  getStats: () => request('/candidates/stats/overview'),
+  getStats: (days) => request(`/candidates/stats/overview${days ? `?days=${days}` : ''}`),
   getSourceStats: () => request('/candidates/stats/sources'),
   checkDuplicate: (name, email, excludeId) =>
     request('/candidates/check-duplicate', { method: 'POST', body: JSON.stringify({ name, email, excludeId }) }),
@@ -147,6 +147,8 @@ export const auditApi = {
     if (params.entity_type) q.set('entity_type', params.entity_type);
     if (params.action) q.set('action', params.action);
     if (params.search) q.set('search', params.search);
+    if (params.date_from) q.set('date_from', params.date_from);
+    if (params.date_to) q.set('date_to', params.date_to);
     const qs = q.toString();
     return request(`/audit${qs ? `?${qs}` : ''}`);
   },
@@ -156,6 +158,8 @@ export const auditApi = {
     if (filters.entity_type) q.set('entity_type', filters.entity_type);
     if (filters.action) q.set('action', filters.action);
     if (filters.search) q.set('search', filters.search);
+    if (filters.date_from) q.set('date_from', filters.date_from);
+    if (filters.date_to) q.set('date_to', filters.date_to);
     const qs = q.toString();
     const token = localStorage.getItem('token');
     const resp = await fetch(`/api/audit/export${qs ? `?${qs}` : ''}`, {

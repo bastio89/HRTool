@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Sparkles, Loader2 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
+import { useToast } from '../components/Toast'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
@@ -16,6 +17,7 @@ const emptyJob = {
 export default function JobForm() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const toast = useToast()
   const isEdit = Boolean(id)
   const [form, setForm] = useState(emptyJob)
   const [loading, setLoading] = useState(isEdit)
@@ -52,6 +54,7 @@ export default function JobForm() {
       } else {
         await jobsApi.create(form)
       }
+      toast.success(isEdit ? 'Stelle aktualisiert' : 'Stelle erstellt')
       navigate('/jobs')
     } catch (err) {
       setError(err.message)

@@ -20,6 +20,12 @@ import AuditLog from './pages/AuditLog'
 import DSGVO from './pages/DSGVO'
 import KITransparenz from './pages/KITransparenz'
 
+function AdminRoute({ children }) {
+  const { user } = useAuth()
+  if (user?.role !== 'admin') return <Navigate to="/" replace />
+  return children
+}
+
 function ProtectedRoutes() {
   const { user, loading } = useAuth()
 
@@ -48,11 +54,11 @@ function ProtectedRoutes() {
         <Route path="matching" element={<Matching />} />
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />
-        <Route path="admin" element={<Navigate to="/admin/users" replace />} />
-        <Route path="admin/users" element={<UserManagement />} />
-        <Route path="admin/audit" element={<AuditLog />} />
-        <Route path="admin/dsgvo" element={<DSGVO />} />
-        <Route path="admin/ki-transparenz" element={<KITransparenz />} />
+        <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
+        <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+        <Route path="admin/audit" element={<AdminRoute><AuditLog /></AdminRoute>} />
+        <Route path="admin/dsgvo" element={<AdminRoute><DSGVO /></AdminRoute>} />
+        <Route path="admin/ki-transparenz" element={<AdminRoute><KITransparenz /></AdminRoute>} />
       </Route>
     </Routes>
   )

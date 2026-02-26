@@ -5,6 +5,7 @@ import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi, interv
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
+import { useAuth } from '../AuthContext'
 
 const PERIOD_OPTIONS = [
   { value: 7, label: '7 Tage' },
@@ -13,6 +14,7 @@ const PERIOD_OPTIONS = [
 ]
 
 export default function Dashboard() {
+  const { isAdmin } = useAuth()
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
@@ -105,7 +107,7 @@ export default function Dashboard() {
           case 'matches': return <MatchesAndLocationsWidget key="matches" matches={recentMatches} stats={stats} visibleWidgets={visibleWidgets} />
           case 'locations': return null // rendered inside matches when both visible, standalone otherwise handled below
           case 'sources': return sourceStats?.sources?.length > 0 ? <SourcesWidget key="sources" sourceStats={sourceStats} /> : null
-          case 'dsgvo': return dsgvoData ? <DSGVOWidget key="dsgvo" data={dsgvoData} /> : null
+          case 'dsgvo': return (dsgvoData && isAdmin) ? <DSGVOWidget key="dsgvo" data={dsgvoData} /> : null
           case 'calendar': return <CalendarWidget key="calendar" interviews={upcomingInterviews} />
           default: return null
         }

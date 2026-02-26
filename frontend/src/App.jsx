@@ -48,6 +48,7 @@ function ProtectedRoutes() {
         <Route path="matching" element={<Matching />} />
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />
+        <Route path="admin" element={<Navigate to="/admin/users" replace />} />
         <Route path="admin/users" element={<UserManagement />} />
         <Route path="admin/audit" element={<AuditLog />} />
         <Route path="admin/dsgvo" element={<DSGVO />} />

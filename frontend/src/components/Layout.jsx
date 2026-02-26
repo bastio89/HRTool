@@ -35,6 +35,7 @@ export default function Layout() {
         w-[280px] flex-shrink-0 flex flex-col py-8 lg:py-10 px-6 lg:px-8
         bg-[#f5f5f7] dark:bg-black lg:bg-transparent
         transform transition-transform duration-300 ease-in-out
+        overflow-y-auto max-h-screen overscroll-contain
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex items-center justify-between lg:justify-start gap-4 px-2 mb-10 lg:mb-14">

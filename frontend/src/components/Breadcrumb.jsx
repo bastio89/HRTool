@@ -1,27 +1,31 @@
 import { useLocation, Link } from 'react-router-dom'
 import { ChevronRight, Home } from 'lucide-react'
-
-const routeLabels = {
-  '': 'Übersicht',
-  'candidates': 'Bewerber',
-  'new': 'Neu anlegen',
-  'edit': 'Bearbeiten',
-  'detail': 'Details',
-  'jobs': 'Stellen',
-  'matching': 'Matching',
-  'results': 'Ergebnisse',
-  'history': 'Historie',
-  'pipeline': 'Pipeline',
-  'admin': 'Administration',
-  'users': 'Benutzer',
-  'audit': 'Audit-Log',
-  'dsgvo': 'DSGVO',
-  'ki-transparenz': 'KI-Transparenz',
-}
+import { useI18n } from '../I18nContext'
 
 export default function Breadcrumb() {
+  const { t } = useI18n()
   const location = useLocation()
   const segments = location.pathname.split('/').filter(Boolean)
+
+  if (segments.length === 0) return null
+
+  const routeLabels = {
+    '': t('breadcrumb.overview'),
+    'candidates': t('breadcrumb.candidates'),
+    'new': t('breadcrumb.new'),
+    'edit': t('breadcrumb.edit'),
+    'detail': t('breadcrumb.detail'),
+    'jobs': t('breadcrumb.jobs'),
+    'matching': t('breadcrumb.matching'),
+    'results': t('breadcrumb.results'),
+    'history': t('breadcrumb.history'),
+    'pipeline': t('breadcrumb.pipeline'),
+    'admin': t('breadcrumb.admin'),
+    'users': t('breadcrumb.users'),
+    'audit': t('breadcrumb.audit'),
+    'dsgvo': t('breadcrumb.dsgvo'),
+    'ki-transparenz': t('breadcrumb.ki_transparency'),
+  }
 
   if (segments.length === 0) return null
 

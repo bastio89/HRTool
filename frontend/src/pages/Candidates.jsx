@@ -16,10 +16,10 @@ const STATUS_STYLE = {
   'Blacklist':  'bg-[#ff3b30]/10 text-[#ff3b30]',
 }
 const SORT_OPTIONS = [
-  { value: 'name_asc',   label: 'Name A–Z' },
-  { value: 'name_desc',  label: 'Name Z–A' },
-  { value: 'newest',     label: 'Neueste zuerst' },
-  { value: 'oldest',     label: 'Älteste zuerst' },
+  { value: 'name_asc',  labelKey: 'filter.sort_name_asc' },
+  { value: 'name_desc', labelKey: 'filter.sort_name_desc' },
+  { value: 'newest',    labelKey: 'filter.sort_newest' },
+  { value: 'oldest',    labelKey: 'filter.sort_oldest' },
 ]
 const PAGE_SIZE = 20
 
@@ -118,10 +118,10 @@ export default function Candidates() {
     try {
       await candidatesApi.delete(id)
       setDeleteConfirm(null)
-      toast.success('Bewerber gelöscht')
+      toast.success(t('candidates.deleted'))
       loadCandidates()
     } catch (err) {
-      toast.error('Fehler beim Löschen: ' + err.message)
+      toast.error(t('candidates.delete_error') + ': ' + err.message)
     }
   }
 
@@ -203,10 +203,10 @@ export default function Candidates() {
       await candidatesApi.batchDelete([...selectedIds])
       setSelectedIds(new Set())
       setBatchDeleteConfirm(false)
-      toast.success(`${count} Bewerber gelöscht`)
+      toast.success(t('candidates.batch_deleted').replace('{count}', count))
       loadCandidates()
     } catch (err) {
-      toast.error('Fehler beim Massen-Löschen: ' + err.message)
+      toast.error(t('candidates.batch_delete_error') + ': ' + err.message)
     }
   }
 
@@ -215,15 +215,15 @@ export default function Candidates() {
       const count = selectedIds.size
       await candidatesApi.batchStatus([...selectedIds], status)
       setSelectedIds(new Set())
-      toast.success(`${count} Bewerber auf "${status}" gesetzt`)
+      toast.success(t('candidates.batch_status_set').replace('{count}', count).replace('{status}', status))
       loadCandidates()
     } catch (err) {
-      toast.error('Fehler bei Massen-Statusänderung: ' + err.message)
+      toast.error(t('candidates.batch_status_error') + ': ' + err.message)
     }
   }
 
   const exportCSV = () => {
-    const headers = ['Name', 'E-Mail', 'Telefon', 'Standort', 'Status', 'Verfügbarkeit', 'Skills', 'Ausbildung', 'Sprachen', 'Zertifikate', 'Führerschein', 'Mobilität', 'Gehaltsvorstellung', 'Quelle', 'Tags', 'Notizen']
+    const headers = [t('csv.name'), t('csv.email'), t('csv.phone'), t('csv.location'), t('csv.status'), t('csv.availability'), t('csv.skills'), t('csv.education'), t('csv.languages'), t('csv.certificates'), t('csv.drivers_license'), t('csv.mobility'), t('csv.salary'), t('csv.source'), t('csv.tags'), t('csv.notes')]
     const escape = (v) => {
       if (!v) return ''
       const s = String(v).replace(/\"/g, '\"\"')
@@ -276,7 +276,7 @@ export default function Candidates() {
           <Link to="/candidates/new">
             <Button size="md" variant="dark">
               <Plus className="w-5 h-5" />
-              <span className="hidden sm:inline">Neuer Bewerber</span>
+              <span className="hidden sm:inline">{t('candidates.new')}</span>
             </Button>
           </Link>
         </div>
@@ -312,7 +312,7 @@ export default function Candidates() {
               }`}
             >
               <SlidersHorizontal className="w-5 h-5" />
-              <span className="hidden sm:inline">Filter</span>
+              <span className="hidden sm:inline">{t('candidates.filter')}</span>
               {activeFilterCount > 0 && (
                 <span className="w-6 h-6 rounded-full bg-white dark:bg-[#1c1c1e] text-black dark:text-white text-[13px] font-bold flex items-center justify-center">{activeFilterCount}</span>
               )}
@@ -323,7 +323,7 @@ export default function Candidates() {
                 onChange={e => setSortBy(e.target.value)}
                 className="appearance-none pl-10 sm:pl-12 pr-4 sm:pr-6 py-3 sm:py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer border border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] focus:outline-none transition-all"
               >
-                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
               </select>
               <ArrowUpDown className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
             </div>
@@ -335,7 +335,7 @@ export default function Candidates() {
           <div className="bg-white dark:bg-[#1c1c1e] rounded-[28px] border border-gray-100/80 dark:border-gray-700 shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-8 space-y-7">
             {/* Skills filter with AND logic */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Skills <span className="normal-case font-medium">(UND-Verknüpfung)</span></p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.skills')} <span className="normal-case font-medium">({t('filter.skills_and')})</span></p>
               <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] min-h-[56px]">
                 {filterSkills.map(skill => (
                   <span key={skill} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0071e3] text-white text-[14px] font-semibold">
@@ -347,7 +347,7 @@ export default function Candidates() {
                 ))}
                 <input
                   type="text"
-                  placeholder={filterSkills.length > 0 ? 'Weiterer Skill...' : 'Skill eingeben und Enter drücken...'}
+                  placeholder={filterSkills.length > 0 ? t('filter.skill_more') : t('filter.skill_placeholder')}
                   value={skillInput}
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={handleSkillKeyDown}
@@ -355,12 +355,12 @@ export default function Candidates() {
                 />
               </div>
               {filterSkills.length >= 2 && (
-                <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-2 ml-1">Bewerber müssen <strong>alle</strong> Skills besitzen</p>
+                <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-2 ml-1">{t('filter.skills_hint')}</p>
               )}
             </div>
             {/* Status filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Status</p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.status')}</p>
               <div className="flex flex-wrap gap-3">
                 {STATUS_OPTIONS.map(s => (
                   <button
@@ -379,10 +379,10 @@ export default function Candidates() {
             </div>
             {/* Availability filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Verfügbarkeit</p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.availability')}</p>
               <input
                 type="text"
-                placeholder="z.B. sofort, 3 Monate..."
+                placeholder={t('filter.availability_placeholder')}
                 value={filterAvail}
                 onChange={e => setFilterAvail(e.target.value)}
                 className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white border border-transparent
@@ -391,10 +391,10 @@ export default function Candidates() {
             </div>
             {/* Location filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Standort</p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.location')}</p>
               <input
                 type="text"
-                placeholder="z.B. Berlin, München..."
+                placeholder={t('filter.location_placeholder')}
                 value={filterLocation}
                 onChange={e => setFilterLocation(e.target.value)}
                 className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white border border-transparent
@@ -403,7 +403,7 @@ export default function Candidates() {
             </div>
             {/* Tags filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Tags <span className="normal-case font-medium">(UND-Verknüpfung)</span></p>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.tags')} <span className="normal-case font-medium">({t('filter.skills_and')})</span></p>
               <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] min-h-[56px] max-w-2xl">
                 {filterTags.map(tag => (
                   <span key={tag} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5e5ce6] text-white text-[14px] font-semibold">
@@ -416,7 +416,7 @@ export default function Candidates() {
                 ))}
                 <input
                   type="text"
-                  placeholder={filterTags.length > 0 ? 'Weiterer Tag...' : 'Tag eingeben und Enter drücken...'}
+                  placeholder={filterTags.length > 0 ? t('filter.tag_more') : t('filter.tag_placeholder')}
                   value={tagInput}
                   onChange={e => setTagInput(e.target.value)}
                   onKeyDown={handleTagKeyDown}
@@ -436,7 +436,7 @@ export default function Candidates() {
             </div>
             {activeFilterCount > 0 && (
               <button onClick={clearFilters} className="flex items-center gap-2 text-[15px] font-semibold text-[#ff3b30] hover:opacity-70 cursor-pointer transition-opacity">
-                <X className="w-4 h-4" /> Alle Filter zurücksetzen
+                <X className="w-4 h-4" /> {t('candidates.clear_filters')}
               </button>
             )}
           </div>
@@ -448,10 +448,10 @@ export default function Candidates() {
         <div className="mb-6 bg-black rounded-[20px] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
           <div className="flex items-center gap-4">
             <span className="text-white text-[15px] sm:text-[17px] font-semibold">
-              {selectedIds.size} {selectedIds.size === 1 ? 'Bewerber' : 'Bewerber'} ausgewählt
+              {selectedIds.size} {t('candidates.selected')}
             </span>
             <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white text-[14px] cursor-pointer transition-colors">
-              Auswahl aufheben
+              {t('candidates.deselect')}
             </button>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
@@ -468,7 +468,7 @@ export default function Candidates() {
               onClick={() => setBatchDeleteConfirm(true)}
               className="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition-all flex items-center gap-1.5"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Löschen
+              <Trash2 className="w-3.5 h-3.5" /> {t('candidates.delete')}
             </button>
           </div>
         </div>
@@ -478,28 +478,28 @@ export default function Candidates() {
       {batchDeleteConfirm && (
         <div className="mb-6 bg-[#ff3b30]/5 border border-[#ff3b30]/20 rounded-[20px] p-5 flex items-center justify-between">
           <span className="text-[16px] font-medium text-[#ff3b30]">
-            {selectedIds.size} Bewerber wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+            {t('candidates.batch_delete_confirm').replace('{count}', selectedIds.size)}
           </span>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={() => setBatchDeleteConfirm(false)}>Abbrechen</Button>
-            <Button variant="danger" onClick={handleBatchDelete}>Endgültig löschen</Button>
+            <Button variant="ghost" onClick={() => setBatchDeleteConfirm(false)}>{t('candidates.cancel')}</Button>
+            <Button variant="danger" onClick={handleBatchDelete}>{t('candidates.final_delete')}</Button>
           </div>
         </div>
       )}
 
       {/* Candidates List */}
       {loading ? (
-        <LoadingSpinner text="Bewerber werden geladen..." />
+        <LoadingSpinner text={t('candidates.loading')} />
       ) : filtered.length === 0 ? (
         <Card className="p-16">
           <EmptyState
             icon={Briefcase}
-            title="Keine Bewerber gefunden"
-            description={candidates.length === 0 ? 'Starte indem du deinen ersten Bewerber anlegst.' : 'Keine Treffer für die gewählten Filter.'}
+            title={t('candidates.no_results')}
+            description={candidates.length === 0 ? t('candidates.no_results_desc') : t('candidates.no_filter_results')}
             action={
               candidates.length === 0
-                ? <Link to="/candidates/new"><Button size="lg" variant="dark"><Plus className="w-5 h-5" /> Bewerber anlegen</Button></Link>
-                : <Button size="lg" variant="secondary" onClick={clearFilters}>Filter zurücksetzen</Button>
+                ? <Link to="/candidates/new"><Button size="lg" variant="dark"><Plus className="w-5 h-5" /> {t('candidates.create')}</Button></Link>
+                : <Button size="lg" variant="secondary" onClick={clearFilters}>{t('candidates.reset_filters')}</Button>
             }
           />
         </Card>
@@ -518,7 +518,7 @@ export default function Candidates() {
                 )}
               </button>
               <span className="text-[14px] text-gray-400 dark:text-gray-500 font-medium">
-                {selectedIds.size > 0 ? `${selectedIds.size} ausgewählt` : 'Alle auswählen'}
+                {selectedIds.size > 0 ? `${selectedIds.size} ${t('candidates.selected')}` : t('candidates.select_all')}
               </span>
             </div>
           )}
@@ -606,7 +606,7 @@ export default function Candidates() {
                     size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#0071e3]/10 hover:text-[#0071e3]"
                     onClick={(e) => { e.stopPropagation(); navigate(`/candidates/${candidate.id}/detail`) }}
-                    title="Aktivitätslog"
+                    title={t('candidates.profile_log')}
                   >
                     <Activity className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
@@ -615,7 +615,7 @@ export default function Candidates() {
                     size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#34c759]/10 hover:text-[#34c759]"
                     onClick={(e) => { e.stopPropagation(); setPrintCandidate(candidate) }}
-                    title="Profil drucken"
+                    title={t('candidates.print_profile')}
                   >
                     <Printer className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
@@ -645,19 +645,19 @@ export default function Candidates() {
               <div className={`overflow-hidden transition-all duration-500 ease-in-out ${expandedId === candidate.id ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                 <div className="px-10 pb-10 pt-4 border-t border-gray-100/80 dark:border-gray-700">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pt-8">
-                    {candidate.email && <DetailItem label="E-Mail" value={candidate.email} />}
-                    {candidate.phone && <DetailItem label="Telefon" value={candidate.phone} />}
-                    {candidate.education && <DetailItem label="Ausbildung" value={candidate.education} icon={GraduationCap} />}
-                    {candidate.languages && <DetailItem label="Sprachen" value={candidate.languages} icon={Globe} />}
-                    {candidate.certificates && <DetailItem label="Zertifikate" value={candidate.certificates} icon={Award} />}
-                    {candidate.drivers_license && <DetailItem label="Führerschein" value={candidate.drivers_license} icon={Car} />}
-                    {candidate.mobility && <DetailItem label="Mobilität" value={candidate.mobility} />}
-                    {candidate.desired_salary && <DetailItem label="Gehaltsvorstellung" value={candidate.desired_salary} />}
-                    {candidate.source && <DetailItem label="Quelle" value={candidate.source} />}
+                    {candidate.email && <DetailItem label={t('form.email')} value={candidate.email} />}
+                    {candidate.phone && <DetailItem label={t('form.phone')} value={candidate.phone} />}
+                    {candidate.education && <DetailItem label={t('form.education')} value={candidate.education} icon={GraduationCap} />}
+                    {candidate.languages && <DetailItem label={t('form.languages')} value={candidate.languages} icon={Globe} />}
+                    {candidate.certificates && <DetailItem label={t('form.certificates')} value={candidate.certificates} icon={Award} />}
+                    {candidate.drivers_license && <DetailItem label={t('form.drivers_license')} value={candidate.drivers_license} icon={Car} />}
+                    {candidate.mobility && <DetailItem label={t('form.mobility')} value={candidate.mobility} />}
+                    {candidate.desired_salary && <DetailItem label={t('form.salary')} value={candidate.desired_salary} />}
+                    {candidate.source && <DetailItem label={t('form.source')} value={candidate.source} />}
                   </div>
                   {candidate.experience && (
                     <div className="mt-12">
-                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Berufserfahrung</p>
+                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">{t('candidates.experience')}</p>
                       <p className="text-[16px] text-gray-700 dark:text-gray-300 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
                         {candidate.experience}
                       </p>
@@ -665,7 +665,7 @@ export default function Candidates() {
                   )}
                   {candidate.notes && (
                     <div className="mt-8">
-                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">Notizen</p>
+                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">{t('form.notes')}</p>
                       <p className="text-[16px] text-gray-700 dark:text-gray-300 bg-[#ff9f0a]/10 rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
                         {candidate.notes}
                       </p>
@@ -677,9 +677,9 @@ export default function Candidates() {
               {/* Delete confirmation */}
               {deleteConfirm === candidate.id && (
                 <div className="px-10 py-6 flex items-center justify-end gap-4 border-t border-[#ff3b30]/20 bg-[#ff3b30]/5">
-                  <span className="text-[16px] font-medium text-[#ff3b30] mr-auto">Bewerber wirklich löschen?</span>
-                  <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>Abbrechen</Button>
-                  <Button variant="danger" onClick={() => handleDelete(candidate.id)}>Löschen</Button>
+                  <span className="text-[16px] font-medium text-[#ff3b30] mr-auto">{t('candidates.delete_confirm')}</span>
+                  <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>{t('candidates.cancel')}</Button>
+                  <Button variant="danger" onClick={() => handleDelete(candidate.id)}>{t('candidates.delete')}</Button>
                 </div>
               )}
             </Card>

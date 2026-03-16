@@ -134,10 +134,13 @@ export default function Layout() {
           {/* Language Switcher */}
           <button
             onClick={() => changeLocale(locale === 'de' ? 'en' : 'de')}
-            className="flex items-center justify-center gap-2 w-full py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 rounded-2xl text-[15px] font-medium transition-all duration-300 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 w-full py-2.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-xl text-[13px] transition-all duration-300 cursor-pointer"
+            title={locale === 'de' ? 'Switch to English' : 'Auf Deutsch wechseln'}
           >
-            <Globe className="w-5 h-5" />
-            {locale === 'de' ? '🇩🇪 Deutsch → 🇬🇧 English' : '🇬🇧 English → 🇩🇪 Deutsch'}
+            <Globe className="w-4 h-4" />
+            <span className={locale === 'de' ? 'font-semibold' : 'opacity-60'}>DE</span>
+            <span className="text-gray-300 dark:text-gray-600">/</span>
+            <span className={locale === 'en' ? 'font-semibold' : 'opacity-60'}>EN</span>
           </button>
           <button
             onClick={toggleTheme}

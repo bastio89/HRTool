@@ -9,9 +9,9 @@ import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
 
 const PERIOD_OPTIONS = [
-  { value: 7, label: '7 Tage' },
-  { value: 30, label: '30 Tage' },
-  { value: 90, label: '90 Tage' },
+  { value: 7, labelKey: 'dashboard.period_7' },
+  { value: 30, labelKey: 'dashboard.period_30' },
+  { value: 90, labelKey: 'dashboard.period_90' },
 ]
 
 export default function Dashboard() {
@@ -59,7 +59,7 @@ export default function Dashboard() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  if (loading) return <LoadingSpinner text="Dashboard wird geladen..." />
+  if (loading) return <LoadingSpinner text={t('dashboard.loading')} />
 
   return (
     <div className="fade-in space-y-8 sm:space-y-14">
@@ -68,8 +68,8 @@ export default function Dashboard() {
         <div className="flex items-center gap-4 p-5 sm:p-6 rounded-[20px] bg-[#ff9f0a]/10 border border-[#ff9f0a]/20">
           <AlertTriangle className="w-6 h-6 text-[#ff9f0a] flex-shrink-0" />
           <div>
-            <p className="text-[15px] sm:text-[17px] font-semibold text-[#ff9f0a]">n8n nicht erreichbar</p>
-            <p className="text-[13px] sm:text-[15px] text-gray-500 dark:text-gray-400 mt-1">KI-Matching und CV-Analyse sind derzeit nicht verfügbar. Bitte prüfe ob n8n läuft.</p>
+            <p className="text-[15px] sm:text-[17px] font-semibold text-[#ff9f0a]">{t('dashboard.n8n_unreachable')}</p>
+            <p className="text-[13px] sm:text-[15px] text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.n8n_desc')}</p>
           </div>
         </div>
       )}
@@ -91,7 +91,7 @@ export default function Dashboard() {
                     : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
-                {opt.label}
+                {t(opt.labelKey)}
               </button>
             ))}
           </div>
@@ -110,7 +110,7 @@ export default function Dashboard() {
               setTimeout(() => document.getElementById('print-styles')?.remove(), 500)
             }}
             className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer"
-            title="Als PDF exportieren"
+            title={t('dashboard.pdf_export')}
           >
             <FileText className="w-5 h-5 text-gray-500" />
           </button>
@@ -126,14 +126,14 @@ export default function Dashboard() {
       {/* Render widgets in configured order */}
       {visibleWidgets.map(widget => {
         switch (widget.id) {
-          case 'stats': return <StatsWidget key="stats" stats={stats} periodDays={periodDays} />
-          case 'pipelines': return activePipelines.length > 0 ? <PipelinesWidget key="pipelines" pipelines={activePipelines} /> : null
-          case 'matches': return <MatchesAndLocationsWidget key="matches" matches={recentMatches} stats={stats} visibleWidgets={visibleWidgets} />
+          case 'stats': return <StatsWidget key="stats" stats={stats} periodDays={periodDays} t={t} />
+          case 'pipelines': return activePipelines.length > 0 ? <PipelinesWidget key="pipelines" pipelines={activePipelines} t={t} /> : null
+          case 'matches': return <MatchesAndLocationsWidget key="matches" matches={recentMatches} stats={stats} visibleWidgets={visibleWidgets} t={t} />
           case 'locations': return null // rendered inside matches when both visible, standalone otherwise handled below
-          case 'sources': return sourceStats?.sources?.length > 0 ? <SourcesWidget key="sources" sourceStats={sourceStats} /> : null
-          case 'timetohire': return timeToHire ? <TimeToHireWidget key="timetohire" data={timeToHire} /> : null
-          case 'dsgvo': return (dsgvoData && isAdmin) ? <DSGVOWidget key="dsgvo" data={dsgvoData} /> : null
-          case 'calendar': return <CalendarWidget key="calendar" interviews={upcomingInterviews} />
+          case 'sources': return sourceStats?.sources?.length > 0 ? <SourcesWidget key="sources" sourceStats={sourceStats} t={t} /> : null
+          case 'timetohire': return timeToHire ? <TimeToHireWidget key="timetohire" data={timeToHire} t={t} /> : null
+          case 'dsgvo': return (dsgvoData && isAdmin) ? <DSGVOWidget key="dsgvo" data={dsgvoData} t={t} /> : null
+          case 'calendar': return <CalendarWidget key="calendar" interviews={upcomingInterviews} t={t} />
           default: return null
         }
       })}
@@ -141,7 +141,7 @@ export default function Dashboard() {
       {/* Render standalone locations if matches is hidden but locations visible */}
       {visibleWidgets.some(w => w.id === 'locations') && !visibleWidgets.some(w => w.id === 'matches') && (
         <Card className="p-12">
-          <LocationsContent stats={stats} />
+          <LocationsContent stats={stats} t={t} />
         </Card>
       )}
     </div>
@@ -150,8 +150,8 @@ export default function Dashboard() {
 
 /* === Widget Components === */
 
-function StatsWidget({ stats, periodDays }) {
-  const periodLabel = periodDays === 7 ? 'zur Vorwoche' : periodDays === 30 ? 'zum Vormonat' : 'zum Vorzeitraum'
+function StatsWidget({ stats, periodDays, t }) {
+  const periodLabel = periodDays === 7 ? t('dashboard.vs_prev_week') : periodDays === 30 ? t('dashboard.vs_prev_month') : t('dashboard.vs_prev_period')
   const monthPct = stats?.newLastMonth > 0
     ? Math.round(((stats?.newThisMonth - stats?.newLastMonth) / stats?.newLastMonth) * 100)
     : stats?.newThisMonth > 0 ? 100 : 0
@@ -171,18 +171,18 @@ function StatsWidget({ stats, periodDays }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
       <Card className="p-10">
-        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">Bewerber gesamt</p>
+        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">{t('dashboard.total_candidates')}</p>
         <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black dark:text-white mb-8">{stats?.totalCandidates || 0}</h3>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${mTrend.color}15` }}>
             <mTrend.icon className="w-4 h-4" style={{ color: mTrend.color }} />
           </div>
-          <span className="text-[15px] font-medium" style={{ color: mTrend.color }}>{mTrend.text} diesen Monat</span>
+          <span className="text-[15px] font-medium" style={{ color: mTrend.color }}>{mTrend.text} {t('dashboard.this_month')}</span>
         </div>
       </Card>
 
       <Card className="p-10">
-        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">Neue ({periodDays} Tage)</p>
+        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">{t('dashboard.new_period').replace('{days}', periodDays)}</p>
         <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black dark:text-white mb-8">{stats?.newThisWeek || 0}</h3>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${wTrend.color}15` }}>
@@ -193,7 +193,7 @@ function StatsWidget({ stats, periodDays }) {
       </Card>
 
       <Card className="p-10">
-        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">Matchings</p>
+        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">{t('dashboard.matchings')}</p>
         <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black dark:text-white mb-8">{stats?.matchingsTotal || 0}</h3>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${maTrend.color}15` }}>
@@ -204,16 +204,16 @@ function StatsWidget({ stats, periodDays }) {
       </Card>
 
       <Card className="p-10">
-        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">Offene Stellen</p>
+        <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mb-6">{t('dashboard.open_jobs')}</p>
         <h3 className="text-[56px] leading-none font-semibold tracking-tight text-black dark:text-white mb-8">{stats?.openJobs || 0}</h3>
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-[#8b5cf6]/10 flex items-center justify-center">
             <Briefcase className="w-4 h-4 text-[#8b5cf6]" />
           </div>
           {stats?.closedThisMonth > 0 ? (
-            <span className="text-[15px] font-medium text-[#34c759]">{stats.closedThisMonth} besetzt diesen Monat</span>
+            <span className="text-[15px] font-medium text-[#34c759]">{stats.closedThisMonth} {t('dashboard.closed_this_month')}</span>
           ) : (
-            <Link to="/jobs" className="text-[15px] font-medium text-[#8b5cf6] hover:opacity-70 transition-opacity">Stellen verwalten</Link>
+            <Link to="/jobs" className="text-[15px] font-medium text-[#8b5cf6] hover:opacity-70 transition-opacity">{t('dashboard.manage_jobs')}</Link>
           )}
         </div>
       </Card>
@@ -221,7 +221,7 @@ function StatsWidget({ stats, periodDays }) {
   )
 }
 
-function PipelinesWidget({ pipelines }) {
+function PipelinesWidget({ pipelines, t }) {
   const stageColors = {
     'Beworben': 'bg-[#007aff]/10 text-[#007aff]',
     'Vorauswahl': 'bg-[#5856d6]/10 text-[#5856d6]',
@@ -234,11 +234,11 @@ function PipelinesWidget({ pipelines }) {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">Aktive Pipelines</h2>
-          <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">Stellen mit Bewerbern in der Pipeline</p>
+          <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.active_pipelines')}</h2>
+          <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.active_pipelines_sub')}</p>
         </div>
         <Link to="/jobs" className="text-[16px] font-medium text-[#0071e3] hover:text-[#0077ed] flex items-center gap-2 transition-colors">
-          Alle Stellen <ArrowRight className="w-5 h-5" />
+          {t('dashboard.all_jobs')} <ArrowRight className="w-5 h-5" />
         </Link>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -276,11 +276,11 @@ function PipelinesWidget({ pipelines }) {
   )
 }
 
-function LocationsContent({ stats }) {
+function LocationsContent({ stats, t }) {
   return (
     <>
-      <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white mb-2">Top Standorte</h2>
-      <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-12">Nach Bewerberherkunft</p>
+      <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white mb-2">{t('dashboard.top_locations')}</h2>
+      <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-12">{t('dashboard.top_locations_sub')}</p>
       {stats?.topLocations?.length > 0 ? (
         <div className="space-y-8">
           {stats.topLocations.map(({ location, count }, idx) => (
@@ -296,25 +296,25 @@ function LocationsContent({ stats }) {
           ))}
         </div>
       ) : (
-        <p className="text-[18px] text-gray-500 dark:text-gray-400 text-center py-12">Keine Daten verfügbar</p>
+        <p className="text-[18px] text-gray-500 dark:text-gray-400 text-center py-12">{t('dashboard.no_data')}</p>
       )}
     </>
   )
 }
 
-function MatchesAndLocationsWidget({ matches, stats, visibleWidgets }) {
+function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
   const showLocations = visibleWidgets.some(w => w.id === 'locations')
   return (
     <div className={`grid grid-cols-1 ${showLocations ? 'lg:grid-cols-3' : ''} gap-8`}>
       <Card className={`${showLocations ? 'lg:col-span-2' : ''} p-12`}>
         <div className="flex items-center justify-between mb-12">
-          <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">Letzte Matchings</h2>
+          <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.recent_matches')}</h2>
           <Link to="/history" className="text-[16px] font-medium text-[#0071e3] hover:text-[#0077ed] flex items-center gap-2 transition-colors">
-            Alle anzeigen <ArrowRight className="w-5 h-5" />
+            {t('dashboard.show_all')} <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
         {matches.length === 0 ? (
-          <p className="text-[18px] text-gray-500 dark:text-gray-400 py-12 text-center">Noch keine Matchings durchgeführt</p>
+          <p className="text-[18px] text-gray-500 dark:text-gray-400 py-12 text-center">{t('dashboard.no_matchings')}</p>
         ) : (
           <div className="space-y-4">
             {matches.map((match) => {
@@ -344,21 +344,21 @@ function MatchesAndLocationsWidget({ matches, stats, visibleWidgets }) {
       </Card>
       {showLocations && (
         <Card className="p-12">
-          <LocationsContent stats={stats} />
+          <LocationsContent stats={stats} t={t} />
         </Card>
       )}
     </div>
   )
 }
 
-function SourcesWidget({ sourceStats }) {
+function SourcesWidget({ sourceStats, t }) {
   const colors = ['#0071e3', '#34c759', '#ff9500', '#5856d6', '#ff3b30', '#30d158', '#ff2d55', '#007aff', '#af52de']
   return (
     <Card className="p-12">
       <div className="flex items-center justify-between mb-10">
         <div>
-          <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">Quellen-Analyse</h2>
-          <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">Woher kommen die Bewerber? Welche Quelle liefert die besten Ergebnisse?</p>
+          <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.sources')}</h2>
+          <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.sources_sub')}</p>
         </div>
         <div className="w-14 h-14 rounded-full bg-[#5856d6]/10 flex items-center justify-center flex-shrink-0">
           <Share2 className="w-7 h-7 text-[#5856d6]" />
@@ -378,12 +378,12 @@ function SourcesWidget({ sourceStats }) {
                 <div className="h-full rounded-full transition-all duration-700" style={{ width: `${s.percentage}%`, backgroundColor: color }} />
               </div>
               <div className="flex items-center justify-between text-[14px]">
-                <span className="text-gray-500 dark:text-gray-400"><span className="font-semibold text-black dark:text-white">{s.count}</span> Bewerber</span>
+                <span className="text-gray-500 dark:text-gray-400"><span className="font-semibold text-black dark:text-white">{s.count}</span> {t('dashboard.candidates_label')}</span>
                 {s.hired > 0 && (
                   <span className="text-[#34c759] font-semibold">{s.hired} Hired ({s.hiredRate}%)</span>
                 )}
                 {s.hired === 0 && s.inProcess > 0 && (
-                  <span className="text-[#ff9500] font-medium">{s.inProcess} in Prozess</span>
+                  <span className="text-[#ff9500] font-medium">{s.inProcess} {t('dashboard.in_process')}</span>
                 )}
               </div>
             </div>
@@ -394,7 +394,7 @@ function SourcesWidget({ sourceStats }) {
   )
 }
 
-function TimeToHireWidget({ data }) {
+function TimeToHireWidget({ data, t }) {
   const { overview, stageMetrics, bottleneck, perJob, monthlyTrend, inPipeline } = data
 
   const stageColors = {
@@ -415,14 +415,14 @@ function TimeToHireWidget({ data }) {
             <Timer className="w-5 h-5 text-[#ff9500]" />
           </div>
           <div>
-            <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">Time-to-Hire</h2>
-            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">Wie schnell werden Stellen besetzt?</p>
+            <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.time_to_hire')}</h2>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">{t('dashboard.tth_sub')}</p>
           </div>
         </div>
         {bottleneck && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ff3b30]/10">
             <Zap className="w-3.5 h-3.5 text-[#ff3b30]" />
-            <span className="text-[12px] font-semibold text-[#ff3b30]">Bottleneck: {bottleneck.stage} ({bottleneck.avgDays}d)</span>
+            <span className="text-[12px] font-semibold text-[#ff3b30]">{t('dashboard.tth_bottleneck')}: {bottleneck.stage} ({bottleneck.avgDays}d)</span>
           </div>
         )}
       </div>
@@ -430,31 +430,31 @@ function TimeToHireWidget({ data }) {
       {/* Overview KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Ø Time-to-Hire</p>
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_avg')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-black dark:text-white">
             {overview.avgDaysToHire != null ? `${overview.avgDaysToHire}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Median</p>
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_median')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-black dark:text-white">
             {overview.medianDays != null ? `${overview.medianDays}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Schnellste</p>
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_fastest')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-[#34c759]">
             {overview.minDays != null ? `${overview.minDays}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Längste</p>
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_slowest')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-[#ff3b30]">
             {overview.maxDays != null ? `${overview.maxDays}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
       </div>
@@ -462,7 +462,7 @@ function TimeToHireWidget({ data }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Stage Duration Bars */}
         <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Ø Verweildauer pro Stage</h3>
+          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">{t('dashboard.tth_stage_duration')}</h3>
           <div className="space-y-4">
             {stageMetrics.map(s => {
               const color = stageColors[s.stage] || '#8e8e93'
@@ -472,7 +472,7 @@ function TimeToHireWidget({ data }) {
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[14px] font-medium text-black dark:text-white">{s.stage}</span>
                     <span className="text-[14px] font-semibold" style={{ color }}>
-                      {s.avgDays != null ? `${s.avgDays} Tage` : '—'}
+                      {s.avgDays != null ? `${s.avgDays} ${t('common.days')}` : '—'}
                       {s.count > 0 && <span className="text-[11px] text-gray-400 ml-1">({s.count}x)</span>}
                     </span>
                   </div>
@@ -492,7 +492,7 @@ function TimeToHireWidget({ data }) {
 
         {/* Monthly Trend */}
         <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Monatlicher Trend</h3>
+          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">{t('dashboard.tth_monthly')}</h3>
           <div className="space-y-4">
             {monthlyTrend.map((m, idx) => {
               const widthPct = m.avgDays != null ? Math.max(4, (m.avgDays / maxTrendDays) * 100) : 0
@@ -531,7 +531,7 @@ function TimeToHireWidget({ data }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         {perJob.length > 0 && (
           <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-            <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Time-to-Hire pro Stelle</h3>
+            <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">{t('dashboard.tth_per_job')}</h3>
             <div className="space-y-3">
               {perJob.map(j => (
                 <div key={j.jobTitle} className="flex items-center justify-between">
@@ -550,24 +550,24 @@ function TimeToHireWidget({ data }) {
         )}
 
         <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Aktuell in Pipeline</h3>
+          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">{t('dashboard.tth_in_pipeline')}</h3>
           <div className="flex items-center gap-6">
             <div className="flex-1">
               <p className="text-[36px] font-semibold tracking-tight text-[#0071e3]">{inPipeline.count}</p>
-              <p className="text-[13px] text-gray-500 dark:text-gray-400">Bewerber in Bearbeitung</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('dashboard.tth_in_progress')}</p>
             </div>
             <div className="flex-1">
               <p className="text-[36px] font-semibold tracking-tight text-[#ff9500]">
                 {inPipeline.avgDaysWaiting != null ? `${inPipeline.avgDaysWaiting}` : '—'}
               </p>
-              <p className="text-[13px] text-gray-500 dark:text-gray-400">Ø Tage wartend</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('dashboard.tth_avg_waiting')}</p>
             </div>
           </div>
           <div className="mt-4 p-3 rounded-xl bg-white/50 dark:bg-[#1c1c1e]/50">
             <p className="text-[12px] text-gray-500 dark:text-gray-400">
               {overview.totalHired > 0
-                ? `Basierend auf ${overview.totalHired} eingestellten Kandidaten. Median: ${overview.medianDays} Tage.`
-                : 'Noch keine Einstellungen abgeschlossen. Daten werden verfügbar sobald Bewerber auf "Hired" gesetzt werden.'}
+                ? t('dashboard.tth_based_on').replace('{count}', overview.totalHired).replace('{median}', overview.medianDays)
+                : t('dashboard.tth_no_hires')}
             </p>
           </div>
         </div>
@@ -576,17 +576,17 @@ function TimeToHireWidget({ data }) {
   )
 }
 
-function DSGVOWidget({ data }) {
+function DSGVOWidget({ data, t }) {
   const isClean = data.expiredCount === 0
   return (
     <Card className="p-6 sm:p-10">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <ShieldAlert className={`w-5 h-5 ${isClean ? 'text-[#34c759]' : 'text-[#ff9f0a]'}`} />
-          <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">DSGVO-Status</h2>
+          <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.dsgvo_status')}</h2>
         </div>
         <Link to="/admin/dsgvo" className="text-[15px] font-medium text-[#0071e3] hover:underline flex items-center gap-1">
-          Verwalten <ArrowRight className="w-4 h-4" />
+          {t('dashboard.dsgvo_manage')} <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
 
@@ -594,8 +594,8 @@ function DSGVOWidget({ data }) {
         <div className="flex items-center gap-4 p-5 rounded-[16px] bg-[#34c759]/5">
           <CheckCircle className="w-8 h-8 text-[#34c759]" />
           <div>
-            <p className="text-[16px] font-semibold text-[#34c759]">Alles konform</p>
-            <p className="text-[14px] text-gray-500 dark:text-gray-400">Keine Bewerber mit abgelaufener Aufbewahrungsfrist ({data.retentionMonths} Monate)</p>
+            <p className="text-[16px] font-semibold text-[#34c759]">{t('dashboard.dsgvo_compliant')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('dashboard.dsgvo_compliant_sub').replace('{months}', data.retentionMonths)}</p>
           </div>
         </div>
       ) : (
@@ -604,9 +604,9 @@ function DSGVOWidget({ data }) {
             <span className="text-[22px] font-bold text-[#ff9f0a]">{data.expiredCount}</span>
           </div>
           <div>
-            <p className="text-[16px] font-semibold text-[#ff9f0a]">Handlungsbedarf</p>
+            <p className="text-[16px] font-semibold text-[#ff9f0a]">{t('dashboard.dsgvo_action')}</p>
             <p className="text-[14px] text-gray-500 dark:text-gray-400">
-              {data.expiredCount} Bewerber haben die Aufbewahrungsfrist von {data.retentionMonths} Monaten überschritten
+              {t('dashboard.dsgvo_expired').replace('{count}', data.expiredCount).replace('{months}', data.retentionMonths)}
             </p>
           </div>
         </div>
@@ -615,7 +615,7 @@ function DSGVOWidget({ data }) {
   )
 }
 
-function CalendarWidget({ interviews }) {
+function CalendarWidget({ interviews, t }) {
   const typeIcons = { 'Video': Video, 'Telefon': Phone, 'vor Ort': MapPin }
   const statusColors = {
     geplant: 'bg-[#0071e3]/10 text-[#0071e3]',
@@ -629,7 +629,7 @@ function CalendarWidget({ interviews }) {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <Calendar className="w-5 h-5 text-[#ff9f0a]" />
-          <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">Anstehende Interviews</h2>
+          <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.upcoming_interviews')}</h2>
         </div>
         <span className="px-3 py-1 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[14px] font-bold">
           {interviews.length}
@@ -637,7 +637,7 @@ function CalendarWidget({ interviews }) {
       </div>
 
       {interviews.length === 0 ? (
-        <p className="text-[15px] text-gray-500 dark:text-gray-400 text-center py-8">Keine anstehenden Interviews in den nächsten 14 Tagen</p>
+        <p className="text-[15px] text-gray-500 dark:text-gray-400 text-center py-8">{t('dashboard.no_interviews')}</p>
       ) : (
         <div className="space-y-3">
           {interviews.slice(0, 6).map(iv => {

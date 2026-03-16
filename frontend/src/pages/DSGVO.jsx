@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Shield, Trash2, AlertTriangle, Clock, Users, Settings, Check, Loader2 } from 'lucide-react'
 import { settingsApi } from '../api'
 import { Card, Button, LoadingSpinner } from '../components/UI'
+import { useI18n } from '../I18nContext'
 
 export default function DSGVO() {
+  const { t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [retentionMonths, setRetentionMonths] = useState(6)
   const [savedMonths, setSavedMonths] = useState(6)
@@ -44,7 +46,7 @@ export default function DSGVO() {
     try {
       await settingsApi.update('dsgvo_retention_months', String(retentionMonths))
       setSavedMonths(retentionMonths)
-      setSuccessMsg('Aufbewahrungsfrist gespeichert')
+      setSuccessMsg(t('dsgvo.saved'))
       // Reload expired list with new retention period
       const expiredData = await settingsApi.getExpired()
       setExpired(expiredData.expired || [])
@@ -63,7 +65,7 @@ export default function DSGVO() {
     setSuccessMsg('')
     try {
       const result = await settingsApi.deleteExpired()
-      setSuccessMsg(`${result.deleted} Bewerber DSGVO-konform gelöscht`)
+      setSuccessMsg(t('dsgvo.deleted').replace('{count}', result.deleted))
       setDeleteConfirm(false)
       await loadData()
       setTimeout(() => setSuccessMsg(''), 5000)
@@ -79,7 +81,7 @@ export default function DSGVO() {
     return new Date(dt).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
   }
 
-  if (loading) return <LoadingSpinner text="DSGVO-Daten werden geladen..." />
+  if (loading) return <LoadingSpinner text={t('dsgvo.loading')} />
 
   return (
     <div className="fade-in max-w-[900px] mx-auto">
@@ -90,8 +92,8 @@ export default function DSGVO() {
             <Shield className="w-6 h-6 text-[#ff9f0a]" />
           </div>
           <div>
-            <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">DSGVO-Löschfristen</h1>
-            <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1">Aufbewahrungsfristen verwalten und abgelaufene Daten löschen</p>
+            <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('dsgvo.title')}</h1>
+            <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.subtitle')}</p>
           </div>
         </div>
       </div>
@@ -115,17 +117,17 @@ export default function DSGVO() {
         <Card className="p-6 text-center">
           <Users className="w-6 h-6 text-gray-400 mx-auto mb-3" />
           <p className="text-[28px] font-bold text-black dark:text-white">{totalCandidates}</p>
-          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">Bewerber gesamt</p>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.total_candidates')}</p>
         </Card>
         <Card className={`p-6 text-center ${expiredCount > 0 ? 'ring-2 ring-[#ff9f0a]/30' : ''}`}>
           <AlertTriangle className={`w-6 h-6 mx-auto mb-3 ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-gray-400'}`} />
           <p className={`text-[28px] font-bold ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-black dark:text-white'}`}>{expiredCount}</p>
-          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">Abgelaufen</p>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.expired')}</p>
         </Card>
         <Card className="p-6 text-center">
           <Clock className="w-6 h-6 text-gray-400 mx-auto mb-3" />
           <p className="text-[28px] font-bold text-black dark:text-white">{savedMonths}</p>
-          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">Monate Frist</p>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.months_period')}</p>
         </Card>
       </div>
 
@@ -133,19 +135,19 @@ export default function DSGVO() {
       <Card className="p-6 sm:p-10 mb-8">
         <div className="flex items-center gap-3 mb-6">
           <Settings className="w-5 h-5 text-gray-400" />
-          <h2 className="text-[20px] font-semibold text-black dark:text-white">Aufbewahrungsfrist</h2>
+          <h2 className="text-[20px] font-semibold text-black dark:text-white">{t('dsgvo.retention')}</h2>
         </div>
         <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-6">
-          Bewerber-Daten werden nach Ablauf der Aufbewahrungsfrist als löschbereit markiert. Die Frist beginnt ab dem letzten Aktualisierungsdatum.
+          {t('dsgvo.retention_desc_full')}
         </p>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
           <div className="flex-1 w-full">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[14px] font-semibold text-gray-600 dark:text-gray-400">
-                {retentionMonths} {retentionMonths === 1 ? 'Monat' : 'Monate'}
+                {retentionMonths} {retentionMonths === 1 ? t('dsgvo.month_singular') : t('dsgvo.months_plural')}
               </span>
-              <span className="text-[12px] text-gray-400">1 – 24 Monate</span>
+              <span className="text-[12px] text-gray-400">{t('dsgvo.months_range')}</span>
             </div>
             <input
               type="range"
@@ -160,11 +162,11 @@ export default function DSGVO() {
                 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white"
             />
             <div className="flex justify-between mt-2 text-[11px] text-gray-400">
-              <span>1 Mon.</span>
-              <span>6 Mon.</span>
-              <span>12 Mon.</span>
-              <span>18 Mon.</span>
-              <span>24 Mon.</span>
+              <span>{t('dsgvo.slider_tick').replace('{n}', '1')}</span>
+              <span>{t('dsgvo.slider_tick').replace('{n}', '6')}</span>
+              <span>{t('dsgvo.slider_tick').replace('{n}', '12')}</span>
+              <span>{t('dsgvo.slider_tick').replace('{n}', '18')}</span>
+              <span>{t('dsgvo.slider_tick').replace('{n}', '24')}</span>
             </div>
           </div>
 
@@ -176,7 +178,7 @@ export default function DSGVO() {
             className="flex-shrink-0"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            {saving ? 'Speichern...' : 'Speichern'}
+            {saving ? t('dsgvo.saving') : t('dsgvo.save')}
           </Button>
         </div>
       </Card>
@@ -187,7 +189,7 @@ export default function DSGVO() {
           <div className="flex items-center gap-3">
             <AlertTriangle className={`w-5 h-5 ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-gray-400'}`} />
             <h2 className="text-[20px] font-semibold text-black dark:text-white">
-              Abgelaufene Bewerber
+              {t('dsgvo.expired_candidates')}
               {expiredCount > 0 && (
                 <span className="ml-3 px-3 py-1 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[14px]">{expiredCount}</span>
               )}
@@ -201,7 +203,7 @@ export default function DSGVO() {
               onClick={() => setDeleteConfirm(true)}
             >
               <Trash2 className="w-4 h-4" />
-              Alle löschen
+              {t('dsgvo.delete_all')}
             </Button>
           )}
         </div>
@@ -210,15 +212,15 @@ export default function DSGVO() {
         {deleteConfirm && (
           <div className="p-5 rounded-[20px] bg-[#ff3b30]/5 border border-[#ff3b30]/20 mb-6">
             <p className="text-[15px] font-medium text-[#ff3b30] mb-4">
-              Sicher? {expiredCount} Bewerber und alle zugehörigen Daten (Aktivitäten, Pipeline-Einträge, Dateien) werden unwiderruflich gelöscht.
+              {t('dsgvo.delete_confirm').replace('{count}', expiredCount)}
             </p>
             <div className="flex items-center gap-3">
               <Button variant="danger" size="sm" onClick={handleDeleteAll} disabled={deleting}>
                 {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                {deleting ? 'Wird gelöscht...' : 'Endgültig löschen'}
+                {deleting ? t('dsgvo.deleting') : t('dsgvo.delete_final')}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)} disabled={deleting}>
-                Abbrechen
+                {t('common.cancel')}
               </Button>
             </div>
           </div>
@@ -227,8 +229,8 @@ export default function DSGVO() {
         {expiredCount === 0 ? (
           <div className="text-center py-12">
             <Check className="w-12 h-12 text-[#34c759] mx-auto mb-4" />
-            <p className="text-[17px] font-semibold text-black dark:text-white">Alles konform</p>
-            <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">Keine Bewerber mit abgelaufener Aufbewahrungsfrist</p>
+            <p className="text-[17px] font-semibold text-black dark:text-white">{t('dsgvo.compliant')}</p>
+            <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.compliant_desc')}</p>
           </div>
         ) : (
           <div className="space-y-3 max-h-[500px] overflow-y-auto">
@@ -241,16 +243,16 @@ export default function DSGVO() {
                   <div className="min-w-0">
                     <p className="text-[15px] font-semibold text-black dark:text-white truncate">{c.name}</p>
                     <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                      {c.email || 'Keine E-Mail'} {c.location ? `· ${c.location}` : ''}
+                      {c.email || t('dsgvo.no_email')} {c.location ? `· ${c.location}` : ''}
                     </p>
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0 ml-4">
                   <p className="text-[13px] font-medium text-[#ff9f0a]">
-                    {Math.round(c.days_since_update)} Tage
+                    {t('dsgvo.days_over').replace('{days}', Math.round(c.days_since_update))}
                   </p>
                   <p className="text-[12px] text-gray-400">
-                    Letzte Änderung: {formatDate(c.updated_at || c.created_at)}
+                    {t('dsgvo.last_change').replace('{date}', formatDate(c.updated_at || c.created_at))}
                   </p>
                 </div>
               </div>

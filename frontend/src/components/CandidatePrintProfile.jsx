@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { X, Printer, EyeOff, Eye, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Clock, Mail, Phone, DollarSign } from 'lucide-react'
+import { useI18n } from '../I18nContext'
 
 const STATUS_STYLES = {
   'Aktiv':      { bg: '#34c759', text: '#fff' },
@@ -28,13 +29,14 @@ function anonymizePhone(phone) {
 }
 
 export default function CandidatePrintProfile({ candidate, open, onClose }) {
+  const { t, locale } = useI18n()
   const [anonymized, setAnonymized] = useState(false)
   const printRef = useRef(null)
 
   if (!open || !candidate) return null
 
   const status = candidate.status || 'Aktiv'
-  const tags = candidate.tags ? candidate.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+  const tags = candidate.tags ? candidate.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []
   const skills = candidate.skills ? candidate.skills.split(',').map(s => s.trim()).filter(Boolean) : []
   const statusStyle = STATUS_STYLES[status] || STATUS_STYLES['Aktiv']
 
@@ -52,7 +54,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Bewerberprofil – ${anonymized ? anonymizeName(candidate.name) : candidate.name}</title>
+        <title>${t('print.candidate_profile')} – ${anonymized ? anonymizeName(candidate.name) : candidate.name}</title>
         <style>
           @page { margin: 20mm 15mm; size: A4; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -78,7 +80,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
       <body>
         ${printContent.innerHTML}
         <div class="footer">
-          Generiert am ${new Date().toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' })} · HR-Tool${anonymized ? ' · Anonymisiertes Profil' : ''}
+          ${t('print.generated_on')} ${new Date().toLocaleDateString(locale === 'en' ? 'en-US' : 'de-DE', { day: '2-digit', month: 'long', year: 'numeric' })} · HR-Tool${anonymized ? ' · ' + t('print.anonymized_profile') : ''}
         </div>
       </body>
       </html>
@@ -97,7 +99,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
       <div className="relative bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-2xl w-full max-w-[800px] max-h-[90vh] overflow-hidden flex flex-col mx-4">
         {/* Toolbar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-          <h3 className="text-[18px] font-semibold text-black dark:text-white">Druckvorschau</h3>
+          <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('print.preview_title')}</h3>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setAnonymized(!anonymized)}
@@ -108,14 +110,14 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
               }`}
             >
               {anonymized ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              {anonymized ? 'Anonymisiert' : 'Anonymisieren'}
+              {anonymized ? t('print.anonymized') : t('print.anonymize')}
             </button>
             <button
               onClick={handlePrint}
               className="flex items-center gap-2 px-5 py-2 rounded-full bg-black dark:bg-white text-white dark:text-black text-[14px] font-semibold hover:opacity-80 transition-all cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              Drucken
+              {t('print.print')}
             </button>
             <button
               onClick={onClose}
@@ -140,7 +142,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
                   {status}
                 </span>
                 {anonymized && (
-                  <p style={{ fontSize: '11px', color: '#ff9f0a', fontWeight: 500, marginTop: '4px' }}>Anonymisiertes Profil</p>
+                  <p style={{ fontSize: '11px', color: '#ff9f0a', fontWeight: 500, marginTop: '4px' }}>{t('print.anonymized_profile')}</p>
                 )}
               </div>
             </div>
@@ -148,29 +150,29 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
             {/* Kontaktdaten */}
             {(displayEmail || displayPhone || candidate.location) && (
               <div className="section" style={{ marginBottom: '22px' }}>
-                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>Kontaktdaten</div>
+                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>{t('print.contact_data')}</div>
                 <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 32px' }}>
                   {displayEmail && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>E-Mail</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.email')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{displayEmail}</div>
                     </div>
                   )}
                   {displayPhone && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Telefon</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.phone')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{displayPhone}</div>
                     </div>
                   )}
                   {candidate.location && !anonymized && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Standort</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.location')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.location}</div>
                     </div>
                   )}
                   {candidate.location && anonymized && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Region</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.region')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.location.split(',')[0].split(' ').slice(-1)[0]}</div>
                     </div>
                   )}
@@ -181,29 +183,29 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
             {/* Qualifikation */}
             {(candidate.experience || candidate.education || candidate.availability || candidate.desired_salary) && (
               <div className="section" style={{ marginBottom: '22px' }}>
-                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>Qualifikation</div>
+                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>{t('print.qualification')}</div>
                 <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 32px' }}>
                   {candidate.experience && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Berufserfahrung</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.experience')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.experience}</div>
                     </div>
                   )}
                   {candidate.education && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Ausbildung</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.education')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.education}</div>
                     </div>
                   )}
                   {candidate.availability && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Verfügbarkeit</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.availability')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.availability}</div>
                     </div>
                   )}
                   {candidate.desired_salary && !anonymized && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Gehaltsvorstellung</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.salary_expectation')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.desired_salary}</div>
                     </div>
                   )}
@@ -214,29 +216,29 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
             {/* Sprachen & Mobilität */}
             {(candidate.languages || candidate.certificates || candidate.drivers_license || candidate.mobility) && (
               <div className="section" style={{ marginBottom: '22px' }}>
-                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>Sprachen & Mobilität</div>
+                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>{t('print.languages_mobility')}</div>
                 <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 32px' }}>
                   {candidate.languages && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Sprachen</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.languages')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.languages}</div>
                     </div>
                   )}
                   {candidate.certificates && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Zertifikate</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.certificates')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.certificates}</div>
                     </div>
                   )}
                   {candidate.drivers_license && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Führerschein</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.drivers_license')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.drivers_license}</div>
                     </div>
                   )}
                   {candidate.mobility && (
                     <div>
-                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Mobilität</div>
+                      <div className="info-label" style={{ fontSize: '12px', fontWeight: 600, color: '#86868b', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{t('print.mobility')}</div>
                       <div className="info-value" style={{ fontSize: '15px', fontWeight: 500, color: '#1d1d1f' }}>{candidate.mobility}</div>
                     </div>
                   )}
@@ -261,8 +263,8 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
               <div className="section" style={{ marginBottom: '22px' }}>
                 <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>Tags</div>
                 <div className="tags-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {tags.map((t, i) => (
-                    <span key={i} className="tag" style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, background: '#0071e3', color: '#fff', opacity: 0.85 }}>{t}</span>
+                  {tags.map((tag, i) => (
+                    <span key={i} className="tag" style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, background: '#0071e3', color: '#fff', opacity: 0.85 }}>{tag}</span>
                   ))}
                 </div>
               </div>
@@ -271,7 +273,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
             {/* Notizen */}
             {candidate.notes && !anonymized && (
               <div className="section" style={{ marginBottom: '22px' }}>
-                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>Notizen</div>
+                <div className="section-title" style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', color: '#86868b', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid #f0f0f0' }}>{t('print.notes')}</div>
                 <div className="text-block" style={{ fontSize: '15px', color: '#1d1d1f', whiteSpace: 'pre-line', lineHeight: 1.6 }}>{candidate.notes}</div>
               </div>
             )}

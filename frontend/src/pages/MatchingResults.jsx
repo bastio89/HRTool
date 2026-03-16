@@ -4,10 +4,12 @@ import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, T
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
+import { useI18n } from '../I18nContext'
 
 export default function MatchingResults() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [expandedIdx, setExpandedIdx] = useState(null)
@@ -30,11 +32,11 @@ export default function MatchingResults() {
     finally { setReviewing(false) }
   }
 
-  if (loading) return <LoadingSpinner text="Ergebnisse werden geladen..." />
+  if (loading) return <LoadingSpinner text={t('matching.results_loading')} />
   if (error) return (
     <div className="text-center py-32">
       <p className="text-[#ff3b30] font-medium mb-8 text-[18px]">{error}</p>
-      <Button variant="secondary" size="lg" onClick={() => navigate('/history')}>Zurück zur Historie</Button>
+      <Button variant="secondary" size="lg" onClick={() => navigate('/history')}>{t('matching.back_history')}</Button>
     </div>
   )
 
@@ -50,7 +52,7 @@ export default function MatchingResults() {
       const s = String(v).replace(/"/g, '""')
       return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s
     }
-    const headers = ['Rang', 'Kandidat', 'Score (%)', 'Zusammenfassung', 'Stärken', 'Schwächen']
+    const headers = [t('matching.ranking'), t('matching.candidate'), t('matching.score'), t('matching.summary'), t('matching.strengths'), t('matching.weaknesses')]
     const rows = results.map((r, i) => [
       i + 1,
       r.candidateName,
@@ -77,7 +79,7 @@ export default function MatchingResults() {
             <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Matching-Ergebnisse</h1>
+            <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('matching.results')}</h1>
             <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
               <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
               {matchedAt && (
@@ -115,7 +117,7 @@ export default function MatchingResults() {
             </>
           )}
           <Link to="/matching">
-            <Button size="md" variant="dark">Neues Matching</Button>
+            <Button size="md" variant="dark">{t('matching.new')}</Button>
           </Link>
         </div>
       </div>
@@ -141,9 +143,9 @@ export default function MatchingResults() {
               <>
                 <UserCheck className="w-6 h-6 text-[#ff9f0a]" />
                 <div>
-                  <p className="text-[15px] font-semibold text-[#ff9f0a]">Menschliche Überprüfung ausstehend (Art. 14 EU AI Act)</p>
+                  <p className="text-[15px] font-semibold text-[#ff9f0a]">{t('matching.review_pending')}</p>
                   <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                    Bitte prüfen Sie die KI-Ergebnisse und bestätigen Sie die Überprüfung.
+                    {t('matching.review_hint')}
                   </p>
                 </div>
               </>
@@ -189,7 +191,7 @@ export default function MatchingResults() {
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">
                 {results.length > 0 ? (avgScore * 100).toFixed(0) + '%' : '-'}
               </p>
-              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Durchschnitt</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.average')}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#0071e3]/10 flex items-center justify-center">
               <BarChart3 className="w-6 h-6 text-[#0071e3]" />
@@ -233,7 +235,7 @@ export default function MatchingResults() {
                   <div className="flex items-center gap-5">
                     <h3 className="text-[26px] font-semibold tracking-tight text-black dark:text-white">{result.candidateName}</h3>
                     <ScoreBadge score={result.score} />
-                    <KiBadge tooltip="Score und Bewertung wurden von einer KI berechnet. Bitte manuell überprüfen." />
+                    <KiBadge tooltip={t('matching.score_tooltip')} />
                   </div>
                   <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-3 leading-relaxed">
                     {result.summary}
@@ -254,7 +256,7 @@ export default function MatchingResults() {
                           <div className="w-12 h-12 rounded-full bg-[#34c759]/10 flex items-center justify-center">
                             <ThumbsUp className="w-6 h-6 text-[#34c759]" />
                           </div>
-                          <h4 className="text-[14px] font-semibold text-[#34c759] uppercase tracking-widest">Stärken</h4>
+                          <h4 className="text-[14px] font-semibold text-[#34c759] uppercase tracking-widest">{t('matching.strengths')}</h4>
                         </div>
                         <ul className="space-y-5">
                           {result.strengths.map((s, i) => {
@@ -285,7 +287,7 @@ export default function MatchingResults() {
                           <div className="w-12 h-12 rounded-full bg-[#ff3b30]/10 flex items-center justify-center">
                             <ThumbsDown className="w-6 h-6 text-[#ff3b30]" />
                           </div>
-                          <h4 className="text-[14px] font-semibold text-[#ff3b30] uppercase tracking-widest">Schwächen</h4>
+                          <h4 className="text-[14px] font-semibold text-[#ff3b30] uppercase tracking-widest">{t('matching.weaknesses')}</h4>
                         </div>
                         <ul className="space-y-5">
                           {result.weaknesses.map((w, i) => {
@@ -319,7 +321,7 @@ export default function MatchingResults() {
 
       {results.length === 0 && (
         <Card className="p-20 text-center mt-10">
-          <p className="text-[20px] font-medium text-gray-500 dark:text-gray-400">Keine Ergebnisse verfügbar.</p>
+          <p className="text-[20px] font-medium text-gray-500 dark:text-gray-400">{t('matching.no_results')}</p>
         </Card>
       )}
     </div>

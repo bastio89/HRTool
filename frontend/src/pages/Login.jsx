@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useAuth } from '../AuthContext'
+import { useI18n } from '../I18nContext'
 import { Command, LogIn, AlertCircle } from 'lucide-react'
 
 export default function Login() {
   const { login } = useAuth()
+  const { t } = useI18n()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,7 +18,7 @@ export default function Login() {
     try {
       await login(username, password)
     } catch (err) {
-      setError(err.message || 'Anmeldung fehlgeschlagen')
+      setError(err.message || t('auth.login_failed'))
     } finally {
       setLoading(false)
     }
@@ -45,26 +47,26 @@ export default function Login() {
             )}
 
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Benutzername</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('auth.username')}</label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700 text-[16px] dark:text-white outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
-                placeholder="Benutzername eingeben"
+                placeholder={t('auth.enter_username')}
                 autoFocus
                 required
               />
             </div>
 
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">Passwort</label>
+              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('auth.password')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700 text-[16px] dark:text-white outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
-                placeholder="Passwort eingeben"
+                placeholder={t('auth.enter_password')}
                 required
               />
             </div>
@@ -79,7 +81,7 @@ export default function Login() {
               ) : (
                 <>
                   <LogIn className="w-5 h-5" />
-                  Anmelden
+                  {t('auth.login')}
                 </>
               )}
             </button>

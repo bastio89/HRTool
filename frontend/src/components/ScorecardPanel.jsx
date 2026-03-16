@@ -2,10 +2,19 @@ import { useState, useEffect } from 'react'
 import { X, Sparkles, Save, Star, ChevronDown, ChevronUp, Loader2, ClipboardList, Plus, Trash2, BarChart3, Users } from 'lucide-react'
 import { scorecardsApi } from '../api'
 import { KiBadge, KiDisclaimer } from './KiBadge'
+import { useI18n } from '../I18nContext'
 
-const RATING_LABELS = ['', 'Mangelhaft', 'Ausreichend', 'Gut', 'Sehr gut', 'Hervorragend']
+const CATEGORY_KEYS = {
+  'Fachkompetenz': 'scorecard.cat_technical',
+  'Soft Skills': 'scorecard.cat_soft_skills',
+  'Motivation': 'scorecard.cat_motivation',
+  'Erfahrung': 'scorecard.cat_experience',
+  'Allgemein': 'scorecard.cat_general',
+}
+const CATEGORIES = Object.keys(CATEGORY_KEYS)
 
 export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved }) {
+  const { t } = useI18n()
   const [tab, setTab] = useState('evaluate') // evaluate | templates | compare
   const [templates, setTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState(null)
@@ -94,17 +103,17 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
         // Create a template from generated questions
         const tmplRes = await scorecardsApi.createTemplate({
           job_id: jobId,
-          title: `KI-Fragen für ${entry.candidate_name}`,
+          title: t('scorecard.ai_questions_for').replace('{name}', entry.candidate_name),
           questions,
           ai_generated: true,
         })
         await loadData()
         // Auto-select the new template
-        const newTemplate = { id: tmplRes.id, title: `KI-Fragen für ${entry.candidate_name}`, questions, ai_generated: 1 }
+        const newTemplate = { id: tmplRes.id, title: t('scorecard.ai_questions_for').replace('{name}', entry.candidate_name), questions, ai_generated: 1 }
         selectTemplate(newTemplate)
       }
     } catch (err) {
-      console.error('KI-Generierung fehlgeschlagen:', err)
+      console.error('AI generation failed:', err)
     } finally {
       setGenerating(false)
     }
@@ -144,9 +153,9 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
         <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">
-              Scorecard — {entry.candidate_name}
+              {t('scorecard.title')} — {entry.candidate_name}
             </h2>
-            <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">Strukturierte Interview-Bewertung</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('scorecard.subtitle')}</p>
           </div>
           <button onClick={onClose} className="w-10 h-10 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center cursor-pointer transition-colors">
             <X className="w-5 h-5 text-gray-500" />
@@ -156,21 +165,21 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
         {/* Tabs */}
         <div className="flex items-center gap-1 px-6 pt-4 flex-shrink-0">
           {[
-            { key: 'evaluate', label: 'Bewerten', icon: Star },
-            { key: 'templates', label: 'Vorlagen', icon: ClipboardList },
-            { key: 'compare', label: 'Vergleich', icon: BarChart3 },
-          ].map(t => (
+            { key: 'evaluate', label: t('scorecard.evaluate'), icon: Star },
+            { key: 'templates', label: t('scorecard.templates'), icon: ClipboardList },
+            { key: 'compare', label: t('scorecard.compare'), icon: BarChart3 },
+          ].map(tb => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
+              key={tb.key}
+              onClick={() => setTab(tb.key)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${
-                tab === t.key
+                tab === tb.key
                   ? 'bg-[#0071e3] text-white'
                   : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
             >
-              <t.icon className="w-4 h-4" />
-              {t.label}
+              <tb.icon className="w-4 h-4" />
+              {tb.label}
             </button>
           ))}
         </div>
@@ -191,7 +200,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                   className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#5e5ce6] to-[#0071e3] text-white text-[14px] font-semibold hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  {generating ? 'KI generiert Fragen...' : 'KI-Interviewfragen generieren'}
+                  {generating ? t('scorecard.generating') : t('scorecard.generate_ai')}
                 </button>
                 <KiBadge label="Ollama" />
               </div>
@@ -200,9 +209,9 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
               {/* Template Selection */}
               {!selectedTemplate ? (
                 <div>
-                  <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Vorlage wählen</p>
+                  <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('scorecard.select_template')}</p>
                   {templates.length === 0 ? (
-                    <p className="text-[15px] text-gray-500">Noch keine Vorlagen vorhanden. Generiere KI-Fragen oder erstelle eine Vorlage.</p>
+                    <p className="text-[15px] text-gray-500">{t('scorecard.no_templates')}</p>
                   ) : (
                     <div className="space-y-3">
                       {templates.map(t => (
@@ -215,8 +224,8 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                             <div>
                               <p className="text-[16px] font-semibold text-black dark:text-white">{t.title}</p>
                               <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
-                                {t.questions.length} Fragen
-                                {t.ai_generated ? ' · KI-generiert' : ''}
+                                {t.questions.length} {t('scorecard.questions')}
+                                {t.ai_generated ? ` · ${t('scorecard.ai_generated')}` : ''}
                                 {t.job_title ? ` · ${t.job_title}` : ''}
                               </p>
                             </div>
@@ -269,7 +278,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                         ))}
                         {answers[idx]?.score > 0 && (
                           <span className="text-[14px] font-semibold text-[#ff9f0a] ml-2">
-                            {RATING_LABELS[answers[idx].score]}
+                            {t(`rating.${answers[idx].score}`)}
                           </span>
                         )}
                       </div>

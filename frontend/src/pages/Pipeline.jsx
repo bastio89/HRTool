@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useI18n } from '../I18nContext'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone, Star, ChevronLeft, ChevronRight, ArrowRight, ClipboardList
@@ -23,6 +24,7 @@ const stageStyle = {
 export default function Pipeline() {
   const { jobId } = useParams()
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [job, setJob] = useState(null)
   const [board, setBoard] = useState({})
   const [allCandidates, setAllCandidates] = useState([])
@@ -122,7 +124,7 @@ export default function Pipeline() {
       await pipelineApi.updateStage(entry.id, targetStage, noteText || undefined)
     } catch (err) {
       loadBoard()
-      alert('Fehler beim Aktualisieren: ' + err.message)
+      alert(t('pipeline.update_error') + ': ' + err.message)
     }
   }
 
@@ -186,7 +188,7 @@ export default function Pipeline() {
       const result = await matchingApi.run(job.description, job.title, candidateIds)
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
-      alert('Matching fehlgeschlagen: ' + err.message)
+      alert(t('pipeline.matching_failed') + ': ' + err.message)
     } finally {
       setMatchingRunning(false)
     }
@@ -226,11 +228,11 @@ export default function Pipeline() {
       await pipelineApi.updateStage(entry.id, targetStage)
     } catch (err) {
       loadBoard()
-      alert('Fehler: ' + err.message)
+      alert(t('common.error') + ': ' + err.message)
     }
   }
 
-  if (loading) return <LoadingSpinner text="Pipeline wird geladen..." />
+  if (loading) return <LoadingSpinner text={t('pipeline.loading')} />
 
   return (
     <div className="fade-in flex flex-col h-full">
@@ -241,7 +243,7 @@ export default function Pipeline() {
             <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5 sm:mb-1">Pipeline</p>
+            <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5 sm:mb-1">{t('pipeline.title')}</p>
             <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black dark:text-white leading-tight truncate">
               {job?.title}
             </h1>
@@ -249,15 +251,15 @@ export default function Pipeline() {
         </div>
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap ml-14 sm:ml-0">
           <div className="px-5 py-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[15px] font-medium text-gray-600 dark:text-gray-400">
-            {totalInPipeline} Bewerber{totalInPipeline !== 1 ? '' : ''}
+            {totalInPipeline} {t('pipeline.candidates')}
           </div>
           {totalInPipeline > 0 && job?.description && (
             <Button variant="secondary" size="md" onClick={startMatchingFromPipeline} disabled={matchingRunning}>
-              <GitCompare className="w-5 h-5" /> {matchingRunning ? 'Matching läuft...' : 'Matching starten'}
+              <GitCompare className="w-5 h-5" /> {matchingRunning ? t('pipeline.matching_running') : t('pipeline.matching')}
             </Button>
           )}
           <Button variant="dark" size="md" onClick={() => setAddPanelOpen(true)}>
-            <UserPlus className="w-5 h-5" /> Bewerber hinzufügen
+            <UserPlus className="w-5 h-5" /> {t('pipeline.add')}
           </Button>
         </div>
       </div>
@@ -334,13 +336,14 @@ export default function Pipeline() {
               <div className="flex flex-col gap-3">
                 {cards.length === 0 && (
                   <div className="flex items-center justify-center h-24 rounded-[20px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-400">
-                    Keine Bewerber
+                    {t('pipeline.no_candidates')}
                   </div>
                 )}
                 {cards.map(entry => (
                   <MobileKanbanCard
                     key={entry.id}
                     entry={entry}
+                    t={t}
                     interviews={entryInterviews[entry.id] || []}
                     rating={candidateRatings[entry.candidate_id]}
                     prevStage={prevStage}
@@ -392,13 +395,14 @@ export default function Pipeline() {
                 {cards.length === 0 && (
                   <div className={`flex items-center justify-center h-20 rounded-[20px] border-2 border-dashed text-[14px] font-medium text-gray-400 
                     ${isOver ? 'border-[#0071e3] text-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700'}`}>
-                    {isOver ? 'Hier ablegen' : 'Leer'}
+                    {isOver ? t('pipeline.drop_here') : t('pipeline.empty')}
                   </div>
                 )}
                 {cards.map(entry => (
                   <KanbanCard
                     key={entry.id}
                     entry={entry}
+                    t={t}
                     interviews={entryInterviews[entry.id] || []}
                     rating={candidateRatings[entry.candidate_id]}
                     onDragStart={() => handleDragStart(entry)}
@@ -420,7 +424,7 @@ export default function Pipeline() {
           <div className="fixed inset-0 bg-black/30" onClick={() => setAddPanelOpen(false)} />
           <div className="relative z-10 w-[520px] max-h-[80vh] bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-10 pt-10 pb-8 flex-shrink-0">
-              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">Bewerber hinzufügen</h2>
+              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('pipeline.add')}</h2>
               <button
                 onClick={() => setAddPanelOpen(false)}
                 className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center cursor-pointer transition-colors"
@@ -434,7 +438,7 @@ export default function Pipeline() {
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Name oder Skills suchen..."
+                  placeholder={t('pipeline.search')}
                   value={addSearch}
                   onChange={e => setAddSearch(e.target.value)}
                   className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] text-black dark:text-white font-medium
@@ -446,8 +450,8 @@ export default function Pipeline() {
               {availableCandidates.length === 0 ? (
                 <p className="text-[16px] font-medium text-gray-400 text-center py-12">
                   {pipelineIds.length === allCandidates.length
-                    ? 'Alle Bewerber sind bereits in dieser Pipeline.'
-                    : 'Keine passenden Bewerber gefunden.'}
+                    ? t('pipeline.already_in')
+                    : t('pipeline.no_match')}
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -486,25 +490,25 @@ export default function Pipeline() {
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6">
           <div className="fixed inset-0 bg-black/30" onClick={() => { setStageChangeModal(null); loadBoard() }} />
           <div className="relative z-10 w-[480px] bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 p-10">
-            <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-2">Stage wechseln</h2>
+            <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-2">{t('pipeline.stage_change')}</h2>
             <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-6">
               <span className="font-semibold text-black dark:text-white">{stageChangeModal.entry.candidate_name}</span>
-              {' '}von <span className="font-semibold">{stageChangeModal.entry.stage}</span>
-              {' '}nach <span className="font-semibold">{stageChangeModal.targetStage}</span>
+              {' '}{t('pipeline.stage_from')} <span className="font-semibold">{stageChangeModal.entry.stage}</span>
+              {' '}{t('pipeline.stage_to')} <span className="font-semibold">{stageChangeModal.targetStage}</span>
             </p>
             <textarea
               value={stageNote}
               onChange={e => setStageNote(e.target.value)}
-              placeholder="Optionale Notiz hinzufügen..."
+              placeholder={t('pipeline.note_optional')}
               rows={3}
               className="w-full px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] text-black dark:text-white font-medium resize-none
                 focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
               autoFocus
             />
             <div className="flex items-center justify-end gap-4 mt-6">
-              <Button variant="secondary" onClick={() => { setStageChangeModal(null); loadBoard() }}>Abbrechen</Button>
+              <Button variant="secondary" onClick={() => { setStageChangeModal(null); loadBoard() }}>{t('common.cancel')}</Button>
               <Button variant="dark" onClick={confirmStageChange}>
-                Verschieben
+                {t('pipeline.confirm')}
               </Button>
             </div>
           </div>
@@ -519,7 +523,7 @@ export default function Pipeline() {
           <div className="relative z-10 w-[520px] max-h-[80vh] bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-10 pt-10 pb-6 flex-shrink-0">
               <div>
-                <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">Notizen</h2>
+                <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('pipeline.notes')}</h2>
                 <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">{notesModal.candidateName}</p>
               </div>
               <button onClick={() => setNotesModal(null)} className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center cursor-pointer transition-colors">
@@ -528,9 +532,9 @@ export default function Pipeline() {
             </div>
             <div className="px-10 pb-4 flex-1 overflow-auto">
               {loadingNotes ? (
-                <p className="text-gray-400 text-center py-8">Laden...</p>
+                <p className="text-gray-400 text-center py-8">{t('common.loading')}</p>
               ) : notes.length === 0 ? (
-                <p className="text-gray-400 text-center py-8 text-[15px]">Noch keine Notizen vorhanden.</p>
+                <p className="text-gray-400 text-center py-8 text-[15px]">{t('pipeline.notes_empty')}</p>
               ) : (
                 <div className="space-y-4">
                   {notes.map(n => (
@@ -561,7 +565,7 @@ export default function Pipeline() {
                   value={newNote}
                   onChange={e => setNewNote(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && submitNote()}
-                  placeholder="Notiz schreiben..."
+                  placeholder={t('pipeline.notes_write')}
                   className="flex-1 px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] text-black dark:text-white font-medium
                     focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
                 />
@@ -603,7 +607,7 @@ export default function Pipeline() {
   )
 }
 
-function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview, onOpenScorecard }) {
+function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview, onOpenScorecard }) {
   return (
     <div
       draggable
@@ -678,20 +682,20 @@ function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNo
         onClick={e => e.stopPropagation()}
         className="mt-4 flex items-center gap-2 text-[13px] font-semibold text-[#0071e3] hover:opacity-70 transition-opacity"
       >
-        <Activity className="w-3.5 h-3.5" /> Profil & Log
+        <Activity className="w-3.5 h-3.5" /> {t('pipeline.profile_log')}
       </Link>
       <div className="flex items-center gap-4 mt-2">
         <button
           onClick={(e) => { e.stopPropagation(); onOpenNotes() }}
           className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
         >
-          <MessageSquare className="w-3.5 h-3.5" /> Notizen
+          <MessageSquare className="w-3.5 h-3.5" /> {t('pipeline.notes')}
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onOpenInterview() }}
           className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] transition-colors cursor-pointer"
         >
-          <Calendar className="w-3.5 h-3.5" /> Interview
+          <Calendar className="w-3.5 h-3.5" /> {t('pipeline.interview')}
           {interviews.length > 0 && (
             <span className="w-4 h-4 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[10px] font-bold flex items-center justify-center">{interviews.length}</span>
           )}
@@ -700,14 +704,14 @@ function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNo
           onClick={(e) => { e.stopPropagation(); onOpenScorecard() }}
           className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#5e5ce6] transition-colors cursor-pointer"
         >
-          <ClipboardList className="w-3.5 h-3.5" /> Scorecard
+          <ClipboardList className="w-3.5 h-3.5" /> {t('pipeline.scorecard')}
         </button>
       </div>
     </div>
   )
 }
 
-function MobileKanbanCard({ entry, interviews, rating, prevStage, nextStage, onMove, onRemove, onOpenNotes, onOpenInterview }) {
+function MobileKanbanCard({ entry, t, interviews, rating, prevStage, nextStage, onMove, onRemove, onOpenNotes, onOpenInterview }) {
   const stageColor = (stage) => ({
     Beworben: '#9ca3af', Vorauswahl: '#0071e3', Interview: '#ff9f0a',
     Angebot: '#8b5cf6', Hired: '#34c759', Abgesagt: '#ff3b30'
@@ -788,19 +792,19 @@ function MobileKanbanCard({ entry, interviews, rating, prevStage, nextStage, onM
           to={`/candidates/${entry.candidate_id}/detail`}
           className="flex items-center gap-1.5 text-[13px] font-semibold text-[#0071e3]"
         >
-          <Activity className="w-3.5 h-3.5" /> Profil
+          <Activity className="w-3.5 h-3.5" /> {t('pipeline.profile')}
         </Link>
         <button
           onClick={onOpenNotes}
           className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500 dark:text-gray-400 cursor-pointer"
         >
-          <MessageSquare className="w-3.5 h-3.5" /> Notizen
+          <MessageSquare className="w-3.5 h-3.5" /> {t('pipeline.notes')}
         </button>
         <button
           onClick={onOpenInterview}
           className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-500 dark:text-gray-400 cursor-pointer"
         >
-          <Calendar className="w-3.5 h-3.5" /> Interview
+          <Calendar className="w-3.5 h-3.5" /> {t('pipeline.interview')}
           {interviews.length > 0 && (
             <span className="w-4 h-4 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[10px] font-bold flex items-center justify-center">{interviews.length}</span>
           )}

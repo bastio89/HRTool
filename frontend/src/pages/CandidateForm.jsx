@@ -5,6 +5,7 @@ import { candidatesApi, cvParserApi, uploadsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useToast } from '../components/Toast'
+import { useI18n } from '../I18nContext'
 
 const SUGGESTED_TAGS = ['Top-Kandidat', 'Senior', 'Junior', 'Freelancer', 'Remote', 'Sofort verfügbar', 'Führungskraft', 'Teilzeit', 'Werkstudent', 'Intern']
 
@@ -22,6 +23,7 @@ export default function CandidateForm() {
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { t } = useI18n()
   const isEdit = Boolean(id)
   const [form, setForm] = useState(emptyCandidate)
   const [loading, setLoading] = useState(isEdit)
@@ -56,7 +58,7 @@ export default function CandidateForm() {
     if (!file) return
     const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
     if (!allowed.includes(file.type)) {
-      setError('Nur PDF und Word-Dateien werden unterstützt')
+      setError(t('form.only_pdf_word'))
       return
     }
     setParsing(true)
@@ -82,7 +84,7 @@ export default function CandidateForm() {
       // Also attach the file for upload after save
       setAttachedFiles(prev => [...prev, file])
     } catch (err) {
-      setError(err.message || 'CV-Analyse fehlgeschlagen')
+      setError(err.message || t('form.cv_failed'))
     } finally {
       setParsing(false)
     }
@@ -138,7 +140,7 @@ export default function CandidateForm() {
           console.warn('File upload failed:', uploadErr)
         }
       }
-      toast.success(isEdit ? 'Bewerber aktualisiert' : 'Bewerber angelegt')
+      toast.success(isEdit ? t('candidates.updated') : t('candidates.created'))
       navigate('/candidates')
     } catch (err) {
       setError(err.message)
@@ -147,7 +149,7 @@ export default function CandidateForm() {
     }
   }
 
-  if (loading) return <LoadingSpinner text="Bewerber wird geladen..." />
+  if (loading) return <LoadingSpinner text={t('candidates.candidate_loading')} />
 
   return (
     <div className="fade-in max-w-[800px] mx-auto">
@@ -158,10 +160,10 @@ export default function CandidateForm() {
         </button>
         <div>
           <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">
-            {isEdit ? 'Bewerber bearbeiten' : 'Neuer Bewerber'}
+            {isEdit ? t('candidates.edit') : t('candidates.new')}
           </h1>
           <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-2">
-            {isEdit ? 'Daten des Bewerbers aktualisieren' : 'Neuen Bewerber in der Kartei anlegen'}
+            {isEdit ? t('candidates.edit_desc') : t('candidates.create_desc')}
           </p>
         </div>
       </div>
@@ -176,7 +178,7 @@ export default function CandidateForm() {
         <div className="p-6 rounded-[20px] bg-[#ff9f0a]/10 border border-[#ff9f0a]/20 mb-10">
           <div className="flex items-center gap-3 mb-3">
             <AlertTriangle className="w-5 h-5 text-[#ff9f0a]" />
-            <span className="text-[16px] font-semibold text-[#ff9f0a]">Mögliche Duplikate gefunden</span>
+            <span className="text-[16px] font-semibold text-[#ff9f0a]">{t('form.duplicates_found')}</span>
           </div>
           <div className="space-y-2">
             {duplicates.map(d => (
@@ -187,12 +189,12 @@ export default function CandidateForm() {
                   {d.location && <span className="text-[14px] text-gray-400 ml-3">{d.location}</span>}
                 </div>
                 <span className="text-[12px] font-semibold text-[#ff9f0a] bg-[#ff9f0a]/10 px-3 py-1 rounded-full">
-                  {d.matchType === 'email' ? 'Gleiche E-Mail' : 'Gleicher Name'}
+                  {d.matchType === 'email' ? t('form.duplicate_email') : t('form.duplicate_name')}
                 </span>
               </div>
             ))}
           </div>
-          <p className="text-[13px] text-[#ff9f0a]/80 mt-3">Du kannst trotzdem fortfahren, falls es sich nicht um ein Duplikat handelt.</p>
+          <p className="text-[13px] text-[#ff9f0a]/80 mt-3">{t('form.duplicate_hint')}</p>
         </div>
       )}
 
@@ -205,16 +207,16 @@ export default function CandidateForm() {
                 <Sparkles className="w-5 h-5 text-[#0071e3]" />
               </div>
               <div>
-                <h2 className="text-[20px] font-semibold tracking-tight text-black dark:text-white">KI-Bewerbungsanalyse</h2>
-                <p className="text-[14px] text-gray-500 dark:text-gray-400">Lade einen Lebenslauf hoch — die KI füllt die Felder automatisch aus</p>
+                <h2 className="text-[20px] font-semibold tracking-tight text-black dark:text-white">{t('cv.title')}</h2>
+                <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('cv.desc')}</p>
               </div>
             </div>
 
             {parsing ? (
               <div className="flex flex-col items-center py-10 gap-4">
                 <div className="w-12 h-12 border-[3px] border-[#0071e3]/20 border-t-[#0071e3] rounded-full animate-spin" />
-                <p className="text-[16px] font-medium text-[#0071e3]">KI analysiert den Lebenslauf...</p>
-                <p className="text-[14px] text-gray-400">Das kann je nach Dateigröße 10–30 Sekunden dauern</p>
+                <p className="text-[16px] font-medium text-[#0071e3]">{t('cv.analyzing')}</p>
+                <p className="text-[14px] text-gray-400">{t('cv.analyzing_time')}</p>
               </div>
             ) : (
               <div
@@ -227,8 +229,8 @@ export default function CandidateForm() {
                   <Upload className="w-7 h-7 text-[#0071e3]" />
                 </div>
                 <div className="text-center">
-                  <p className="text-[16px] font-semibold text-black dark:text-white">PDF oder Word-Datei hierhin ziehen</p>
-                  <p className="text-[14px] text-gray-400 mt-1">oder klicken zum Auswählen</p>
+                  <p className="text-[16px] font-semibold text-black dark:text-white">{t('cv.drop_hint')}</p>
+                  <p className="text-[14px] text-gray-400 mt-1">{t('cv.click_hint')}</p>
                 </div>
                 <input
                   ref={fileInputRef}
@@ -254,7 +256,7 @@ export default function CandidateForm() {
             {/* Attached files list */}
             {attachedFiles.length > 0 && (
               <div className="mt-6 space-y-2">
-                <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Angehängte Dateien</p>
+                <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cv.attached_files')}</p>
                 {attachedFiles.map((f, idx) => (
                   <div key={idx} className="flex items-center justify-between bg-white dark:bg-[#1c1c1e] rounded-2xl px-5 py-3 border border-gray-100 dark:border-gray-700">
                     <div className="flex items-center gap-3">
@@ -273,39 +275,39 @@ export default function CandidateForm() {
         )}
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Persönliche Daten</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.personal')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <Input label="Name *" placeholder="Max Mustermann" value={form.name} onChange={handleChange('name')} required />
-            <Input label="E-Mail" type="email" placeholder="max@example.com" value={form.email} onChange={handleChange('email')} />
-            <Input label="Telefon" placeholder="+49 171 1234567" value={form.phone} onChange={handleChange('phone')} />
-            <Input label="Wohnort" placeholder="Berlin" value={form.location} onChange={handleChange('location')} />
+            <Input label={t('form.name') + ' *'} placeholder="Max Mustermann" value={form.name} onChange={handleChange('name')} required />
+            <Input label={t('form.email')} type="email" placeholder="max@example.com" value={form.email} onChange={handleChange('email')} />
+            <Input label={t('form.phone')} placeholder="+49 171 1234567" value={form.phone} onChange={handleChange('phone')} />
+            <Input label={t('form.location')} placeholder="Berlin" value={form.location} onChange={handleChange('location')} />
           </div>
         </Card>
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Berufliches Profil</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.professional')}</h2>
           <div className="space-y-8">
             <Textarea 
-              label="Berufserfahrung" 
+              label={t('form.experience')} 
               placeholder="5 Jahre Software-Entwicklung bei Firma XY, davon 2 Jahre als Teamlead..."
               value={form.experience} 
               onChange={handleChange('experience')}
               rows={4}
             />
             <Input 
-              label="Skills / Kompetenzen" 
+              label={t('form.skills')} 
               placeholder="JavaScript, React, Node.js, Python (kommagetrennt)"
               value={form.skills} 
               onChange={handleChange('skills')} 
             />
             <Input 
-              label="Ausbildung" 
+              label={t('form.education')} 
               placeholder="B.Sc. Informatik, Universität Berlin"
               value={form.education} 
               onChange={handleChange('education')} 
             />
             <Input 
-              label="Zertifikate" 
+              label={t('form.certificates')} 
               placeholder="AWS Solutions Architect, PMP, Scrum Master"
               value={form.certificates} 
               onChange={handleChange('certificates')} 
@@ -314,20 +316,20 @@ export default function CandidateForm() {
         </Card>
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Erweiterte Informationen</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.extended')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <Input label="Sprachen" placeholder="Deutsch (C2), Englisch (C1)" value={form.languages} onChange={handleChange('languages')} />
-            <Input label="Führerschein" placeholder="B, BE" value={form.drivers_license} onChange={handleChange('drivers_license')} />
-            <Input label="Mobilität" placeholder="Bundesweit, Remote bevorzugt" value={form.mobility} onChange={handleChange('mobility')} />
-            <Input label="Gehaltsvorstellung" placeholder="55.000 - 65.000 € p.a." value={form.desired_salary} onChange={handleChange('desired_salary')} />
-            <Input label="Verfügbarkeit" placeholder="Ab sofort / 3 Monate Kündigungsfrist" value={form.availability} onChange={handleChange('availability')} />
+            <Input label={t('form.languages')} placeholder="Deutsch (C2), Englisch (C1)" value={form.languages} onChange={handleChange('languages')} />
+            <Input label={t('form.drivers_license')} placeholder="B, BE" value={form.drivers_license} onChange={handleChange('drivers_license')} />
+            <Input label={t('form.mobility')} placeholder="Bundesweit, Remote bevorzugt" value={form.mobility} onChange={handleChange('mobility')} />
+            <Input label={t('form.salary')} placeholder="55.000 - 65.000 € p.a." value={form.desired_salary} onChange={handleChange('desired_salary')} />
+            <Input label={t('form.availability')} placeholder="Ab sofort / 3 Monate Kündigungsfrist" value={form.availability} onChange={handleChange('availability')} />
           </div>
         </Card>
 
         <Card className="p-12">
           <Textarea 
-            label="Notizen" 
-            placeholder="Interne Notizen zum Bewerber..."
+            label={t('form.notes')} 
+            placeholder={t('form.notes_placeholder')}
             value={form.notes} 
             onChange={handleChange('notes')}
             rows={3}
@@ -335,10 +337,10 @@ export default function CandidateForm() {
         </Card>
 
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Weitere Einstellungen</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.settings')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">Status</label>
+              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.status')}</label>
               <select
                 value={form.status}
                 onChange={handleChange('status')}
@@ -352,19 +354,19 @@ export default function CandidateForm() {
               </select>
             </div>
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">Quelle</label>
+              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.source')}</label>
               <select
                 value={form.source}
                 onChange={handleChange('source')}
                 className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
                   focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
               >
-                <option value="">– Bitte wählen –</option>
+                <option value="">{t('form.select')}</option>
                 {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <Input
-              label="Tags"
+              label={t('form.tags')}
               placeholder="Top-Kandidat, Remote, Senior (kommagetrennt)"
               value={form.tags}
               onChange={handleChange('tags')}
@@ -400,7 +402,7 @@ export default function CandidateForm() {
                   )}
                   {availableSuggestions.length > 0 && (
                     <div>
-                      <p className="text-[12px] font-medium text-gray-400 dark:text-gray-500 mb-2">Vorschläge:</p>
+                      <p className="text-[12px] font-medium text-gray-400 dark:text-gray-500 mb-2">{t('form.tags_suggestions')}</p>
                       <div className="flex flex-wrap gap-2">
                         {availableSuggestions.map(tag => (
                           <button key={tag} type="button" onClick={() => addTag(tag)}
@@ -419,11 +421,11 @@ export default function CandidateForm() {
 
         <div className="flex items-center justify-end gap-5 pt-6 pb-12">
           <Button variant="secondary" size="lg" type="button" onClick={() => navigate('/candidates')}>
-            Abbrechen
+            {t('form.cancel')}
           </Button>
           <Button variant="dark" type="submit" size="lg" disabled={saving || !form.name.trim()}>
             <Save className="w-5 h-5" />
-            {saving ? 'Wird gespeichert...' : (isEdit ? 'Aktualisieren' : 'Anlegen')}
+            {saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}
           </Button>
         </div>
       </form>

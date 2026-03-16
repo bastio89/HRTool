@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { GitCompare, FileText, Users, Search, CheckSquare, Square, Loader2, Zap, Briefcase, PenLine, ChevronRight } from 'lucide-react'
 import { candidatesApi, matchingApi, jobsApi } from '../api'
 import { Card, Button, Textarea, Input, EmptyState, LoadingSpinner } from '../components/UI'
+import { useI18n } from '../I18nContext'
 
 export default function Matching() {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [jobMode, setJobMode] = useState('manual') // 'manual' | 'existing'
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
@@ -69,11 +71,11 @@ export default function Matching() {
 
   const handleMatch = async () => {
     if (!jobDescription.trim()) {
-      setError('Bitte füge eine Stellenbeschreibung ein.')
+      setError(t('matching.enter_desc'))
       return
     }
     if (selectedIds.length === 0) {
-      setError('Bitte wähle mindestens einen Bewerber aus.')
+      setError(t('matching.select_candidates'))
       return
     }
     setError('')
@@ -93,14 +95,14 @@ export default function Matching() {
     !searchTerm || c.name.toLowerCase().includes(searchTerm.toLowerCase()) || (c.skills && c.skills.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
-  if (loading) return <LoadingSpinner text="Bewerber werden geladen..." />
+  if (loading) return <LoadingSpinner text={t('matching.candidates_loading')} />
 
   return (
     <div className="fade-in max-w-[1200px] mx-auto">
       <div className="mb-8 sm:mb-14">
-        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Stellen-Matching</h1>
+        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('matching.title')}</h1>
         <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">
-          Füge eine Stellenbeschreibung ein und finde die passendsten Bewerber
+          {t('matching.subtitle')}
         </p>
       </div>
 
@@ -117,7 +119,7 @@ export default function Matching() {
               <div className="w-14 h-14 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center">
                 <FileText className="w-6 h-6 text-black dark:text-white" />
               </div>
-              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">Stellenbeschreibung</h2>
+              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('matching.description')}</h2>
             </div>
 
             {/* Mode toggle */}
@@ -129,7 +131,7 @@ export default function Matching() {
                   jobMode === 'manual' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
-                <PenLine className="w-4 h-4" /> Manuell eingeben
+                <PenLine className="w-4 h-4" /> {t('matching.manual_input')}
               </button>
               <button
                 type="button"
@@ -138,7 +140,7 @@ export default function Matching() {
                   jobMode === 'existing' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
-                <Briefcase className="w-4 h-4" /> Aus Stellen wählen
+                <Briefcase className="w-4 h-4" /> {t('matching.from_jobs')}
                 {jobs.length > 0 && (
                   <span className="ml-1 px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[12px] font-bold">{jobs.length}</span>
                 )}
@@ -151,13 +153,13 @@ export default function Matching() {
                 {jobs.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 rounded-[24px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                     <Briefcase className="w-10 h-10 text-gray-300 mb-4" />
-                    <p className="text-[17px] font-semibold text-gray-400">Noch keine Stellen angelegt</p>
+                    <p className="text-[17px] font-semibold text-gray-400">{t('matching.no_jobs')}</p>
                     <button
                       type="button"
                       onClick={() => navigate('/jobs')}
                       className="mt-5 px-6 py-3 rounded-full bg-black text-white text-[15px] font-semibold cursor-pointer hover:bg-gray-800 transition-colors"
                     >
-                      Stellen verwalten →
+                      {t('matching.manage_jobs')}
                     </button>
                   </div>
                 ) : (
@@ -166,7 +168,7 @@ export default function Matching() {
                       <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="Stellen durchsuchen..."
+                        placeholder={t('matching.search_jobs')}
                         value={jobSearch}
                         onChange={e => setJobSearch(e.target.value)}
                         className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[15px] font-medium text-black dark:text-white border border-transparent
@@ -213,7 +215,7 @@ export default function Matching() {
             )}
 
             <Input
-              label="Stellentitel"
+              label={t('matching.job_title')}
               placeholder="z.B. Senior Frontend Developer (m/w/d)"
               value={jobTitle}
               onChange={(e) => setJobTitle(e.target.value)}
@@ -221,7 +223,7 @@ export default function Matching() {
 
             <div className="mt-8">
               <Textarea
-                label="Stellenbeschreibung"
+                label={t('matching.description')}
                 placeholder={`Füge hier die vollständige Stellenbeschreibung ein...\n\nBeispiel:\n- Aufgaben und Verantwortlichkeiten\n- Anforderungen und Qualifikationen\n- Gewünschte Skills\n- Standort und Arbeitsmodell`}
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
@@ -238,7 +240,7 @@ export default function Matching() {
                 <Users className="w-6 h-6 text-black dark:text-white" />
               </div>
               <div>
-                <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">Bewerberauswahl</h2>
+                <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('matching.candidate_selection')}</h2>
                 <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-1">
                   {selectedIds.length} von {candidates.length} ausgewählt
                 </p>
@@ -248,9 +250,9 @@ export default function Matching() {
             {candidates.length === 0 ? (
               <EmptyState
                 icon={Users}
-                title="Keine Bewerber"
-                description="Lege zuerst Bewerber an."
-                action={<Button variant="secondary" size="md" onClick={() => navigate('/candidates/new')}>Bewerber anlegen</Button>}
+                title={t('matching.no_candidates')}
+                description={t('matching.no_candidates_desc')}
+                action={<Button variant="secondary" size="md" onClick={() => navigate('/candidates/new')}>{t('matching.create_candidate')}</Button>}
               />
             ) : (
               <>
@@ -258,7 +260,7 @@ export default function Matching() {
                   <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Filtern..."
+                    placeholder={t('matching.filter')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-14 pr-5 py-4 text-[15px] bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px] 
@@ -304,9 +306,9 @@ export default function Matching() {
             onClick={handleMatch}
           >
             {matching ? (
-              <><Loader2 className="w-6 h-6 animate-spin" /> Matching läuft...</>
+              <><Loader2 className="w-6 h-6 animate-spin" /> {t('matching.running')}</>
             ) : (
-              <><Zap className="w-6 h-6" /> Matching starten</>
+              <><Zap className="w-6 h-6" /> {t('matching.start')}</>
             )}
           </Button>
 
@@ -317,7 +319,7 @@ export default function Matching() {
                 <div>
                   <p className="text-[16px] font-semibold text-[#0071e3]">KI analysiert...</p>
                   <p className="text-[15px] font-medium text-[#0071e3]/70 mt-1">
-                    {selectedIds.length || candidates.length} Bewerber werden abgeglichen.
+                    {t('matching.candidates_matched').replace('{count}', selectedIds.length || candidates.length)}
                   </p>
                 </div>
               </div>

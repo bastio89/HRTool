@@ -1,25 +1,26 @@
 import { useState, useRef } from 'react'
 import { Upload, FileText, X, AlertCircle, CheckCircle, ArrowRight, ArrowLeft, ChevronDown, AlertTriangle } from 'lucide-react'
 import { candidatesApi } from '../api'
+import { useI18n } from '../I18nContext'
 
 const CANDIDATE_FIELDS = [
-  { key: 'name', label: 'Name', required: true },
-  { key: 'email', label: 'E-Mail' },
-  { key: 'phone', label: 'Telefon' },
-  { key: 'location', label: 'Standort' },
-  { key: 'experience', label: 'Erfahrung' },
-  { key: 'skills', label: 'Skills' },
-  { key: 'education', label: 'Ausbildung' },
-  { key: 'desired_salary', label: 'Gehaltswunsch' },
-  { key: 'availability', label: 'Verfügbarkeit' },
-  { key: 'languages', label: 'Sprachen' },
-  { key: 'certificates', label: 'Zertifikate' },
-  { key: 'drivers_license', label: 'Führerschein' },
-  { key: 'mobility', label: 'Mobilität' },
-  { key: 'notes', label: 'Notizen' },
-  { key: 'status', label: 'Status' },
-  { key: 'tags', label: 'Tags' },
-  { key: 'source', label: 'Quelle' },
+  { key: 'name', labelKey: 'form.name', required: true },
+  { key: 'email', labelKey: 'form.email' },
+  { key: 'phone', labelKey: 'form.phone' },
+  { key: 'location', labelKey: 'form.location' },
+  { key: 'experience', labelKey: 'form.experience' },
+  { key: 'skills', labelKey: 'form.skills' },
+  { key: 'education', labelKey: 'form.education' },
+  { key: 'desired_salary', labelKey: 'form.salary' },
+  { key: 'availability', labelKey: 'form.availability' },
+  { key: 'languages', labelKey: 'form.languages' },
+  { key: 'certificates', labelKey: 'form.certificates' },
+  { key: 'drivers_license', labelKey: 'form.drivers_license' },
+  { key: 'mobility', labelKey: 'form.mobility' },
+  { key: 'notes', labelKey: 'form.notes' },
+  { key: 'status', labelKey: 'form.status' },
+  { key: 'tags', labelKey: 'form.tags' },
+  { key: 'source', labelKey: 'form.source' },
 ]
 
 // Smart auto-mapping: map CSV header to candidate field
@@ -49,7 +50,7 @@ function autoMap(header) {
 
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) throw new Error('CSV muss mindestens eine Kopfzeile und eine Datenzeile enthalten')
+  if (lines.length < 2) throw new Error('CSV_MIN_LINES')
 
   // Parse with proper quote handling
   function parseLine(line) {
@@ -86,6 +87,7 @@ function parseCSV(text) {
 }
 
 export default function CSVImportDialog({ open, onClose, onImported }) {
+  const { t } = useI18n()
   const [step, setStep] = useState(1) // 1: upload, 2: mapping, 3: preview, 4: result
   const [csvHeaders, setCsvHeaders] = useState([])
   const [csvRows, setCsvRows] = useState([])
@@ -128,7 +130,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
         setMapping(autoMapping)
         setStep(2)
       } catch (err) {
-        setError(err.message)
+        setError(err.message === 'CSV_MIN_LINES' ? t('csv.min_lines') : err.message)
       }
     }
     reader.readAsText(file)
@@ -157,7 +159,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
     try {
       const rows = mappedRows()
       if (rows.length === 0) {
-        setError('Keine gültigen Zeilen zum Importieren (Name fehlt)')
+        setError(t('csv.no_valid_rows'))
         setImporting(false)
         return
       }
@@ -186,12 +188,12 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-5 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
           <div>
-            <h3 className="text-[22px] font-semibold text-black dark:text-white">CSV-Import</h3>
+            <h3 className="text-[22px] font-semibold text-black dark:text-white">{t('csv.import_title')}</h3>
             <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">
-              {step === 1 && 'CSV-Datei auswählen'}
-              {step === 2 && 'Spalten zuordnen'}
-              {step === 3 && 'Vorschau & Importieren'}
-              {step === 4 && 'Import-Ergebnis'}
+              {step === 1 && t('csv.step_upload')}
+              {step === 2 && t('csv.step_mapping')}
+              {step === 3 && t('csv.step_preview')}
+              {step === 4 && t('csv.step_result')}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -223,9 +225,9 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
               onClick={() => fileRef.current?.click()}
             >
               <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-[18px] font-semibold text-black dark:text-white mb-2">CSV-Datei hochladen</p>
-              <p className="text-[14px] text-gray-500 dark:text-gray-400">Klicke oder ziehe eine .csv Datei hierher</p>
-              <p className="text-[13px] text-gray-400 mt-3">Unterstützt: Komma- und Semikolon-getrennt, UTF-8</p>
+              <p className="text-[18px] font-semibold text-black dark:text-white mb-2">{t('csv.upload_title')}</p>
+              <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('csv.upload_hint')}</p>
+              <p className="text-[13px] text-gray-400 mt-3">{t('csv.upload_supported')}</p>
               <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
             </div>
           )}
@@ -234,7 +236,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
           {step === 2 && (
             <div className="space-y-3">
               <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-4">
-                Ordne die CSV-Spalten den Bewerber-Feldern zu. <span className="font-semibold text-black dark:text-white">{csvRows.length} Zeilen</span> erkannt.
+                {t('csv.mapping_hint')} <span className="font-semibold text-black dark:text-white">{t('csv.rows_detected').replace('{count}', csvRows.length)}</span>
               </p>
               {csvHeaders.map(header => (
                 <div key={header} className="flex items-center gap-4 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
@@ -249,10 +251,10 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
                       onChange={e => setMapping(m => ({ ...m, [header]: e.target.value || undefined }))}
                       className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#1c1c1e] text-[14px] text-black dark:text-white outline-none appearance-none cursor-pointer"
                     >
-                      <option value="">— Nicht importieren —</option>
+                      <option value="">{t('csv.no_import')}</option>
                       {CANDIDATE_FIELDS.map(f => (
                         <option key={f.key} value={f.key}>
-                          {f.label}{f.required ? ' *' : ''}
+                          {t(f.labelKey)}{f.required ? ' *' : ''}
                         </option>
                       ))}
                     </select>
@@ -264,14 +266,14 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
               {!hasNameMapping && (
                 <div className="flex items-center gap-3 p-4 rounded-2xl bg-[#ff9500]/10 border border-[#ff9500]/20 mt-4">
                   <AlertTriangle className="w-5 h-5 text-[#ff9500] flex-shrink-0" />
-                  <span className="text-[14px] text-[#ff9500]">Mindestens eine Spalte muss dem Feld „Name" zugeordnet werden.</span>
+                  <span className="text-[14px] text-[#ff9500]">{t('csv.name_required')}</span>
                 </div>
               )}
 
               <label className="flex items-center gap-3 mt-4 cursor-pointer">
                 <input type="checkbox" checked={skipDuplicates} onChange={e => setSkipDuplicates(e.target.checked)}
                   className="w-5 h-5 rounded-md accent-[#0071e3]" />
-                <span className="text-[14px] text-gray-600 dark:text-gray-300">Duplikate überspringen (Name/E-Mail)</span>
+                <span className="text-[14px] text-gray-600 dark:text-gray-300">{t('csv.skip_duplicates')}</span>
               </label>
             </div>
           )}
@@ -280,7 +282,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
           {step === 3 && (
             <div>
               <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-6">
-                Vorschau der ersten 5 Einträge. <span className="font-semibold text-black dark:text-white">{mappedRows().length} gültige Zeilen</span> werden importiert.
+                {t('csv.preview_first')} <span className="font-semibold text-black dark:text-white">{t('csv.valid_rows').replace('{count}', mappedRows().length)}</span>
               </p>
               <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
                 <table className="w-full text-[13px]">
@@ -288,7 +290,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
                     <tr className="bg-[#f5f5f7] dark:bg-[#2c2c2e] border-b border-gray-200 dark:border-gray-700">
                       <th className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">#</th>
                       {CANDIDATE_FIELDS.filter(f => Object.values(mapping).includes(f.key)).map(f => (
-                        <th key={f.key} className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">{f.label}</th>
+                        <th key={f.key} className="px-4 py-3 text-left font-semibold text-gray-500 dark:text-gray-400">{t(f.labelKey)}</th>
                       ))}
                     </tr>
                   </thead>
@@ -305,7 +307,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
                 </table>
               </div>
               {mappedRows().length > 5 && (
-                <p className="text-[13px] text-gray-400 mt-3 text-center">… und {mappedRows().length - 5} weitere Zeilen</p>
+                <p className="text-[13px] text-gray-400 mt-3 text-center">{t('csv.more_rows').replace('{count}', mappedRows().length - 5)}</p>
               )}
             </div>
           )}
@@ -316,36 +318,36 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-center">
                   <div className="text-[32px] font-bold text-black dark:text-white">{result.total}</div>
-                  <div className="text-[13px] text-gray-500 mt-1">Gesamt</div>
+                  <div className="text-[13px] text-gray-500 mt-1">{t('csv.result_total')}</div>
                 </div>
                 <div className="p-5 rounded-2xl bg-[#34c759]/10 text-center">
                   <div className="text-[32px] font-bold text-[#34c759]">{result.imported}</div>
-                  <div className="text-[13px] text-[#34c759] mt-1">Importiert</div>
+                  <div className="text-[13px] text-[#34c759] mt-1">{t('csv.result_imported')}</div>
                 </div>
                 <div className="p-5 rounded-2xl bg-[#ff9500]/10 text-center">
                   <div className="text-[32px] font-bold text-[#ff9500]">{result.skipped}</div>
-                  <div className="text-[13px] text-[#ff9500] mt-1">Duplikate</div>
+                  <div className="text-[13px] text-[#ff9500] mt-1">{t('csv.result_duplicates')}</div>
                 </div>
                 <div className="p-5 rounded-2xl bg-[#ff3b30]/10 text-center">
                   <div className="text-[32px] font-bold text-[#ff3b30]">{result.errors}</div>
-                  <div className="text-[13px] text-[#ff3b30] mt-1">Fehler</div>
+                  <div className="text-[13px] text-[#ff3b30] mt-1">{t('csv.result_errors')}</div>
                 </div>
               </div>
 
               {result.imported > 0 && (
                 <div className="flex items-center gap-3 p-4 rounded-2xl bg-[#34c759]/10">
                   <CheckCircle className="w-5 h-5 text-[#34c759]" />
-                  <span className="text-[15px] font-medium text-[#34c759]">{result.imported} Bewerber erfolgreich importiert!</span>
+                  <span className="text-[15px] font-medium text-[#34c759]">{t('csv.import_success').replace('{count}', result.imported)}</span>
                 </div>
               )}
 
               {result.duplicates?.length > 0 && (
                 <div>
-                  <p className="text-[14px] font-semibold text-gray-600 dark:text-gray-300 mb-2">Übersprungene Duplikate:</p>
+                  <p className="text-[14px] font-semibold text-gray-600 dark:text-gray-300 mb-2">{t('csv.skipped_title')}</p>
                   <div className="space-y-1 max-h-[150px] overflow-y-auto">
                     {result.duplicates.map((d, i) => (
                       <div key={i} className="text-[13px] text-gray-500 dark:text-gray-400">
-                        Zeile {d.row}: <span className="text-black dark:text-white">{d.name}</span> (existiert als „{d.existingName}")
+                        {t('csv.row_label')} {d.row}: <span className="text-black dark:text-white">{d.name}</span> ({t('csv.exists_as')} „{d.existingName}")
                       </div>
                     ))}
                   </div>
@@ -354,11 +356,11 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
 
               {result.errorDetails?.length > 0 && (
                 <div>
-                  <p className="text-[14px] font-semibold text-[#ff3b30] mb-2">Fehlerhafte Zeilen:</p>
+                  <p className="text-[14px] font-semibold text-[#ff3b30] mb-2">{t('csv.error_rows_title')}</p>
                   <div className="space-y-1 max-h-[150px] overflow-y-auto">
                     {result.errorDetails.map((e, i) => (
                       <div key={i} className="text-[13px] text-gray-500">
-                        Zeile {e.row}: {e.reason}
+                        {t('csv.row_label')} {e.row}: {e.reason}
                       </div>
                     ))}
                   </div>
@@ -373,14 +375,14 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
           <div>
             {step > 1 && step < 4 && (
               <button onClick={() => setStep(s => s - 1)} className="flex items-center gap-2 text-[14px] font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
-                <ArrowLeft className="w-4 h-4" /> Zurück
+                <ArrowLeft className="w-4 h-4" /> {t('common.back')}
               </button>
             )}
           </div>
           <div className="flex items-center gap-3">
             {step === 4 ? (
               <button onClick={() => { reset(); onClose(); }} className="px-6 py-2.5 rounded-full bg-[#0071e3] text-white text-[14px] font-medium hover:bg-[#0077ed] transition-colors cursor-pointer">
-                Schließen
+                {t('common.close')}
               </button>
             ) : step === 3 ? (
               <button onClick={handleImport} disabled={importing}
@@ -389,12 +391,12 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
                 {importing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Importiere...
+                    {t('csv.importing')}
                   </>
                 ) : (
                   <>
                     <Upload className="w-4 h-4" />
-                    {mappedRows().length} Bewerber importieren
+                    {t('csv.import_count').replace('{count}', mappedRows().length)}
                   </>
                 )}
               </button>
@@ -402,7 +404,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
               <button onClick={() => setStep(3)} disabled={!hasNameMapping}
                 className="px-6 py-2.5 rounded-full bg-[#0071e3] text-white text-[14px] font-medium hover:bg-[#0077ed] transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-2"
               >
-                Vorschau <ArrowRight className="w-4 h-4" />
+                {t('csv.step_preview')} <ArrowRight className="w-4 h-4" />
               </button>
             ) : null}
           </div>

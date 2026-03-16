@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { History as HistoryIcon, Trash2, Clock, Users, ArrowRight } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, EmptyState, LoadingSpinner } from '../components/UI'
+import { useI18n } from '../I18nContext'
 
 export default function History() {
+  const { t } = useI18n()
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -20,28 +22,28 @@ export default function History() {
       await matchingApi.deleteResult(id)
       setResults(prev => prev.filter(r => r.id !== id))
     } catch (err) {
-      alert('Fehler: ' + err.message)
+      alert(t('history.error') + ': ' + err.message)
     }
   }
 
-  if (loading) return <LoadingSpinner text="Historie wird geladen..." />
+  if (loading) return <LoadingSpinner text={t('history.loading')} />
 
   return (
     <div className="fade-in max-w-[1000px] mx-auto">
       <div className="mb-8 sm:mb-14">
-        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Matching-Historie</h1>
-        <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">Vergangene Matching-Durchläufe</p>
+        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('history.title')}</h1>
+        <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">{t('history.subtitle')}</p>
       </div>
 
       {results.length === 0 ? (
         <Card className="p-16">
           <EmptyState
             icon={HistoryIcon}
-            title="Noch keine Matchings"
-            description="Starte dein erstes Matching um Ergebnisse zu sehen."
+            title={t('history.no_matchings')}
+            description={t('history.no_matchings_desc')}
             action={
               <Link to="/matching">
-                <Button size="lg" variant="dark">Matching starten</Button>
+                <Button size="lg" variant="dark">{t('history.start_matching')}</Button>
               </Link>
             }
           />
@@ -70,7 +72,7 @@ export default function History() {
                       </span>
                       <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        {matchResults.length} Bewerber
+                        {t('history.candidates_count').replace('{count}', matchResults.length)}
                       </span>
                       <span className="text-[13px] sm:text-[15px] font-semibold text-[#0071e3]">
                         ∅ {(avgScore * 100).toFixed(0)}%

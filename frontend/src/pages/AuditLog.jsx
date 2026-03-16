@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../AuthContext'
+import { useI18n } from '../I18nContext'
 import { auditApi } from '../api'
 import { useTheme } from '../ThemeContext'
 import { Shield, Search, ChevronLeft, ChevronRight, Activity, User, Briefcase, Users, GitBranch, Clock, Filter, Download, Calendar } from 'lucide-react'
@@ -24,6 +25,7 @@ const ENTITY_ICONS = {
 export default function AuditLog() {
   const { isAdmin } = useAuth()
   const { isDark } = useTheme()
+  const { t } = useI18n()
   const toast = useToast()
   const [entries, setEntries] = useState([])
   const [stats, setStats] = useState(null)
@@ -39,10 +41,10 @@ export default function AuditLog() {
     setExporting(true)
     try {
       await auditApi.exportCSV(filters)
-      toast.success('CSV-Export heruntergeladen')
+      toast.success(t('audit.csv_downloaded'))
     } catch (err) {
       console.error('Export-Fehler:', err)
-      toast.error('Export fehlgeschlagen')
+      toast.error(t('audit.export_error'))
     } finally {
       setExporting(false)
     }
@@ -84,7 +86,7 @@ export default function AuditLog() {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: isDark ? '#aaa' : '#86868b' }}>
         <Shield size={48} style={{ marginBottom: 12, opacity: 0.3 }} />
-        <p>Nur Admins haben Zugriff auf das Audit-Log.</p>
+        <p>{t('audit.admin_only')}</p>
       </div>
     )
   }
@@ -111,10 +113,10 @@ export default function AuditLog() {
           color: isDark ? '#f5f5f7' : '#1d1d1f',
           fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif'
         }}>
-          Audit-Log
+          {t('audit.title')}
         </h1>
         <p style={{ margin: '8px 0 0', color: isDark ? '#98989d' : '#86868b', fontSize: 17 }}>
-          Systemweites Änderungsprotokoll — Wer hat was wann geändert?
+          {t('audit.subtitle')}
         </p>
       </div>
       <div style={{ marginTop: -20, marginBottom: 24, display: 'flex', justifyContent: 'flex-end' }}>
@@ -130,7 +132,7 @@ export default function AuditLog() {
           }}
         >
           <Download size={16} />
-          {exporting ? 'Exportiere...' : 'CSV Export'}
+          {exporting ? t('audit.exporting') : t('audit.csv_export')}
         </button>
       </div>
 
@@ -149,7 +151,7 @@ export default function AuditLog() {
               <div style={{ fontSize: 28, fontWeight: 700, color: isDark ? '#f5f5f7' : '#1d1d1f' }}>
                 {stats.today}
               </div>
-              <div style={{ fontSize: 13, color: isDark ? '#98989d' : '#86868b' }}>Heute</div>
+              <div style={{ fontSize: 13, color: isDark ? '#98989d' : '#86868b' }}>{t('audit.today')}</div>
             </div>
           </div>
           <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -164,7 +166,7 @@ export default function AuditLog() {
               <div style={{ fontSize: 28, fontWeight: 700, color: isDark ? '#f5f5f7' : '#1d1d1f' }}>
                 {stats.thisWeek}
               </div>
-              <div style={{ fontSize: 13, color: isDark ? '#98989d' : '#86868b' }}>Diese Woche</div>
+              <div style={{ fontSize: 13, color: isDark ? '#98989d' : '#86868b' }}>{t('audit.this_week')}</div>
             </div>
           </div>
           {stats.byType?.slice(0, 3).map(t => {
@@ -203,12 +205,12 @@ export default function AuditLog() {
             fontSize: 14, outline: 'none', cursor: 'pointer'
           }}
         >
-          <option value="">Alle Bereiche</option>
-          <option value="Candidate">Bewerber</option>
-          <option value="Job">Stellen</option>
-          <option value="Pipeline">Pipeline</option>
-          <option value="User">Benutzer</option>
-          <option value="System">System</option>
+          <option value="">{t('audit.all_areas')}</option>
+          <option value="Candidate">{t('audit.type_candidates')}</option>
+          <option value="Job">{t('audit.type_jobs')}</option>
+          <option value="Pipeline">{t('audit.type_pipeline')}</option>
+          <option value="User">{t('audit.type_user')}</option>
+          <option value="System">{t('audit.type_system')}</option>
         </select>
 
         <select
@@ -220,19 +222,19 @@ export default function AuditLog() {
             fontSize: 14, outline: 'none', cursor: 'pointer'
           }}
         >
-          <option value="">Alle Aktionen</option>
-          <option value="erstellt">Erstellt</option>
-          <option value="aktualisiert">Aktualisiert</option>
-          <option value="gelöscht">Gelöscht</option>
-          <option value="batch-gelöscht">Batch-Gelöscht</option>
-          <option value="batch-status">Batch-Status</option>
-          <option value="pipeline-hinzugefügt">Pipeline Hinzugefügt</option>
-          <option value="stage-geändert">Stage Geändert</option>
-          <option value="benutzer-erstellt">Benutzer Erstellt</option>
-          <option value="benutzer-gelöscht">Benutzer Gelöscht</option>
-          <option value="passwort-geändert">Passwort Geändert</option>
-          <option value="passwort-zurückgesetzt">Passwort Zurückgesetzt</option>
-          <option value="backup-erstellt">Backup Erstellt</option>
+          <option value="">{t('audit.all_actions')}</option>
+          <option value="erstellt">{t('audit.action_created')}</option>
+          <option value="aktualisiert">{t('audit.action_updated')}</option>
+          <option value="gelöscht">{t('audit.action_deleted')}</option>
+          <option value="batch-gelöscht">{t('audit.action_batch_deleted')}</option>
+          <option value="batch-status">{t('audit.action_batch_status')}</option>
+          <option value="pipeline-hinzugefügt">{t('audit.action_pipeline_added')}</option>
+          <option value="stage-geändert">{t('audit.action_stage_changed')}</option>
+          <option value="benutzer-erstellt">{t('audit.action_user_created')}</option>
+          <option value="benutzer-gelöscht">{t('audit.action_user_deleted')}</option>
+          <option value="passwort-geändert">{t('audit.action_password_changed')}</option>
+          <option value="passwort-zurückgesetzt">{t('audit.action_password_reset')}</option>
+          <option value="backup-erstellt">{t('audit.action_backup')}</option>
         </select>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -270,7 +272,7 @@ export default function AuditLog() {
               type="text"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
-              placeholder="Suche nach Benutzer, Aktion, Objekt..."
+              placeholder={t('audit.search_placeholder')}
               style={{
                 width: '100%', padding: '8px 12px 8px 36px', borderRadius: 10,
                 border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
@@ -283,7 +285,7 @@ export default function AuditLog() {
             padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
             background: isDark ? '#0a84ff' : '#0071e3', color: '#fff', fontSize: 14, fontWeight: 500
           }}>
-            Suchen
+            {t('audit.search')}
           </button>
         </form>
       </div>
@@ -292,11 +294,11 @@ export default function AuditLog() {
       <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: 48, textAlign: 'center', color: isDark ? '#98989d' : '#86868b' }}>
-            Lade Audit-Log...
+            {t('audit.loading')}
           </div>
         ) : entries.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: isDark ? '#98989d' : '#86868b' }}>
-            Keine Einträge gefunden.
+            {t('audit.no_entries')}
           </div>
         ) : (
           <>
@@ -307,12 +309,12 @@ export default function AuditLog() {
                     borderBottom: `1px solid ${isDark ? '#38383a' : '#e5e5e7'}`,
                     background: isDark ? '#2c2c2e' : '#f9f9fb'
                   }}>
-                    <th style={thStyle(isDark)}>Zeitpunkt</th>
-                    <th style={thStyle(isDark)}>Benutzer</th>
-                    <th style={thStyle(isDark)}>Aktion</th>
-                    <th style={thStyle(isDark)}>Bereich</th>
-                    <th style={thStyle(isDark)}>Objekt</th>
-                    <th style={thStyle(isDark)}>Details</th>
+                    <th style={thStyle(isDark)}>{t('audit.col_timestamp')}</th>
+                    <th style={thStyle(isDark)}>{t('audit.col_user')}</th>
+                    <th style={thStyle(isDark)}>{t('audit.col_action')}</th>
+                    <th style={thStyle(isDark)}>{t('audit.col_area')}</th>
+                    <th style={thStyle(isDark)}>{t('audit.col_object')}</th>
+                    <th style={thStyle(isDark)}>{t('audit.col_details')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -386,7 +388,7 @@ export default function AuditLog() {
               padding: '16px 20px', borderTop: `1px solid ${isDark ? '#38383a' : '#e5e5e7'}`,
               fontSize: 13, color: isDark ? '#98989d' : '#86868b'
             }}>
-              <span>{total} Einträge gesamt</span>
+              <span>{t('audit.total_entries').replace('{count}', total)}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
+import { useI18n } from '../I18nContext'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
@@ -20,6 +21,7 @@ const statusColor = {
 
 export default function Jobs() {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
@@ -60,44 +62,44 @@ export default function Jobs() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 sm:mb-14 gap-4">
         <div>
-          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Stellenverwaltung</h1>
+          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('jobs.title')}</h1>
           <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">
-            {totalCount} Stelle{totalCount !== 1 ? 'n' : ''}{filterStatus ? ` (${filterStatus})` : ''}
+            {t('jobs.count').replace('{count}', totalCount)}{filterStatus ? ` (${filterStatus})` : ''}
           </p>
         </div>
         <Button size="md" variant="dark" onClick={() => navigate('/jobs/new')}>
-          <Plus className="w-5 h-5" /> Neue Stelle
+          <Plus className="w-5 h-5" /> {t('jobs.new')}
         </Button>
       </div>
 
       {/* Status Filter */}
       <div className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-10 flex-wrap">
-        {['', ...JOB_STATUSES].map(s => (
+        {[{val:'', label: t('common.all')}, {val:'Offen', label: t('jobs.status_open')}, {val:'Besetzt', label: t('jobs.status_filled')}, {val:'Pausiert', label: t('jobs.status_paused')}, {val:'Archiviert', label: t('jobs.status_archived')}].map(s => (
           <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
+            key={s.val}
+            onClick={() => setFilterStatus(s.val)}
             className={`px-5 py-2.5 rounded-full text-[15px] font-medium transition-all cursor-pointer ${
-              filterStatus === s
+              filterStatus === s.val
                 ? 'bg-black text-white'
                 : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
             }`}
           >
-            {s === '' ? 'Alle' : s}
+            {s.label}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <LoadingSpinner text="Stellen werden geladen..." />
+        <LoadingSpinner text={t('jobs.loading')} />
       ) : jobs.length === 0 ? (
         <Card className="p-16">
           <EmptyState
             icon={Briefcase}
-            title="Keine Stellen vorhanden"
-            description="Lege deine erste Stelle an um die Pipeline zu nutzen."
+            title={t('jobs.no_jobs')}
+            description={t('jobs.no_jobs_desc')}
             action={
               <Button size="lg" variant="dark" onClick={() => navigate('/jobs/new')}>
-                <Plus className="w-5 h-5" /> Stelle anlegen
+                <Plus className="w-5 h-5" /> {t('jobs.create_job')}
               </Button>
             }
           />
@@ -108,10 +110,10 @@ export default function Jobs() {
             <Card key={job.id} className="p-0 overflow-hidden" hover>
               {deleteConfirm === job.id ? (
                 <div className="flex items-center justify-between px-10 py-6 bg-[#ff3b30]/5 border-t border-[#ff3b30]/20">
-                  <span className="text-[16px] font-medium text-[#ff3b30]">Stelle wirklich löschen?</span>
+                  <span className="text-[16px] font-medium text-[#ff3b30]">{t('jobs.delete_confirm')}</span>
                   <div className="flex gap-4">
-                    <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>Abbrechen</Button>
-                    <Button variant="danger" onClick={() => handleDelete(job.id)}>Löschen</Button>
+                    <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</Button>
+                    <Button variant="danger" onClick={() => handleDelete(job.id)}>{t('common.delete')}</Button>
                   </div>
                 </div>
               ) : (
@@ -137,7 +139,7 @@ export default function Jobs() {
                       )}
                       <span className="text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">{job.type}</span>
                       <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
-                        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.candidate_count || 0} in Pipeline
+                        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.candidate_count || 0} {t('jobs.in_pipeline')}
                       </span>
                       <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
                         <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -160,7 +162,7 @@ export default function Jobs() {
                   {/* Actions */}
                   <div className="flex items-center gap-2 sm:gap-3 self-end sm:self-center">
                     <Button variant="secondary" size="sm" onClick={() => navigate(`/jobs/${job.id}/edit`)}>
-                      Bearbeiten
+                      {t('jobs.edit_btn')}
                     </Button>
                     <Button
                       variant="primary"
@@ -168,7 +170,7 @@ export default function Jobs() {
                       className="flex items-center gap-2"
                       onClick={() => navigate(`/pipeline/${job.id}`)}
                     >
-                      Pipeline <ChevronRightIcon className="w-4 h-4" />
+                      {t('jobs.pipeline')} <ChevronRightIcon className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost"

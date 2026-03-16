@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useI18n } from '../I18nContext'
 import {
   ArrowLeft, Plus, Trash2, Phone, Mail, Users, GitBranch, FileText,
   MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock,
@@ -38,6 +39,7 @@ function formatDate(dt) {
 export default function CandidateDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [candidate, setCandidate] = useState(null)
   const [activities, setActivities] = useState([])
   const [loading, setLoading] = useState(true)
@@ -180,10 +182,10 @@ export default function CandidateDetail() {
   }
 
   const RATING_CATEGORIES = [
-    { key: 'gesamt', label: 'Gesamt', color: '#ff9f0a' },
-    { key: 'fachlich', label: 'Fachlich', color: '#0071e3' },
-    { key: 'persönlich', label: 'Persönlich', color: '#34c759' },
-    { key: 'kulturfit', label: 'Kulturfit', color: '#8b5cf6' },
+    { key: 'gesamt', labelKey: 'detail.overall', color: '#ff9f0a' },
+    { key: 'fachlich', labelKey: 'detail.technical', color: '#0071e3' },
+    { key: 'persönlich', labelKey: 'detail.personal', color: '#34c759' },
+    { key: 'kulturfit', labelKey: 'detail.culture_fit', color: '#8b5cf6' },
   ]
 
   const canPreview = (mimeType) => {
@@ -195,12 +197,12 @@ export default function CandidateDetail() {
     return File
   }
 
-  if (loading) return <LoadingSpinner text="Profil wird geladen..." />
+  if (loading) return <LoadingSpinner text={t('detail.loading')} />
   if (!candidate) return (
     <div className="fade-in max-w-[800px] mx-auto text-center py-24">
-      <p className="text-[20px] font-semibold text-gray-400">Bewerber nicht gefunden.</p>
+      <p className="text-[20px] font-semibold text-gray-400">{t('detail.not_found')}</p>
       <Button variant="dark" size="md" onClick={() => navigate('/candidates')} className="mt-8">
-        <ArrowLeft className="w-5 h-5" /> Zurück
+        <ArrowLeft className="w-5 h-5" /> {t('common.back')}
       </Button>
     </div>
   )
@@ -216,13 +218,13 @@ export default function CandidateDetail() {
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
         <div className="flex-1">
-          <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5">Bewerberprofil</p>
+          <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5">{t('detail.profile')}</p>
           <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black dark:text-white leading-tight">{candidate.name}</h1>
         </div>
         <button
           onClick={() => setShowPrint(true)}
           className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
-          title="Profil drucken"
+          title={t('detail.print')}
         >
           <Printer className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
@@ -276,7 +278,7 @@ export default function CandidateDetail() {
       {/* Rating Section */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-[22px] font-semibold text-black dark:text-white">Bewertung</h2>
+          <h2 className="text-[22px] font-semibold text-black dark:text-white">{t('detail.rating')}</h2>
           {ratingOverall !== null && (
             <div className="flex items-center gap-2">
               <div className="flex">
@@ -293,12 +295,12 @@ export default function CandidateDetail() {
         {/* Category averages */}
         {Object.keys(ratingAverages).length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            {RATING_CATEGORIES.map(({ key, label, color }) => {
+            {RATING_CATEGORIES.map(({ key, labelKey, color }) => {
               const avg = ratingAverages[key]
               if (!avg) return null
               return (
                 <div key={key} className="rounded-[16px] p-4 text-center" style={{ background: `${color}10` }}>
-                  <p className="text-[12px] font-semibold uppercase tracking-wider mb-2" style={{ color }}>{label}</p>
+                  <p className="text-[12px] font-semibold uppercase tracking-wider mb-2" style={{ color }}>{t(labelKey)}</p>
                   <div className="flex items-center justify-center gap-1.5">
                     <Star className="w-4 h-4 fill-current" style={{ color }} />
                     <span className="text-[20px] font-bold text-black dark:text-white">{avg}</span>
@@ -311,23 +313,23 @@ export default function CandidateDetail() {
 
         {/* Add rating form */}
         <form onSubmit={handleAddRating} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-6 mb-8">
-          <p className="text-[15px] font-semibold text-gray-600 dark:text-gray-400 mb-4">Neue Bewertung</p>
+          <p className="text-[15px] font-semibold text-gray-600 dark:text-gray-400 mb-4">{t('detail.new_rating')}</p>
           <div className="flex flex-col gap-4">
             {/* Category selector */}
             <div className="flex gap-2 flex-wrap">
-              {RATING_CATEGORIES.map(({ key, label, color }) => (
+              {RATING_CATEGORIES.map(({ key, labelKey, color }) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setNewRating(prev => ({ ...prev, category: key }))}
-                  className={`px-4 py-2 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${
                     newRating.category === key
                       ? 'text-white shadow-md'
                       : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'
                   }`}
                   style={newRating.category === key ? { backgroundColor: color } : {}}
                 >
-                  {label}
+                  {t(labelKey)}
                 </button>
               ))}
             </div>
@@ -357,14 +359,14 @@ export default function CandidateDetail() {
             <textarea
               value={newRating.comment}
               onChange={e => setNewRating(prev => ({ ...prev, comment: e.target.value }))}
-              placeholder="Kommentar (optional)..."
+              placeholder={t('detail.comment_placeholder')}
               rows={2}
               className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none
                 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
             />
             <div className="flex justify-end">
               <Button variant="dark" size="md" disabled={ratingSubmitting || newRating.rating < 1}>
-                <Star className="w-5 h-5" /> Bewerten
+                <Star className="w-5 h-5" /> {t('detail.rate')}
               </Button>
             </div>
           </div>
@@ -374,7 +376,7 @@ export default function CandidateDetail() {
         {ratings.length === 0 ? (
           <div className="text-center py-8">
             <Star className="w-10 h-10 text-gray-200 dark:text-gray-600 mx-auto mb-3" />
-            <p className="text-[16px] font-semibold text-gray-400">Noch keine Bewertungen</p>
+            <p className="text-[16px] font-semibold text-gray-400">{t('detail.no_ratings')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -392,7 +394,7 @@ export default function CandidateDetail() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2.5 py-0.5 rounded-full text-[12px] font-semibold" style={{ background: `${cat?.color || '#999'}20`, color: cat?.color || '#999' }}>
-                        {cat?.label || r.category}
+                        {cat ? t(cat.labelKey) : r.category}
                       </span>
                       <span className="text-[13px] font-medium text-gray-400">{r.created_by}</span>
                       <span className="text-[13px] font-medium text-gray-400">{formatDate(r.created_at)}</span>
@@ -416,7 +418,7 @@ export default function CandidateDetail() {
 
       {/* Files Section */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 p-10 mb-8">
-        <h2 className="text-[22px] font-semibold text-black dark:text-white mb-6">Dokumente</h2>
+        <h2 className="text-[22px] font-semibold text-black dark:text-white mb-6">{t('detail.documents')}</h2>
 
         {/* Drop zone */}
         <div
@@ -437,9 +439,9 @@ export default function CandidateDetail() {
         >
           <Upload className={`w-8 h-8 mx-auto mb-3 ${dragOver ? 'text-[#0071e3]' : 'text-gray-300'}`} />
           <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">
-            {uploading ? 'Wird hochgeladen...' : 'Dateien hierher ziehen oder klicken'}
+            {uploading ? t('detail.uploading') : t('detail.drop_files')}
           </p>
-          <p className="text-[13px] text-gray-400 mt-1">PDF, Word, JPG, PNG — max. 10 MB</p>
+          <p className="text-[13px] text-gray-400 mt-1">{t('detail.file_format_hint')}</p>
         </div>
 
         {/* File list */}
@@ -462,7 +464,7 @@ export default function CandidateDetail() {
                     <button
                       onClick={() => setPreviewFile(f)}
                       className="w-9 h-9 rounded-full hover:bg-[#8b5cf6]/10 flex items-center justify-center transition-colors cursor-pointer"
-                      title="Vorschau"
+                      title={t('detail.preview')}
                     >
                       <Eye className="w-4.5 h-4.5 text-[#8b5cf6]" />
                     </button>
@@ -470,14 +472,14 @@ export default function CandidateDetail() {
                   <a
                     href={uploadsApi.getDownloadUrl(f.id)}
                     className="w-9 h-9 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors cursor-pointer"
-                    title="Herunterladen"
+                    title={t('detail.download')}
                   >
                     <Download className="w-4.5 h-4.5 text-[#0071e3]" />
                   </a>
                   <button
                     onClick={() => handleDeleteFile(f.id)}
                     className="w-9 h-9 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                    title="Löschen"
+                    title={t('common.delete')}
                   >
                     <X className="w-4 h-4 text-[#ff3b30]" />
                   </button>
@@ -488,21 +490,23 @@ export default function CandidateDetail() {
         )}
 
         {files.length === 0 && !uploading && (
-          <p className="text-[15px] text-gray-400 text-center">Noch keine Dokumente hochgeladen.</p>
+          <p className="text-[15px] text-gray-400 text-center">{t('detail.no_documents')}</p>
         )}
       </div>
 
       {/* Activity Log */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 p-10">
-        <h2 className="text-[22px] font-semibold text-black dark:text-white mb-8">Aktivitätslog</h2>
+        <h2 className="text-[22px] font-semibold text-black dark:text-white mb-8">{t('detail.activity_log')}</h2>
 
         {/* Add activity form */}
         <form onSubmit={handleAddActivity} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-6 mb-10">
-          <p className="text-[15px] font-semibold text-gray-600 dark:text-gray-400 mb-5">Neue Aktivität</p>
+          <p className="text-[15px] font-semibold text-gray-600 dark:text-gray-400 mb-5">{t('detail.new_activity')}</p>
           <div className="flex flex-col gap-4">
             <div className="flex gap-3 flex-wrap">
-              {ACTIVITY_TYPES.map(type => {
+              {ACTIVITY_TYPES.map((type, idx) => {
                 const { Icon, color, bg } = activityIcon[type]
+                const typeLabels = t('detail.activity_types')
+                const displayLabel = Array.isArray(typeLabels) ? typeLabels[idx] : type
                 return (
                   <button
                     key={type}
@@ -513,7 +517,7 @@ export default function CandidateDetail() {
                     }`}
                   >
                     <Icon className="w-4 h-4" />
-                    {type}
+                    {displayLabel}
                   </button>
                 )
               })}
@@ -521,14 +525,14 @@ export default function CandidateDetail() {
             <textarea
               value={newText}
               onChange={e => setNewText(e.target.value)}
-              placeholder="Details, Notizen, Ergebnisse..."
+              placeholder={t('detail.activity_placeholder')}
               rows={3}
               className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none
                 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
             />
             <div className="flex justify-end">
               <Button variant="dark" size="md" disabled={submitting || !newText.trim()}>
-                <Plus className="w-5 h-5" /> Hinzufügen
+                <Plus className="w-5 h-5" /> {t('detail.add')}
               </Button>
             </div>
           </div>
@@ -540,8 +544,8 @@ export default function CandidateDetail() {
             <div className="w-16 h-16 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center mx-auto mb-5">
               <FileText className="w-8 h-8 text-gray-300" />
             </div>
-            <p className="text-[18px] font-semibold text-gray-400">Noch keine Aktivitäten</p>
-            <p className="text-[15px] font-medium text-gray-300 mt-2">Füge Notizen, Anrufe und Termine hinzu.</p>
+            <p className="text-[18px] font-semibold text-gray-400">{t('detail.no_activities')}</p>
+            <p className="text-[15px] font-medium text-gray-300 mt-2">{t('detail.no_activities_desc')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -561,9 +565,9 @@ export default function CandidateDetail() {
                   <div className="flex-1 pb-6">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-3">
-                        <span className="text-[15px] font-bold text-black dark:text-white">{activity.type}</span>
+                        <span className="text-[15px] font-bold text-black dark:text-white">{(() => { const typeLabels = t('detail.activity_types'); const idx = ACTIVITY_TYPES.indexOf(activity.type); return Array.isArray(typeLabels) && idx >= 0 ? typeLabels[idx] : activity.type; })()}</span>
                         {activity.auto_generated === 1 && (
-                          <span className="px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-[12px] font-medium text-gray-500 dark:text-gray-400">Automatisch</span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-[12px] font-medium text-gray-500 dark:text-gray-400">{t('detail.auto_generated')}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -573,11 +577,11 @@ export default function CandidateDetail() {
                             <button
                               onClick={() => handleDeleteActivity(activity.id)}
                               className="px-3 py-1.5 rounded-full bg-[#ff3b30] text-white text-[13px] font-semibold cursor-pointer hover:opacity-80 transition-opacity"
-                            >Löschen</button>
+                            >{t('common.delete')}</button>
                             <button
                               onClick={() => setDeleteConfirm(null)}
                               className="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 text-[13px] font-semibold cursor-pointer hover:opacity-80 transition-opacity"
-                            >Abbrechen</button>
+                            >{t('common.cancel')}</button>
                           </div>
                         ) : (
                           <button
@@ -606,7 +610,7 @@ export default function CandidateDetail() {
         <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
           <h2 className="text-[22px] font-semibold text-black dark:text-white mb-8">
             <GitBranch className="w-5 h-5 inline mr-2 text-[#0071e3]" />
-            Bewerbungsverlauf
+            {t('detail.history')}
           </h2>
           <div className="space-y-4">
             {pipelineHistory.entries.map(entry => {
@@ -667,7 +671,7 @@ export default function CandidateDetail() {
                     </div>
                   )}
                   <div className="ml-7 mt-2 text-[12px] text-gray-400">
-                    Hinzugefügt: {new Date(entry.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {t('detail.added_on')}: {new Date(entry.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}
                   </div>
                 </div>
               )
@@ -726,7 +730,7 @@ export default function CandidateDetail() {
                 />
               ) : (
                 <div className="flex items-center justify-center h-64">
-                  <p className="text-[16px] text-gray-400">Vorschau nicht verfügbar</p>
+                  <p className="text-[16px] text-gray-400">{t('detail.preview_unavailable')}</p>
                 </div>
               )}
             </div>

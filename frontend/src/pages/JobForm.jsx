@@ -5,6 +5,7 @@ import { jobsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useToast } from '../components/Toast'
+import { useI18n } from '../I18nContext'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
@@ -18,6 +19,7 @@ export default function JobForm() {
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { t } = useI18n()
   const isEdit = Boolean(id)
   const [form, setForm] = useState(emptyJob)
   const [loading, setLoading] = useState(isEdit)
@@ -54,7 +56,7 @@ export default function JobForm() {
       } else {
         await jobsApi.create(form)
       }
-      toast.success(isEdit ? 'Stelle aktualisiert' : 'Stelle erstellt')
+      toast.success(isEdit ? t('jobs.updated') : t('jobs.created'))
       navigate('/jobs')
     } catch (err) {
       setError(err.message)
@@ -65,7 +67,7 @@ export default function JobForm() {
 
   const handleGenerate = async () => {
     if (!form.title.trim() && !aiKeywords.trim()) {
-      setError('Bitte zuerst einen Jobtitel oder Stichpunkte eingeben.')
+      setError(t('jobs.ai_hint'))
       return
     }
     setError('')
@@ -84,13 +86,13 @@ export default function JobForm() {
       }))
       setAiModel(result.model || '')
     } catch (err) {
-      setError(err.message || 'KI-Generierung fehlgeschlagen')
+      setError(err.message || t('jobs.ai_failed'))
     } finally {
       setGenerating(false)
     }
   }
 
-  if (loading) return <LoadingSpinner text="Stelle wird geladen..." />
+  if (loading) return <LoadingSpinner text={t('jobs.job_loading')} />
 
   return (
     <div className="fade-in max-w-[800px] mx-auto">
@@ -104,10 +106,10 @@ export default function JobForm() {
         </button>
         <div>
           <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">
-            {isEdit ? 'Stelle bearbeiten' : 'Neue Stelle anlegen'}
+            {isEdit ? t('jobs.edit') : t('jobs.create')}
           </h1>
           <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-2">
-            {isEdit ? 'Details der Stelle aktualisieren' : 'Neue Stelle in der Stellenverwaltung anlegen'}
+            {isEdit ? t('jobs.edit_desc') : t('jobs.create_desc')}
           </p>
         </div>
       </div>
@@ -130,7 +132,7 @@ export default function JobForm() {
               required
             />
             <Input
-              label="Standort"
+              label={t('form.location')}
               placeholder="München / Remote / Hybrid"
               value={form.location}
               onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
@@ -151,11 +153,11 @@ export default function JobForm() {
                   className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
                     focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
                 >
-                  {JOB_TYPES.map(t => <option key={t}>{t}</option>)}
+                  {JOB_TYPES.map(type => <option key={type}>{type}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-3">
-                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">Status</label>
+                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">{t('form.status')}</label>
                 <select
                   value={form.status}
                   onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
@@ -190,8 +192,8 @@ export default function JobForm() {
                 <Sparkles className="w-4.5 h-4.5 text-[#5e5ce6]" />
               </div>
               <div>
-                <p className="text-[15px] font-semibold text-black dark:text-white">KI-Stellenbeschreibung</p>
-                <p className="text-[13px] text-gray-500 dark:text-gray-400">Stichpunkte eingeben — KI generiert Beschreibung & Anforderungen</p>
+                <p className="text-[15px] font-semibold text-black dark:text-white">{t('jobs.ai_title')}</p>
+                <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('jobs.ai_subtitle')}</p>
               </div>
             </div>
             <textarea
@@ -210,12 +212,12 @@ export default function JobForm() {
               {generating ? (
                 <>
                   <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                  KI generiert...
+                  {t('jobs.ai_generating')}
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4.5 h-4.5" />
-                  KI generieren
+                  {t('jobs.ai_generate')}
                 </>
               )}
             </button>
@@ -223,14 +225,14 @@ export default function JobForm() {
 
           <div className="space-y-8">
             <Textarea
-              label="Stellenbeschreibung"
+              label={t('jobs.description')}
               placeholder="Was sind die Hauptaufgaben und Verantwortlichkeiten dieser Rolle?"
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               rows={8}
             />
             <Textarea
-              label="Anforderungen"
+              label={t('jobs.requirements')}
               placeholder="Welche Skills, Erfahrungen und Qualifikationen werden erwartet?"
               value={form.requirements}
               onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))}
@@ -241,11 +243,11 @@ export default function JobForm() {
 
         <div className="flex items-center justify-end gap-5 pt-6 pb-12">
           <Button variant="secondary" size="lg" type="button" onClick={() => navigate('/jobs')}>
-            Abbrechen
+            {t('form.cancel')}
           </Button>
           <Button variant="dark" type="submit" size="lg" disabled={saving || !form.title.trim()}>
             <Save className="w-5 h-5" />
-            {saving ? 'Wird gespeichert...' : (isEdit ? 'Aktualisieren' : 'Anlegen')}
+            {saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}
           </Button>
         </div>
       </form>

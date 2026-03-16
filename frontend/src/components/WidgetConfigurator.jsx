@@ -1,11 +1,13 @@
 import { useState, useRef } from 'react'
 import { Settings, GripVertical, Eye, EyeOff, RotateCcw, X, BarChart2, GitMerge, GitCompare, MapPin, Share2 } from 'lucide-react'
+import { useI18n } from '../I18nContext'
 
 const ICONS = {
   BarChart2, GitBranch: GitMerge, GitCompare, MapPin, Share2
 }
 
 export default function WidgetConfigurator({ widgets, onToggle, onReorder, onReset }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const dragItem = useRef(null)
   const dragOverItem = useRef(null)
@@ -36,7 +38,7 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
         className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 text-[14px] font-medium transition-all duration-300 cursor-pointer"
       >
         <Settings className="w-4 h-4" />
-        Widgets
+        {t('widget.title')}
       </button>
 
       {open && (
@@ -52,8 +54,8 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
             {/* Header */}
             <div className="flex items-center justify-between px-7 py-5 border-b border-gray-100 dark:border-gray-800">
               <div>
-                <h3 className="text-[20px] font-semibold text-black dark:text-white">Dashboard-Widgets</h3>
-                <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Reihenfolge & Sichtbarkeit anpassen</p>
+                <h3 className="text-[20px] font-semibold text-black dark:text-white">{t('widget.dashboard_widgets')}</h3>
+                <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('widget.config_desc')}</p>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -126,13 +128,13 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
                 className="flex items-center gap-2 text-[14px] font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-4 h-4" />
-                Zurücksetzen
+                {t('widget.reset')}
               </button>
               <button
                 onClick={() => setOpen(false)}
                 className="px-5 py-2.5 rounded-full bg-[#0071e3] text-white text-[14px] font-medium hover:bg-[#0077ed] transition-colors cursor-pointer"
               >
-                Fertig
+                {t('widget.done')}
               </button>
             </div>
           </div>

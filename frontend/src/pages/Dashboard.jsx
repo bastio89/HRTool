@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap } from 'lucide-react'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText } from 'lucide-react'
 import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi, interviewsApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
 import { useAuth } from '../AuthContext'
+import { useI18n } from '../I18nContext'
 
 const PERIOD_OPTIONS = [
   { value: 7, label: '7 Tage' },
@@ -15,6 +16,7 @@ const PERIOD_OPTIONS = [
 
 export default function Dashboard() {
   const { isAdmin } = useAuth()
+  const { t } = useI18n()
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
@@ -74,8 +76,8 @@ export default function Dashboard() {
 
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Übersicht</h1>
-          <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">Willkommen zurück. Hier ist der aktuelle Stand.</p>
+          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.title')}</h1>
+          <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full p-1">
@@ -93,6 +95,25 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => {
+              const style = document.createElement('style')
+              style.id = 'print-styles'
+              style.textContent = `@media print { 
+                aside, header, nav, .no-print { display: none !important; } 
+                main { margin: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+                .fade-in { animation: none !important; }
+                * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+              }`
+              document.head.appendChild(style)
+              window.print()
+              setTimeout(() => document.getElementById('print-styles')?.remove(), 500)
+            }}
+            className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer"
+            title="Als PDF exportieren"
+          >
+            <FileText className="w-5 h-5 text-gray-500" />
+          </button>
           <WidgetConfigurator
           widgets={widgets}
           onToggle={toggleWidget}

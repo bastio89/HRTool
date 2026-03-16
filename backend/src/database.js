@@ -262,4 +262,37 @@ for (const [key, value] of defaultSettings) {
   upsertSetting.run(key, value);
 }
 
+// --- Scorecard tables for Interview-Bewertungsbögen ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scorecard_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER,
+    title TEXT NOT NULL,
+    questions TEXT NOT NULL DEFAULT '[]',
+    ai_generated INTEGER DEFAULT 0,
+    created_by INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scorecard_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    template_id INTEGER NOT NULL,
+    interview_id INTEGER,
+    pipeline_entry_id INTEGER,
+    candidate_id INTEGER NOT NULL,
+    evaluator_name TEXT NOT NULL,
+    answers TEXT NOT NULL DEFAULT '[]',
+    total_score REAL,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (template_id) REFERENCES scorecard_templates(id) ON DELETE CASCADE,
+    FOREIGN KEY (interview_id) REFERENCES interviews(id) ON DELETE SET NULL,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+  )
+`);
+
 module.exports = db;

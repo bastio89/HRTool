@@ -239,6 +239,34 @@ router.get('/stats/time-to-hire', (req, res) => {
 
 /**
  * @swagger
+ * /candidates/stats/tags:
+ *   get:
+ *     summary: Alle verwendeten Tags mit Häufigkeit
+ *     tags: [Candidates]
+ *     responses:
+ *       200: { description: Liste aller Tags }
+ */
+router.get('/stats/tags', (req, res) => {
+  try {
+    const rows = db.prepare("SELECT tags FROM candidates WHERE tags IS NOT NULL AND tags != ''").all();
+    const tagCounts = {};
+    for (const row of rows) {
+      const tags = row.tags.split(',').map(t => t.trim()).filter(Boolean);
+      for (const tag of tags) {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      }
+    }
+    const sorted = Object.entries(tagCounts)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count);
+    res.json({ tags: sorted });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Laden der Tags' });
+  }
+});
+
+/**
+ * @swagger
  * /candidates/stats/sources:
  *   get:
  *     summary: Quellen-Analyse (Bewerber pro Quelle, Hired-Rate)
@@ -351,11 +379,20 @@ router.get('/', (req, res) => {
     const conditions = [];
     const params = [];
     
-    // Full-text search
+    // Full-text search (including tags)
     if (search) {
-      conditions.push('(name LIKE ? OR skills LIKE ? OR location LIKE ? OR experience LIKE ? OR education LIKE ?)');
+      conditions.push('(name LIKE ? OR skills LIKE ? OR location LIKE ? OR experience LIKE ? OR education LIKE ? OR tags LIKE ?)');
       const searchTerm = `%${search}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+    
+    // Tags AND-logic: each tag must be present
+    if (req.query.tags) {
+      const tagList = req.query.tags.split(',').map(t => t.trim()).filter(Boolean);
+      for (const tag of tagList) {
+        conditions.push('tags LIKE ?');
+        params.push(`%${tag}%`);
+      }
     }
     
     // Skills AND-logic: each skill must be present

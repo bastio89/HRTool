@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer, Star } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer, Star, Tag } from 'lucide-react'
 import { candidatesApi, ratingsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 import CSVImportDialog from '../components/CSVImportDialog'
 import { useToast } from '../components/Toast'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
+import { useI18n } from '../I18nContext'
 
 const STATUS_OPTIONS = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist']
 const STATUS_STYLE = {
@@ -45,8 +46,12 @@ export default function Candidates() {
   const [showImport, setShowImport] = useState(false)
   const [printCandidate, setPrintCandidate] = useState(null)
   const [candidateRatings, setCandidateRatings] = useState({})
+  const [filterTags, setFilterTags] = useState([])
+  const [tagInput, setTagInput] = useState('')
+  const [availableTags, setAvailableTags] = useState([])
   const navigate = useNavigate()
   const toast = useToast()
+  const { t } = useI18n()
 
   // Debounce search input
   useEffect(() => {
@@ -66,6 +71,11 @@ export default function Candidates() {
     return () => clearTimeout(timer)
   }, [filterLocation])
 
+  // Load available tags
+  useEffect(() => {
+    candidatesApi.getTags().then(res => setAvailableTags(res.tags || [])).catch(() => {})
+  }, [])
+
   const sortMap = { name_asc: { sort: 'name', order: 'asc' }, name_desc: { sort: 'name', order: 'desc' }, newest: { sort: 'created_at', order: 'desc' }, oldest: { sort: 'created_at', order: 'asc' } }
 
   const loadCandidates = useCallback(async () => {
@@ -82,6 +92,7 @@ export default function Candidates() {
       if (filterSkills.length > 0) params.skills = filterSkills.join(',')
       if (filterStatus.length > 0) params.status = filterStatus.join(',')
       if (debouncedLocation) params.location = debouncedLocation
+      if (filterTags.length > 0) params.tags = filterTags.join(',')
       const data = await candidatesApi.getAll(params)
       setCandidates(data.data || [])
       setTotalCount(data.total || 0)
@@ -99,7 +110,7 @@ export default function Candidates() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, currentPage, sortBy, filterSkills, filterStatus, debouncedLocation])
+  }, [debouncedSearch, currentPage, sortBy, filterSkills, filterStatus, debouncedLocation, filterTags])
 
   useEffect(() => { loadCandidates() }, [loadCandidates])
 
@@ -142,9 +153,32 @@ export default function Candidates() {
     }
   }
 
-  const clearFilters = () => { setFilterStatus([]); setFilterAvail(''); setFilterSkills([]); setSkillInput(''); setFilterLocation(''); setSearch('') }
+  const clearFilters = () => { setFilterStatus([]); setFilterAvail(''); setFilterSkills([]); setSkillInput(''); setFilterLocation(''); setFilterTags([]); setTagInput(''); setSearch('') }
 
-  const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0) + filterSkills.length + (filterLocation ? 1 : 0)
+  const activeFilterCount = filterStatus.length + (filterAvail ? 1 : 0) + filterSkills.length + (filterLocation ? 1 : 0) + filterTags.length
+
+  const addTag = (tag) => {
+    const t = tag.trim()
+    if (t && !filterTags.includes(t)) {
+      setFilterTags(prev => [...prev, t])
+      setCurrentPage(1)
+    }
+    setTagInput('')
+  }
+
+  const removeTag = (tag) => {
+    setFilterTags(prev => prev.filter(t => t !== tag))
+    setCurrentPage(1)
+  }
+
+  const handleTagKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addTag(tagInput)
+    } else if (e.key === 'Backspace' && !tagInput && filterTags.length > 0) {
+      removeTag(filterTags[filterTags.length - 1])
+    }
+  }
 
   // Batch selection helpers
   const toggleSelect = (id) => {
@@ -223,9 +257,9 @@ export default function Candidates() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 sm:mb-14 gap-4">
         <div>
-          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Bewerber</h1>
+          <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('candidates.title')}</h1>
           <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">
-            {loading ? '...' : `${filtered.length} von ${totalCount} Profilen`}
+            {loading ? '...' : `${filtered.length} ${t('candidates.of')} ${totalCount} ${t('candidates.profiles')}`}
           </p>
         </div>
         <div className="flex items-center gap-3 sm:gap-4">
@@ -255,7 +289,7 @@ export default function Candidates() {
             <Search className="absolute left-5 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
-              placeholder="Suche nach Name, Skills, Standort, Tags..."
+              placeholder={t('candidates.search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-13 sm:pl-16 pr-8 py-4 sm:py-5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px] sm:rounded-[24px]
@@ -366,6 +400,39 @@ export default function Candidates() {
                 className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white border border-transparent
                   focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
               />
+            </div>
+            {/* Tags filter */}
+            <div>
+              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">Tags <span className="normal-case font-medium">(UND-Verknüpfung)</span></p>
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] min-h-[56px] max-w-2xl">
+                {filterTags.map(tag => (
+                  <span key={tag} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5e5ce6] text-white text-[14px] font-semibold">
+                    <Tag className="w-3 h-3" />
+                    {tag}
+                    <button onClick={() => removeTag(tag)} className="w-5 h-5 rounded-full hover:bg-white/20 flex items-center justify-center cursor-pointer transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  type="text"
+                  placeholder={filterTags.length > 0 ? 'Weiterer Tag...' : 'Tag eingeben und Enter drücken...'}
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={handleTagKeyDown}
+                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none"
+                />
+              </div>
+              {availableTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {availableTags.filter(t => !filterTags.includes(t.tag)).slice(0, 10).map(t => (
+                    <button key={t.tag} onClick={() => addTag(t.tag)}
+                      className="px-3 py-1.5 rounded-full bg-[#5e5ce6]/5 text-[13px] font-medium text-[#5e5ce6] hover:bg-[#5e5ce6]/10 transition-all cursor-pointer border border-[#5e5ce6]/10">
+                      {t.tag} <span className="text-[11px] opacity-60">({t.count})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {activeFilterCount > 0 && (
               <button onClick={clearFilters} className="flex items-center gap-2 text-[15px] font-semibold text-[#ff3b30] hover:opacity-70 cursor-pointer transition-opacity">

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import { ThemeProvider } from './ThemeContext'
+import { I18nProvider } from './I18nContext'
 import { ToastProvider } from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
@@ -66,6 +67,7 @@ function ProtectedRoutes() {
 
 export default function App() {
   return (
+    <I18nProvider>
     <ThemeProvider>
     <AuthProvider>
       <ToastProvider>
@@ -78,6 +80,7 @@ export default function App() {
       </ToastProvider>
     </AuthProvider>
     </ThemeProvider>
+    </I18nProvider>
   )
 }
 

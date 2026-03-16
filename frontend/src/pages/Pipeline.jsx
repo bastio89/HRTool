@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone, Star, ChevronLeft, ChevronRight, ArrowRight
+  ArrowLeft, Plus, X, UserPlus, MapPin, Search, GripVertical, Activity, MessageSquare, Send, GitCompare, Calendar, Clock, Video, Phone, Star, ChevronLeft, ChevronRight, ArrowRight, ClipboardList
 } from 'lucide-react'
 import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi, ratingsApi } from '../api'
 import InterviewScheduler from '../components/InterviewScheduler'
+import ScorecardPanel from '../components/ScorecardPanel'
 import { Button, LoadingSpinner } from '../components/UI'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
@@ -39,6 +40,7 @@ export default function Pipeline() {
   const [loadingNotes, setLoadingNotes] = useState(false)
   const [matchingRunning, setMatchingRunning] = useState(false)
   const [interviewModal, setInterviewModal] = useState(null) // { entry }
+  const [scorecardModal, setScorecardModal] = useState(null) // { entry }
   const [entryInterviews, setEntryInterviews] = useState({}) // { [entryId]: interview[] }
   const [candidateRatings, setCandidateRatings] = useState({}) // { [candidateId]: { average, count } }
   const [activeStage, setActiveStage] = useState(0) // Mobile: index into STAGES
@@ -403,6 +405,7 @@ export default function Pipeline() {
                     onRemove={() => handleRemove(entry.id, stage)}
                     onOpenNotes={() => openNotes(entry.id, entry.candidate_name)}
                     onOpenInterview={() => setInterviewModal({ entry })}
+                    onOpenScorecard={() => setScorecardModal({ entry })}
                   />
                 ))}
               </div>
@@ -585,11 +588,22 @@ export default function Pipeline() {
           onSaved={() => loadInterviews(board)}
         />
       )}
+
+      {/* Scorecard Panel Modal */}
+      {scorecardModal && (
+        <ScorecardPanel
+          open={!!scorecardModal}
+          onClose={() => setScorecardModal(null)}
+          entry={scorecardModal.entry}
+          jobId={parseInt(jobId)}
+          onSaved={() => {}}
+        />
+      )}
     </div>
   )
 }
 
-function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview }) {
+function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview, onOpenScorecard }) {
   return (
     <div
       draggable
@@ -628,6 +642,15 @@ function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNo
           {entry.skills.split(',').slice(0, 2).map((skill, i) => (
             <span key={i} className="px-2.5 py-1 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full text-[12px] font-medium text-gray-600 dark:text-gray-400">
               {skill.trim()}
+            </span>
+          ))}
+        </div>
+      )}
+      {entry.tags && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {entry.tags.split(',').slice(0, 3).map((tag, i) => (
+            <span key={i} className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[11px] font-semibold text-[#5e5ce6]">
+              {tag.trim()}
             </span>
           ))}
         </div>
@@ -672,6 +695,12 @@ function KanbanCard({ entry, interviews, rating, onDragStart, onRemove, onOpenNo
           {interviews.length > 0 && (
             <span className="w-4 h-4 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[10px] font-bold flex items-center justify-center">{interviews.length}</span>
           )}
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenScorecard() }}
+          className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#5e5ce6] transition-colors cursor-pointer"
+        >
+          <ClipboardList className="w-3.5 h-3.5" /> Scorecard
         </button>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, FileText } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
@@ -91,10 +91,28 @@ export default function MatchingResults() {
         </div>
         <div className="flex items-center gap-3 sm:gap-4 ml-14 sm:ml-0">
           {results.length > 0 && (
-            <Button size="md" variant="secondary" onClick={exportCSV}>
-              <Download className="w-5 h-5" />
-              <span className="hidden sm:inline">CSV Export</span>
-            </Button>
+            <>
+              <Button size="md" variant="secondary" onClick={() => {
+                const style = document.createElement('style')
+                style.id = 'print-styles'
+                style.textContent = `@media print { 
+                  aside, header, nav, .no-print { display: none !important; } 
+                  main { margin: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+                  .fade-in { animation: none !important; }
+                  * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+                }`
+                document.head.appendChild(style)
+                window.print()
+                setTimeout(() => document.getElementById('print-styles')?.remove(), 500)
+              }}>
+                <FileText className="w-5 h-5" />
+                <span className="hidden sm:inline">PDF Export</span>
+              </Button>
+              <Button size="md" variant="secondary" onClick={exportCSV}>
+                <Download className="w-5 h-5" />
+                <span className="hidden sm:inline">CSV Export</span>
+              </Button>
+            </>
           )}
           <Link to="/matching">
             <Button size="md" variant="dark">Neues Matching</Button>

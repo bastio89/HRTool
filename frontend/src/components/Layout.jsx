@@ -1,28 +1,30 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
+import { useI18n } from '../I18nContext'
 import Breadcrumb from './Breadcrumb'
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Übersicht' },
-  { to: '/candidates', icon: Users, label: 'Bewerber' },
-  { to: '/jobs', icon: Briefcase, label: 'Stellen' },
-  { to: '/matching', icon: GitCompare, label: 'Matching' },
-  { to: '/history', icon: History, label: 'Historie' },
+  { to: '/', icon: LayoutDashboard, labelKey: 'nav.overview' },
+  { to: '/candidates', icon: Users, labelKey: 'nav.candidates' },
+  { to: '/jobs', icon: Briefcase, labelKey: 'nav.jobs' },
+  { to: '/matching', icon: GitCompare, labelKey: 'nav.matching' },
+  { to: '/history', icon: History, labelKey: 'nav.history' },
 ]
 
 const adminItems = [
-  { to: '/admin/users', icon: Shield, label: 'Benutzer' },
-  { to: '/admin/audit', icon: ClipboardList, label: 'Audit-Log' },
-  { to: '/admin/dsgvo', icon: ShieldAlert, label: 'DSGVO' },
-  { to: '/admin/ki-transparenz', icon: Bot, label: 'KI-Transparenz' },
+  { to: '/admin/users', icon: Shield, labelKey: 'nav.users' },
+  { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
+  { to: '/admin/dsgvo', icon: ShieldAlert, labelKey: 'nav.dsgvo' },
+  { to: '/admin/ki-transparenz', icon: Bot, labelKey: 'nav.ai_transparency' },
 ]
 
 export default function Layout() {
   const { user, logout, isAdmin } = useAuth()
   const { isDark, toggleTheme } = useTheme()
+  const { locale, changeLocale, t } = useI18n()
   const location = useLocation()
   const isAdminRoute = location.pathname.startsWith('/admin')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -69,7 +71,7 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 space-y-2">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, labelKey }) => (
             <NavLink
               key={to}
               to={to}
@@ -84,7 +86,7 @@ export default function Layout() {
               }
             >
               <Icon className="w-5 h-5" />
-              {label}
+              {t(labelKey)}
             </NavLink>
           ))}
           {isAdmin && (
@@ -99,13 +101,13 @@ export default function Layout() {
               >
                 <span className="flex items-center gap-4">
                   <Settings className="w-5 h-5" />
-                  Administration
+                  {t('nav.admin')}
                 </span>
                 <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${adminOpen ? 'rotate-180' : ''}`} />
               </button>
               <div className={`overflow-hidden transition-all duration-300 ease-in-out ${adminOpen ? 'max-h-[300px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                 <div className="space-y-1 pl-4">
-                  {adminItems.map(({ to, icon: Icon, label }) => (
+                  {adminItems.map(({ to, icon: Icon, labelKey }) => (
                     <NavLink
                       key={to}
                       to={to}
@@ -119,7 +121,7 @@ export default function Layout() {
                       }
                     >
                       <Icon className="w-4 h-4" />
-                      {label}
+                      {t(labelKey)}
                     </NavLink>
                   ))}
                 </div>
@@ -129,16 +131,24 @@ export default function Layout() {
         </nav>
 
         <div className="mt-auto pt-10 space-y-3">
+          {/* Language Switcher */}
+          <button
+            onClick={() => changeLocale(locale === 'de' ? 'en' : 'de')}
+            className="flex items-center justify-center gap-2 w-full py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 rounded-2xl text-[15px] font-medium transition-all duration-300 cursor-pointer"
+          >
+            <Globe className="w-5 h-5" />
+            {locale === 'de' ? '🇩🇪 Deutsch → 🇬🇧 English' : '🇬🇧 English → 🇩🇪 Deutsch'}
+          </button>
           <button
             onClick={toggleTheme}
             className="flex items-center justify-center gap-2 w-full py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 rounded-2xl text-[15px] font-medium transition-all duration-300 cursor-pointer"
           >
             {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            {isDark ? 'Light Mode' : 'Dark Mode'}
+            {isDark ? t('nav.light_mode') : t('nav.dark_mode')}
           </button>
           <Link to="/candidates/new" onClick={closeSidebar} className="flex items-center justify-center gap-2 w-full py-4 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-2xl text-[16px] font-medium transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 duration-300">
             <Plus className="w-5 h-5" />
-            Neuer Eintrag
+            {t('nav.new_entry')}
           </Link>
         </div>
       </aside>
@@ -158,10 +168,10 @@ export default function Layout() {
           <div className="flex items-center gap-3 sm:gap-5">
             <div className="text-right hidden sm:block">
               <p className="text-[14px] sm:text-[16px] font-semibold text-black dark:text-white tracking-tight">{user?.display_name || user?.username}</p>
-              <p className="text-[12px] sm:text-[14px] text-gray-500 font-medium">{user?.role === 'admin' ? 'Administrator' : 'Recruiter'}</p>
+              <p className="text-[12px] sm:text-[14px] text-gray-500 font-medium">{user?.role === 'admin' ? t('auth.administrator') : t('auth.recruiter')}</p>
             </div>
             <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.display_name || user?.username}`} alt="Profile" className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-100 border border-gray-200 shadow-sm" />
-            <button onClick={logout} className="p-2 sm:p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title="Abmelden">
+            <button onClick={logout} className="p-2 sm:p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title={t('auth.logout')}>
               <LogOut className="w-5 h-5" />
             </button>
           </div>

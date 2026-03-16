@@ -16,6 +16,7 @@ const settingsRouter = require('./src/routes/settings');
 const interviewsRouter = require('./src/routes/interviews');
 const ratingsRouter = require('./src/routes/ratings');
 const aiLogsRouter = require('./src/routes/ai-logs');
+const scorecardsRouter = require('./src/routes/scorecards');
 const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
@@ -48,6 +49,7 @@ app.use('/api/audit', auditRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/interviews', interviewsRouter);
 app.use('/api/ratings', ratingsRouter);
+app.use('/api/scorecards', scorecardsRouter);
 app.use('/api/ai-logs', aiLogsRouter);
 
 /**

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Save, AlertTriangle, Upload, FileText, Sparkles, X, Paperclip } from 'lucide-react'
+import { ArrowLeft, Save, AlertTriangle, Upload, FileText, Sparkles, X, Paperclip, Tag } from 'lucide-react'
 import { candidatesApi, cvParserApi, uploadsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useToast } from '../components/Toast'
+
+const SUGGESTED_TAGS = ['Top-Kandidat', 'Senior', 'Junior', 'Freelancer', 'Remote', 'Sofort verfügbar', 'Führungskraft', 'Teilzeit', 'Werkstudent', 'Intern']
 
 const emptyCandidate = {
   name: '', email: '', phone: '', location: '',
@@ -367,6 +369,51 @@ export default function CandidateForm() {
               value={form.tags}
               onChange={handleChange('tags')}
             />
+            {/* Tag Chips UI */}
+            {(() => {
+              const currentTags = form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+              const availableSuggestions = SUGGESTED_TAGS.filter(t => !currentTags.includes(t));
+              const addTag = (tag) => {
+                const tags = form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+                if (!tags.includes(tag)) {
+                  setForm(prev => ({ ...prev, tags: [...tags, tag].join(', ') }));
+                }
+              };
+              const removeTag = (tag) => {
+                const tags = form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+                setForm(prev => ({ ...prev, tags: tags.filter(t => t !== tag).join(', ') }));
+              };
+              return (
+                <div className="md:col-span-2">
+                  {currentTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {currentTags.map(tag => (
+                        <span key={tag} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[14px] font-semibold">
+                          <Tag className="w-3 h-3" />
+                          {tag}
+                          <button type="button" onClick={() => removeTag(tag)} className="w-5 h-5 rounded-full hover:bg-[#5e5ce6]/20 flex items-center justify-center cursor-pointer transition-colors">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {availableSuggestions.length > 0 && (
+                    <div>
+                      <p className="text-[12px] font-medium text-gray-400 dark:text-gray-500 mb-2">Vorschläge:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {availableSuggestions.map(tag => (
+                          <button key={tag} type="button" onClick={() => addTag(tag)}
+                            className="px-3 py-1.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:bg-[#5e5ce6]/10 hover:text-[#5e5ce6] transition-all cursor-pointer border border-transparent hover:border-[#5e5ce6]/20">
+                            + {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </Card>
 

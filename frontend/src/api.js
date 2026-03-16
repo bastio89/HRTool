@@ -65,6 +65,7 @@ export const candidatesApi = {
     if (params.skills) q.set('skills', params.skills);
     if (params.status) q.set('status', params.status);
     if (params.location) q.set('location', params.location);
+    if (params.tags) q.set('tags', params.tags);
     const qs = q.toString();
     return request(`/candidates${qs ? `?${qs}` : ''}`);
   },
@@ -79,6 +80,7 @@ export const candidatesApi = {
   getStats: (days) => request(`/candidates/stats/overview${days ? `?days=${days}` : ''}`),
   getSourceStats: () => request('/candidates/stats/sources'),
   getTimeToHire: () => request('/candidates/stats/time-to-hire'),
+  getTags: () => request('/candidates/stats/tags'),
   checkDuplicate: (name, email, excludeId) =>
     request('/candidates/check-duplicate', { method: 'POST', body: JSON.stringify({ name, email, excludeId }) }),
 };
@@ -275,4 +277,24 @@ export const interviewsApi = {
   create: (data) => request('/interviews', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/interviews/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/interviews/${id}`, { method: 'DELETE' }),
+};
+
+// Scorecards API
+export const scorecardsApi = {
+  getTemplates: (jobId) => request(`/scorecards/templates${jobId ? `?job_id=${jobId}` : ''}`),
+  getTemplate: (id) => request(`/scorecards/templates/${id}`),
+  createTemplate: (data) => request('/scorecards/templates', { method: 'POST', body: JSON.stringify(data) }),
+  updateTemplate: (id, data) => request(`/scorecards/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTemplate: (id) => request(`/scorecards/templates/${id}`, { method: 'DELETE' }),
+  getResponses: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.candidate_id) q.set('candidate_id', params.candidate_id);
+    if (params.interview_id) q.set('interview_id', params.interview_id);
+    if (params.template_id) q.set('template_id', params.template_id);
+    return request(`/scorecards/responses?${q.toString()}`);
+  },
+  createResponse: (data) => request('/scorecards/responses', { method: 'POST', body: JSON.stringify(data) }),
+  deleteResponse: (id) => request(`/scorecards/responses/${id}`, { method: 'DELETE' }),
+  compareResponses: (candidateId) => request(`/scorecards/responses/compare?candidate_id=${candidateId}`),
+  generateQuestions: (data) => request('/scorecards/generate-questions', { method: 'POST', body: JSON.stringify(data), timeout: 180000 }),
 };

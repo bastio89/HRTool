@@ -181,8 +181,8 @@ export default function Layout() {
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-10">
+        <div className="flex-1 overflow-auto flex flex-col">
+          <div className="max-w-[1600px] w-full mx-auto p-4 sm:p-6 lg:p-10 flex-1 flex flex-col min-h-0">
             <Breadcrumb />
             <Outlet />
           </div>

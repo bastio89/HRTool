@@ -235,9 +235,9 @@ export default function Pipeline() {
   if (loading) return <LoadingSpinner text={t('pipeline.loading')} />
 
   return (
-    <div className="fade-in flex flex-col h-full">
+    <div className="fade-in flex flex-col flex-1 min-h-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-6 sm:mb-10">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-4 sm:mb-6">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
           <button onClick={() => navigate('/jobs')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
             <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
@@ -361,7 +361,7 @@ export default function Pipeline() {
       </div>
 
       {/* Desktop Kanban board — horizontal scroll (hidden on mobile) */}
-      <div className="hidden md:flex gap-4 sm:gap-5 overflow-x-auto pb-6 -mx-2 px-2 snap-x snap-mandatory sm:snap-none">
+      <div className="hidden md:flex gap-3 flex-1 min-h-0 pb-2">
         {STAGES.map(stage => {
           const style = stageStyle[stage]
           const cards = board[stage] || []
@@ -370,7 +370,7 @@ export default function Pipeline() {
           return (
             <div
               key={stage}
-              className={`flex-shrink-0 w-[280px] rounded-[28px] p-5 flex flex-col gap-4 transition-all duration-200
+              className={`flex-1 min-w-0 rounded-[24px] p-4 flex flex-col gap-3 transition-all duration-200
                 ${isOver ? 'ring-2 ring-[#0071e3] ring-offset-2 scale-[1.01]' : ''}
                 ${style.col}`}
               onDragOver={e => handleDragOver(e, stage)}
@@ -378,22 +378,22 @@ export default function Pipeline() {
               onDragLeave={() => setDragOverStage(null)}
             >
               {/* Column header */}
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-3">
-                  <span className={`w-2.5 h-2.5 rounded-full ${style.dot}`} />
-                  <span className={`text-[15px] font-bold uppercase tracking-wider ${style.header}`}>
+              <div className="flex items-center justify-between px-0.5">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                  <span className={`text-[13px] font-bold uppercase tracking-wider ${style.header}`}>
                     {stage}
                   </span>
                 </div>
-                <span className="text-[14px] font-semibold text-gray-400 bg-white dark:bg-[#1c1c1e] px-2.5 py-0.5 rounded-full">
+                <span className="text-[13px] font-semibold text-gray-400 bg-white dark:bg-[#1c1c1e] px-2 py-0.5 rounded-full">
                   {cards.length}
                 </span>
               </div>
 
               {/* Cards */}
-              <div className="flex flex-col gap-3 min-h-[80px]">
+              <div className="flex flex-col gap-2.5 flex-1 overflow-y-auto min-h-[60px] scrollbar-thin">
                 {cards.length === 0 && (
-                  <div className={`flex items-center justify-center h-20 rounded-[20px] border-2 border-dashed text-[14px] font-medium text-gray-400 
+                  <div className={`flex items-center justify-center h-16 rounded-[16px] border-2 border-dashed text-[13px] font-medium text-gray-400 
                     ${isOver ? 'border-[#0071e3] text-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700'}`}>
                     {isOver ? t('pipeline.drop_here') : t('pipeline.empty')}
                   </div>
@@ -612,14 +612,14 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
     <div
       draggable
       onDragStart={onDragStart}
-      className="bg-white dark:bg-[#1c1c1e] rounded-[20px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-all duration-200 group"
+      className="bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/8 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-all duration-200 group"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
+          <GripVertical className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-[16px] font-semibold text-black dark:text-white truncate">{entry.candidate_name}</p>
+              <p className="text-[14px] font-semibold text-black dark:text-white truncate">{entry.candidate_name}</p>
               {rating && (
                 <span className="flex items-center gap-0.5 flex-shrink-0">
                   <Star className="w-3.5 h-3.5 text-[#ff9f0a] fill-[#ff9f0a]" />
@@ -628,8 +628,8 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
               )}
             </div>
             {entry.location && (
-              <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5" />{entry.location}
+              <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
+                <MapPin className="w-3 h-3" />{entry.location}
               </p>
             )}
           </div>
@@ -641,19 +641,15 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
           <X className="w-3.5 h-3.5 text-[#ff3b30]" />
         </button>
       </div>
-      {entry.skills && (
-        <div className="flex flex-wrap gap-1.5 mt-4">
-          {entry.skills.split(',').slice(0, 2).map((skill, i) => (
-            <span key={i} className="px-2.5 py-1 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full text-[12px] font-medium text-gray-600 dark:text-gray-400">
+      {(entry.skills || entry.tags) && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {entry.skills && entry.skills.split(',').slice(0, 2).map((skill, i) => (
+            <span key={`s${i}`} className="px-2 py-0.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full text-[11px] font-medium text-gray-600 dark:text-gray-400">
               {skill.trim()}
             </span>
           ))}
-        </div>
-      )}
-      {entry.tags && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {entry.tags.split(',').slice(0, 3).map((tag, i) => (
-            <span key={i} className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[11px] font-semibold text-[#5e5ce6]">
+          {entry.tags && entry.tags.split(',').slice(0, 2).map((tag, i) => (
+            <span key={`t${i}`} className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[11px] font-semibold text-[#5e5ce6]">
               {tag.trim()}
             </span>
           ))}
@@ -665,10 +661,10 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
         const typeIcon = next.interview_type === 'Video' ? Video : next.interview_type === 'Telefon' ? Phone : MapPin
         const TypeIcon = typeIcon
         return (
-          <div className="mt-3 p-2.5 rounded-[12px] bg-[#ff9f0a]/5 border border-[#ff9f0a]/10">
-            <div className="flex items-center gap-2">
+          <div className="mt-2 p-2 rounded-[10px] bg-[#ff9f0a]/5 border border-[#ff9f0a]/10">
+            <div className="flex items-center gap-1.5">
               <Calendar className="w-3 h-3 text-[#ff9f0a]" />
-              <span className="text-[12px] font-semibold text-[#ff9f0a]">
+              <span className="text-[11px] font-semibold text-[#ff9f0a]">
                 {new Date(next.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}
                 {next.interview_time && ` · ${next.interview_time}`}
               </span>
@@ -677,34 +673,38 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
           </div>
         )
       })()}
-      <Link
-        to={`/candidates/${entry.candidate_id}/detail`}
-        onClick={e => e.stopPropagation()}
-        className="mt-4 flex items-center gap-2 text-[13px] font-semibold text-[#0071e3] hover:opacity-70 transition-opacity"
-      >
-        <Activity className="w-3.5 h-3.5" /> {t('pipeline.profile_log')}
-      </Link>
-      <div className="flex items-center gap-4 mt-2">
+      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+        <Link
+          to={`/candidates/${entry.candidate_id}/detail`}
+          onClick={e => e.stopPropagation()}
+          className="text-[#0071e3] hover:opacity-70 transition-opacity cursor-pointer"
+          title={t('pipeline.profile_log')}
+        >
+          <Activity className="w-3.5 h-3.5" />
+        </Link>
         <button
           onClick={(e) => { e.stopPropagation(); onOpenNotes() }}
-          className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
+          className="text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
+          title={t('pipeline.notes')}
         >
-          <MessageSquare className="w-3.5 h-3.5" /> {t('pipeline.notes')}
+          <MessageSquare className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onOpenInterview() }}
-          className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] transition-colors cursor-pointer"
+          className="text-gray-400 hover:text-[#ff9f0a] transition-colors cursor-pointer relative"
+          title={t('pipeline.interview')}
         >
-          <Calendar className="w-3.5 h-3.5" /> {t('pipeline.interview')}
+          <Calendar className="w-3.5 h-3.5" />
           {interviews.length > 0 && (
-            <span className="w-4 h-4 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[10px] font-bold flex items-center justify-center">{interviews.length}</span>
+            <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 rounded-full bg-[#ff9f0a] text-white text-[8px] font-bold flex items-center justify-center">{interviews.length}</span>
           )}
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onOpenScorecard() }}
-          className="flex items-center gap-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:text-[#5e5ce6] transition-colors cursor-pointer"
+          className="text-gray-400 hover:text-[#5e5ce6] transition-colors cursor-pointer"
+          title={t('pipeline.scorecard')}
         >
-          <ClipboardList className="w-3.5 h-3.5" /> {t('pipeline.scorecard')}
+          <ClipboardList className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>

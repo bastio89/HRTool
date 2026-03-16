@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
@@ -12,6 +12,7 @@ export default function MatchingResults() {
   const [loading, setLoading] = useState(true)
   const [expandedIdx, setExpandedIdx] = useState(null)
   const [error, setError] = useState('')
+  const [reviewing, setReviewing] = useState(false)
 
   useEffect(() => {
     matchingApi.getResult(id)
@@ -19,6 +20,15 @@ export default function MatchingResults() {
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
   }, [id])
+
+  const handleReview = async () => {
+    setReviewing(true)
+    try {
+      await matchingApi.reviewResult(id)
+      setData(prev => ({ ...prev, human_reviewed: 1, reviewed_by: 'Du', reviewed_at: new Date().toISOString() }))
+    } catch (err) { setError(err.message) }
+    finally { setReviewing(false) }
+  }
 
   if (loading) return <LoadingSpinner text="Ergebnisse werden geladen..." />
   if (error) return (
@@ -93,7 +103,42 @@ export default function MatchingResults() {
       </div>
 
       {/* AI Act Art. 13: KI-Transparenzhinweis */}
-      <KiDisclaimer feature="matching" className="mb-10" />
+      <KiDisclaimer feature="matching" className="mb-6" />
+
+      {/* AI Act Art. 14: Menschliche Aufsicht — Review-Status */}
+      <Card className={`p-5 mb-10 border ${data?.human_reviewed ? 'border-[#34c759]/20 bg-[#34c759]/5' : 'border-[#ff9f0a]/20 bg-[#ff9f0a]/5'}`}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            {data?.human_reviewed ? (
+              <>
+                <CheckCircle className="w-6 h-6 text-[#34c759]" />
+                <div>
+                  <p className="text-[15px] font-semibold text-[#34c759]">Menschlich überprüft (Art. 14 EU AI Act)</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400">
+                    Überprüft von {data.reviewed_by} am {new Date(data.reviewed_at).toLocaleString('de-DE')}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <UserCheck className="w-6 h-6 text-[#ff9f0a]" />
+                <div>
+                  <p className="text-[15px] font-semibold text-[#ff9f0a]">Menschliche Überprüfung ausstehend (Art. 14 EU AI Act)</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400">
+                    Bitte prüfen Sie die KI-Ergebnisse und bestätigen Sie die Überprüfung.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+          {!data?.human_reviewed && (
+            <Button size="md" variant="dark" onClick={handleReview} disabled={reviewing}>
+              <UserCheck className="w-5 h-5" />
+              {reviewing ? 'Wird bestätigt...' : 'Als geprüft markieren'}
+            </Button>
+          )}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
         <Card className="p-10">

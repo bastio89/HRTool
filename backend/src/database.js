@@ -188,6 +188,10 @@ const migrations = [
   `ALTER TABLE candidates ADD COLUMN tags TEXT`,
   `ALTER TABLE jobs ADD COLUMN url TEXT`,
   `ALTER TABLE candidates ADD COLUMN source TEXT`,
+  `ALTER TABLE matching_results ADD COLUMN human_reviewed INTEGER DEFAULT 0`,
+  `ALTER TABLE matching_results ADD COLUMN reviewed_by TEXT`,
+  `ALTER TABLE matching_results ADD COLUMN reviewed_at DATETIME`,
+  `ALTER TABLE matching_results ADD COLUMN review_notes TEXT`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }

@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAiCall } = require('../aiLogger');
+const { logAudit } = require('./audit');
 
 const router = express.Router();
 
@@ -177,7 +178,7 @@ router.post('/run', async (req, res) => {
 router.get('/history', (req, res) => {
   try {
     const results = db.prepare(
-      'SELECT id, job_title, created_at, results FROM matching_results ORDER BY created_at DESC LIMIT 50'
+      'SELECT id, job_title, created_at, results, human_reviewed, reviewed_by, reviewed_at, review_notes FROM matching_results ORDER BY created_at DESC LIMIT 50'
     ).all();
     
     const parsed = results.map(r => ({
@@ -213,7 +214,14 @@ router.get('/history/:id', (req, res) => {
     if (!result) {
       return res.status(404).json({ error: 'Ergebnis nicht gefunden' });
     }
-    res.json({ ...result, results: JSON.parse(result.results) });
+    res.json({ 
+      ...result, 
+      results: JSON.parse(result.results),
+      human_reviewed: !!result.human_reviewed,
+      reviewed_by: result.reviewed_by,
+      reviewed_at: result.reviewed_at,
+      review_notes: result.review_notes,
+    });
   } catch (error) {
     console.error('Error fetching matching result:', error);
     res.status(500).json({ error: 'Fehler beim Laden des Ergebnisses' });
@@ -245,6 +253,55 @@ router.delete('/history/:id', (req, res) => {
   } catch (error) {
     console.error('Error deleting result:', error);
     res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
+/**
+ * @swagger
+ * /matching/history/{id}/review:
+ *   put:
+ *     summary: Matching-Ergebnis als menschlich überprüft markieren (EU AI Act Art. 14)
+ *     tags: [Matching]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               notes: { type: string, description: Optionale Anmerkungen zur Überprüfung }
+ *     responses:
+ *       200: { description: Als überprüft markiert }
+ */
+router.put('/history/:id/review', (req, res) => {
+  try {
+    const { notes } = req.body;
+    const result = db.prepare('SELECT * FROM matching_results WHERE id = ?').get(req.params.id);
+    if (!result) return res.status(404).json({ error: 'Ergebnis nicht gefunden' });
+
+    db.prepare(`
+      UPDATE matching_results 
+      SET human_reviewed = 1, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_notes = ?
+      WHERE id = ?
+    `).run(req.user?.display_name || req.user?.username || 'Unbekannt', notes || null, req.params.id);
+
+    logAudit(req, 'ki-review', 'Matching', req.params.id, result.job_title, {
+      notes,
+      action: 'Human review completed (AI Act Art. 14)'
+    });
+
+    res.json({
+      success: true,
+      human_reviewed: true,
+      reviewed_by: req.user?.display_name || req.user?.username,
+      reviewed_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error marking as reviewed:', error);
+    res.status(500).json({ error: 'Fehler beim Markieren als überprüft' });
   }
 });
 

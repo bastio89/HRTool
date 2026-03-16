@@ -92,7 +92,7 @@ export const matchingApi = {
     }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),
-  deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),
+  deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),\n  reviewResult: (id, notes) => request(`/matching/history/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
 };
 
 // Jobs API
@@ -221,6 +221,25 @@ export const cvParserApi = {
     }
     return response.json();
   },
+};
+
+// AI-Logs API (EU AI Act Compliance)
+export const aiLogsApi = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set('page', params.page);
+    if (params.limit) q.set('limit', params.limit);
+    if (params.feature) q.set('feature', params.feature);
+    if (params.success) q.set('success', params.success);
+    if (params.date_from) q.set('date_from', params.date_from);
+    if (params.date_to) q.set('date_to', params.date_to);
+    const qs = q.toString();
+    return request(`/ai-logs${qs ? `?${qs}` : ''}`);
+  },
+  getById: (id) => request(`/ai-logs/${id}`),
+  getStats: () => request('/ai-logs/stats/overview'),
+  getBiasReport: () => request('/ai-logs/stats/bias-report'),
+  getCompliance: () => request('/ai-logs/compliance/checklist'),
 };
 
 // Settings API

@@ -90,6 +90,155 @@ router.get('/stats/overview', (req, res) => {
 
 /**
  * @swagger
+ * /candidates/stats/time-to-hire:
+ *   get:
+ *     summary: Time-to-Hire Metriken (Durchschnitt pro Stage, Bottleneck-Erkennung)
+ *     tags: [Candidates]
+ *     responses:
+ *       200:
+ *         description: Time-to-Hire Statistiken
+ */
+router.get('/stats/time-to-hire', (req, res) => {
+  try {
+    // 1) Overall Time-to-Hire: Days from pipeline entry to Hired
+    const hiredEntries = db.prepare(`
+      SELECT pe.id, pe.created_at as entered_at, pe.updated_at as hired_at,
+        CAST(julianday(pe.updated_at) - julianday(pe.created_at) AS REAL) as days_to_hire,
+        c.name as candidate_name, j.title as job_title
+      FROM pipeline_entries pe
+      JOIN candidates c ON c.id = pe.candidate_id
+      JOIN jobs j ON j.id = pe.job_id
+      WHERE pe.stage = 'Hired'
+      ORDER BY pe.updated_at DESC
+    `).all();
+
+    const totalHired = hiredEntries.length;
+    const avgDaysToHire = totalHired > 0
+      ? Math.round(hiredEntries.reduce((sum, e) => sum + e.days_to_hire, 0) / totalHired * 10) / 10
+      : null;
+    const minDays = totalHired > 0 ? Math.round(Math.min(...hiredEntries.map(e => e.days_to_hire)) * 10) / 10 : null;
+    const maxDays = totalHired > 0 ? Math.round(Math.max(...hiredEntries.map(e => e.days_to_hire)) * 10) / 10 : null;
+    const medianDays = totalHired > 0 ? (() => {
+      const sorted = hiredEntries.map(e => e.days_to_hire).sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return Math.round((sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2) * 10) / 10;
+    })() : null;
+
+    // 2) Average time per stage transition (from pipeline_notes)
+    const stageTransitions = db.prepare(`
+      SELECT pn.old_stage, pn.new_stage,
+        pe.id as entry_id, pe.created_at as entry_created,
+        pn.created_at as transition_at
+      FROM pipeline_notes pn
+      JOIN pipeline_entries pe ON pe.id = pn.pipeline_entry_id
+      WHERE pn.old_stage IS NOT NULL AND pn.new_stage IS NOT NULL
+        AND pn.old_stage != pn.new_stage
+      ORDER BY pe.id, pn.created_at
+    `).all();
+
+    // Group transitions by entry to compute stage durations
+    const entryMap = new Map();
+    for (const t of stageTransitions) {
+      if (!entryMap.has(t.entry_id)) entryMap.set(t.entry_id, []);
+      entryMap.get(t.entry_id).push(t);
+    }
+
+    const stageDurations = {};
+    const stages = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot'];
+    for (const stage of stages) stageDurations[stage] = [];
+
+    for (const [entryId, transitions] of entryMap) {
+      // For each transition, compute time spent in old_stage
+      for (let i = 0; i < transitions.length; i++) {
+        const t = transitions[i];
+        // Previous timestamp: either previous transition or entry creation
+        const prevTime = i === 0 ? t.entry_created : transitions[i - 1].transition_at;
+        const days = (new Date(t.transition_at) - new Date(prevTime)) / (1000 * 60 * 60 * 24);
+        if (days >= 0 && stages.includes(t.old_stage)) {
+          stageDurations[t.old_stage].push(days);
+        }
+      }
+    }
+
+    const stageMetrics = stages.map(stage => {
+      const durations = stageDurations[stage];
+      const count = durations.length;
+      const avg = count > 0 ? Math.round(durations.reduce((s, d) => s + d, 0) / count * 10) / 10 : null;
+      return { stage, avgDays: avg, count };
+    });
+
+    // 3) Bottleneck: stage with highest average days
+    const bottleneck = stageMetrics
+      .filter(s => s.avgDays !== null)
+      .sort((a, b) => b.avgDays - a.avgDays)[0] || null;
+
+    // 4) Time-to-Hire per job (top 10)
+    const jobGroups = {};
+    for (const e of hiredEntries) {
+      if (!jobGroups[e.job_title]) jobGroups[e.job_title] = [];
+      jobGroups[e.job_title].push(e.days_to_hire);
+    }
+    const perJob = Object.entries(jobGroups).map(([title, days]) => ({
+      jobTitle: title,
+      hired: days.length,
+      avgDays: Math.round(days.reduce((s, d) => s + d, 0) / days.length * 10) / 10,
+    })).sort((a, b) => b.hired - a.hired).slice(0, 10);
+
+    // 5) Trend: Avg time-to-hire for last 3 months
+    const monthlyTrend = [];
+    for (let i = 2; i >= 0; i--) {
+      const monthEntries = hiredEntries.filter(e => {
+        const d = new Date(e.hired_at);
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
+        return d >= monthStart && d <= monthEnd;
+      });
+      const avg = monthEntries.length > 0
+        ? Math.round(monthEntries.reduce((s, e) => s + e.days_to_hire, 0) / monthEntries.length * 10) / 10
+        : null;
+      const now = new Date();
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthlyTrend.push({
+        month: monthDate.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' }),
+        avgDays: avg,
+        hired: monthEntries.length,
+      });
+    }
+
+    // 6) Currently in pipeline (not yet hired/rejected)
+    const inPipeline = db.prepare(`
+      SELECT COUNT(*) as count,
+        ROUND(AVG(julianday('now') - julianday(pe.created_at)), 1) as avg_days_waiting
+      FROM pipeline_entries pe
+      WHERE pe.stage NOT IN ('Hired', 'Abgesagt')
+    `).get();
+
+    res.json({
+      overview: {
+        totalHired,
+        avgDaysToHire,
+        medianDays,
+        minDays,
+        maxDays,
+      },
+      stageMetrics,
+      bottleneck: bottleneck ? { stage: bottleneck.stage, avgDays: bottleneck.avgDays } : null,
+      perJob,
+      monthlyTrend,
+      inPipeline: {
+        count: inPipeline.count,
+        avgDaysWaiting: inPipeline.avg_days_waiting,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching time-to-hire stats:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Time-to-Hire Statistiken' });
+  }
+});
+
+/**
+ * @swagger
  * /candidates/stats/sources:
  *   get:
  *     summary: Quellen-Analyse (Bewerber pro Quelle, Hired-Rate)

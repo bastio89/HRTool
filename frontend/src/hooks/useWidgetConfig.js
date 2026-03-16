@@ -7,6 +7,7 @@ const DEFAULT_WIDGETS = [
   { id: 'matches', label: 'Letzte Matchings', icon: 'GitCompare', visible: true },
   { id: 'locations', label: 'Top Standorte', icon: 'MapPin', visible: true },
   { id: 'sources', label: 'Quellen-Analyse', icon: 'Share2', visible: true },
+  { id: 'timetohire', label: 'Time-to-Hire', icon: 'Timer', visible: true },
   { id: 'dsgvo', label: 'DSGVO-Status', icon: 'ShieldAlert', visible: true },
   { id: 'calendar', label: 'Interviews', icon: 'Calendar', visible: true },
 ]

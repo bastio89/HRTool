@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone } from 'lucide-react'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap } from 'lucide-react'
 import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi, interviewsApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
   const [sourceStats, setSourceStats] = useState(null)
+  const [timeToHire, setTimeToHire] = useState(null)
   const [dsgvoData, setDsgvoData] = useState(null)
   const [upcomingInterviews, setUpcomingInterviews] = useState([])
   const [loading, setLoading] = useState(true)
@@ -29,18 +30,20 @@ export default function Dashboard() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [statsData, historyData, pipelineData, healthData, sourceData] = await Promise.all([
+      const [statsData, historyData, pipelineData, healthData, sourceData, tthData] = await Promise.all([
         candidatesApi.getStats(periodDays).catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
         matchingApi.getHistory().catch(() => ({ data: [] })),
         pipelineApi.getActiveJobs().catch(() => ({ data: [] })),
         healthApi.check().catch(() => ({ n8nStatus: 'unreachable' })),
         candidatesApi.getSourceStats().catch(() => ({ sources: [], total: 0 })),
+        candidatesApi.getTimeToHire().catch(() => null),
       ])
       const dsgvoResult = await settingsApi.getExpired().catch(() => null)
       const interviewsResult = await interviewsApi.getUpcoming().catch(() => ({ data: [] }))
       setDsgvoData(dsgvoResult)
       setUpcomingInterviews(interviewsResult.data || [])
       setStats(statsData)
+      setTimeToHire(tthData)
       setRecentMatches(historyData.data?.slice(0, 4) || [])
       setActivePipelines(pipelineData.data || [])
       setN8nStatus(healthData.n8nStatus || healthData.services?.n8n || 'unknown')
@@ -107,6 +110,7 @@ export default function Dashboard() {
           case 'matches': return <MatchesAndLocationsWidget key="matches" matches={recentMatches} stats={stats} visibleWidgets={visibleWidgets} />
           case 'locations': return null // rendered inside matches when both visible, standalone otherwise handled below
           case 'sources': return sourceStats?.sources?.length > 0 ? <SourcesWidget key="sources" sourceStats={sourceStats} /> : null
+          case 'timetohire': return timeToHire ? <TimeToHireWidget key="timetohire" data={timeToHire} /> : null
           case 'dsgvo': return (dsgvoData && isAdmin) ? <DSGVOWidget key="dsgvo" data={dsgvoData} /> : null
           case 'calendar': return <CalendarWidget key="calendar" interviews={upcomingInterviews} />
           default: return null
@@ -364,6 +368,188 @@ function SourcesWidget({ sourceStats }) {
             </div>
           )
         })}
+      </div>
+    </Card>
+  )
+}
+
+function TimeToHireWidget({ data }) {
+  const { overview, stageMetrics, bottleneck, perJob, monthlyTrend, inPipeline } = data
+
+  const stageColors = {
+    'Beworben': '#007aff',
+    'Vorauswahl': '#5856d6',
+    'Interview': '#ff9500',
+    'Angebot': '#34c759',
+  }
+
+  const maxStageDays = Math.max(...stageMetrics.filter(s => s.avgDays).map(s => s.avgDays), 1)
+  const maxTrendDays = Math.max(...monthlyTrend.filter(m => m.avgDays).map(m => m.avgDays), 1)
+
+  return (
+    <Card className="p-6 sm:p-10">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#ff9500]/10 flex items-center justify-center">
+            <Timer className="w-5 h-5 text-[#ff9500]" />
+          </div>
+          <div>
+            <h2 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white">Time-to-Hire</h2>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">Wie schnell werden Stellen besetzt?</p>
+          </div>
+        </div>
+        {bottleneck && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ff3b30]/10">
+            <Zap className="w-3.5 h-3.5 text-[#ff3b30]" />
+            <span className="text-[12px] font-semibold text-[#ff3b30]">Bottleneck: {bottleneck.stage} ({bottleneck.avgDays}d)</span>
+          </div>
+        )}
+      </div>
+
+      {/* Overview KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Ø Time-to-Hire</p>
+          <p className="text-[28px] font-semibold tracking-tight text-black dark:text-white">
+            {overview.avgDaysToHire != null ? `${overview.avgDaysToHire}` : '—'}
+            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+          </p>
+        </div>
+        <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Median</p>
+          <p className="text-[28px] font-semibold tracking-tight text-black dark:text-white">
+            {overview.medianDays != null ? `${overview.medianDays}` : '—'}
+            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+          </p>
+        </div>
+        <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Schnellste</p>
+          <p className="text-[28px] font-semibold tracking-tight text-[#34c759]">
+            {overview.minDays != null ? `${overview.minDays}` : '—'}
+            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+          </p>
+        </div>
+        <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+          <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">Längste</p>
+          <p className="text-[28px] font-semibold tracking-tight text-[#ff3b30]">
+            {overview.maxDays != null ? `${overview.maxDays}` : '—'}
+            <span className="text-[14px] font-medium text-gray-400 ml-1">Tage</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Stage Duration Bars */}
+        <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Ø Verweildauer pro Stage</h3>
+          <div className="space-y-4">
+            {stageMetrics.map(s => {
+              const color = stageColors[s.stage] || '#8e8e93'
+              const widthPct = s.avgDays != null ? Math.max(4, (s.avgDays / maxStageDays) * 100) : 0
+              return (
+                <div key={s.stage}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[14px] font-medium text-black dark:text-white">{s.stage}</span>
+                    <span className="text-[14px] font-semibold" style={{ color }}>
+                      {s.avgDays != null ? `${s.avgDays} Tage` : '—'}
+                      {s.count > 0 && <span className="text-[11px] text-gray-400 ml-1">({s.count}x)</span>}
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-600">
+                    {s.avgDays != null && (
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${widthPct}%`, backgroundColor: color }}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Monthly Trend */}
+        <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Monatlicher Trend</h3>
+          <div className="space-y-4">
+            {monthlyTrend.map((m, idx) => {
+              const widthPct = m.avgDays != null ? Math.max(4, (m.avgDays / maxTrendDays) * 100) : 0
+              const prevAvg = idx > 0 ? monthlyTrend[idx - 1].avgDays : null
+              const isImproved = prevAvg != null && m.avgDays != null && m.avgDays < prevAvg
+              const isWorse = prevAvg != null && m.avgDays != null && m.avgDays > prevAvg
+              return (
+                <div key={m.month}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[14px] font-medium text-black dark:text-white">{m.month}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[14px] font-semibold text-black dark:text-white">
+                        {m.avgDays != null ? `${m.avgDays}d` : '—'}
+                      </span>
+                      {isImproved && <TrendingDown className="w-3.5 h-3.5 text-[#34c759]" />}
+                      {isWorse && <TrendingUp className="w-3.5 h-3.5 text-[#ff3b30]" />}
+                      <span className="text-[11px] text-gray-400">{m.hired} hired</span>
+                    </div>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-600">
+                    {m.avgDays != null && (
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${widthPct}%`, backgroundColor: isImproved ? '#34c759' : isWorse ? '#ff3b30' : '#ff9500' }}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Per-Job Time-to-Hire + In Pipeline info */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        {perJob.length > 0 && (
+          <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+            <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Time-to-Hire pro Stelle</h3>
+            <div className="space-y-3">
+              {perJob.map(j => (
+                <div key={j.jobTitle} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <Briefcase className="w-4 h-4 text-[#0071e3] flex-shrink-0" />
+                    <span className="text-[14px] font-medium text-black dark:text-white truncate">{j.jobTitle}</span>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+                    <span className="text-[13px] text-gray-400">{j.hired}x</span>
+                    <span className="text-[14px] font-bold text-[#ff9500] tabular-nums">{j.avgDays}d</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+          <h3 className="text-[16px] font-semibold text-black dark:text-white mb-4">Aktuell in Pipeline</h3>
+          <div className="flex items-center gap-6">
+            <div className="flex-1">
+              <p className="text-[36px] font-semibold tracking-tight text-[#0071e3]">{inPipeline.count}</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">Bewerber in Bearbeitung</p>
+            </div>
+            <div className="flex-1">
+              <p className="text-[36px] font-semibold tracking-tight text-[#ff9500]">
+                {inPipeline.avgDaysWaiting != null ? `${inPipeline.avgDaysWaiting}` : '—'}
+              </p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">Ø Tage wartend</p>
+            </div>
+          </div>
+          <div className="mt-4 p-3 rounded-xl bg-white/50 dark:bg-[#1c1c1e]/50">
+            <p className="text-[12px] text-gray-500 dark:text-gray-400">
+              {overview.totalHired > 0
+                ? `Basierend auf ${overview.totalHired} eingestellten Kandidaten. Median: ${overview.medianDays} Tage.`
+                : 'Noch keine Einstellungen abgeschlossen. Daten werden verfügbar sobald Bewerber auf "Hired" gesetzt werden.'}
+            </p>
+          </div>
+        </div>
       </div>
     </Card>
   )

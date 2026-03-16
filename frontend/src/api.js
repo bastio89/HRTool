@@ -78,6 +78,7 @@ export const candidatesApi = {
   importCSV: (rows, skipDuplicates = true) => request('/candidates/import', { method: 'POST', body: JSON.stringify({ rows, skipDuplicates }) }),
   getStats: (days) => request(`/candidates/stats/overview${days ? `?days=${days}` : ''}`),
   getSourceStats: () => request('/candidates/stats/sources'),
+  getTimeToHire: () => request('/candidates/stats/time-to-hire'),
   checkDuplicate: (name, email, excludeId) =>
     request('/candidates/check-duplicate', { method: 'POST', body: JSON.stringify({ name, email, excludeId }) }),
 };

@@ -92,7 +92,8 @@ export const matchingApi = {
     }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),
-  deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),\n  reviewResult: (id, notes) => request(`/matching/history/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
+  deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),
+  reviewResult: (id, notes) => request(`/matching/history/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
 };
 
 // Jobs API

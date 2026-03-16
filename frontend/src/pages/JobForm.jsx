@@ -95,7 +95,7 @@ export default function JobForm() {
   if (loading) return <LoadingSpinner text={t('jobs.job_loading')} />
 
   return (
-    <div className="fade-in max-w-[800px] mx-auto">
+    <div className="fade-in max-w-[1000px] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <button

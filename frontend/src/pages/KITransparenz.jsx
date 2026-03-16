@@ -18,7 +18,7 @@ export default function KITransparenz() {
   const [tab, setTab] = useState('compliance')
 
   return (
-    <div className="fade-in max-w-[1200px] mx-auto">
+    <div className="fade-in max-w-[1400px] mx-auto">
       <div className="flex items-center gap-4 sm:gap-8 mb-8">
         <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />

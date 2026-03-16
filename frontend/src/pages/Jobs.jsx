@@ -58,7 +58,7 @@ export default function Jobs() {
   }
 
   return (
-    <div className="fade-in max-w-[1000px] mx-auto">
+    <div className="fade-in max-w-[1400px] mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 sm:mb-14 gap-4">
         <div>

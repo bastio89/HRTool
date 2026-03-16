@@ -72,7 +72,7 @@ export default function MatchingResults() {
   }
 
   return (
-    <div className="fade-in max-w-[1200px] mx-auto">
+    <div className="fade-in max-w-[1400px] mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
           <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">

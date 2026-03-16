@@ -29,7 +29,7 @@ export default function History() {
   if (loading) return <LoadingSpinner text={t('history.loading')} />
 
   return (
-    <div className="fade-in max-w-[1000px] mx-auto">
+    <div className="fade-in max-w-[1400px] mx-auto">
       <div className="mb-8 sm:mb-14">
         <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('history.title')}</h1>
         <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">{t('history.subtitle')}</p>

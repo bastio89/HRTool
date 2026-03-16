@@ -152,7 +152,7 @@ export default function CandidateForm() {
   if (loading) return <LoadingSpinner text={t('candidates.candidate_loading')} />
 
   return (
-    <div className="fade-in max-w-[800px] mx-auto">
+    <div className="fade-in max-w-[1000px] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <button onClick={() => navigate('/candidates')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">

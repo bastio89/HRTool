@@ -84,7 +84,7 @@ export default function DSGVO() {
   if (loading) return <LoadingSpinner text={t('dsgvo.loading')} />
 
   return (
-    <div className="fade-in max-w-[900px] mx-auto">
+    <div className="fade-in max-w-[1200px] mx-auto">
       {/* Header */}
       <div className="mb-8 sm:mb-14">
         <div className="flex items-center gap-4 mb-3">

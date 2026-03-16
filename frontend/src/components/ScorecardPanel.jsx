@@ -214,22 +214,22 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                     <p className="text-[15px] text-gray-500">{t('scorecard.no_templates')}</p>
                   ) : (
                     <div className="space-y-3">
-                      {templates.map(t => (
+                      {templates.map(tpl => (
                         <button
-                          key={t.id}
-                          onClick={() => selectTemplate(t)}
+                          key={tpl.id}
+                          onClick={() => selectTemplate(tpl)}
                           className="w-full text-left p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-all cursor-pointer group"
                         >
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-[16px] font-semibold text-black dark:text-white">{t.title}</p>
+                              <p className="text-[16px] font-semibold text-black dark:text-white">{tpl.title}</p>
                               <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
-                                {t.questions.length} {t('scorecard.questions')}
-                                {t.ai_generated ? ` · ${t('scorecard.ai_generated')}` : ''}
-                                {t.job_title ? ` · ${t.job_title}` : ''}
+                                {tpl.questions.length} {t('scorecard.questions')}
+                                {tpl.ai_generated ? ` · ${t('scorecard.ai_generated')}` : ''}
+                                {tpl.job_title ? ` · ${tpl.job_title}` : ''}
                               </p>
                             </div>
-                            {t.ai_generated === 1 && <KiBadge />}
+                            {tpl.ai_generated === 1 && <KiBadge />}
                           </div>
                         </button>
                       ))}
@@ -425,22 +425,22 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                 </div>
               )}
 
-              {templates.map(t => (
-                <div key={t.id} className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+              {templates.map(tpl => (
+                <div key={tpl.id} className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <p className="text-[16px] font-semibold text-black dark:text-white">{t.title}</p>
-                      {t.ai_generated === 1 && <KiBadge />}
+                      <p className="text-[16px] font-semibold text-black dark:text-white">{tpl.title}</p>
+                      {tpl.ai_generated === 1 && <KiBadge />}
                     </div>
                     <button
-                      onClick={async () => { await scorecardsApi.deleteTemplate(t.id); loadData() }}
+                      onClick={async () => { await scorecardsApi.deleteTemplate(tpl.id); loadData() }}
                       className="text-gray-400 hover:text-[#ff3b30] cursor-pointer transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="space-y-2">
-                    {t.questions.map((q, i) => (
+                    {tpl.questions.map((q, i) => (
                       <div key={i} className="flex items-start gap-2">
                         <span className="text-[13px] font-bold text-gray-400 mt-0.5">{i + 1}.</span>
                         <div>

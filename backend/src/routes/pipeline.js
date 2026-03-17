@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { logAiCall } = require('../aiLogger');
 let triggerStageEmail = null;
 try {
   triggerStageEmail = require('./emails').triggerStageEmail;
@@ -176,6 +177,53 @@ router.put('/:entryId/stage', (req, res) => {
       // Trigger automatic email on stage change
       if (triggerStageEmail) {
         triggerStageEmail(entry.candidate_id, stage, job?.title, req.user?.username).catch(() => {});
+      }
+
+      // ─── KI-Override Detection (Art. 14 EU AI Act) ───
+      // If a recruiter advances a candidate to a positive stage despite a low AI matching score,
+      // log it as a human override of the AI recommendation
+      const POSITIVE_STAGES = ['Interview', 'Angebot', 'Hired'];
+      if (POSITIVE_STAGES.includes(stage)) {
+        try {
+          // Find matching results for this job that include this candidate
+          const matchingRows = db.prepare(`
+            SELECT mr.id, mr.results FROM matching_results mr
+            WHERE mr.job_title = (SELECT title FROM jobs WHERE id = ?)
+            ORDER BY mr.created_at DESC LIMIT 5
+          `).all(entry.job_id);
+
+          for (const mr of matchingRows) {
+            try {
+              const parsed = JSON.parse(mr.results);
+              const results = parsed.results || [];
+              const candidate = db.prepare('SELECT name FROM candidates WHERE id = ?').get(entry.candidate_id);
+              const candidateMatch = results.find(r => {
+                const rName = (r.name || r.kandidat || '').toLowerCase();
+                const cName = (candidate?.name || '').toLowerCase();
+                return rName === cName || rName.includes(cName) || cName.includes(rName);
+              });
+              if (candidateMatch) {
+                const scorePct = Math.round((candidateMatch.score || 0) * 100);
+                if (scorePct < 50) {
+                  // This is a KI-Override: recruiter advances candidate despite low AI score
+                  const overrideNote = `KI-Override: ${candidate?.name} → "${stage}" trotz KI-Score ${scorePct}% (Matching #${mr.id})`;
+                  db.prepare('INSERT INTO activities (candidate_id, type, content) VALUES (?, ?, ?)')
+                    .run(entry.candidate_id, 'KI-Override', overrideNote);
+                  logAudit(req, 'ki-override', 'Pipeline', req.params.entryId, candidate?.name, {
+                    matchingId: mr.id,
+                    aiScore: scorePct,
+                    newStage: stage,
+                    job: job?.title,
+                  });
+                  console.log(`⚠️ KI-Override erkannt: ${candidate?.name} → "${stage}" trotz Score ${scorePct}%`);
+                }
+                break; // Found the candidate, stop searching
+              }
+            } catch (_) {}
+          }
+        } catch (overrideErr) {
+          console.error('Override detection error:', overrideErr.message);
+        }
       }
     }
 

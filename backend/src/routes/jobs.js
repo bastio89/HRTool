@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
+const { generatorRateLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -204,7 +205,7 @@ router.delete('/:id', (req, res) => {
  *     responses:
  *       200: { description: Generierte Stellenbeschreibung und Anforderungen }
  */
-router.post('/generate-description', async (req, res) => {
+router.post('/generate-description', generatorRateLimiter, async (req, res) => {
   try {
     const { title, keywords, type, location } = req.body;
 

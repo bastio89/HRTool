@@ -19,7 +19,7 @@ const router = express.Router();
  *         schema: { type: integer, default: 20 }
  *       - in: query
  *         name: feature
- *         schema: { type: string, enum: [matching, cv-parser, job-generator] }
+ *         schema: { type: string, enum: [matching, cv-parser, job-generator, email-template] }
  *       - in: query
  *         name: success
  *         schema: { type: string, enum: ['true', 'false'] }
@@ -89,6 +89,121 @@ router.get('/', (req, res) => {
   } catch (error) {
     console.error('Error fetching AI logs:', error);
     res.status(500).json({ error: 'Fehler beim Laden der KI-Protokolle' });
+  }
+});
+
+// ═══════════════════════════════════════
+// Model Card (EU AI Act Art. 13 — Transparency)
+// ═══════════════════════════════════════
+
+/**
+ * @swagger
+ * /ai-logs/model-card:
+ *   get:
+ *     summary: Model Card — Strukturierte Modellinformationen (Art. 13)
+ *     tags: [AI-Logs]
+ *     responses:
+ *       200: { description: Model-Card-Informationen }
+ */
+router.get('/model-card', (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    }
+
+    const modelStats = db.prepare(`
+      SELECT model, 
+             COUNT(*) as total_calls,
+             SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
+             ROUND(AVG(duration_ms)) as avg_duration_ms,
+             MIN(created_at) as first_used,
+             MAX(created_at) as last_used
+      FROM ai_logs
+      WHERE model IS NOT NULL
+      GROUP BY model
+      ORDER BY total_calls DESC
+    `).all();
+
+    const featureUsage = db.prepare(`
+      SELECT feature, model, COUNT(*) as count
+      FROM ai_logs WHERE model IS NOT NULL
+      GROUP BY feature, model
+      ORDER BY feature, count DESC
+    `).all();
+
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+
+    const modelCard = {
+      model: {
+        name: OLLAMA_MODEL,
+        provider: 'Ollama (lokal)',
+        type: 'Large Language Model (LLM)',
+        architecture: 'Transformer-basiert',
+        deployment: 'On-Premise / lokale Ausführung',
+        endpoint: (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost'),
+      },
+      intendedUse: {
+        primaryUses: [
+          { feature: 'matching', description: 'Bewertung der Passung zwischen Bewerberprofilen und Stellenanforderungen', riskLevel: 'high', aiActCategory: 'Annex III, Kat. 4 — Beschäftigung' },
+          { feature: 'cv-parser', description: 'Extraktion strukturierter Daten aus Lebensläufen (PDF/Word)', riskLevel: 'high', aiActCategory: 'Annex III, Kat. 4 — Beschäftigung' },
+          { feature: 'job-generator', description: 'Generierung von Stellenbeschreibungen aus Stichpunkten', riskLevel: 'low', aiActCategory: 'Art. 50 — Transparenzpflicht' },
+          { feature: 'email-template', description: 'Generierung von E-Mail-Vorlagen für HR-Kommunikation', riskLevel: 'low', aiActCategory: 'Art. 50 — Transparenzpflicht' },
+          { feature: 'interview-questions', description: 'Generierung von Interviewfragen basierend auf Stelle und Profil', riskLevel: 'low', aiActCategory: 'Art. 50 — Transparenzpflicht' },
+        ],
+        outOfScope: [
+          'Autonome Einstellungsentscheidungen',
+          'Verarbeitung sensibler Daten (Geschlecht, Herkunft, Religion)',
+          'Erstellung rechtsverbindlicher Dokumente',
+          'Bewertung existierender Mitarbeiter (Performance Reviews)',
+        ],
+      },
+      dataHandling: {
+        inputDataTypes: ['Bewerberprofile (Name, Skills, Erfahrung)', 'Stellenbeschreibungen', 'Lebenslauf-Text (extrahiert)', 'Stichpunkte für Stellenbeschreibungen'],
+        anonymization: 'Bewerbernamen werden beim Matching durch Platzhalter ersetzt (Kandidat 1, 2, 3...)',
+        dataMinimization: 'Nur jobrelevante Felder werden übermittelt. Keine Adressen, Geburtsdaten oder Fotos.',
+        dataRetention: 'Alle KI-Aufrufe werden in der lokalen Datenbank protokolliert (ai_logs). Keine Cloud-Übertragung.',
+        thirdPartySharing: 'Nein — Das LLM läuft vollständig lokal via Ollama.',
+      },
+      performance: {
+        modelStats,
+        featureUsage,
+        knownLimitations: [
+          'LLM-Antworten können inkonsistent sein (Temperatur-Parameter)',
+          'JSON-Parsing kann bei unerwarteten Formaten fehlschlagen',
+          'Bei sehr langen Profilen kann die Kontextlänge überschritten werden',
+          'Die Bewertungsqualität hängt von der Qualität der Eingabedaten ab',
+          'Keine Echtzeit-Garantie — Antwortzeiten variieren (5–120 Sekunden)',
+        ],
+      },
+      safeguards: {
+        humanOversight: 'Alle KI-Ergebnisse sind Vorschläge. Finale Entscheidungen werden von Recruitern getroffen.',
+        biasMonitoring: 'Score-Verteilungen, Standort- und Quellen-Analysen werden im Bias-Monitor überwacht.',
+        overrideLogging: 'Überstimmungen niedriger KI-Scores werden als KI-Override protokolliert.',
+        rateLimiting: 'Alle KI-Endpunkte sind zeitbasiert limitiert (Matching: 5/min, Generatoren: 10/min).',
+        errorHandling: 'Fehlgeschlagene Aufrufe werden protokolliert. Compliance-Dashboard zeigt Fehlerrate.',
+        transparency: 'Alle KI-Inhalte sind durch lila Badges und Disclaimer gekennzeichnet.',
+      },
+      regulatoryInfo: {
+        regulation: 'EU AI Act — Verordnung (EU) 2024/1689',
+        applicableArticles: [
+          'Art. 6 — Klassifizierung als Hochrisiko (Annex III Nr. 4)',
+          'Art. 9 — Risikomanagement (Bias-Monitoring, Fehlerüberwachung)',
+          'Art. 10 — Datenqualität (Anonymisierung, Datenminimierung)',
+          'Art. 12 — Aufzeichnungspflicht (vollständiges Prompt/Response-Logging)',
+          'Art. 13 — Transparenz (Model Card, KI-Badges)',
+          'Art. 14 — Menschliche Aufsicht (Human Review, Override-Logging)',
+          'Art. 25 — Betreiberpflichten (lokale Verarbeitung)',
+          'Art. 50 — Transparenzpflicht für niedrigere Risikostufen',
+        ],
+        complianceContact: 'Administrator dieses HR-Tool-Systems',
+        lastReview: new Date().toISOString().slice(0, 10),
+      },
+    };
+
+    res.json(modelCard);
+  } catch (error) {
+    console.error('Error generating model card:', error);
+    res.status(500).json({ error: 'Fehler beim Erstellen der Model Card' });
   }
 });
 
@@ -396,6 +511,19 @@ router.get('/compliance/checklist', (req, res) => {
       SELECT COUNT(*) as count FROM ai_logs WHERE success = 0 AND created_at >= datetime('now', '-7 days')
     `).get().count;
 
+    // Override tracking
+    const overrideCount = db.prepare(`
+      SELECT COUNT(*) as count FROM audit_log WHERE action = 'ki-override'
+    `).get().count;
+    const recentOverrides = db.prepare(`
+      SELECT COUNT(*) as count FROM audit_log WHERE action = 'ki-override' AND created_at >= datetime('now', '-30 days')
+    `).get().count;
+
+    // Rate limiting check — count AI calls in last hour
+    const aiCallsLastHour = db.prepare(`
+      SELECT COUNT(*) as count FROM ai_logs WHERE created_at >= datetime('now', '-1 hour')
+    `).get().count;
+
     const checks = [
       {
         id: 'logging',
@@ -471,6 +599,22 @@ router.get('/compliance/checklist', (req, res) => {
           : logsWithUser > 0 ? 'warning'
           : 'failed',
         details: `${logsWithUser} von ${totalLogs} Aufrufen mit Nutzer-ID`,
+      },
+      {
+        id: 'override-tracking',
+        article: 'Art. 14',
+        title: 'KI-Override Protokollierung',
+        description: 'Menschliche Überstimmungen von KI-Empfehlungen werden dokumentiert',
+        status: 'passed',
+        details: `${overrideCount} Overrides gesamt, ${recentOverrides} in den letzten 30 Tagen. Override-Erkennung aktiv: Warnung bei Beförderung trotz Score <50%.`,
+      },
+      {
+        id: 'rate-limiting',
+        article: 'Art. 9',
+        title: 'Rate-Limiting',
+        description: 'KI-Aufrufe sind pro Stunde limitiert, um Missbrauch zu verhindern',
+        status: aiCallsLastHour <= 50 ? 'passed' : aiCallsLastHour <= 100 ? 'warning' : 'failed',
+        details: `${aiCallsLastHour} KI-Aufrufe in der letzten Stunde (Limit: 50/h Warnung, 100/h kritisch)`,
       },
     ];
 

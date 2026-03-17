@@ -2,6 +2,8 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { logAiCall } = require('../aiLogger');
+const { generatorRateLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -460,7 +462,7 @@ router.put('/triggers', (req, res) => {
 // AI Template Generation (Ollama)
 // ═══════════════════════════════════════
 
-router.post('/generate-template', async (req, res) => {
+router.post('/generate-template', generatorRateLimiter, async (req, res) => {
   try {
     const { purpose, tone, stage } = req.body;
     if (!purpose) {
@@ -492,12 +494,15 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown, ohne Erklärung):
 
 Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
 
+    const startTime = Date.now();
+
     // Ping Ollama
     try {
       const pc = new AbortController();
       setTimeout(() => pc.abort(), 5000);
       await fetch(`${OLLAMA_URL}/`, { signal: pc.signal });
     } catch (_) {
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Ollama nicht erreichbar' });
       return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
     }
 
@@ -520,6 +525,7 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
     } catch (err) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
+        logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Timeout' });
         return res.status(504).json({ error: 'Timeout: KI-Generierung hat zu lange gedauert.' });
       }
       throw err;
@@ -529,6 +535,7 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
 
     if (!response.ok) {
       const errText = await response.text();
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: errText, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Ollama HTTP ' + response.status });
       return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
     }
 
@@ -547,9 +554,12 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
         throw new Error('Kein JSON in Antwort');
       }
     } catch (parseErr) {
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: Date.now() - startTime, inputTokens: data.prompt_eval_count || null, outputTokens: data.eval_count || null, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
       return res.status(502).json({ error: 'KI-Antwort konnte nicht verarbeitet werden: ' + parseErr.message });
     }
 
+    const durationMs = Date.now() - startTime;
+    logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: parsed, durationMs, inputTokens: data.prompt_eval_count || null, outputTokens: data.eval_count || null, success: true });
     logAudit(req, 'ki-email-template', 'EmailTemplate', null, parsed.name, { purpose, model: OLLAMA_MODEL });
 
     res.json({

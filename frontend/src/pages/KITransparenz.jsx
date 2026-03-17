@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info } from 'lucide-react'
+import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server } from 'lucide-react'
 import { Card, LoadingSpinner } from '../components/UI'
 import { aiLogsApi } from '../api'
 import { useI18n } from '../I18nContext'
@@ -9,6 +9,7 @@ const TABS = [
   { id: 'compliance', labelKey: 'ki.tab_compliance', icon: Shield },
   { id: 'logs', labelKey: 'ki.tab_logs', icon: FileText },
   { id: 'bias', labelKey: 'ki.tab_bias', icon: Scale },
+  { id: 'modelcard', labelKey: 'ki.tab_modelcard', icon: CreditCard },
   { id: 'info', labelKey: 'ki.tab_info', icon: Info },
 ]
 
@@ -46,6 +47,7 @@ export default function KITransparenz() {
       {tab === 'compliance' && <ComplianceTab t={t} />}
       {tab === 'logs' && <LogsTab t={t} />}
       {tab === 'bias' && <BiasTab t={t} />}
+      {tab === 'modelcard' && <ModelCardTab t={t} />}
       {tab === 'info' && <InfoTab t={t} locale={locale} />}
     </div>
   )
@@ -129,7 +131,7 @@ function ComplianceTab({ t }) {
               {stats.byFeature.map(f => {
                 const riskLevel = ['matching', 'cv-parser'].includes(f.feature) ? t('ki.high_risk') : t('ki.low_risk')
                 const riskColor = ['matching', 'cv-parser'].includes(f.feature) ? '#ff3b30' : '#34c759'
-                const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen') }
+                const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen'), 'email-template': t('ki.feature_email_tpl'), 'interview-questions': t('ki.feature_interview_q') }
                 return (
                   <div key={f.feature} className="flex items-center justify-between p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                     <div className="flex items-center gap-4">
@@ -198,7 +200,7 @@ function LogsTab({ t }) {
 
   useEffect(() => { load() }, [load])
 
-  const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen') }
+  const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen'), 'email-template': t('ki.feature_email_tpl'), 'interview-questions': t('ki.feature_interview_q') }
 
   const loadDetail = async (id) => {
     if (expandedId === id) { setExpandedId(null); setDetail(null); return }
@@ -215,6 +217,8 @@ function LogsTab({ t }) {
             <option value="matching">{t('ki.feature_matching')}</option>
             <option value="cv-parser">{t('ki.feature_cv_parser')}</option>
             <option value="job-generator">{t('ki.feature_job_gen')}</option>
+            <option value="email-template">{t('ki.feature_email_tpl')}</option>
+            <option value="interview-questions">{t('ki.feature_interview_q')}</option>
           </select>
           <select value={filter.success} onChange={e => setFilter({ ...filter, success: e.target.value, page: 1 })}
             className="px-4 py-2.5 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[14px] font-medium border-none outline-none text-black dark:text-white">
@@ -434,6 +438,192 @@ function BiasTab({ t }) {
           </Card>
         )}
       </div>
+    </div>
+  )
+}
+
+function ModelCardTab({ t }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { aiLogsApi.getModelCard().then(setData).catch(() => {}).finally(() => setLoading(false)) }, [])
+
+  if (loading) return <LoadingSpinner text={t('ki.mc_loading')} />
+  if (!data) return <Card className="p-16 text-center"><p className="text-gray-500">{t('ki.mc_error')}</p></Card>
+
+  const riskColors = { high: '#ff3b30', low: '#34c759' }
+  const riskLabels = { high: t('ki.high_risk'), low: t('ki.low_risk') }
+
+  return (
+    <div className="space-y-8 max-w-[1000px]">
+      <Card className="p-8 bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 border border-[#5e5ce6]/10">
+        <div className="flex items-start gap-5">
+          <div className="w-14 h-14 rounded-2xl bg-[#5e5ce6]/10 flex items-center justify-center flex-shrink-0">
+            <CreditCard className="w-7 h-7 text-[#5e5ce6]" />
+          </div>
+          <div>
+            <h2 className="text-[20px] font-semibold text-black dark:text-white mb-2">{t('ki.mc_title')}</h2>
+            <p className="text-[15px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.mc_subtitle')}</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Model Identity */}
+      <Card className="p-8">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-[#5e5ce6]/10 flex items-center justify-center"><Server className="w-6 h-6 text-[#5e5ce6]" /></div>
+          <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('ki.mc_model_identity')}</h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[
+            [t('ki.mc_model_name'), data.model.name],
+            [t('ki.mc_provider'), data.model.provider],
+            [t('ki.mc_type'), data.model.type],
+            [t('ki.mc_architecture'), data.model.architecture],
+            [t('ki.mc_deployment'), data.model.deployment],
+            [t('ki.mc_endpoint'), data.model.endpoint],
+          ].map(([label, val]) => (
+            <div key={label} className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+              <p className="text-[11px] font-bold text-gray-400 uppercase mb-1">{label}</p>
+              <p className="text-[15px] font-semibold text-black dark:text-white">{val}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Intended Use */}
+      <Card className="p-8">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-[#0071e3]/10 flex items-center justify-center"><Bot className="w-6 h-6 text-[#0071e3]" /></div>
+          <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('ki.mc_intended_use')}</h3>
+        </div>
+        <div className="space-y-3 mb-6">
+          {data.intendedUse.primaryUses.map(u => (
+            <div key={u.feature} className="flex items-center justify-between p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-[14px] font-bold text-black dark:text-white">{u.feature}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: `${riskColors[u.riskLevel]}15`, color: riskColors[u.riskLevel] }}>{riskLabels[u.riskLevel]}</span>
+                </div>
+                <p className="text-[12px] text-gray-500">{u.description}</p>
+                <p className="text-[11px] text-[#5e5ce6] font-semibold mt-1">{u.aiActCategory}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="p-4 rounded-2xl bg-[#ff3b30]/5 border border-[#ff3b30]/10">
+          <p className="text-[12px] font-bold text-[#ff3b30] uppercase mb-2">{t('ki.mc_out_of_scope')}</p>
+          <ul className="space-y-1">
+            {data.intendedUse.outOfScope.map((item, i) => (
+              <li key={i} className="text-[13px] text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                <XCircle className="w-3.5 h-3.5 text-[#ff3b30] flex-shrink-0" />{item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Card>
+
+      {/* Data & Privacy */}
+      <Card className="p-8">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-[#34c759]/10 flex items-center justify-center"><Lock className="w-6 h-6 text-[#34c759]" /></div>
+          <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('ki.mc_data_privacy')}</h3>
+        </div>
+        <div className="space-y-4">
+          {[
+            [t('ki.mc_input_data'), data.dataHandling.inputDataTypes.join(', ')],
+            [t('ki.mc_anonymization'), data.dataHandling.anonymization],
+            [t('ki.mc_data_min'), data.dataHandling.dataMinimization],
+            [t('ki.mc_retention'), data.dataHandling.dataRetention],
+            [t('ki.mc_third_party'), data.dataHandling.thirdPartySharing],
+          ].map(([label, val]) => (
+            <div key={label} className="pl-4 border-l-2 border-gray-100 dark:border-gray-700">
+              <h4 className="text-[14px] font-bold text-black dark:text-white mb-1">{label}</h4>
+              <p className="text-[13px] text-gray-600 dark:text-gray-400">{val}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Performance */}
+      {data.performance?.modelStats?.length > 0 && (
+        <Card className="p-8">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-[#ff9f0a]/10 flex items-center justify-center"><Zap className="w-6 h-6 text-[#ff9f0a]" /></div>
+            <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('ki.mc_performance')}</h3>
+          </div>
+          <div className="space-y-3 mb-6">
+            {data.performance.modelStats.map(m => (
+              <div key={m.model} className="flex items-center justify-between p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+                <span className="text-[14px] font-bold text-black dark:text-white">{m.model}</span>
+                <div className="flex items-center gap-4 text-[12px]">
+                  <span className="text-gray-400">{m.total_calls} {t('ki.calls')}</span>
+                  <span className="text-[#34c759] font-semibold">{m.successful} OK</span>
+                  {m.avg_duration_ms && <span className="text-gray-400">{(m.avg_duration_ms / 1000).toFixed(1)}s Ø</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {data.performance.knownLimitations?.length > 0 && (
+            <div className="p-4 rounded-2xl bg-[#ff9f0a]/5 border border-[#ff9f0a]/10">
+              <p className="text-[12px] font-bold text-[#ff9f0a] uppercase mb-2">{t('ki.mc_limitations')}</p>
+              <ul className="space-y-1">
+                {data.performance.knownLimitations.map((item, i) => (
+                  <li key={i} className="text-[13px] text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-[#ff9f0a] flex-shrink-0 mt-0.5" />{item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Safeguards */}
+      <Card className="p-8">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-[#0071e3]/10 flex items-center justify-center"><Shield className="w-6 h-6 text-[#0071e3]" /></div>
+          <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('ki.mc_safeguards')}</h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[
+            [t('ki.mc_sg_human'), data.safeguards.humanOversight, '#34c759', UserCheck],
+            [t('ki.mc_sg_bias'), data.safeguards.biasMonitoring, '#ff9f0a', Scale],
+            [t('ki.mc_sg_override'), data.safeguards.overrideLogging, '#5e5ce6', Eye],
+            [t('ki.mc_sg_rate'), data.safeguards.rateLimiting, '#0071e3', Zap],
+            [t('ki.mc_sg_error'), data.safeguards.errorHandling, '#ff3b30', AlertTriangle],
+            [t('ki.mc_sg_transparency'), data.safeguards.transparency, '#ff9f0a', Eye],
+          ].map(([label, val, color, Icon]) => (
+            <div key={label} className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+              <div className="flex items-center gap-2 mb-2">
+                <Icon className="w-4 h-4" style={{ color }} />
+                <p className="text-[13px] font-bold text-black dark:text-white">{label}</p>
+              </div>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400">{val}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Regulatory */}
+      <Card className="p-8 mb-16">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-[#ff3b30]/10 flex items-center justify-center"><Scale className="w-6 h-6 text-[#ff3b30]" /></div>
+          <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('ki.mc_regulatory')}</h3>
+        </div>
+        <p className="text-[15px] font-semibold text-[#5e5ce6] mb-4">{data.regulatoryInfo.regulation}</p>
+        <div className="space-y-2 mb-4">
+          {data.regulatoryInfo.applicableArticles.map((a, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+              <CheckCircle className="w-4 h-4 text-[#34c759] flex-shrink-0" />
+              <span className="text-[13px] text-gray-700 dark:text-gray-300">{a}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[12px] text-gray-400 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+          {t('ki.mc_last_review')}: {data.regulatoryInfo.lastReview}
+        </p>
+      </Card>
     </div>
   )
 }

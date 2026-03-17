@@ -243,6 +243,7 @@ export const aiLogsApi = {
   getStats: () => request('/ai-logs/stats/overview'),
   getBiasReport: () => request('/ai-logs/stats/bias-report'),
   getCompliance: () => request('/ai-logs/compliance/checklist'),
+  getModelCard: () => request('/ai-logs/model-card'),
 };
 
 // Email API

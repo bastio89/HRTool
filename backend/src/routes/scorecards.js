@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { generatorRateLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -298,7 +299,7 @@ router.get('/responses/compare', (req, res) => {
  *     summary: KI-generierte Interviewfragen basierend auf Stelle + Kandidatenprofil
  *     tags: [Scorecards]
  */
-router.post('/generate-questions', async (req, res) => {
+router.post('/generate-questions', generatorRateLimiter, async (req, res) => {
   try {
     const { job_id, candidate_id, question_count } = req.body;
     

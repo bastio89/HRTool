@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server } from 'lucide-react'
+import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server, AlertOctagon, TestTubes, Lightbulb, Bell, Play } from 'lucide-react'
 import { Card, LoadingSpinner } from '../components/UI'
 import { aiLogsApi } from '../api'
 import { useI18n } from '../I18nContext'
@@ -9,6 +9,9 @@ const TABS = [
   { id: 'compliance', labelKey: 'ki.tab_compliance', icon: Shield },
   { id: 'logs', labelKey: 'ki.tab_logs', icon: FileText },
   { id: 'bias', labelKey: 'ki.tab_bias', icon: Scale },
+  { id: 'riskreg', labelKey: 'ki.tab_risk_register', icon: AlertOctagon },
+  { id: 'biastest', labelKey: 'ki.tab_bias_testset', icon: TestTubes },
+  { id: 'alerts', labelKey: 'ki.tab_bias_alerts', icon: Bell },
   { id: 'modelcard', labelKey: 'ki.tab_modelcard', icon: CreditCard },
   { id: 'info', labelKey: 'ki.tab_info', icon: Info },
 ]
@@ -47,6 +50,9 @@ export default function KITransparenz() {
       {tab === 'compliance' && <ComplianceTab t={t} />}
       {tab === 'logs' && <LogsTab t={t} />}
       {tab === 'bias' && <BiasTab t={t} />}
+      {tab === 'riskreg' && <RiskRegisterTab t={t} />}
+      {tab === 'biastest' && <BiasTestsetTab t={t} />}
+      {tab === 'alerts' && <BiasAlertsTab t={t} />}
       {tab === 'modelcard' && <ModelCardTab t={t} />}
       {tab === 'info' && <InfoTab t={t} locale={locale} />}
     </div>
@@ -656,6 +662,340 @@ function getInfoSections(t) {
       { label: t('ki.info_s5_l4'), text: t('ki.info_s5_t4') },
     ]},
   ]
+}
+
+// ═══════════════════════════════════════
+// Risk Register Tab
+// ═══════════════════════════════════════
+function RiskRegisterTab({ t }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    aiLogsApi.getRiskRegister().then(setData).catch(() => null).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <LoadingSpinner text={t('ki.risk_loading')} />
+  if (!data) return <Card className="p-8"><p className="text-gray-500">{t('ki.risk_error')}</p></Card>
+
+  const levelColors = { high: '#ff3b30', medium: '#ff9f0a', low: '#34c759' }
+  const statusLabels = { mitigated: t('ki.risk_mitigated'), active: t('ki.risk_active'), 'partially-mitigated': t('ki.risk_partial') }
+  const statusColors = { mitigated: 'bg-[#34c759]/10 text-[#34c759]', active: 'bg-[#ff3b30]/10 text-[#ff3b30]', 'partially-mitigated': 'bg-[#ff9f0a]/10 text-[#ff9f0a]' }
+
+  return (
+    <div className="space-y-6 max-w-[1200px]">
+      <Card className="p-6 bg-gradient-to-br from-[#ff3b30]/5 to-[#ff9f0a]/5 border border-[#ff3b30]/10">
+        <div className="flex items-center gap-4 mb-4">
+          <AlertOctagon className="w-8 h-8 text-[#ff3b30]" />
+          <div>
+            <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.risk_title')}</h2>
+            <p className="text-[14px] text-gray-500">{t('ki.risk_subtitle')}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mt-4">
+          <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
+            <p className="text-[28px] font-bold text-[#ff3b30]">{data.summary.active}</p>
+            <p className="text-[13px] text-gray-500">{t('ki.risk_active')}</p>
+          </div>
+          <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
+            <p className="text-[28px] font-bold text-[#ff9f0a]">{data.summary.partiallyMitigated}</p>
+            <p className="text-[13px] text-gray-500">{t('ki.risk_partial')}</p>
+          </div>
+          <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
+            <p className="text-[28px] font-bold text-[#34c759]">{data.summary.mitigated}</p>
+            <p className="text-[13px] text-gray-500">{t('ki.risk_mitigated')}</p>
+          </div>
+        </div>
+      </Card>
+
+      {data.risks.map(risk => (
+        <Card key={risk.id} className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${levelColors[risk.riskLevel]}15` }}>
+                <AlertTriangle className="w-5 h-5" style={{ color: levelColors[risk.riskLevel] }} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[12px] font-mono font-bold text-gray-400">{risk.id}</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: `${levelColors[risk.riskLevel]}15`, color: levelColors[risk.riskLevel] }}>
+                    {risk.riskLevel.toUpperCase()}
+                  </span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] font-semibold">{risk.aiActArticle}</span>
+                </div>
+                <h3 className="text-[16px] font-bold text-black dark:text-white">{risk.title}</h3>
+                <p className="text-[13px] text-gray-500 mt-1">{risk.description}</p>
+              </div>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-[12px] font-bold flex-shrink-0 ${statusColors[risk.status]}`}>
+              {statusLabels[risk.status]}
+            </span>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-[13px] font-bold text-gray-700 dark:text-gray-300 mb-2">{t('ki.risk_mitigations')}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {risk.mitigations.map((m, i) => (
+                <div key={i} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+                  <CheckCircle className="w-4 h-4 text-[#34c759] mt-0.5 flex-shrink-0" />
+                  {m}
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════
+// Bias Testset Tab
+// ═══════════════════════════════════════
+function BiasTestsetTab({ t }) {
+  const [profiles, setProfiles] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [running, setRunning] = useState(false)
+  const [results, setResults] = useState(null)
+  const [jobDesc, setJobDesc] = useState('')
+  const [jobTitle, setJobTitle] = useState('')
+
+  useEffect(() => {
+    aiLogsApi.getBiasTestset().then(setProfiles).catch(() => null).finally(() => setLoading(false))
+  }, [])
+
+  const runTest = async () => {
+    if (!jobDesc.trim()) return
+    setRunning(true)
+    try {
+      const res = await aiLogsApi.runBiasTest({ jobDescription: jobDesc, jobTitle: jobTitle })
+      setResults(res)
+    } catch (e) {
+      setResults({ error: e.message })
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  if (loading) return <LoadingSpinner text={t('ki.biastest_loading')} />
+
+  return (
+    <div className="space-y-6 max-w-[1200px]">
+      <Card className="p-6 bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 border border-[#5e5ce6]/10">
+        <div className="flex items-center gap-4 mb-4">
+          <TestTubes className="w-8 h-8 text-[#5e5ce6]" />
+          <div>
+            <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.biastest_title')}</h2>
+            <p className="text-[14px] text-gray-500">{t('ki.biastest_subtitle')}</p>
+          </div>
+        </div>
+        {profiles && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {profiles.diversityDimensions?.map((d, i) => (
+              <span key={i} className="text-[12px] px-3 py-1 rounded-full bg-white/50 dark:bg-black/20 text-gray-600 dark:text-gray-400 font-medium">{d}</span>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Test runner */}
+      <Card className="p-6">
+        <h3 className="text-[16px] font-bold text-black dark:text-white mb-4">{t('ki.biastest_run')}</h3>
+        <div className="space-y-3">
+          <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder={t('ki.biastest_job_title')}
+            className="w-full px-4 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-gray-200 dark:border-gray-700 text-[14px] outline-none focus:ring-2 focus:ring-[#5e5ce6]/30" />
+          <textarea value={jobDesc} onChange={e => setJobDesc(e.target.value)} rows={4} placeholder={t('ki.biastest_job_desc')}
+            className="w-full px-4 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-gray-200 dark:border-gray-700 text-[14px] outline-none focus:ring-2 focus:ring-[#5e5ce6]/30 resize-none" />
+          <button onClick={runTest} disabled={running || !jobDesc.trim()}
+            className="flex items-center gap-2 px-6 py-3 bg-[#5e5ce6] hover:bg-[#4d4bc5] text-white rounded-xl font-semibold text-[14px] disabled:opacity-50 transition-colors cursor-pointer">
+            {running ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{t('ki.biastest_running')}</> : <><Play className="w-4 h-4" />{t('ki.biastest_start')}</>}
+          </button>
+        </div>
+      </Card>
+
+      {/* Profiles overview */}
+      {profiles && !results && (
+        <Card className="p-6">
+          <h3 className="text-[16px] font-bold text-black dark:text-white mb-4">{t('ki.biastest_profiles')} ({profiles.totalProfiles})</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {profiles.profiles?.map(p => (
+              <div key={p.id} className="p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/50 dark:border-gray-700/50">
+                <p className="text-[13px] font-bold text-black dark:text-white">{p.name}</p>
+                <p className="text-[12px] text-gray-500 mt-0.5">{p.location} · {p.experience}</p>
+                <p className="text-[11px] text-gray-400 mt-1">{p.skills}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Results */}
+      {results && !results.error && (
+        <>
+          <Card className="p-6">
+            <h3 className="text-[16px] font-bold text-black dark:text-white mb-4">{t('ki.biastest_results')}</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+              <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
+                <p className="text-[24px] font-bold text-[#0071e3]">{Math.round(results.analysis.avgScore * 100)}%</p>
+                <p className="text-[12px] text-gray-500">⌀ Score</p>
+              </div>
+              <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
+                <p className="text-[24px] font-bold text-[#5e5ce6]">{Math.round(results.analysis.stdDeviation * 100)}%</p>
+                <p className="text-[12px] text-gray-500">σ {t('ki.biastest_deviation')}</p>
+              </div>
+              <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
+                <p className="text-[24px] font-bold text-black dark:text-white">{results.analysis.scoredProfiles}/{results.analysis.totalProfiles}</p>
+                <p className="text-[12px] text-gray-500">{t('ki.biastest_scored')}</p>
+              </div>
+              <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
+                <p className="text-[24px] font-bold text-gray-600">{Math.round(results.duration / 1000)}s</p>
+                <p className="text-[12px] text-gray-500">{t('ki.biastest_duration')}</p>
+              </div>
+            </div>
+
+            {/* Scored profiles sorted by score */}
+            <div className="space-y-2">
+              {results.results?.filter(r => r.score !== null).sort((a, b) => b.score - a.score).map((r, i) => {
+                const pct = Math.round(r.score * 100)
+                const barColor = pct >= 70 ? '#34c759' : pct >= 40 ? '#ff9f0a' : '#ff3b30'
+                return (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+                    <span className="text-[13px] font-bold text-black dark:text-white w-24 flex-shrink-0">{r.name}</span>
+                    <div className="flex-1 h-6 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                    </div>
+                    <span className="text-[13px] font-bold w-12 text-right" style={{ color: barColor }}>{pct}%</span>
+                    <span className="text-[11px] text-gray-500 w-24 truncate hidden sm:block">{r.location}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+
+          {/* Bias alerts from test */}
+          {results.biasAlerts?.length > 0 && (
+            <Card className="p-6 border border-[#ff9f0a]/20">
+              <h3 className="text-[16px] font-bold text-[#ff9f0a] mb-3">{t('ki.biastest_bias_alerts')}</h3>
+              <div className="space-y-3">
+                {results.biasAlerts.map((a, i) => (
+                  <div key={i} className="p-3 rounded-xl bg-[#ff9f0a]/5 border border-[#ff9f0a]/10">
+                    <p className="text-[13px] font-bold text-black dark:text-white">{a.message}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Location bias analysis */}
+          {results.analysis.locationBias?.length > 0 && (
+            <Card className="p-6">
+              <h3 className="text-[16px] font-bold text-black dark:text-white mb-4">{t('ki.biastest_location_analysis')}</h3>
+              <div className="space-y-2">
+                {results.analysis.locationBias.map((l, i) => (
+                  <div key={i} className="flex items-center gap-3 text-[13px]">
+                    <span className="w-28 text-gray-600 dark:text-gray-400">{l.location}</span>
+                    <div className="flex-1 h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#0071e3] rounded-full" style={{ width: `${Math.round(l.avgScore * 100)}%` }} />
+                    </div>
+                    <span className="font-bold text-black dark:text-white w-12 text-right">{Math.round(l.avgScore * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {results?.error && (
+        <Card className="p-6 border border-[#ff3b30]/20">
+          <p className="text-[14px] text-[#ff3b30] font-medium">{results.error}</p>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════
+// Bias Alerts Tab
+// ═══════════════════════════════════════
+function BiasAlertsTab({ t }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    aiLogsApi.getBiasAlerts().then(setData).catch(() => null).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <LoadingSpinner text={t('ki.alerts_loading')} />
+  if (!data) return <Card className="p-8"><p className="text-gray-500">{t('ki.alerts_error')}</p></Card>
+
+  const severityColors = {
+    critical: { bg: 'bg-[#ff3b30]/10', border: 'border-[#ff3b30]/20', text: 'text-[#ff3b30]', icon: '#ff3b30' },
+    warning: { bg: 'bg-[#ff9f0a]/10', border: 'border-[#ff9f0a]/20', text: 'text-[#ff9f0a]', icon: '#ff9f0a' },
+    info: { bg: 'bg-[#0071e3]/10', border: 'border-[#0071e3]/20', text: 'text-[#0071e3]', icon: '#0071e3' },
+  }
+
+  return (
+    <div className="space-y-6 max-w-[1000px]">
+      <Card className="p-6 bg-gradient-to-br from-[#ff9f0a]/5 to-[#ff3b30]/5 border border-[#ff9f0a]/10">
+        <div className="flex items-center gap-4 mb-4">
+          <Bell className="w-8 h-8 text-[#ff9f0a]" />
+          <div>
+            <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.alerts_title')}</h2>
+            <p className="text-[14px] text-gray-500">{t('ki.alerts_subtitle')}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-4 mt-4">
+          <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
+            <p className="text-[28px] font-bold text-[#ff3b30]">{data.summary.critical}</p>
+            <p className="text-[13px] text-gray-500">{t('ki.alerts_critical')}</p>
+          </div>
+          <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
+            <p className="text-[28px] font-bold text-[#ff9f0a]">{data.summary.warnings}</p>
+            <p className="text-[13px] text-gray-500">{t('ki.alerts_warnings')}</p>
+          </div>
+          <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
+            <p className="text-[28px] font-bold text-[#0071e3]">{data.summary.info}</p>
+            <p className="text-[13px] text-gray-500">{t('ki.alerts_info')}</p>
+          </div>
+        </div>
+      </Card>
+
+      {data.alerts.length === 0 ? (
+        <Card className="p-8 text-center">
+          <CheckCircle className="w-12 h-12 text-[#34c759] mx-auto mb-3" />
+          <p className="text-[16px] font-semibold text-black dark:text-white">{t('ki.alerts_none')}</p>
+          <p className="text-[14px] text-gray-500 mt-1">{t('ki.alerts_none_desc')}</p>
+        </Card>
+      ) : (
+        data.alerts.map((alert, i) => {
+          const colors = severityColors[alert.severity] || severityColors.info
+          return (
+            <Card key={i} className={`p-6 border ${colors.border}`}>
+              <div className="flex items-start gap-4">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${colors.bg}`}>
+                  <AlertTriangle className="w-5 h-5" style={{ color: colors.icon }} />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold uppercase ${colors.bg} ${colors.text}`}>{alert.severity}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 font-medium">{alert.type}</span>
+                  </div>
+                  <h3 className="text-[15px] font-bold text-black dark:text-white mt-1">{alert.title}</h3>
+                  <p className="text-[13px] text-gray-600 dark:text-gray-400 mt-1">{alert.message}</p>
+                  {alert.recommendation && (
+                    <div className="mt-3 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+                      <p className="text-[12px] font-bold text-gray-500 mb-1">{t('ki.alerts_recommendation')}</p>
+                      <p className="text-[13px] text-gray-700 dark:text-gray-300">{alert.recommendation}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )
+        })
+      )}
+    </div>
+  )
 }
 
 function InfoTab({ t, locale }) {

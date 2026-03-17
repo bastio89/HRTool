@@ -18,6 +18,8 @@ const ratingsRouter = require('./src/routes/ratings');
 const aiLogsRouter = require('./src/routes/ai-logs');
 const scorecardsRouter = require('./src/routes/scorecards');
 const emailsRouter = require('./src/routes/emails');
+const collaborationRouter = require('./src/routes/collaboration');
+const reportsRouter = require('./src/routes/reports');
 const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
@@ -53,6 +55,8 @@ app.use('/api/ratings', ratingsRouter);
 app.use('/api/scorecards', scorecardsRouter);
 app.use('/api/ai-logs', aiLogsRouter);
 app.use('/api/emails', emailsRouter);
+app.use('/api/collaboration', collaborationRouter);
+app.use('/api/reports', reportsRouter);
 
 /**
  * @swagger

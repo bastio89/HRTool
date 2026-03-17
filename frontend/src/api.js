@@ -244,6 +244,11 @@ export const aiLogsApi = {
   getBiasReport: () => request('/ai-logs/stats/bias-report'),
   getCompliance: () => request('/ai-logs/compliance/checklist'),
   getModelCard: () => request('/ai-logs/model-card'),
+  getRiskRegister: () => request('/ai-logs/risk-register'),
+  getBiasTestset: () => request('/ai-logs/bias-testset'),
+  runBiasTest: (data) => request('/ai-logs/bias-testset/run', { method: 'POST', body: JSON.stringify(data), timeout: 300000 }),
+  getExplanation: (logId) => request(`/ai-logs/explain/${logId}`),
+  getBiasAlerts: () => request('/ai-logs/bias-alerts'),
 };
 
 // Email API
@@ -332,4 +337,47 @@ export const scorecardsApi = {
   deleteResponse: (id) => request(`/scorecards/responses/${id}`, { method: 'DELETE' }),
   compareResponses: (candidateId) => request(`/scorecards/responses/compare?candidate_id=${candidateId}`),
   generateQuestions: (data) => request('/scorecards/generate-questions', { method: 'POST', body: JSON.stringify(data), timeout: 180000 }),
+};
+
+// Collaboration API (Team-Kollaboration)
+export const collaborationApi = {
+  getComments: (entityType, entityId) => request(`/collaboration/comments?entity_type=${entityType}&entity_id=${entityId}`),
+  createComment: (data) => request('/collaboration/comments', { method: 'POST', body: JSON.stringify(data) }),
+  deleteComment: (id) => request(`/collaboration/comments/${id}`, { method: 'DELETE' }),
+  getCommentCounts: (entityType, entityIds) => request(`/collaboration/comments/count?entity_type=${entityType}&entity_ids=${entityIds.join(',')}`),
+  getNotifications: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set('page', params.page);
+    if (params.unread) q.set('unread', params.unread);
+    const qs = q.toString();
+    return request(`/collaboration/notifications${qs ? `?${qs}` : ''}`);
+  },
+  markRead: (id) => request(`/collaboration/notifications/${id}/read`, { method: 'PUT' }),
+  markAllRead: () => request('/collaboration/notifications/read-all', { method: 'PUT' }),
+  getUnreadCount: () => request('/collaboration/notifications/unread-count'),
+  getUsers: () => request('/collaboration/users'),
+};
+
+// Reports API (Reporting & Analytics)
+export const reportsApi = {
+  getOverview: (days) => request(`/reports/overview${days ? `?days=${days}` : ''}`),
+  getPipelineFunnel: (jobId) => request(`/reports/pipeline-funnel${jobId ? `?job_id=${jobId}` : ''}`),
+  getTimeToHire: () => request('/reports/time-to-hire'),
+  getSourceEffectiveness: () => request('/reports/source-effectiveness'),
+  getActivityTimeline: (days) => request(`/reports/activity-timeline${days ? `?days=${days}` : ''}`),
+  getTeamPerformance: (days) => request(`/reports/team-performance${days ? `?days=${days}` : ''}`),
+  exportCSV: async (type) => {
+    const token = localStorage.getItem('hrtool_token');
+    const resp = await fetch(`/api/reports/export/csv?type=${type}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!resp.ok) throw new Error('Export fehlgeschlagen');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${type}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };

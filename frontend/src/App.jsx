@@ -21,6 +21,7 @@ import AuditLog from './pages/AuditLog'
 import DSGVO from './pages/DSGVO'
 import KITransparenz from './pages/KITransparenz'
 import EmailSettings from './pages/EmailSettings'
+import Reports from './pages/Reports'
 
 function AdminRoute({ children }) {
   const { user } = useAuth()
@@ -62,6 +63,7 @@ function ProtectedRoutes() {
         <Route path="admin/dsgvo" element={<AdminRoute><DSGVO /></AdminRoute>} />
         <Route path="admin/ki-transparenz" element={<AdminRoute><KITransparenz /></AdminRoute>} />
         <Route path="admin/email" element={<AdminRoute><EmailSettings /></AdminRoute>} />
+        <Route path="admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
       </Route>
     </Routes>
   )

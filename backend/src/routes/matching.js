@@ -3,6 +3,7 @@ const db = require('../database');
 const { logAiCall } = require('../aiLogger');
 const { logAudit } = require('./audit');
 const { matchingRateLimiter } = require('../middleware/rateLimiter');
+const { promptGuard } = require('../middleware/promptSanitizer');
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ const router = express.Router();
  *       400: { description: Keine Beschreibung oder keine Bewerber }
  *       502: { description: n8n Workflow fehlgeschlagen }
  */
-router.post('/run', matchingRateLimiter, async (req, res) => {
+router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
   try {
     const { jobDescription, jobTitle, candidateIds } = req.body;
 

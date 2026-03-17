@@ -3,6 +3,7 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
+const { promptGuard } = require('../middleware/promptSanitizer');
 
 const router = express.Router();
 
@@ -205,7 +206,7 @@ router.delete('/:id', (req, res) => {
  *     responses:
  *       200: { description: Generierte Stellenbeschreibung und Anforderungen }
  */
-router.post('/generate-description', generatorRateLimiter, async (req, res) => {
+router.post('/generate-description', generatorRateLimiter, promptGuard('job-generator'), async (req, res) => {
   try {
     const { title, keywords, type, location } = req.body;
 

@@ -10,6 +10,7 @@ import { candidatesApi, activitiesApi, uploadsApi, ratingsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 import SendEmailModal from '../components/SendEmailModal'
+import CommentSection from '../components/CommentSection'
 
 const ACTIVITY_TYPES = ['Notiz', 'Anruf', 'E-Mail', 'Interview', 'Angebot', 'Absage', 'Pipeline']
 
@@ -688,6 +689,11 @@ export default function CandidateDetail() {
           </div>
         </div>
       )}
+
+      {/* Team Comments */}
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10">
+        <CommentSection entityType="candidate" entityId={parseInt(id)} />
+      </div>
 
       <CandidatePrintProfile
         candidate={candidate}

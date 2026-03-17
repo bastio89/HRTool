@@ -4,6 +4,7 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
+const { promptGuard } = require('../middleware/promptSanitizer');
 
 const router = express.Router();
 
@@ -462,7 +463,7 @@ router.put('/triggers', (req, res) => {
 // AI Template Generation (Ollama)
 // ═══════════════════════════════════════
 
-router.post('/generate-template', generatorRateLimiter, async (req, res) => {
+router.post('/generate-template', generatorRateLimiter, promptGuard('email-template'), async (req, res) => {
   try {
     const { purpose, tone, stage } = req.body;
     if (!purpose) {

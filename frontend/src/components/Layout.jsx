@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
 import Breadcrumb from './Breadcrumb'
+import NotificationBell from './NotificationBell'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav.overview' },
@@ -17,6 +18,7 @@ const navItems = [
 const adminItems = [
   { to: '/admin/users', icon: Shield, labelKey: 'nav.users' },
   { to: '/admin/email', icon: Mail, labelKey: 'nav.email' },
+  { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
   { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
   { to: '/admin/dsgvo', icon: ShieldAlert, labelKey: 'nav.dsgvo' },
   { to: '/admin/ki-transparenz', icon: Bot, labelKey: 'nav.ai_transparency' },
@@ -106,7 +108,7 @@ export default function Layout() {
                 </span>
                 <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${adminOpen ? 'rotate-180' : ''}`} />
               </button>
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${adminOpen ? 'max-h-[300px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${adminOpen ? 'max-h-[360px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                 <div className="space-y-1 pl-4">
                   {adminItems.map(({ to, icon: Icon, labelKey }) => (
                     <NavLink
@@ -170,6 +172,7 @@ export default function Layout() {
           </button>
 
           <div className="flex items-center gap-3 sm:gap-5">
+            <NotificationBell />
             <div className="text-right hidden sm:block">
               <p className="text-[14px] sm:text-[16px] font-semibold text-black dark:text-white tracking-tight">{user?.display_name || user?.username}</p>
               <p className="text-[12px] sm:text-[14px] text-gray-500 font-medium">{user?.role === 'admin' ? t('auth.administrator') : t('auth.recruiter')}</p>

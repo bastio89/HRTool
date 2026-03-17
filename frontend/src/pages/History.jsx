@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { History as HistoryIcon, Trash2, Clock, Users, ArrowRight } from 'lucide-react'
+import { History as HistoryIcon, Trash2, Clock, Users, ArrowRight, Search, X, SortDesc } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, EmptyState, LoadingSpinner } from '../components/UI'
 import { useI18n } from '../I18nContext'
@@ -9,6 +9,8 @@ export default function History() {
   const { t } = useI18n()
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState('newest')
 
   useEffect(() => {
     matchingApi.getHistory()
@@ -28,12 +30,80 @@ export default function History() {
 
   if (loading) return <LoadingSpinner text={t('history.loading')} />
 
+  // Filter and sort
+  const filtered = useMemo(() => {
+    let list = results
+    if (search.trim()) {
+      const q = search.toLowerCase().trim()
+      list = list.filter(r => {
+        const jobMatch = r.job_title?.toLowerCase().includes(q)
+        const candidateMatch = (r.results?.results || []).some(c => c.candidateName?.toLowerCase().includes(q))
+        return jobMatch || candidateMatch
+      })
+    }
+    // Sort
+    list = [...list].sort((a, b) => {
+      if (sort === 'newest') return new Date(b.created_at) - new Date(a.created_at)
+      if (sort === 'oldest') return new Date(a.created_at) - new Date(b.created_at)
+      if (sort === 'score') {
+        const scoreA = (a.results?.results || [])[0]?.score || 0
+        const scoreB = (b.results?.results || [])[0]?.score || 0
+        return scoreB - scoreA
+      }
+      if (sort === 'candidates') {
+        return (b.results?.results || []).length - (a.results?.results || []).length
+      }
+      return 0
+    })
+    return list
+  }, [results, search, sort])
+
   return (
     <div className="fade-in max-w-[1400px] mx-auto">
       <div className="mb-8 sm:mb-14">
         <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('history.title')}</h1>
         <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">{t('history.subtitle')}</p>
       </div>
+
+      {results.length > 0 && (
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex-1 relative">
+            <Search className="w-[18px] h-[18px] text-gray-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={t('history.search_placeholder')}
+              className="w-full pl-11 pr-10 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white text-[14px] font-medium border-none outline-none focus:ring-2 focus:ring-[#0071e3]/30 transition-all placeholder:text-gray-400"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-300/50 dark:bg-gray-600/50 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors cursor-pointer">
+                <X className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl p-1">
+            <SortDesc className="w-4 h-4 text-gray-400 ml-2" />
+            <select
+              value={sort}
+              onChange={e => setSort(e.target.value)}
+              className="px-3 py-2.5 bg-transparent text-[13px] font-medium text-black dark:text-white border-none outline-none cursor-pointer appearance-none pr-6"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%239ca3af\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            >
+              <option value="newest">{t('history.sort_newest')}</option>
+              <option value="oldest">{t('history.sort_oldest')}</option>
+              <option value="score">{t('history.sort_score')}</option>
+              <option value="candidates">{t('history.sort_candidates')}</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {search && (
+        <p className="text-[13px] text-gray-400 mb-4">
+          {t('history.search_results').replace('{count}', filtered.length).replace('{total}', results.length)}
+        </p>
+      )}
 
       {results.length === 0 ? (
         <Card className="p-16">
@@ -48,9 +118,18 @@ export default function History() {
             }
           />
         </Card>
+      ) : filtered.length === 0 ? (
+        <Card className="p-16 text-center">
+          <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <p className="text-[16px] font-semibold text-black dark:text-white">{t('history.no_search_results')}</p>
+          <p className="text-[14px] text-gray-500 mt-1">{t('history.no_search_results_desc')}</p>
+          <button onClick={() => setSearch('')} className="mt-4 px-5 py-2.5 rounded-xl bg-[#0071e3] text-white text-[14px] font-semibold hover:bg-[#005bb5] transition-colors cursor-pointer">
+            {t('history.clear_search')}
+          </button>
+        </Card>
       ) : (
         <div className="space-y-5 sm:space-y-8">
-          {results.map((result) => {
+          {filtered.map((result) => {
             const matchResults = result.results?.results || []
             const topScore = matchResults[0]?.score || 0
             const avgScore = matchResults.length > 0 ? matchResults.reduce((s, r) => s + r.score, 0) / matchResults.length : 0

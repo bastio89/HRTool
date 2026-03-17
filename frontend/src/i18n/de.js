@@ -341,6 +341,15 @@ export default {
   'history.start_matching': 'Matching starten',
   'history.candidates_count': '{count} Bewerber',
   'history.error': 'Fehler',
+  'history.search_placeholder': 'Stelle oder Bewerber suchen...',
+  'history.sort_newest': 'Neueste zuerst',
+  'history.sort_oldest': 'Älteste zuerst',
+  'history.sort_score': 'Bester Score',
+  'history.sort_candidates': 'Meiste Bewerber',
+  'history.search_results': '{count} von {total} Ergebnissen',
+  'history.no_search_results': 'Keine Treffer',
+  'history.no_search_results_desc': 'Kein Matching-Durchlauf passt zu Ihrer Suche.',
+  'history.clear_search': 'Suche zurücksetzen',
 
   // Scorecard
   'scorecard.title': 'Scorecard',

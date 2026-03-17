@@ -99,15 +99,22 @@ export default function Dashboard() {
             onClick={() => {
               const style = document.createElement('style')
               style.id = 'print-styles'
-              style.textContent = `@media print { 
-                aside, header, nav, .no-print { display: none !important; } 
-                main { margin: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
-                .fade-in { animation: none !important; }
-                * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
-              }`
+              style.textContent = `
+                @media print { 
+                  aside, header, nav, .no-print { display: none !important; } 
+                  main { margin: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+                  .fade-in { animation: none !important; }
+                  * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+                }
+              `
               document.head.appendChild(style)
-              window.print()
-              setTimeout(() => document.getElementById('print-styles')?.remove(), 500)
+              // Delay to let browser apply styles before triggering print
+              requestAnimationFrame(() => {
+                setTimeout(() => {
+                  window.print()
+                  setTimeout(() => document.getElementById('print-styles')?.remove(), 1000)
+                }, 100)
+              })
             }}
             className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer"
             title={t('dashboard.pdf_export')}

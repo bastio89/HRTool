@@ -290,6 +290,39 @@ db.exec(`
   )
 `);
 
+// --- Matching-Gewichtungsprofile ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS matching_weight_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    is_default INTEGER DEFAULT 0,
+    weights TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// Seed a default matching weight profile if none exists
+const profileCount = db.prepare('SELECT COUNT(*) as count FROM matching_weight_profiles').get();
+if (profileCount.count === 0) {
+  db.prepare(`INSERT INTO matching_weight_profiles (name, is_default, weights) VALUES (?, 1, ?)`).run(
+    'Standard',
+    JSON.stringify({
+      skills: 0,
+      experience: 0,
+      education: 0,
+      location: 0,
+      languages: 0,
+      salary: 0,
+      availability: 0,
+      certificates: 0,
+      cultural_fit: 0,
+      mobility: 0
+    })
+  );
+}
+
 // Performance-Indizes
 const indexes = [
   // Candidates: Suche, Filter, Sortierung
@@ -455,6 +488,38 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  )
+`);
+
+// --- Compliance-Aktionen & Risiko-Maßnahmen ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS compliance_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ref_type TEXT NOT NULL,
+    ref_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    priority TEXT DEFAULT 'medium',
+    assigned_to TEXT,
+    notes TEXT,
+    due_date TEXT,
+    completed_at DATETIME,
+    completed_by TEXT,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS risk_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    risk_id TEXT NOT NULL UNIQUE,
+    manual_status TEXT,
+    notes TEXT,
+    updated_by TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `);
 

@@ -87,15 +87,27 @@ export const candidatesApi = {
 
 // Matching API
 export const matchingApi = {
-  run: (jobDescription, jobTitle, candidateIds = []) =>
+  run: (jobDescription, jobTitle, candidateIds = [], weights = null) =>
     request('/matching/run', {
       method: 'POST',
-      body: JSON.stringify({ jobDescription, jobTitle, candidateIds }),
+      body: JSON.stringify({ jobDescription, jobTitle, candidateIds, weights }),
     }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),
   deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),
   reviewResult: (id, notes) => request(`/matching/history/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
+};
+
+// Matching Weights API
+export const matchingWeightsApi = {
+  getProfiles: () => request('/matching-weights/profiles'),
+  getProfile: (id) => request(`/matching-weights/profiles/${id}`),
+  createProfile: (name, weights) =>
+    request('/matching-weights/profiles', { method: 'POST', body: JSON.stringify({ name, weights }) }),
+  updateProfile: (id, name, weights) =>
+    request(`/matching-weights/profiles/${id}`, { method: 'PUT', body: JSON.stringify({ name, weights }) }),
+  deleteProfile: (id) => request(`/matching-weights/profiles/${id}`, { method: 'DELETE' }),
+  setDefault: (id) => request(`/matching-weights/profiles/${id}/default`, { method: 'PUT' }),
 };
 
 // Jobs API
@@ -249,6 +261,28 @@ export const aiLogsApi = {
   runBiasTest: (data) => request('/ai-logs/bias-testset/run', { method: 'POST', body: JSON.stringify(data), timeout: 300000 }),
   getExplanation: (logId) => request(`/ai-logs/explain/${logId}`),
   getBiasAlerts: () => request('/ai-logs/bias-alerts'),
+};
+
+// Compliance Actions API
+export const complianceApi = {
+  getActions: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.ref_type) q.set('ref_type', params.ref_type);
+    if (params.ref_id) q.set('ref_id', params.ref_id);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString();
+    return request(`/compliance-actions${qs ? `?${qs}` : ''}`);
+  },
+  createAction: (data) =>
+    request('/compliance-actions', { method: 'POST', body: JSON.stringify(data) }),
+  updateAction: (id, data) =>
+    request(`/compliance-actions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAction: (id) =>
+    request(`/compliance-actions/${id}`, { method: 'DELETE' }),
+  getSummary: () => request('/compliance-actions/summary'),
+  getRiskOverrides: () => request('/compliance-actions/risk-overrides'),
+  setRiskOverride: (riskId, manual_status, notes) =>
+    request(`/compliance-actions/risk-overrides/${riskId}`, { method: 'PUT', body: JSON.stringify({ manual_status, notes }) }),
 };
 
 // Email API

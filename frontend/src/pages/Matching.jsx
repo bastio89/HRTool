@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { GitCompare, FileText, Users, Search, CheckSquare, Square, Loader2, Zap, Briefcase, PenLine, ChevronRight } from 'lucide-react'
 import { candidatesApi, matchingApi, jobsApi } from '../api'
 import { Card, Button, Textarea, Input, EmptyState, LoadingSpinner } from '../components/UI'
+import MatchingWeights from '../components/MatchingWeights'
 import { useI18n } from '../I18nContext'
 
 export default function Matching() {
@@ -21,6 +22,10 @@ export default function Matching() {
   const [jobs, setJobs] = useState([])
   const [selectedJobId, setSelectedJobId] = useState(null)
   const [jobSearch, setJobSearch] = useState('')
+  const [weights, setWeights] = useState({
+    skills: 0, experience: 0, education: 0, location: 0, languages: 0,
+    salary: 0, availability: 0, certificates: 0, cultural_fit: 0, mobility: 0
+  })
 
   useEffect(() => {
     Promise.all([
@@ -82,7 +87,7 @@ export default function Matching() {
     setMatching(true)
 
     try {
-      const result = await matchingApi.run(jobDescription, jobTitle, selectedIds)
+      const result = await matchingApi.run(jobDescription, jobTitle, selectedIds, weights)
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
       setError(err.message)
@@ -229,6 +234,11 @@ export default function Matching() {
                 onChange={(e) => setJobDescription(e.target.value)}
                 rows={18}
               />
+            </div>
+
+            {/* Matching-Gewichtung */}
+            <div className="mt-8">
+              <MatchingWeights weights={weights} onChange={setWeights} />
             </div>
           </Card>
         </div>

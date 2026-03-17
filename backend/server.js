@@ -21,6 +21,8 @@ const emailsRouter = require('./src/routes/emails');
 const collaborationRouter = require('./src/routes/collaboration');
 const reportsRouter = require('./src/routes/reports');
 const candidateDetailsRouter = require('./src/routes/candidate-details');
+const matchingWeightsRouter = require('./src/routes/matching-weights');
+const complianceActionsRouter = require('./src/routes/compliance-actions');
 const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
@@ -59,6 +61,8 @@ app.use('/api/emails', emailsRouter);
 app.use('/api/collaboration', collaborationRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/candidate-details', candidateDetailsRouter);
+app.use('/api/matching-weights', matchingWeightsRouter);
+app.use('/api/compliance-actions', complianceActionsRouter);
 
 /**
  * @swagger

@@ -29,7 +29,7 @@ const router = express.Router();
  */
 router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
   try {
-    const { jobDescription, jobTitle, candidateIds } = req.body;
+    const { jobDescription, jobTitle, candidateIds, weights } = req.body;
 
     if (!jobDescription || jobDescription.trim() === '') {
       return res.status(400).json({ error: 'Stellenbeschreibung ist erforderlich' });
@@ -53,9 +53,52 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
     
+    // Build weight instructions for the LLM prompt
+    const WEIGHT_LABELS = {
+      skills: 'Fachliche Qualifikation / Skills',
+      experience: 'Berufserfahrung',
+      education: 'Ausbildung / Hochschulabschluss',
+      location: 'Wohnortnähe / Standort',
+      languages: 'Sprachkenntnisse',
+      salary: 'Gehaltsvorstellung',
+      availability: 'Verfügbarkeit / Startdatum',
+      certificates: 'Zertifikate / Weiterbildungen',
+      cultural_fit: 'Kulturelle Passung / Soft Skills',
+      mobility: 'Mobilität / Führerschein'
+    };
+
+    let weightInstructions = '';
+    if (weights && typeof weights === 'object') {
+      const nonZero = Object.entries(weights).filter(([k, v]) => v !== 0 && WEIGHT_LABELS[k]);
+      if (nonZero.length > 0) {
+        const increased = nonZero.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+        const decreased = nonZero.filter(([, v]) => v < 0).sort((a, b) => a[1] - b[1]);
+
+        weightInstructions = '\n\nWICHTIG – GEWICHTUNG DER BEWERTUNGSKRITERIEN:\n';
+        weightInstructions += 'Der Recruiter hat folgende Gewichtungsanpassungen vorgenommen (Skala -10 bis +10, 0=Standard):\n';
+
+        if (increased.length > 0) {
+          weightInstructions += '\nSTÄRKER GEWICHTEN (höhere Priorität):\n';
+          for (const [key, val] of increased) {
+            const intensity = val >= 7 ? 'SEHR STARK' : val >= 4 ? 'STARK' : 'LEICHT';
+            weightInstructions += `- ${WEIGHT_LABELS[key]}: +${val} → ${intensity} höher gewichten\n`;
+          }
+        }
+        if (decreased.length > 0) {
+          weightInstructions += '\nWENIGER GEWICHTEN (niedrigere Priorität):\n';
+          for (const [key, val] of decreased) {
+            const intensity = val <= -7 ? 'FAST IGNORIEREN' : val <= -4 ? 'DEUTLICH WENIGER' : 'ETWAS WENIGER';
+            weightInstructions += `- ${WEIGHT_LABELS[key]}: ${val} → ${intensity} gewichten\n`;
+          }
+        }
+        weightInstructions += '\nPasse deinen Score entsprechend dieser Gewichtung an. Kriterien mit hoher Gewichtung sollen überproportional in den Score einfließen.\n';
+      }
+    }
+
     const matchingPrompt = JSON.stringify({
-      jobDescription,
+      jobDescription: jobDescription + weightInstructions,
       jobTitle: jobTitle || 'Unbenannte Stelle',
+      weights: weights || null,
       candidates: candidates.map((c, idx) => ({
         id: c.id,
         name: `Kandidat ${idx + 1}`,

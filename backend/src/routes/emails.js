@@ -7,10 +7,18 @@ const router = express.Router();
 
 // ─── Helper: Get SMTP settings from DB ───
 function getSmtpSettings() {
-  const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'smtp_%' OR key = 'email_company_name'").all();
+  const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'smtp_%' OR key LIKE 'email_%'").all();
   const s = {};
   for (const r of rows) s[r.key] = r.value;
   return s;
+}
+
+// ─── Helper: Check if stage trigger is enabled ───
+function isStageTriggerEnabled(stage) {
+  const key = `email_trigger_${stage}`;
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  // Default: enabled (1) if no setting exists
+  return !row || row.value !== '0';
 }
 
 // ─── Helper: Create Nodemailer transporter ───
@@ -415,12 +423,160 @@ router.get('/log', (req, res) => {
 });
 
 // ═══════════════════════════════════════
+// Stage Trigger Toggles
+// ═══════════════════════════════════════
+
+const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt'];
+
+router.get('/triggers', (req, res) => {
+  try {
+    const triggers = {};
+    for (const stage of STAGES) {
+      triggers[stage] = isStageTriggerEnabled(stage);
+    }
+    res.json(triggers);
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Laden der Trigger-Einstellungen' });
+  }
+});
+
+router.put('/triggers', (req, res) => {
+  try {
+    const { triggers } = req.body;
+    const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime("now"))');
+    for (const stage of STAGES) {
+      if (triggers[stage] !== undefined) {
+        upsert.run(`email_trigger_${stage}`, triggers[stage] ? '1' : '0');
+      }
+    }
+    logAudit(req, 'email-trigger-konfiguriert', 'Setting', null, 'Email-Trigger', { triggers });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Speichern der Trigger-Einstellungen' });
+  }
+});
+
+// ═══════════════════════════════════════
+// AI Template Generation (Ollama)
+// ═══════════════════════════════════════
+
+router.post('/generate-template', async (req, res) => {
+  try {
+    const { purpose, tone, stage } = req.body;
+    if (!purpose) {
+      return res.status(400).json({ error: 'Zweck des Templates ist erforderlich' });
+    }
+
+    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+
+    const smtp = getSmtpSettings();
+    const companyName = smtp.email_company_name || 'Unser Unternehmen';
+
+    const prompt = `Du bist ein professioneller HR-Texter. Erstelle eine E-Mail-Vorlage auf Deutsch für ein HR-Tool.
+
+Zweck: ${purpose}
+${tone ? `Tonalität: ${tone}` : 'Tonalität: professionell und freundlich'}
+${stage ? `Pipeline-Stufe: ${stage}` : ''}
+Unternehmen: ${companyName}
+
+Verwende diese Platzhalter im Text:
+- {{vorname}} = Vorname des Bewerbers
+- {{nachname}} = Nachname des Bewerbers  
+- {{stelle}} = Stellenbezeichnung
+- {{unternehmen}} = Unternehmensname
+- {{datum}} = aktuelles Datum
+
+Antworte NUR mit diesem exakten JSON-Format (ohne Markdown, ohne Erklärung):
+{"name": "KURZER TEMPLATE-NAME", "subject": "BETREFF-ZEILE mit Platzhaltern", "body": "VOLLSTÄNDIGER E-MAIL-TEXT mit Platzhaltern und Zeilenumbrüchen als \\n"}
+
+Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
+
+    // Ping Ollama
+    try {
+      const pc = new AbortController();
+      setTimeout(() => pc.abort(), 5000);
+      await fetch(`${OLLAMA_URL}/`, { signal: pc.signal });
+    } catch (_) {
+      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+    let response;
+    try {
+      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          prompt,
+          stream: false,
+          options: { temperature: 0.7, num_predict: 1500 }
+        }),
+        signal: controller.signal
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        return res.status(504).json({ error: 'Timeout: KI-Generierung hat zu lange gedauert.' });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
+    }
+
+    const data = await response.json();
+    const raw = data.response || '';
+
+    let parsed = { name: '', subject: '', body: '' };
+    try {
+      const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+        // Convert literal \n to real newlines in body
+        if (parsed.body) parsed.body = parsed.body.replace(/\\n/g, '\n');
+      } else {
+        throw new Error('Kein JSON in Antwort');
+      }
+    } catch (parseErr) {
+      return res.status(502).json({ error: 'KI-Antwort konnte nicht verarbeitet werden: ' + parseErr.message });
+    }
+
+    logAudit(req, 'ki-email-template', 'EmailTemplate', null, parsed.name, { purpose, model: OLLAMA_MODEL });
+
+    res.json({
+      name: parsed.name || parsed.Name || '',
+      subject: parsed.subject || parsed.Subject || parsed.Betreff || parsed.betreff || '',
+      body: parsed.body || parsed.Body || parsed.Text || parsed.text || '',
+      model: OLLAMA_MODEL,
+    });
+  } catch (err) {
+    console.error('AI template generation error:', err);
+    res.status(500).json({ error: `KI-Generierung fehlgeschlagen: ${err.message}` });
+  }
+});
+
+// ═══════════════════════════════════════
 // Pipeline stage trigger (called internally)
 // ═══════════════════════════════════════
 
 // Export the trigger function for use from pipeline.js
 async function triggerStageEmail(candidateId, newStage, jobTitle, username) {
   try {
+    // Check if trigger is enabled for this stage
+    if (!isStageTriggerEnabled(newStage)) {
+      console.log(`📧 Pipeline-Trigger für "${newStage}" ist deaktiviert — übersprungen`);
+      return;
+    }
+
     const template = db.prepare(
       'SELECT * FROM email_templates WHERE trigger_stage = ? AND is_active = 1'
     ).get(newStage);

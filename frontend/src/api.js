@@ -251,6 +251,9 @@ export const emailApi = {
   saveSmtpSettings: (data) =>
     request('/emails/smtp/settings', { method: 'PUT', body: JSON.stringify(data) }),
   testSmtp: () => request('/emails/smtp/test', { method: 'POST' }),
+  getTriggers: () => request('/emails/triggers'),
+  saveTriggers: (triggers) =>
+    request('/emails/triggers', { method: 'PUT', body: JSON.stringify({ triggers }) }),
   getTemplates: () => request('/emails/templates'),
   getTemplate: (id) => request(`/emails/templates/${id}`),
   createTemplate: (data) =>
@@ -258,6 +261,8 @@ export const emailApi = {
   updateTemplate: (id, data) =>
     request(`/emails/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteTemplate: (id) => request(`/emails/templates/${id}`, { method: 'DELETE' }),
+  generateTemplate: (data) =>
+    request('/emails/generate-template', { method: 'POST', body: JSON.stringify(data), timeout: 130000 }),
   send: (data) =>
     request('/emails/send', { method: 'POST', body: JSON.stringify(data) }),
   sendWithTemplate: (data) =>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Mail, Send, Settings, FileText, Plus, Trash2, Edit3, Eye, Check, X, Loader2, AlertTriangle, TestTube, Zap } from 'lucide-react'
+import { Mail, Send, Settings, FileText, Plus, Trash2, Edit3, Eye, Check, X, Loader2, AlertTriangle, TestTube, Zap, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react'
 import { emailApi } from '../api'
 import { Card, Button, Input, LoadingSpinner } from '../components/UI'
 import { useI18n } from '../I18nContext'
@@ -24,6 +24,13 @@ export default function EmailSettings() {
   const [templates, setTemplates] = useState([])
   const [editTpl, setEditTpl] = useState(null)
   const [tplSaving, setTplSaving] = useState(false)
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiPurpose, setAiPurpose] = useState('')
+  const [aiTone, setAiTone] = useState('')
+
+  // Stage trigger toggles
+  const [triggers, setTriggers] = useState({})
+  const [triggersSaving, setTriggersSaving] = useState(false)
 
   // Log state
   const [logs, setLogs] = useState([])
@@ -35,12 +42,14 @@ export default function EmailSettings() {
 
   const loadData = async () => {
     try {
-      const [smtpData, tplData] = await Promise.all([
+      const [smtpData, tplData, triggerData] = await Promise.all([
         emailApi.getSmtpSettings(),
         emailApi.getTemplates(),
+        emailApi.getTriggers(),
       ])
       setSmtp(prev => ({ ...prev, ...smtpData }))
       setTemplates(tplData.data || [])
+      setTriggers(triggerData || {})
     } catch (err) {
       console.error(err)
     } finally {
@@ -120,6 +129,49 @@ export default function EmailSettings() {
     }
   }
 
+  // Trigger toggle handlers
+  const handleTriggerToggle = (stage) => {
+    setTriggers(prev => ({ ...prev, [stage]: !prev[stage] }))
+  }
+
+  const handleTriggersSave = async () => {
+    setTriggersSaving(true)
+    try {
+      await emailApi.saveTriggers(triggers)
+      setSmtpMsg({ type: 'success', text: t('email.triggers_saved') })
+      setTimeout(() => setSmtpMsg({ type: '', text: '' }), 3000)
+    } catch (err) {
+      setSmtpMsg({ type: 'error', text: err.message })
+    } finally {
+      setTriggersSaving(false)
+    }
+  }
+
+  // AI Template generation
+  const handleAiGenerate = async () => {
+    if (!aiPurpose.trim()) return
+    setAiGenerating(true)
+    try {
+      const res = await emailApi.generateTemplate({
+        purpose: aiPurpose,
+        tone: aiTone || undefined,
+        stage: editTpl?.trigger_stage || undefined,
+      })
+      setEditTpl(prev => ({
+        ...prev,
+        name: res.name || prev.name,
+        subject: res.subject || prev.subject,
+        body: res.body || prev.body,
+      }))
+      setAiPurpose('')
+      setAiTone('')
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner text={t('common.loading')} />
 
   const tabs = [
@@ -156,6 +208,7 @@ export default function EmailSettings() {
 
       {/* SMTP Tab */}
       {tab === 'smtp' && (
+        <>
         <Card className="p-6 space-y-6">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
@@ -230,6 +283,54 @@ export default function EmailSettings() {
             </Button>
           </div>
         </Card>
+
+        {/* Stage Trigger Toggles */}
+        <Card className="p-6 space-y-5">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 bg-purple-50 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
+              <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('email.triggers_title')}</h2>
+              <p className="text-[13px] text-gray-500">{t('email.triggers_desc')}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {STAGES.map(stage => {
+              const enabled = triggers[stage] !== false
+              return (
+                <div key={stage} className="flex items-center justify-between px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[15px] font-medium text-black dark:text-white">{stage}</span>
+                    {templates.some(t => t.trigger_stage === stage && t.is_active) && (
+                      <span className="text-[11px] text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-lg">
+                        {t('email.has_template')}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleTriggerToggle(stage)}
+                    className="cursor-pointer transition-colors"
+                    title={enabled ? t('email.trigger_enabled') : t('email.trigger_disabled')}
+                  >
+                    {enabled ? (
+                      <ToggleRight className="w-9 h-9 text-[#34c759]" />
+                    ) : (
+                      <ToggleLeft className="w-9 h-9 text-gray-300 dark:text-gray-600" />
+                    )}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          <Button onClick={handleTriggersSave} disabled={triggersSaving}>
+            {triggersSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {t('email.save_triggers')}
+          </Button>
+        </Card>
+        </>
       )}
 
       {/* Templates Tab */}
@@ -294,6 +395,51 @@ export default function EmailSettings() {
                     {v}
                   </button>
                 ))}
+              </div>
+
+              {/* AI Template Generation */}
+              <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-xl p-4 space-y-3 border border-purple-100 dark:border-purple-800/40">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span className="text-[14px] font-semibold text-purple-700 dark:text-purple-300">{t('email.ai_generate_title')}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    value={aiPurpose}
+                    onChange={e => setAiPurpose(e.target.value)}
+                    placeholder={t('email.ai_purpose_placeholder')}
+                    className="w-full px-3 py-2.5 bg-white dark:bg-[#1c1c1e] border border-purple-200 dark:border-purple-700/50 rounded-lg text-[14px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={aiTone}
+                      onChange={e => setAiTone(e.target.value)}
+                      className="flex-1 px-3 py-2.5 bg-white dark:bg-[#1c1c1e] border border-purple-200 dark:border-purple-700/50 rounded-lg text-[14px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                    >
+                      <option value="">{t('email.ai_tone_default')}</option>
+                      <option value="professionell und formell">{t('email.ai_tone_formal')}</option>
+                      <option value="freundlich und persönlich">{t('email.ai_tone_friendly')}</option>
+                      <option value="kurz und prägnant">{t('email.ai_tone_concise')}</option>
+                      <option value="empathisch und wertschätzend">{t('email.ai_tone_empathetic')}</option>
+                    </select>
+                    <button
+                      onClick={handleAiGenerate}
+                      disabled={aiGenerating || !aiPurpose.trim()}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold transition-all cursor-pointer ${
+                        aiGenerating || !aiPurpose.trim()
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                          : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow-md'
+                      }`}
+                    >
+                      {aiGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      {t('email.ai_generate')}
+                    </button>
+                  </div>
+                </div>
+                {aiGenerating && (
+                  <p className="text-[12px] text-purple-500 animate-pulse">{t('email.ai_generating')}</p>
+                )}
               </div>
 
               <div className="flex items-center gap-4">

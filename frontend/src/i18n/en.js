@@ -1002,6 +1002,84 @@ export default {
   'collab.mark_all_read': 'Mark all read',
   'collab.no_notifications': 'No notifications',
 
+  // Info panels — general
+  'ki.info_show': 'Show background information',
+
+  // Compliance info
+  'ki.compliance_title': 'Compliance Checklist',
+  'ki.compliance_subtitle': 'Automated verification of EU AI Act requirements for your AI system',
+  'ki.compliance_info_what_title': 'What is the Compliance Checklist?',
+  'ki.compliance_info_what_text': 'The checklist automatically verifies whether your HR AI system meets all EU AI Act requirements. Each check is evaluated in real-time against the actual system configuration and usage data.',
+  'ki.compliance_info_why_title': 'Why is this important?',
+  'ki.compliance_info_why_text': 'HR systems with AI matching are classified as high-risk AI under Art. 6 / Annex III of the EU AI Act. Operators must be able to demonstrate compliance — during audits, complaints, or regulatory inspections.',
+  'ki.compliance_info_checks_title': 'What is being checked?',
+  'ki.compliance_info_check1': 'Logging: Are all AI calls fully recorded? (Art. 12)',
+  'ki.compliance_info_check2': 'Transparency: Are AI results clearly labeled as such? (Art. 13)',
+  'ki.compliance_info_check3': 'Human oversight: Is a human involved in critical decisions? (Art. 14)',
+  'ki.compliance_info_check4': 'Risk management: Are safeguards against bias active? (Art. 9)',
+  'ki.compliance_info_legal': 'Legal basis: EU Regulation 2024/1689, Art. 6 in conjunction with Annex III No. 4 — AI systems for employment and personnel management. Compliance records must be retained for 10 years (Art. 18).',
+
+  // Logs info
+  'ki.logs_title': 'AI Logs',
+  'ki.logs_subtitle': 'Complete record of all AI interactions in the system',
+  'ki.logs_info_what_title': 'What are the AI Logs?',
+  'ki.logs_info_what_text': 'Every interaction with the AI system is logged — from matching requests and CV parsing to email generation. The log contains the prompt, response, model details, and performance data.',
+  'ki.logs_info_why_title': 'Why is this important?',
+  'ki.logs_info_why_text': 'Art. 12 of the EU AI Act requires a complete record of all AI decisions. In case of complaints or audits, it must be traceable what data the AI received and how it decided.',
+  'ki.logs_info_content_title': 'What is being logged?',
+  'ki.logs_info_content1': 'Prompt & Response: The complete input and output of every AI call',
+  'ki.logs_info_content2': 'Metadata: Timestamp, model, duration, token usage, user',
+  'ki.logs_info_content3': 'Risk classification: High-risk features (matching, CV parser) are flagged',
+  'ki.logs_info_content4': 'Errors: Failed calls are stored with error messages',
+  'ki.logs_info_legal': 'Legal basis: Art. 12 (Record-keeping) of EU Regulation 2024/1689. Logs must be automatically generated and retained for at least 6 months.',
+
+  // Bias Report info
+  'ki.bias_info_what_title': 'What is the Bias Report?',
+  'ki.bias_info_what_text': 'The Bias Report analyzes all previous AI matching results for systematic biases. It shows whether certain candidate groups (by location, source, etc.) are systematically rated higher or lower.',
+  'ki.bias_info_why_title': 'Why is this important?',
+  'ki.bias_info_why_text': 'AI systems can inherit unconscious biases from training data. Art. 10 of the EU AI Act requires that training data is representative and regularly checked for biases.',
+  'ki.bias_info_measures_title': 'What safeguards are in place?',
+  'ki.bias_info_measure1': 'Score distribution: Analysis of grade distribution — extreme clusters indicate bias',
+  'ki.bias_info_measure2': 'Anonymization: Personal data is removed before AI matching',
+  'ki.bias_info_measure3': 'Human review: AI recommendations are validated by recruiters',
+  'ki.bias_info_measure4': 'Location & source analysis: Comparison of success rates by origin and application channel',
+  'ki.bias_info_legal': 'Legal basis: Art. 10 (Data Governance) and Art. 15 (Accuracy, Robustness, Cybersecurity) of EU Regulation 2024/1689. Systematic bias monitoring is mandatory for high-risk AI.',
+
+  // Model Card info
+  'ki.mc_info_what_title': 'What is a Model Card?',
+  'ki.mc_info_what_text': 'The Model Card is a standardized profile of the deployed AI model. It documents all technical details, intended use, limitations, and safeguards at a glance.',
+  'ki.mc_info_why_title': 'Why is this important?',
+  'ki.mc_info_why_text': 'Art. 13 of the EU AI Act requires transparency about deployed AI systems. Users, affected persons, and supervisory authorities must be able to understand how the system works, its limitations, and what data it processes.',
+  'ki.mc_info_content_title': 'What does the Model Card contain?',
+  'ki.mc_info_content1': 'Model identity: Name, provider, architecture, deployment type',
+  'ki.mc_info_content2': 'Intended use: Which HR functions is the model used for?',
+  'ki.mc_info_content3': 'Data & privacy: What data is processed and how is it protected?',
+  'ki.mc_info_content4': 'Performance: Success rate, response times, known limitations',
+  'ki.mc_info_content5': 'Safeguards: Human oversight, bias monitoring, rate limiting, etc.',
+  'ki.mc_info_legal': 'Legal basis: Art. 13 (Transparency) and Art. 11 (Technical Documentation) of EU Regulation 2024/1689. The Model Card must be kept up to date and made available upon request.',
+
+  // Risk Register info
+  'ki.risk_info_what_title': 'What is the Risk Register?',
+  'ki.risk_info_what_text': 'The Risk Register documents all identified risks of the AI system, assesses their severity, and lists the countermeasures taken. It is continuously updated.',
+  'ki.risk_info_why_title': 'Why is this important?',
+  'ki.risk_info_why_text': 'Art. 9 of the EU AI Act requires a risk management system that identifies, assesses, and mitigates risks. The register serves as proof that known risks are actively managed.',
+  'ki.risk_info_levels_title': 'Risk levels explained',
+  'ki.risk_info_level1': 'High (Red): Critical risks with potentially severe impact on affected persons — require immediate action',
+  'ki.risk_info_level2': 'Medium (Orange): Significant risks that must be controlled — partially mitigated by existing measures',
+  'ki.risk_info_level3': 'Low (Green): Low residual risks after successful mitigation — continue to be monitored',
+  'ki.risk_info_legal': 'Legal basis: Art. 9 (Risk Management System) of EU Regulation 2024/1689. The risk register must cover the entire lifecycle of the AI system and be regularly updated.',
+
+  // Bias Alerts info
+  'ki.alerts_info_what_title': 'What are Bias Alerts?',
+  'ki.alerts_info_what_text': 'Bias Alerts are automatic warnings triggered when the system detects systematic biases in AI results. They are based on continuous analysis of all matching results.',
+  'ki.alerts_info_why_title': 'Why is this important?',
+  'ki.alerts_info_why_text': 'Regular bias monitoring is mandatory under Art. 9 of the EU AI Act. Without automatic alerts, systematic discrimination patterns could go unnoticed and disadvantage applicants.',
+  'ki.alerts_info_types_title': 'Alert types explained',
+  'ki.alerts_info_type1': 'Critical (Red): Severe biases detected — immediate review required, consider temporarily disabling AI feature',
+  'ki.alerts_info_type2': 'Warning (Orange): Notable patterns detected — should be investigated promptly and root cause analyzed',
+  'ki.alerts_info_type3': 'Info (Blue): Statistical anomalies — take note, no immediate action required',
+  'ki.alerts_info_legal': 'Legal basis: Art. 9 (Risk Management) and Art. 72 (Post-Market Monitoring) of EU Regulation 2024/1689. Operators must report serious incidents to the competent authority within 15 days.',
+
   // Navigation
   'nav.reports': 'Reports',
 

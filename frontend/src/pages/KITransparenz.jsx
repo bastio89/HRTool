@@ -16,6 +16,55 @@ const TABS = [
   { id: 'info', labelKey: 'ki.tab_info', icon: Info },
 ]
 
+// Reusable info panel component
+function InfoPanel({ show, onToggle, color, items, legalText, t }) {
+  return (
+    <>
+      <button onClick={onToggle} className={`w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
+        show ? `bg-[${color}] text-white shadow-lg shadow-[${color}]/25` : `bg-white/60 dark:bg-white/10 text-[${color}] hover:bg-[${color}]/10`
+      }`} style={show ? { backgroundColor: color, boxShadow: `0 8px 16px ${color}40` } : { color }} title={t('ki.info_show')}>
+        <Info className="w-[18px] h-[18px]" />
+      </button>
+      <div className={`overflow-hidden transition-all duration-300 ease-in-out col-span-full ${show ? 'max-h-[800px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+        <div className="p-5 rounded-xl bg-white/70 dark:bg-black/20 border border-gray-200/50 dark:border-gray-700/50 space-y-4">
+          {items.map((item, i) => (
+            <div key={i}>
+              <h4 className="text-[14px] font-bold mb-1.5" style={{ color }}>{item.title}</h4>
+              {item.text && <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{item.text}</p>}
+              {item.steps && (
+                <ul className="space-y-1.5">
+                  {item.steps.map((s, j) => (
+                    <li key={j} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ backgroundColor: `${color}15`, color }}>{j + 1}</span>
+                      <span className="leading-relaxed">{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {item.bullets && (
+                <ul className="space-y-1.5">
+                  {item.bullets.map((b, j) => (
+                    <li key={j} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+                      <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color }} />
+                      <span className="leading-relaxed">{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+          {legalText && (
+            <div className="flex items-start gap-2 p-3 rounded-lg border" style={{ backgroundColor: `${color}08`, borderColor: `${color}20` }}>
+              <Scale className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color }} />
+              <p className="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed">{legalText}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function KITransparenz() {
   const navigate = useNavigate()
   const { t, locale } = useI18n()
@@ -63,6 +112,7 @@ function ComplianceTab({ t }) {
   const [data, setData] = useState(null)
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -88,6 +138,24 @@ function ComplianceTab({ t }) {
 
   return (
     <div className="space-y-8">
+      <Card className="p-6 bg-gradient-to-br from-[#0071e3]/5 to-[#34c759]/5 border border-[#0071e3]/10">
+        <div className="flex items-center gap-4">
+          <Shield className="w-8 h-8 text-[#0071e3]" />
+          <div className="flex-1">
+            <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.compliance_title')}</h2>
+            <p className="text-[14px] text-gray-500">{t('ki.compliance_subtitle')}</p>
+          </div>
+          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#0071e3" t={t}
+            items={[
+              { title: t('ki.compliance_info_what_title'), text: t('ki.compliance_info_what_text') },
+              { title: t('ki.compliance_info_why_title'), text: t('ki.compliance_info_why_text') },
+              { title: t('ki.compliance_info_checks_title'), bullets: [t('ki.compliance_info_check1'), t('ki.compliance_info_check2'), t('ki.compliance_info_check3'), t('ki.compliance_info_check4')] },
+            ]}
+            legalText={t('ki.compliance_info_legal')}
+          />
+        </div>
+      </Card>
+
       {data?.summary && (
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
           <Card className="p-8 text-center">
@@ -190,6 +258,7 @@ function LogsTab({ t }) {
   const [filter, setFilter] = useState({ feature: '', success: '', page: 1 })
   const [expandedId, setExpandedId] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [showInfo, setShowInfo] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -215,6 +284,24 @@ function LogsTab({ t }) {
 
   return (
     <div className="space-y-6">
+      <Card className="p-6 bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 border border-[#5e5ce6]/10">
+        <div className="flex items-center gap-4">
+          <FileText className="w-8 h-8 text-[#5e5ce6]" />
+          <div className="flex-1">
+            <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.logs_title')}</h2>
+            <p className="text-[14px] text-gray-500">{t('ki.logs_subtitle')}</p>
+          </div>
+          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t}
+            items={[
+              { title: t('ki.logs_info_what_title'), text: t('ki.logs_info_what_text') },
+              { title: t('ki.logs_info_why_title'), text: t('ki.logs_info_why_text') },
+              { title: t('ki.logs_info_content_title'), bullets: [t('ki.logs_info_content1'), t('ki.logs_info_content2'), t('ki.logs_info_content3'), t('ki.logs_info_content4')] },
+            ]}
+            legalText={t('ki.logs_info_legal')}
+          />
+        </div>
+      </Card>
+
       <Card className="p-5">
         <div className="flex items-center gap-4 flex-wrap">
           <select value={filter.feature} onChange={e => setFilter({ ...filter, feature: e.target.value, page: 1 })}
@@ -329,6 +416,7 @@ function LogsTab({ t }) {
 function BiasTab({ t }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => { aiLogsApi.getBiasReport().then(setData).catch(() => {}).finally(() => setLoading(false)) }, [])
 
@@ -341,14 +429,20 @@ function BiasTab({ t }) {
   return (
     <div className="space-y-8">
       <Card className="p-6 bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 border border-[#5e5ce6]/10">
-        <div className="flex items-start gap-4">
-          <Scale className="w-6 h-6 text-[#5e5ce6] flex-shrink-0 mt-1" />
-          <div>
-            <h3 className="text-[16px] font-bold text-black dark:text-white mb-1">{t('ki.bias_title')}</h3>
-            <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
-              {t('ki.bias_desc')}
-            </p>
+        <div className="flex items-center gap-4">
+          <Scale className="w-8 h-8 text-[#5e5ce6] flex-shrink-0" />
+          <div className="flex-1">
+            <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.bias_title')}</h2>
+            <p className="text-[14px] text-gray-500">{t('ki.bias_desc')}</p>
           </div>
+          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t}
+            items={[
+              { title: t('ki.bias_info_what_title'), text: t('ki.bias_info_what_text') },
+              { title: t('ki.bias_info_why_title'), text: t('ki.bias_info_why_text') },
+              { title: t('ki.bias_info_measures_title'), bullets: [t('ki.bias_info_measure1'), t('ki.bias_info_measure2'), t('ki.bias_info_measure3'), t('ki.bias_info_measure4')] },
+            ]}
+            legalText={t('ki.bias_info_legal')}
+          />
         </div>
       </Card>
 
@@ -451,6 +545,7 @@ function BiasTab({ t }) {
 function ModelCardTab({ t }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => { aiLogsApi.getModelCard().then(setData).catch(() => {}).finally(() => setLoading(false)) }, [])
 
@@ -463,14 +558,22 @@ function ModelCardTab({ t }) {
   return (
     <div className="space-y-8 max-w-[1000px]">
       <Card className="p-8 bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 border border-[#5e5ce6]/10">
-        <div className="flex items-start gap-5">
+        <div className="flex items-center gap-5">
           <div className="w-14 h-14 rounded-2xl bg-[#5e5ce6]/10 flex items-center justify-center flex-shrink-0">
             <CreditCard className="w-7 h-7 text-[#5e5ce6]" />
           </div>
-          <div>
-            <h2 className="text-[20px] font-semibold text-black dark:text-white mb-2">{t('ki.mc_title')}</h2>
-            <p className="text-[15px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.mc_subtitle')}</p>
+          <div className="flex-1">
+            <h2 className="text-[20px] font-semibold text-black dark:text-white mb-1">{t('ki.mc_title')}</h2>
+            <p className="text-[14px] text-gray-500">{t('ki.mc_subtitle')}</p>
           </div>
+          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t}
+            items={[
+              { title: t('ki.mc_info_what_title'), text: t('ki.mc_info_what_text') },
+              { title: t('ki.mc_info_why_title'), text: t('ki.mc_info_why_text') },
+              { title: t('ki.mc_info_content_title'), bullets: [t('ki.mc_info_content1'), t('ki.mc_info_content2'), t('ki.mc_info_content3'), t('ki.mc_info_content4'), t('ki.mc_info_content5')] },
+            ]}
+            legalText={t('ki.mc_info_legal')}
+          />
         </div>
       </Card>
 
@@ -670,6 +773,7 @@ function getInfoSections(t) {
 function RiskRegisterTab({ t }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
     aiLogsApi.getRiskRegister().then(setData).catch(() => null).finally(() => setLoading(false))
@@ -687,10 +791,18 @@ function RiskRegisterTab({ t }) {
       <Card className="p-6 bg-gradient-to-br from-[#ff3b30]/5 to-[#ff9f0a]/5 border border-[#ff3b30]/10">
         <div className="flex items-center gap-4 mb-4">
           <AlertOctagon className="w-8 h-8 text-[#ff3b30]" />
-          <div>
+          <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.risk_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.risk_subtitle')}</p>
           </div>
+          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff3b30" t={t}
+            items={[
+              { title: t('ki.risk_info_what_title'), text: t('ki.risk_info_what_text') },
+              { title: t('ki.risk_info_why_title'), text: t('ki.risk_info_why_text') },
+              { title: t('ki.risk_info_levels_title'), bullets: [t('ki.risk_info_level1'), t('ki.risk_info_level2'), t('ki.risk_info_level3')] },
+            ]}
+            legalText={t('ki.risk_info_legal')}
+          />
         </div>
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
@@ -956,6 +1068,7 @@ function BiasTestsetTab({ t }) {
 function BiasAlertsTab({ t }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
     aiLogsApi.getBiasAlerts().then(setData).catch(() => null).finally(() => setLoading(false))
@@ -975,10 +1088,18 @@ function BiasAlertsTab({ t }) {
       <Card className="p-6 bg-gradient-to-br from-[#ff9f0a]/5 to-[#ff3b30]/5 border border-[#ff9f0a]/10">
         <div className="flex items-center gap-4 mb-4">
           <Bell className="w-8 h-8 text-[#ff9f0a]" />
-          <div>
+          <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.alerts_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.alerts_subtitle')}</p>
           </div>
+          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff9f0a" t={t}
+            items={[
+              { title: t('ki.alerts_info_what_title'), text: t('ki.alerts_info_what_text') },
+              { title: t('ki.alerts_info_why_title'), text: t('ki.alerts_info_why_text') },
+              { title: t('ki.alerts_info_types_title'), bullets: [t('ki.alerts_info_type1'), t('ki.alerts_info_type2'), t('ki.alerts_info_type3')] },
+            ]}
+            legalText={t('ki.alerts_info_legal')}
+          />
         </div>
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">

@@ -1002,6 +1002,84 @@ export default {
   'collab.mark_all_read': 'Alle gelesen',
   'collab.no_notifications': 'Keine Benachrichtigungen',
 
+  // Info panels — general
+  'ki.info_show': 'Hintergrund-Informationen anzeigen',
+
+  // Compliance info
+  'ki.compliance_title': 'Compliance-Checkliste',
+  'ki.compliance_subtitle': 'Automatisierte Prüfung der EU AI Act Anforderungen für Ihr KI-System',
+  'ki.compliance_info_what_title': 'Was ist die Compliance-Checkliste?',
+  'ki.compliance_info_what_text': 'Die Checkliste prüft automatisch, ob Ihr HR-KI-System alle Anforderungen des EU AI Act erfüllt. Jeder Prüfpunkt wird in Echtzeit gegen die tatsächliche Systemkonfiguration und Nutzungsdaten ausgewertet.',
+  'ki.compliance_info_why_title': 'Warum ist das wichtig?',
+  'ki.compliance_info_why_text': 'HR-Systeme mit KI-Matching gelten nach Art. 6 / Annex III des EU AI Act als Hochrisiko-KI. Betreiber müssen die Einhaltung aller Anforderungen nachweisen können — bei Audits, Beschwerden oder behördlichen Prüfungen.',
+  'ki.compliance_info_checks_title': 'Was wird geprüft?',
+  'ki.compliance_info_check1': 'Protokollierung: Werden alle KI-Aufrufe vollständig geloggt? (Art. 12)',
+  'ki.compliance_info_check2': 'Transparenz: Sind KI-Ergebnisse klar als solche gekennzeichnet? (Art. 13)',
+  'ki.compliance_info_check3': 'Menschliche Kontrolle: Wird bei kritischen Entscheidungen ein Mensch einbezogen? (Art. 14)',
+  'ki.compliance_info_check4': 'Risikomanagement: Sind Schutzmaßnahmen gegen Verzerrungen aktiv? (Art. 9)',
+  'ki.compliance_info_legal': 'Rechtsgrundlage: EU-Verordnung 2024/1689, Art. 6 i.V.m. Annex III Nr. 4 — KI-Systeme für Beschäftigung und Personalmanagement. Compliance-Nachweise müssen für 10 Jahre aufbewahrt werden (Art. 18).',
+
+  // Logs info
+  'ki.logs_title': 'KI-Protokolle',
+  'ki.logs_subtitle': 'Vollständige Aufzeichnung aller KI-Interaktionen im System',
+  'ki.logs_info_what_title': 'Was sind die KI-Protokolle?',
+  'ki.logs_info_what_text': 'Jede Interaktion mit dem KI-System wird protokolliert — von Matching-Anfragen über Lebenslauf-Parsing bis zur E-Mail-Generierung. Das Protokoll enthält den Prompt, die Antwort, Modelldetails und Performance-Daten.',
+  'ki.logs_info_why_title': 'Warum ist das wichtig?',
+  'ki.logs_info_why_text': 'Art. 12 des EU AI Act verlangt eine lückenlose Aufzeichnung aller KI-Entscheidungen. Bei Beschwerden oder Audits muss nachvollziehbar sein, welche Daten die KI erhalten hat und wie sie entschieden hat.',
+  'ki.logs_info_content_title': 'Was wird protokolliert?',
+  'ki.logs_info_content1': 'Prompt & Antwort: Der vollständige Ein- und Ausgang jeder KI-Anfrage',
+  'ki.logs_info_content2': 'Metadaten: Zeitstempel, Modell, Dauer, Token-Verbrauch, Nutzer',
+  'ki.logs_info_content3': 'Risikoeinstufung: Hochrisiko-Features (Matching, CV-Parser) werden markiert',
+  'ki.logs_info_content4': 'Fehler: Fehlgeschlagene Aufrufe werden mit Fehlermeldung gespeichert',
+  'ki.logs_info_legal': 'Rechtsgrundlage: Art. 12 (Aufzeichnungspflicht) der EU-Verordnung 2024/1689. Protokolle müssen automatisch generiert und für mindestens 6 Monate aufbewahrt werden.',
+
+  // Bias Report info
+  'ki.bias_info_what_title': 'Was ist der Bias-Report?',
+  'ki.bias_info_what_text': 'Der Bias-Report analysiert alle bisherigen KI-Matching-Ergebnisse auf systematische Verzerrungen. Er zeigt, ob bestimmte Kandidatengruppen (nach Standort, Quelle etc.) systematisch besser oder schlechter bewertet werden.',
+  'ki.bias_info_why_title': 'Warum ist das wichtig?',
+  'ki.bias_info_why_text': 'KI-Systeme können unbewusste Vorurteile aus Trainingsdaten übernehmen. Art. 10 des EU AI Act verlangt, dass Trainingsdaten repräsentativ sind und regelmäßig auf Verzerrungen geprüft werden.',
+  'ki.bias_info_measures_title': 'Welche Schutzmaßnahmen gibt es?',
+  'ki.bias_info_measure1': 'Score-Verteilung: Analyse der Notenverteilung — extreme Häufungen deuten auf Bias hin',
+  'ki.bias_info_measure2': 'Anonymisierung: Persönliche Daten werden vor dem KI-Matching entfernt',
+  'ki.bias_info_measure3': 'Menschliche Überprüfung: KI-Empfehlungen werden von Recruitern validiert',
+  'ki.bias_info_measure4': 'Standort- & Quellenanalyse: Vergleich der Erfolgschancen nach Herkunft und Bewerbungskanal',
+  'ki.bias_info_legal': 'Rechtsgrundlage: Art. 10 (Daten-Governance) und Art. 15 (Genauigkeit, Robustheit, Cybersicherheit) der EU-Verordnung 2024/1689. Systematisches Bias-Monitoring ist Pflicht für Hochrisiko-KI.',
+
+  // Model Card info
+  'ki.mc_info_what_title': 'Was ist eine Model Card?',
+  'ki.mc_info_what_text': 'Die Model Card ist ein standardisierter Steckbrief des eingesetzten KI-Modells. Sie dokumentiert alle technischen Details, den Verwendungszweck, Einschränkungen und Schutzmaßnahmen auf einen Blick.',
+  'ki.mc_info_why_title': 'Warum ist das wichtig?',
+  'ki.mc_info_why_text': 'Art. 13 des EU AI Act verlangt Transparenz über eingesetzte KI-Systeme. Nutzer, Betroffene und Aufsichtsbehörden müssen verstehen können, wie das System funktioniert, welche Limitierungen es hat und welche Daten es verarbeitet.',
+  'ki.mc_info_content_title': 'Was enthält die Model Card?',
+  'ki.mc_info_content1': 'Modell-Identität: Name, Anbieter, Architektur, Deployment-Art',
+  'ki.mc_info_content2': 'Verwendungszweck: Für welche HR-Funktionen wird das Modell eingesetzt?',
+  'ki.mc_info_content3': 'Daten & Datenschutz: Welche Daten werden verarbeitet, wie werden sie geschützt?',
+  'ki.mc_info_content4': 'Performance: Erfolgsrate, Antwortzeiten, bekannte Limitierungen',
+  'ki.mc_info_content5': 'Schutzmaßnahmen: Human Oversight, Bias-Monitoring, Rate-Limiting etc.',
+  'ki.mc_info_legal': 'Rechtsgrundlage: Art. 13 (Transparenz) und Art. 11 (Technische Dokumentation) der EU-Verordnung 2024/1689. Die Model Card muss aktuell gehalten und auf Anfrage bereitgestellt werden.',
+
+  // Risk Register info
+  'ki.risk_info_what_title': 'Was ist das Risiko-Register?',
+  'ki.risk_info_what_text': 'Das Risiko-Register dokumentiert alle identifizierten Risiken des KI-Systems, bewertet ihre Schwere und listet die ergriffenen Gegenmaßnahmen auf. Es wird kontinuierlich aktualisiert.',
+  'ki.risk_info_why_title': 'Warum ist das wichtig?',
+  'ki.risk_info_why_text': 'Art. 9 des EU AI Act verlangt ein Risikomanagementsystem, das Risiken identifiziert, bewertet und mitigiert. Das Register dient als Nachweis, dass bekannte Risiken aktiv gemanagt werden.',
+  'ki.risk_info_levels_title': 'Risikostufen erklärt',
+  'ki.risk_info_level1': 'Hoch (Rot): Kritische Risiken mit potenziell schwerwiegenden Auswirkungen auf Betroffene — erfordern sofortige Maßnahmen',
+  'ki.risk_info_level2': 'Mittel (Orange): Signifikante Risiken, die kontrolliert werden müssen — teilweise mitigiert durch bestehende Maßnahmen',
+  'ki.risk_info_level3': 'Niedrig (Grün): Geringe Restrisiken nach erfolgreicher Mitigation — werden weiterhin überwacht',
+  'ki.risk_info_legal': 'Rechtsgrundlage: Art. 9 (Risikomanagementsystem) der EU-Verordnung 2024/1689. Das Risiko-Register muss den gesamten Lebenszyklus des KI-Systems abdecken und regelmäßig aktualisiert werden.',
+
+  // Bias Alerts info
+  'ki.alerts_info_what_title': 'Was sind Bias-Alerts?',
+  'ki.alerts_info_what_text': 'Bias-Alerts sind automatische Warnungen, die ausgelöst werden, wenn das System systematische Verzerrungen in den KI-Ergebnissen erkennt. Sie basieren auf der kontinuierlichen Analyse aller Matching-Ergebnisse.',
+  'ki.alerts_info_why_title': 'Warum ist das wichtig?',
+  'ki.alerts_info_why_text': 'Regelmäßiges Monitoring auf Bias ist nach Art. 9 des EU AI Act Pflicht. Ohne automatische Alerts könnten systematische Diskriminierungsmuster unbemerkt bleiben und Bewerber benachteiligen.',
+  'ki.alerts_info_types_title': 'Alert-Typen erklärt',
+  'ki.alerts_info_type1': 'Kritisch (Rot): Schwerwiegende Verzerrungen erkannt — sofortige Überprüfung erforderlich, ggf. KI-Feature vorübergehend deaktivieren',
+  'ki.alerts_info_type2': 'Warnung (Orange): Auffällige Muster erkannt — sollten zeitnah untersucht und die Ursache analysiert werden',
+  'ki.alerts_info_type3': 'Info (Blau): Statistische Auffälligkeiten — zur Kenntnis nehmen, keine sofortige Aktion nötig',
+  'ki.alerts_info_legal': 'Rechtsgrundlage: Art. 9 (Risikomanagement) und Art. 72 (Post-Market Monitoring) der EU-Verordnung 2024/1689. Betreiber müssen schwerwiegende Vorfälle innerhalb von 15 Tagen der zuständigen Behörde melden.',
+
   // Navigation
   'nav.reports': 'Reports',
 

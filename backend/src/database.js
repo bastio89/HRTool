@@ -192,10 +192,103 @@ const migrations = [
   `ALTER TABLE matching_results ADD COLUMN reviewed_by TEXT`,
   `ALTER TABLE matching_results ADD COLUMN reviewed_at DATETIME`,
   `ALTER TABLE matching_results ADD COLUMN review_notes TEXT`,
+  // --- Erweiterung Bewerberprofil ---
+  // Social-Media-Profile (#3)
+  `ALTER TABLE candidates ADD COLUMN linkedin_url TEXT`,
+  `ALTER TABLE candidates ADD COLUMN xing_url TEXT`,
+  `ALTER TABLE candidates ADD COLUMN github_url TEXT`,
+  `ALTER TABLE candidates ADD COLUMN portfolio_url TEXT`,
+  // Gehaltsstruktur (#4)
+  `ALTER TABLE candidates ADD COLUMN salary_min INTEGER`,
+  `ALTER TABLE candidates ADD COLUMN salary_max INTEGER`,
+  `ALTER TABLE candidates ADD COLUMN salary_currency TEXT DEFAULT 'EUR'`,
+  `ALTER TABLE candidates ADD COLUMN salary_interval TEXT DEFAULT 'yearly'`,
+  // Kündigungsfrist (#5)
+  `ALTER TABLE candidates ADD COLUMN notice_period TEXT`,
+  `ALTER TABLE candidates ADD COLUMN available_from TEXT`,
+  // DSGVO-Einwilligung (#7)
+  `ALTER TABLE candidates ADD COLUMN gdpr_consent_date TEXT`,
+  `ALTER TABLE candidates ADD COLUMN gdpr_consent_type TEXT`,
+  `ALTER TABLE candidates ADD COLUMN gdpr_consent_expires TEXT`,
+  // Kandidaten-Foto (#8)
+  `ALTER TABLE candidates ADD COLUMN photo_filename TEXT`,
+  // Arbeitserlaubnis / Nationalität (#9)
+  `ALTER TABLE candidates ADD COLUMN nationality TEXT`,
+  `ALTER TABLE candidates ADD COLUMN work_permit TEXT`,
+  `ALTER TABLE candidates ADD COLUMN work_permit_until TEXT`,
+  // Empfehlungs-Tracking (#11)
+  `ALTER TABLE candidates ADD COLUMN referrer_name TEXT`,
+  `ALTER TABLE candidates ADD COLUMN referrer_email TEXT`,
+  // Aktuelle Position
+  `ALTER TABLE candidates ADD COLUMN current_employer TEXT`,
+  `ALTER TABLE candidates ADD COLUMN current_position TEXT`,
+  // Absagegründe (#6)
+  `ALTER TABLE pipeline_entries ADD COLUMN rejection_category TEXT`,
+  `ALTER TABLE pipeline_entries ADD COLUMN rejection_details TEXT`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }
 }
+
+// --- Neue Tabellen für strukturierten Werdegang, Ausbildung, Custom Fields ---
+
+// Strukturierter Werdegang (#1)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS candidate_work_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL,
+    employer TEXT NOT NULL,
+    position TEXT NOT NULL,
+    from_date TEXT,
+    to_date TEXT,
+    is_current INTEGER DEFAULT 0,
+    description TEXT,
+    location TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+  )
+`);
+
+// Strukturierte Ausbildung (#2)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS candidate_education (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL,
+    institution TEXT NOT NULL,
+    degree TEXT,
+    field_of_study TEXT,
+    from_date TEXT,
+    to_date TEXT,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+  )
+`);
+
+// Benutzerdefinierte Felder (#12)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS custom_field_definitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    field_type TEXT NOT NULL DEFAULT 'text',
+    options TEXT,
+    is_required INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS candidate_custom_values (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL,
+    field_id INTEGER NOT NULL,
+    value TEXT,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (field_id) REFERENCES custom_field_definitions(id) ON DELETE CASCADE,
+    UNIQUE(candidate_id, field_id)
+  )
+`);
 
 // Performance-Indizes
 const indexes = [
@@ -237,6 +330,12 @@ const indexes = [
   `CREATE INDEX IF NOT EXISTS idx_ai_logs_feature ON ai_logs(feature)`,
   `CREATE INDEX IF NOT EXISTS idx_ai_logs_created_at ON ai_logs(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_ai_logs_user_id ON ai_logs(user_id)`,
+  // Work History & Education
+  `CREATE INDEX IF NOT EXISTS idx_work_history_candidate ON candidate_work_history(candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_education_candidate ON candidate_education(candidate_id)`,
+  // Custom Fields
+  `CREATE INDEX IF NOT EXISTS idx_custom_values_candidate ON candidate_custom_values(candidate_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_custom_values_field ON candidate_custom_values(field_id)`,
 ];
 for (const sql of indexes) {
   try { db.exec(sql); } catch (_) { /* index already exists */ }

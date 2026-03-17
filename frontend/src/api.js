@@ -358,6 +358,44 @@ export const collaborationApi = {
   getUsers: () => request('/collaboration/users'),
 };
 
+// Candidate Details API (Werdegang, Ausbildung, Foto, Custom Fields, Merge)
+export const candidateDetailsApi = {
+  // Work History
+  getWorkHistory: (candidateId) => request(`/candidate-details/${candidateId}/work-history`),
+  addWorkHistory: (candidateId, data) => request(`/candidate-details/${candidateId}/work-history`, { method: 'POST', body: JSON.stringify(data) }),
+  updateWorkHistory: (id, data) => request(`/candidate-details/work-history/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteWorkHistory: (id) => request(`/candidate-details/work-history/${id}`, { method: 'DELETE' }),
+  bulkWorkHistory: (candidateId, entries) => request(`/candidate-details/${candidateId}/work-history/bulk`, { method: 'POST', body: JSON.stringify({ entries }) }),
+  // Education
+  getEducation: (candidateId) => request(`/candidate-details/${candidateId}/education`),
+  addEducation: (candidateId, data) => request(`/candidate-details/${candidateId}/education`, { method: 'POST', body: JSON.stringify(data) }),
+  updateEducation: (id, data) => request(`/candidate-details/education/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteEducation: (id) => request(`/candidate-details/education/${id}`, { method: 'DELETE' }),
+  bulkEducation: (candidateId, entries) => request(`/candidate-details/${candidateId}/education/bulk`, { method: 'POST', body: JSON.stringify({ entries }) }),
+  // Photo
+  uploadPhoto: async (candidateId, file) => {
+    const formData = new FormData();
+    formData.append('photo', file);
+    const response = await fetch(`${API_BASE}/candidate-details/${candidateId}/photo`, { method: 'POST', headers: authHeaders(), body: formData });
+    if (!response.ok) { const err = await response.json().catch(() => ({ error: 'Upload fehlgeschlagen' })); throw new Error(err.error); }
+    return response.json();
+  },
+  deletePhoto: (candidateId) => request(`/candidate-details/${candidateId}/photo`, { method: 'DELETE' }),
+  getPhotoUrl: (candidateId) => {
+    const token = localStorage.getItem('hrtool_token');
+    return `${API_BASE}/candidate-details/${candidateId}/photo${token ? `?token=${token}` : ''}`;
+  },
+  // Custom Fields
+  getCustomFieldDefinitions: () => request('/candidate-details/custom-fields/definitions'),
+  createCustomField: (data) => request('/candidate-details/custom-fields/definitions', { method: 'POST', body: JSON.stringify(data) }),
+  updateCustomField: (id, data) => request(`/candidate-details/custom-fields/definitions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCustomField: (id) => request(`/candidate-details/custom-fields/definitions/${id}`, { method: 'DELETE' }),
+  getCustomValues: (candidateId) => request(`/candidate-details/${candidateId}/custom-fields`),
+  saveCustomValues: (candidateId, values) => request(`/candidate-details/${candidateId}/custom-fields`, { method: 'PUT', body: JSON.stringify({ values }) }),
+  // Merge
+  merge: (keepId, mergeId) => request('/candidate-details/merge', { method: 'POST', body: JSON.stringify({ keepId, mergeId }) }),
+};
+
 // Reports API (Reporting & Analytics)
 export const reportsApi = {
   getOverview: (days) => request(`/reports/overview${days ? `?days=${days}` : ''}`),

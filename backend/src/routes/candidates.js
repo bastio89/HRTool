@@ -603,7 +603,14 @@ router.post('/', (req, res) => {
     const {
       name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages,
-      certificates, drivers_license, mobility, notes, status, tags, source
+      certificates, drivers_license, mobility, notes, status, tags, source,
+      linkedin_url, xing_url, github_url, portfolio_url,
+      salary_min, salary_max, salary_currency, salary_interval,
+      notice_period, available_from,
+      gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
+      nationality, work_permit, work_permit_until,
+      referrer_name, referrer_email,
+      current_employer, current_position
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -613,14 +620,28 @@ router.post('/', (req, res) => {
     const result = db.prepare(`
       INSERT INTO candidates (name, email, phone, location, experience, skills,
         education, desired_salary, availability, languages, certificates,
-        drivers_license, mobility, notes, status, tags, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        drivers_license, mobility, notes, status, tags, source,
+        linkedin_url, xing_url, github_url, portfolio_url,
+        salary_min, salary_max, salary_currency, salary_interval,
+        notice_period, available_from,
+        gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
+        nationality, work_permit, work_permit_until,
+        referrer_name, referrer_email,
+        current_employer, current_position)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
-      notes || null, status || 'Aktiv', tags || null, source || null
+      notes || null, status || 'Aktiv', tags || null, source || null,
+      linkedin_url || null, xing_url || null, github_url || null, portfolio_url || null,
+      salary_min || null, salary_max || null, salary_currency || 'EUR', salary_interval || 'yearly',
+      notice_period || null, available_from || null,
+      gdpr_consent_date || null, gdpr_consent_type || null, gdpr_consent_expires || null,
+      nationality || null, work_permit || null, work_permit_until || null,
+      referrer_name || null, referrer_email || null,
+      current_employer || null, current_position || null
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(result.lastInsertRowid);
@@ -662,7 +683,14 @@ router.put('/:id', (req, res) => {
     const {
       name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages,
-      certificates, drivers_license, mobility, notes, status, tags, source
+      certificates, drivers_license, mobility, notes, status, tags, source,
+      linkedin_url, xing_url, github_url, portfolio_url,
+      salary_min, salary_max, salary_currency, salary_interval,
+      notice_period, available_from,
+      gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
+      nationality, work_permit, work_permit_until,
+      referrer_name, referrer_email,
+      current_employer, current_position
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -674,14 +702,29 @@ router.put('/:id', (req, res) => {
         name = ?, email = ?, phone = ?, location = ?, experience = ?,
         skills = ?, education = ?, desired_salary = ?, availability = ?,
         languages = ?, certificates = ?, drivers_license = ?, mobility = ?,
-        notes = ?, status = ?, tags = ?, source = ?, updated_at = CURRENT_TIMESTAMP
+        notes = ?, status = ?, tags = ?, source = ?,
+        linkedin_url = ?, xing_url = ?, github_url = ?, portfolio_url = ?,
+        salary_min = ?, salary_max = ?, salary_currency = ?, salary_interval = ?,
+        notice_period = ?, available_from = ?,
+        gdpr_consent_date = ?, gdpr_consent_type = ?, gdpr_consent_expires = ?,
+        nationality = ?, work_permit = ?, work_permit_until = ?,
+        referrer_name = ?, referrer_email = ?,
+        current_employer = ?, current_position = ?,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
-      notes || null, status || 'Aktiv', tags || null, source || null, req.params.id
+      notes || null, status || 'Aktiv', tags || null, source || null,
+      linkedin_url || null, xing_url || null, github_url || null, portfolio_url || null,
+      salary_min || null, salary_max || null, salary_currency || 'EUR', salary_interval || 'yearly',
+      notice_period || null, available_from || null,
+      gdpr_consent_date || null, gdpr_consent_type || null, gdpr_consent_expires || null,
+      nationality || null, work_permit || null, work_permit_until || null,
+      referrer_name || null, referrer_email || null,
+      current_employer || null, current_position || null, req.params.id
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);

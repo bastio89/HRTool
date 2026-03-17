@@ -245,6 +245,35 @@ export const aiLogsApi = {
   getCompliance: () => request('/ai-logs/compliance/checklist'),
 };
 
+// Email API
+export const emailApi = {
+  getSmtpSettings: () => request('/emails/smtp/settings'),
+  saveSmtpSettings: (data) =>
+    request('/emails/smtp/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  testSmtp: () => request('/emails/smtp/test', { method: 'POST' }),
+  getTemplates: () => request('/emails/templates'),
+  getTemplate: (id) => request(`/emails/templates/${id}`),
+  createTemplate: (data) =>
+    request('/emails/templates', { method: 'POST', body: JSON.stringify(data) }),
+  updateTemplate: (id, data) =>
+    request(`/emails/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTemplate: (id) => request(`/emails/templates/${id}`, { method: 'DELETE' }),
+  send: (data) =>
+    request('/emails/send', { method: 'POST', body: JSON.stringify(data) }),
+  sendWithTemplate: (data) =>
+    request('/emails/send-with-template', { method: 'POST', body: JSON.stringify(data) }),
+  preview: (data) =>
+    request('/emails/preview', { method: 'POST', body: JSON.stringify(data) }),
+  getLog: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.candidate_id) q.set('candidate_id', params.candidate_id);
+    if (params.page) q.set('page', params.page);
+    if (params.limit) q.set('limit', params.limit);
+    const qs = q.toString();
+    return request(`/emails/log${qs ? `?${qs}` : ''}`);
+  },
+};
+
 // Settings API
 export const settingsApi = {
   getAll: () => request('/settings'),

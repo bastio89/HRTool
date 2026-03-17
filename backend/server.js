@@ -17,6 +17,7 @@ const interviewsRouter = require('./src/routes/interviews');
 const ratingsRouter = require('./src/routes/ratings');
 const aiLogsRouter = require('./src/routes/ai-logs');
 const scorecardsRouter = require('./src/routes/scorecards');
+const emailsRouter = require('./src/routes/emails');
 const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
@@ -51,6 +52,7 @@ app.use('/api/interviews', interviewsRouter);
 app.use('/api/ratings', ratingsRouter);
 app.use('/api/scorecards', scorecardsRouter);
 app.use('/api/ai-logs', aiLogsRouter);
+app.use('/api/emails', emailsRouter);
 
 /**
  * @swagger

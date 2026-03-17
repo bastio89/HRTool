@@ -1,6 +1,10 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+let triggerStageEmail = null;
+try {
+  triggerStageEmail = require('./emails').triggerStageEmail;
+} catch (e) { /* emails module loads lazily */ }
 
 const router = express.Router();
 
@@ -168,6 +172,11 @@ router.put('/:entryId/stage', (req, res) => {
       db.prepare(`INSERT INTO activities (candidate_id, type, content) VALUES (?, ?, ?)`)
         .run(entry.candidate_id, 'Pipeline', `Stage gewechselt: "${entry.stage}" → "${stage}"${job ? ` (${job.title})` : ''}${notes ? ` — ${notes}` : ''}`);
       logAudit(req, 'stage-geändert', 'Pipeline', req.params.entryId, null, { oldStage, newStage: stage, job: job?.title });
+
+      // Trigger automatic email on stage change
+      if (triggerStageEmail) {
+        triggerStageEmail(entry.candidate_id, stage, job?.title, req.user?.username).catch(() => {});
+      }
     }
 
     res.json(db.prepare('SELECT * FROM pipeline_entries WHERE id = ?').get(req.params.entryId));

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
@@ -16,6 +16,7 @@ const navItems = [
 
 const adminItems = [
   { to: '/admin/users', icon: Shield, labelKey: 'nav.users' },
+  { to: '/admin/email', icon: Mail, labelKey: 'nav.email' },
   { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
   { to: '/admin/dsgvo', icon: ShieldAlert, labelKey: 'nav.dsgvo' },
   { to: '/admin/ki-transparenz', icon: Bot, labelKey: 'nav.ai_transparency' },

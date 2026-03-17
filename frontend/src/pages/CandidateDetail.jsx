@@ -9,6 +9,7 @@ import {
 import { candidatesApi, activitiesApi, uploadsApi, ratingsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
+import SendEmailModal from '../components/SendEmailModal'
 
 const ACTIVITY_TYPES = ['Notiz', 'Anruf', 'E-Mail', 'Interview', 'Angebot', 'Absage', 'Pipeline']
 
@@ -51,6 +52,7 @@ export default function CandidateDetail() {
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
   const [previewFile, setPreviewFile] = useState(null)
   const [ratings, setRatings] = useState([])
   const [ratingAverages, setRatingAverages] = useState({})
@@ -221,6 +223,13 @@ export default function CandidateDetail() {
           <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5">{t('detail.profile')}</p>
           <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black dark:text-white leading-tight">{candidate.name}</h1>
         </div>
+        <button
+          onClick={() => setShowEmailModal(true)}
+          className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#0071e3]/10 dark:bg-[#0a84ff]/20 hover:bg-[#0071e3]/20 dark:hover:bg-[#0a84ff]/30 flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
+          title={t('email.send_email')}
+        >
+          <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-[#0071e3] dark:text-[#0a84ff]" />
+        </button>
         <button
           onClick={() => setShowPrint(true)}
           className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
@@ -685,6 +694,18 @@ export default function CandidateDetail() {
         open={showPrint}
         onClose={() => setShowPrint(false)}
       />
+
+      {/* Send Email Modal */}
+      {showEmailModal && (
+        <SendEmailModal
+          candidate={candidate}
+          onClose={() => setShowEmailModal(false)}
+          onSent={() => {
+            // Refresh activities to show the sent email
+            activitiesApi.getByCandidate(id).then(r => setActivities(r.data || [])).catch(() => {})
+          }}
+        />
+      )}
 
       {/* File Preview Modal */}
       {previewFile && (

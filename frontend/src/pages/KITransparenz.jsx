@@ -758,6 +758,7 @@ function BiasTestsetTab({ t }) {
   const [results, setResults] = useState(null)
   const [jobDesc, setJobDesc] = useState('')
   const [jobTitle, setJobTitle] = useState('')
+  const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
     aiLogsApi.getBiasTestset().then(setProfiles).catch(() => null).finally(() => setLoading(false))
@@ -783,11 +784,46 @@ function BiasTestsetTab({ t }) {
       <Card className="p-6 bg-gradient-to-br from-[#5e5ce6]/5 to-[#0071e3]/5 border border-[#5e5ce6]/10">
         <div className="flex items-center gap-4 mb-4">
           <TestTubes className="w-8 h-8 text-[#5e5ce6]" />
-          <div>
+          <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.biastest_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.biastest_subtitle')}</p>
           </div>
+          <button onClick={() => setShowInfo(!showInfo)} className={`w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
+            showInfo ? 'bg-[#5e5ce6] text-white shadow-lg shadow-[#5e5ce6]/25' : 'bg-white/60 dark:bg-white/10 text-[#5e5ce6] hover:bg-[#5e5ce6]/10'
+          }`} title={t('ki.biastest_info_toggle')}>
+            <Info className="w-[18px] h-[18px]" />
+          </button>
         </div>
+
+        {/* Collapsible info panel */}
+        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showInfo ? 'max-h-[800px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+          <div className="p-5 rounded-xl bg-white/70 dark:bg-black/20 border border-[#5e5ce6]/10 space-y-4">
+            <div>
+              <h4 className="text-[14px] font-bold text-[#5e5ce6] mb-1.5">{t('ki.biastest_info_what_title')}</h4>
+              <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.biastest_info_what_text')}</p>
+            </div>
+            <div>
+              <h4 className="text-[14px] font-bold text-[#5e5ce6] mb-1.5">{t('ki.biastest_info_why_title')}</h4>
+              <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.biastest_info_why_text')}</p>
+            </div>
+            <div>
+              <h4 className="text-[14px] font-bold text-[#5e5ce6] mb-1.5">{t('ki.biastest_info_how_title')}</h4>
+              <ul className="space-y-1.5">
+                {[1, 2, 3, 4].map(n => (
+                  <li key={n} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+                    <span className="w-5 h-5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{n}</span>
+                    <span className="leading-relaxed">{t(`ki.biastest_info_step${n}`)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-[#5e5ce6]/5 border border-[#5e5ce6]/10">
+              <Scale className="w-4 h-4 text-[#5e5ce6] mt-0.5 flex-shrink-0" />
+              <p className="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.biastest_info_legal')}</p>
+            </div>
+          </div>
+        </div>
+
         {profiles && (
           <div className="flex flex-wrap gap-2 mt-3">
             {profiles.diversityDimensions?.map((d, i) => (

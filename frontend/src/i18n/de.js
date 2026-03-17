@@ -969,6 +969,17 @@ export default {
   'ki.biastest_duration': 'Dauer',
   'ki.biastest_bias_alerts': 'Erkannte Bias-Hinweise',
   'ki.biastest_location_analysis': 'Standort-Analyse',
+  'ki.biastest_info_toggle': 'Hintergrund-Informationen anzeigen',
+  'ki.biastest_info_what_title': 'Was ist das Bias-Testset?',
+  'ki.biastest_info_what_text': 'Das Bias-Testset besteht aus 20 fiktiven Bewerberprofilen mit unterschiedlichem Hintergrund — verschiedene Standorte, Bildungswege, Erfahrungslevel und Fachgebiete. Diese Profile werden gegen eine Stellenbeschreibung gematcht, um zu prüfen, ob das KI-System bestimmte Gruppen systematisch bevorzugt oder benachteiligt.',
+  'ki.biastest_info_why_title': 'Warum ist das wichtig?',
+  'ki.biastest_info_why_text': 'Der EU AI Act (Artikel 9 & 10) verlangt, dass Hochrisiko-KI-Systeme — wozu HR-Matching zählt — regelmäßig auf Verzerrungen (Bias) geprüft werden. Ohne solche Tests könnten z.B. Bewerber aus bestimmten Regionen, mit nicht-akademischer Ausbildung oder Quereinsteiger systematisch schlechtere Bewertungen erhalten.',
+  'ki.biastest_info_how_title': 'Wie funktioniert der Test?',
+  'ki.biastest_info_step1': 'Geben Sie eine Stellenbeschreibung ein, gegen die getestet werden soll.',
+  'ki.biastest_info_step2': 'Die KI bewertet jeden der 20 Kandidaten einzeln mit einem Score von 0–100%.',
+  'ki.biastest_info_step3': 'Die Ergebnisse werden nach Standort und Bildungsweg gruppiert, um systematische Muster zu erkennen.',
+  'ki.biastest_info_step4': 'Bei auffälligen Abweichungen (>30%) werden automatisch Bias-Warnungen generiert.',
+  'ki.biastest_info_legal': 'Rechtsgrundlage: Art. 9 (Risikomanagement) und Art. 10 (Daten-Governance) der EU-Verordnung 2024/1689 über KI. Regelmäßige Bias-Tests sind eine Pflicht für Betreiber von Hochrisiko-KI-Systemen im Personalwesen.',
 
   // Bias Alerts
   'ki.tab_bias_alerts': 'Bias-Alerts',

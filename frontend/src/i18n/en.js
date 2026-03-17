@@ -969,6 +969,17 @@ export default {
   'ki.biastest_duration': 'Duration',
   'ki.biastest_bias_alerts': 'Detected Bias Indicators',
   'ki.biastest_location_analysis': 'Location Analysis',
+  'ki.biastest_info_toggle': 'Show background information',
+  'ki.biastest_info_what_title': 'What is the Bias Testset?',
+  'ki.biastest_info_what_text': 'The Bias Testset consists of 20 fictional candidate profiles with diverse backgrounds — different locations, educational paths, experience levels, and specializations. These profiles are matched against a job description to check whether the AI system systematically favors or disadvantages certain groups.',
+  'ki.biastest_info_why_title': 'Why is this important?',
+  'ki.biastest_info_why_text': 'The EU AI Act (Articles 9 & 10) requires that high-risk AI systems — which includes HR matching — are regularly tested for bias. Without such tests, candidates from certain regions, with non-academic education, or career changers could systematically receive lower scores.',
+  'ki.biastest_info_how_title': 'How does the test work?',
+  'ki.biastest_info_step1': 'Enter a job description to test against.',
+  'ki.biastest_info_step2': 'The AI evaluates each of the 20 candidates individually with a score from 0–100%.',
+  'ki.biastest_info_step3': 'Results are grouped by location and education to identify systematic patterns.',
+  'ki.biastest_info_step4': 'Significant deviations (>30%) automatically trigger bias warnings.',
+  'ki.biastest_info_legal': 'Legal basis: Art. 9 (Risk Management) and Art. 10 (Data Governance) of EU Regulation 2024/1689 on AI. Regular bias testing is mandatory for operators of high-risk AI systems in human resources.',
 
   // Bias Alerts
   'ki.tab_bias_alerts': 'Bias Alerts',

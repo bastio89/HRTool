@@ -28,8 +28,6 @@ export default function History() {
     }
   }
 
-  if (loading) return <LoadingSpinner text={t('history.loading')} />
-
   // Filter and sort
   const filtered = useMemo(() => {
     let list = results
@@ -57,6 +55,8 @@ export default function History() {
     })
     return list
   }, [results, search, sort])
+
+  if (loading) return <LoadingSpinner text={t('history.loading')} />
 
   return (
     <div className="fade-in max-w-[1400px] mx-auto">

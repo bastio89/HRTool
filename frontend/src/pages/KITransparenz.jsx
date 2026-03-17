@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server, AlertOctagon, TestTubes, Lightbulb, Bell, Play } from 'lucide-react'
+import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server, AlertOctagon, TestTubes, Lightbulb, Bell, Play, Plus, ExternalLink, Pencil, Trash2, ChevronDown, ChevronUp, ListTodo, CircleDot, CircleCheck } from 'lucide-react'
 import { Card, LoadingSpinner } from '../components/UI'
-import { aiLogsApi } from '../api'
+import { aiLogsApi, complianceApi } from '../api'
 import { useI18n } from '../I18nContext'
 
 const TABS = [
@@ -113,17 +113,78 @@ export default function KITransparenz() {
 }
 
 function ComplianceTab({ t }) {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showInfo, setShowInfo] = useState(false)
+  const [actions, setActions] = useState([])
+  const [actionSummary, setActionSummary] = useState(null)
+  const [showNewAction, setShowNewAction] = useState(null) // check id
+  const [newActionTitle, setNewActionTitle] = useState('')
+  const [newActionPriority, setNewActionPriority] = useState('medium')
+
+  // Quick-action links for each check
+  const ACTION_LINKS = {
+    'logging': null,
+    'transparency': null,
+    'human-oversight': '/history',
+    'anonymization': null,
+    'risk-management': null,
+    'data-governance': null,
+    'local-processing': null,
+    'user-tracking': null,
+    'override-tracking': '/history',
+    'rate-limiting': null,
+    'prompt-injection': null,
+  }
 
   useEffect(() => {
     Promise.all([
       aiLogsApi.getCompliance().catch(() => null),
       aiLogsApi.getStats().catch(() => null),
-    ]).then(([c, s]) => { setData(c); setStats(s) }).finally(() => setLoading(false))
+      complianceApi.getActions({ ref_type: 'compliance' }).catch(() => ({ data: [] })),
+      complianceApi.getSummary().catch(() => null),
+    ]).then(([c, s, a, sum]) => {
+      setData(c); setStats(s); setActions(a.data || []); setActionSummary(sum)
+    }).finally(() => setLoading(false))
   }, [])
+
+  const handleCreateAction = async (checkId, checkTitle) => {
+    if (!newActionTitle.trim()) return
+    try {
+      const action = await complianceApi.createAction({
+        ref_type: 'compliance',
+        ref_id: checkId,
+        title: newActionTitle.trim(),
+        priority: newActionPriority,
+        description: `Maßnahme für: ${checkTitle}`,
+      })
+      setActions(prev => [action, ...prev])
+      setNewActionTitle('')
+      setShowNewAction(null)
+      setNewActionPriority('medium')
+      // Refresh summary
+      complianceApi.getSummary().then(setActionSummary).catch(() => {})
+    } catch (err) { console.error(err) }
+  }
+
+  const handleToggleAction = async (action) => {
+    const newStatus = action.status === 'done' ? 'open' : action.status === 'open' ? 'in_progress' : 'done'
+    try {
+      const updated = await complianceApi.updateAction(action.id, { status: newStatus })
+      setActions(prev => prev.map(a => a.id === action.id ? updated : a))
+      complianceApi.getSummary().then(setActionSummary).catch(() => {})
+    } catch (err) { console.error(err) }
+  }
+
+  const handleDeleteAction = async (id) => {
+    try {
+      await complianceApi.deleteAction(id)
+      setActions(prev => prev.filter(a => a.id !== id))
+      complianceApi.getSummary().then(setActionSummary).catch(() => {})
+    } catch (err) { console.error(err) }
+  }
 
   if (loading) return <LoadingSpinner text={t('ki.compliance_loading')} />
 
@@ -232,23 +293,122 @@ function ComplianceTab({ t }) {
         </Card>
       )}
 
+      {/* Action Summary */}
+      {actionSummary && (actionSummary.open > 0 || actionSummary.inProgress > 0) && (
+        <Card className="p-5 border border-[#ff9f0a]/20 bg-[#ff9f0a]/5">
+          <div className="flex items-center gap-4">
+            <ListTodo className="w-6 h-6 text-[#ff9f0a]" />
+            <div className="flex-1">
+              <p className="text-[14px] font-bold text-black dark:text-white">{t('ki.actions_pending')}</p>
+              <p className="text-[12px] text-gray-500 mt-0.5">
+                {actionSummary.open} {t('ki.action_open')} · {actionSummary.inProgress} {t('ki.action_in_progress')} · {actionSummary.done} {t('ki.action_done')}
+                {actionSummary.overdue > 0 && <span className="text-[#ff3b30] font-bold"> · {actionSummary.overdue} {t('ki.action_overdue')}</span>}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {data?.checks && (
         <Card className="p-8">
           <h3 className="text-[18px] font-semibold text-black dark:text-white mb-6">{t('ki.compliance_checklist')}</h3>
           <div className="space-y-3">
-            {data.checks.map(c => (
-              <div key={c.id} className={`flex items-start gap-4 p-5 rounded-2xl border ${statusColors[c.status]}`}>
-                <div className="mt-0.5 flex-shrink-0">{statusIcons[c.status]}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="text-[15px] font-bold text-black dark:text-white">{c.title}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[11px] font-bold">{c.article}</span>
+            {data.checks.map(c => {
+              const checkActions = actions.filter(a => a.ref_id === c.id)
+              const link = ACTION_LINKS[c.id]
+              return (
+                <div key={c.id} className={`rounded-2xl border ${statusColors[c.status]} overflow-hidden`}>
+                  <div className="flex items-start gap-4 p-5">
+                    <div className="mt-0.5 flex-shrink-0">{statusIcons[c.status]}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="text-[15px] font-bold text-black dark:text-white">{c.title}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[11px] font-bold">{c.article}</span>
+                      </div>
+                      <p className="text-[13px] text-gray-600 dark:text-gray-400">{c.description}</p>
+                      <p className="text-[12px] text-gray-400 mt-1">{c.details}</p>
+
+                      {/* Quick actions row */}
+                      <div className="flex items-center gap-2 mt-3 flex-wrap">
+                        {(c.status === 'failed' || c.status === 'warning') && link && (
+                          <button onClick={() => navigate(link)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[#0071e3] text-white hover:bg-[#005bb5] transition-colors cursor-pointer">
+                            <ExternalLink className="w-3 h-3" />{t('ki.action_fix_now')}
+                          </button>
+                        )}
+                        <button onClick={() => setShowNewAction(showNewAction === c.id ? null : c.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer">
+                          <Plus className="w-3 h-3" />{t('ki.action_create')}
+                        </button>
+                        {checkActions.length > 0 && (
+                          <span className="text-[11px] font-medium text-gray-400">
+                            {checkActions.filter(a => a.status === 'done').length}/{checkActions.length} {t('ki.action_tasks_done')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[13px] text-gray-600 dark:text-gray-400">{c.description}</p>
-                  <p className="text-[12px] text-gray-400 mt-1">{c.details}</p>
+
+                  {/* New action form */}
+                  {showNewAction === c.id && (
+                    <div className="px-5 pb-4 pt-2 border-t border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-black/10">
+                      <div className="flex items-center gap-2">
+                        <input type="text" value={newActionTitle} onChange={e => setNewActionTitle(e.target.value)}
+                          placeholder={t('ki.action_title_placeholder')}
+                          className="flex-1 px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:border-[#0071e3]/30 focus:ring-2 focus:ring-[#0071e3]/10"
+                          onKeyDown={e => e.key === 'Enter' && handleCreateAction(c.id, c.title)}
+                          autoFocus />
+                        <select value={newActionPriority} onChange={e => setNewActionPriority(e.target.value)}
+                          className="px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[12px] font-bold border-none outline-none text-black dark:text-white">
+                          <option value="critical">{t('ki.priority_critical')}</option>
+                          <option value="high">{t('ki.priority_high')}</option>
+                          <option value="medium">{t('ki.priority_medium')}</option>
+                          <option value="low">{t('ki.priority_low')}</option>
+                        </select>
+                        <button onClick={() => handleCreateAction(c.id, c.title)}
+                          disabled={!newActionTitle.trim()}
+                          className="px-4 py-2 rounded-xl bg-[#0071e3] text-white text-[12px] font-bold hover:bg-[#005bb5] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                          {t('ki.action_add')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Existing actions for this check */}
+                  {checkActions.length > 0 && (
+                    <div className="px-5 pb-4 border-t border-gray-200/50 dark:border-gray-700/50">
+                      <div className="space-y-1.5 mt-3">
+                        {checkActions.map(action => (
+                          <div key={action.id} className="flex items-center gap-3 group">
+                            <button onClick={() => handleToggleAction(action)} className="flex-shrink-0 cursor-pointer" title={t('ki.action_toggle_status')}>
+                              {action.status === 'done'
+                                ? <CircleCheck className="w-4 h-4 text-[#34c759]" />
+                                : action.status === 'in_progress'
+                                ? <CircleDot className="w-4 h-4 text-[#0071e3]" />
+                                : <div className="w-4 h-4 rounded-full border-2 border-gray-300 dark:border-gray-600" />
+                              }
+                            </button>
+                            <span className={`flex-1 text-[12px] font-medium ${action.status === 'done' ? 'line-through text-gray-400' : 'text-black dark:text-white'}`}>
+                              {action.title}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                              action.priority === 'critical' ? 'bg-[#ff3b30]/10 text-[#ff3b30]' :
+                              action.priority === 'high' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' :
+                              action.priority === 'low' ? 'bg-gray-100 dark:bg-gray-800 text-gray-400' :
+                              'bg-[#0071e3]/10 text-[#0071e3]'
+                            }`}>{action.priority}</span>
+                            <button onClick={() => handleDeleteAction(action.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-gray-400 hover:text-[#ff3b30]">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </Card>
       )}
@@ -782,10 +942,75 @@ function RiskRegisterTab({ t }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showInfo, setShowInfo] = useState(false)
+  const [overrides, setOverrides] = useState({})
+  const [actions, setActions] = useState([])
+  const [editingRisk, setEditingRisk] = useState(null) // risk.id
+  const [overrideStatus, setOverrideStatus] = useState('')
+  const [overrideNotes, setOverrideNotes] = useState('')
+  const [showNewTask, setShowNewTask] = useState(null) // risk.id
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskPriority, setNewTaskPriority] = useState('high')
+  const [expandedRisk, setExpandedRisk] = useState(null) // risk.id
 
   useEffect(() => {
-    aiLogsApi.getRiskRegister().then(setData).catch(() => null).finally(() => setLoading(false))
+    Promise.all([
+      aiLogsApi.getRiskRegister(),
+      complianceApi.getRiskOverrides().catch(() => ({ data: [] })),
+      complianceApi.getActions({ ref_type: 'risk' }).catch(() => ({ data: [] })),
+    ]).then(([d, o, a]) => {
+      setData(d)
+      // Build overrides map
+      const map = {}
+      for (const ov of (o.data || [])) { map[ov.risk_id] = ov }
+      setOverrides(map)
+      setActions(a.data || [])
+    }).catch(() => null).finally(() => setLoading(false))
   }, [])
+
+  const handleSaveOverride = async (riskId) => {
+    try {
+      const result = await complianceApi.setRiskOverride(riskId, overrideStatus || null, overrideNotes)
+      if (overrideStatus) {
+        setOverrides(prev => ({ ...prev, [riskId]: result }))
+      } else {
+        setOverrides(prev => { const copy = { ...prev }; delete copy[riskId]; return copy })
+      }
+      setEditingRisk(null)
+      setOverrideStatus('')
+      setOverrideNotes('')
+    } catch (err) { console.error(err) }
+  }
+
+  const handleCreateTask = async (riskId, riskTitle) => {
+    if (!newTaskTitle.trim()) return
+    try {
+      const action = await complianceApi.createAction({
+        ref_type: 'risk',
+        ref_id: riskId,
+        title: newTaskTitle.trim(),
+        priority: newTaskPriority,
+        description: `Maßnahme für Risiko: ${riskTitle}`,
+      })
+      setActions(prev => [action, ...prev])
+      setNewTaskTitle('')
+      setShowNewTask(null)
+    } catch (err) { console.error(err) }
+  }
+
+  const handleToggleTask = async (action) => {
+    const newStatus = action.status === 'done' ? 'open' : action.status === 'open' ? 'in_progress' : 'done'
+    try {
+      const updated = await complianceApi.updateAction(action.id, { status: newStatus })
+      setActions(prev => prev.map(a => a.id === action.id ? updated : a))
+    } catch (err) { console.error(err) }
+  }
+
+  const handleDeleteTask = async (id) => {
+    try {
+      await complianceApi.deleteAction(id)
+      setActions(prev => prev.filter(a => a.id !== id))
+    } catch (err) { console.error(err) }
+  }
 
   if (loading) return <LoadingSpinner text={t('ki.risk_loading')} />
   if (!data) return <Card className="p-8"><p className="text-gray-500">{t('ki.risk_error')}</p></Card>
@@ -793,6 +1018,20 @@ function RiskRegisterTab({ t }) {
   const levelColors = { high: '#ff3b30', medium: '#ff9f0a', low: '#34c759' }
   const statusLabels = { mitigated: t('ki.risk_mitigated'), active: t('ki.risk_active'), 'partially-mitigated': t('ki.risk_partial') }
   const statusColors = { mitigated: 'bg-[#34c759]/10 text-[#34c759]', active: 'bg-[#ff3b30]/10 text-[#ff3b30]', 'partially-mitigated': 'bg-[#ff9f0a]/10 text-[#ff9f0a]' }
+
+  // Apply overrides to risks
+  const risksWithOverrides = data.risks.map(risk => {
+    const ov = overrides[risk.id]
+    if (ov?.manual_status) {
+      return { ...risk, status: ov.manual_status, _overridden: true, _overrideNotes: ov.notes, _overrideBy: ov.updated_by }
+    }
+    return risk
+  })
+
+  // Recalculate summary with overrides
+  const active = risksWithOverrides.filter(r => r.status === 'active').length
+  const mitigated = risksWithOverrides.filter(r => r.status === 'mitigated').length
+  const partial = risksWithOverrides.filter(r => r.status === 'partially-mitigated').length
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -815,56 +1054,196 @@ function RiskRegisterTab({ t }) {
         />
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
-            <p className="text-[28px] font-bold text-[#ff3b30]">{data.summary.active}</p>
+            <p className="text-[28px] font-bold text-[#ff3b30]">{active}</p>
             <p className="text-[13px] text-gray-500">{t('ki.risk_active')}</p>
           </div>
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
-            <p className="text-[28px] font-bold text-[#ff9f0a]">{data.summary.partiallyMitigated}</p>
+            <p className="text-[28px] font-bold text-[#ff9f0a]">{partial}</p>
             <p className="text-[13px] text-gray-500">{t('ki.risk_partial')}</p>
           </div>
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
-            <p className="text-[28px] font-bold text-[#34c759]">{data.summary.mitigated}</p>
+            <p className="text-[28px] font-bold text-[#34c759]">{mitigated}</p>
             <p className="text-[13px] text-gray-500">{t('ki.risk_mitigated')}</p>
           </div>
         </div>
       </Card>
 
-      {data.risks.map(risk => (
-        <Card key={risk.id} className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${levelColors[risk.riskLevel]}15` }}>
-                <AlertTriangle className="w-5 h-5" style={{ color: levelColors[risk.riskLevel] }} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[12px] font-mono font-bold text-gray-400">{risk.id}</span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: `${levelColors[risk.riskLevel]}15`, color: levelColors[risk.riskLevel] }}>
-                    {risk.riskLevel.toUpperCase()}
-                  </span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] font-semibold">{risk.aiActArticle}</span>
+      {risksWithOverrides.map(risk => {
+        const riskActions = actions.filter(a => a.ref_id === risk.id)
+        const isExpanded = expandedRisk === risk.id
+        return (
+          <Card key={risk.id} className="p-6 overflow-hidden">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${levelColors[risk.riskLevel]}15` }}>
+                  <AlertTriangle className="w-5 h-5" style={{ color: levelColors[risk.riskLevel] }} />
                 </div>
-                <h3 className="text-[16px] font-bold text-black dark:text-white">{risk.title}</h3>
-                <p className="text-[13px] text-gray-500 mt-1">{risk.description}</p>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[12px] font-mono font-bold text-gray-400">{risk.id}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: `${levelColors[risk.riskLevel]}15`, color: levelColors[risk.riskLevel] }}>
+                      {risk.riskLevel.toUpperCase()}
+                    </span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] font-semibold">{risk.aiActArticle}</span>
+                    {risk._overridden && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#af52de]/10 text-[#af52de] font-bold">{t('ki.risk_manual_override')}</span>
+                    )}
+                  </div>
+                  <h3 className="text-[16px] font-bold text-black dark:text-white">{risk.title}</h3>
+                  <p className="text-[13px] text-gray-500 mt-1">{risk.description}</p>
+                  {risk._overridden && risk._overrideNotes && (
+                    <p className="text-[12px] text-[#af52de] mt-1 italic">💬 {risk._overrideNotes} — {risk._overrideBy}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={`px-3 py-1 rounded-full text-[12px] font-bold ${statusColors[risk.status]}`}>
+                  {statusLabels[risk.status]}
+                </span>
+                <button onClick={() => { setEditingRisk(editingRisk === risk.id ? null : risk.id); setOverrideStatus(risk.status); setOverrideNotes(risk._overrideNotes || '') }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer"
+                  title={t('ki.risk_change_status')}>
+                  <Pencil className="w-3.5 h-3.5 text-gray-500" />
+                </button>
               </div>
             </div>
-            <span className={`px-3 py-1 rounded-full text-[12px] font-bold flex-shrink-0 ${statusColors[risk.status]}`}>
-              {statusLabels[risk.status]}
-            </span>
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-            <p className="text-[13px] font-bold text-gray-700 dark:text-gray-300 mb-2">{t('ki.risk_mitigations')}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {risk.mitigations.map((m, i) => (
-                <div key={i} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
-                  <CheckCircle className="w-4 h-4 text-[#34c759] mt-0.5 flex-shrink-0" />
-                  {m}
+
+            {/* Status override editor */}
+            {editingRisk === risk.id && (
+              <div className="mb-4 p-4 rounded-xl bg-[#af52de]/5 border border-[#af52de]/20">
+                <p className="text-[12px] font-bold text-[#af52de] uppercase mb-3">{t('ki.risk_override_title')}</p>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  {['active', 'partially-mitigated', 'mitigated'].map(s => (
+                    <button key={s} onClick={() => setOverrideStatus(s)}
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-bold transition-all cursor-pointer ${
+                        overrideStatus === s ? statusColors[s] + ' ring-2 ring-offset-1 ring-current' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500'
+                      }`}>
+                      {statusLabels[s]}
+                    </button>
+                  ))}
+                  {risk._overridden && (
+                    <button onClick={() => setOverrideStatus('')}
+                      className="px-3 py-1.5 rounded-full text-[12px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
+                      ↩ {t('ki.risk_reset_auto')}
+                    </button>
+                  )}
                 </div>
-              ))}
+                <textarea value={overrideNotes} onChange={e => setOverrideNotes(e.target.value)}
+                  placeholder={t('ki.risk_override_notes_placeholder')}
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#1c1c1e] text-[13px] font-medium text-black dark:text-white border border-[#af52de]/20 focus:outline-none focus:border-[#af52de] focus:ring-2 focus:ring-[#af52de]/10 resize-none mb-3" />
+                <div className="flex items-center gap-2">
+                  <button onClick={() => handleSaveOverride(risk.id)}
+                    className="px-4 py-2 rounded-xl bg-[#af52de] text-white text-[12px] font-bold hover:bg-[#9b3bc9] transition-colors cursor-pointer">
+                    {t('ki.risk_save_override')}
+                  </button>
+                  <button onClick={() => setEditingRisk(null)}
+                    className="px-4 py-2 rounded-xl text-[12px] font-bold text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
+                    {t('ki.action_cancel')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Mitigations */}
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <p className="text-[13px] font-bold text-gray-700 dark:text-gray-300 mb-2">{t('ki.risk_mitigations')}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {risk.mitigations.map((m, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+                    <CheckCircle className="w-4 h-4 text-[#34c759] mt-0.5 flex-shrink-0" />
+                    {m}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </Card>
-      ))}
+
+            {/* Tasks section - collapsible */}
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-3">
+                <button onClick={() => setExpandedRisk(isExpanded ? null : risk.id)}
+                  className="flex items-center gap-2 text-[13px] font-bold text-gray-700 dark:text-gray-300 cursor-pointer hover:text-black dark:hover:text-white transition-colors">
+                  <ListTodo className="w-4 h-4" />
+                  {t('ki.risk_action_tasks')}
+                  {riskActions.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[10px] font-bold">
+                      {riskActions.filter(a => a.status === 'done').length}/{riskActions.length}
+                    </span>
+                  )}
+                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                </button>
+                <button onClick={() => { setShowNewTask(showNewTask === risk.id ? null : risk.id); setExpandedRisk(risk.id) }}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer">
+                  <Plus className="w-3 h-3" />{t('ki.action_create')}
+                </button>
+              </div>
+
+              {isExpanded && (
+                <>
+                  {/* New task form */}
+                  {showNewTask === risk.id && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <input type="text" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)}
+                        placeholder={t('ki.action_title_placeholder')}
+                        className="flex-1 px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:border-[#0071e3]/30 focus:ring-2 focus:ring-[#0071e3]/10"
+                        onKeyDown={e => e.key === 'Enter' && handleCreateTask(risk.id, risk.title)}
+                        autoFocus />
+                      <select value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[12px] font-bold border-none outline-none text-black dark:text-white">
+                        <option value="critical">{t('ki.priority_critical')}</option>
+                        <option value="high">{t('ki.priority_high')}</option>
+                        <option value="medium">{t('ki.priority_medium')}</option>
+                        <option value="low">{t('ki.priority_low')}</option>
+                      </select>
+                      <button onClick={() => handleCreateTask(risk.id, risk.title)}
+                        disabled={!newTaskTitle.trim()}
+                        className="px-4 py-2 rounded-xl bg-[#0071e3] text-white text-[12px] font-bold hover:bg-[#005bb5] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        {t('ki.action_add')}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Task list */}
+                  {riskActions.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {riskActions.map(action => (
+                        <div key={action.id} className="flex items-center gap-3 group p-1.5 rounded-lg hover:bg-[#f5f5f7]/50 dark:hover:bg-[#2c2c2e]/50 transition-colors">
+                          <button onClick={() => handleToggleTask(action)} className="flex-shrink-0 cursor-pointer" title={t('ki.action_toggle_status')}>
+                            {action.status === 'done'
+                              ? <CircleCheck className="w-4 h-4 text-[#34c759]" />
+                              : action.status === 'in_progress'
+                              ? <CircleDot className="w-4 h-4 text-[#0071e3]" />
+                              : <div className="w-4 h-4 rounded-full border-2 border-gray-300 dark:border-gray-600" />
+                            }
+                          </button>
+                          <span className={`flex-1 text-[12px] font-medium ${action.status === 'done' ? 'line-through text-gray-400' : 'text-black dark:text-white'}`}>
+                            {action.title}
+                          </span>
+                          {action.created_by && (
+                            <span className="text-[10px] text-gray-400 hidden sm:block">{action.created_by}</span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                            action.priority === 'critical' ? 'bg-[#ff3b30]/10 text-[#ff3b30]' :
+                            action.priority === 'high' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' :
+                            action.priority === 'low' ? 'bg-gray-100 dark:bg-gray-800 text-gray-400' :
+                            'bg-[#0071e3]/10 text-[#0071e3]'
+                          }`}>{action.priority}</span>
+                          <button onClick={() => handleDeleteTask(action.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-gray-400 hover:text-[#ff3b30]">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-gray-400 italic">{t('ki.risk_no_tasks')}</p>
+                  )}
+                </>
+              )}
+            </div>
+          </Card>
+        )
+      })}
     </div>
   )
 }

@@ -16,52 +16,56 @@ const TABS = [
   { id: 'info', labelKey: 'ki.tab_info', icon: Info },
 ]
 
-// Reusable info panel component
-function InfoPanel({ show, onToggle, color, items, legalText, t }) {
+// Info toggle button (place inside header flex row)
+function InfoButton({ show, onToggle, color, t }) {
   return (
-    <>
-      <button onClick={onToggle} className={`w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
-        show ? `bg-[${color}] text-white shadow-lg shadow-[${color}]/25` : `bg-white/60 dark:bg-white/10 text-[${color}] hover:bg-[${color}]/10`
-      }`} style={show ? { backgroundColor: color, boxShadow: `0 8px 16px ${color}40` } : { color }} title={t('ki.info_show')}>
-        <Info className="w-[18px] h-[18px]" />
-      </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out col-span-full ${show ? 'max-h-[800px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-        <div className="p-5 rounded-xl bg-white/70 dark:bg-black/20 border border-gray-200/50 dark:border-gray-700/50 space-y-4">
-          {items.map((item, i) => (
-            <div key={i}>
-              <h4 className="text-[14px] font-bold mb-1.5" style={{ color }}>{item.title}</h4>
-              {item.text && <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{item.text}</p>}
-              {item.steps && (
-                <ul className="space-y-1.5">
-                  {item.steps.map((s, j) => (
-                    <li key={j} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ backgroundColor: `${color}15`, color }}>{j + 1}</span>
-                      <span className="leading-relaxed">{s}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {item.bullets && (
-                <ul className="space-y-1.5">
-                  {item.bullets.map((b, j) => (
-                    <li key={j} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
-                      <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color }} />
-                      <span className="leading-relaxed">{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-          {legalText && (
-            <div className="flex items-start gap-2 p-3 rounded-lg border" style={{ backgroundColor: `${color}08`, borderColor: `${color}20` }}>
-              <Scale className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color }} />
-              <p className="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed">{legalText}</p>
-            </div>
-          )}
-        </div>
+    <button onClick={onToggle} className="w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 cursor-pointer"
+      style={show ? { backgroundColor: color, color: '#fff', boxShadow: `0 8px 16px ${color}40` } : { color, backgroundColor: 'rgba(255,255,255,0.6)' }}
+      title={t('ki.info_show')}>
+      <Info className="w-[18px] h-[18px]" />
+    </button>
+  )
+}
+
+// Collapsible info content (place AFTER the header flex row, still inside the Card)
+function InfoContent({ show, color, items, legalText }) {
+  return (
+    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${show ? 'max-h-[800px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+      <div className="p-5 rounded-xl bg-white/70 dark:bg-black/20 border border-gray-200/50 dark:border-gray-700/50 space-y-4">
+        {items.map((item, i) => (
+          <div key={i}>
+            <h4 className="text-[14px] font-bold mb-1.5" style={{ color }}>{item.title}</h4>
+            {item.text && <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{item.text}</p>}
+            {item.steps && (
+              <ul className="space-y-1.5">
+                {item.steps.map((s, j) => (
+                  <li key={j} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ backgroundColor: `${color}15`, color }}>{j + 1}</span>
+                    <span className="leading-relaxed">{s}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {item.bullets && (
+              <ul className="space-y-1.5">
+                {item.bullets.map((b, j) => (
+                  <li key={j} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
+                    <CheckCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color }} />
+                    <span className="leading-relaxed">{b}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+        {legalText && (
+          <div className="flex items-start gap-2 p-3 rounded-lg border" style={{ backgroundColor: `${color}08`, borderColor: `${color}20` }}>
+            <Scale className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color }} />
+            <p className="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed">{legalText}</p>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   )
 }
 
@@ -145,15 +149,16 @@ function ComplianceTab({ t }) {
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.compliance_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.compliance_subtitle')}</p>
           </div>
-          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#0071e3" t={t}
-            items={[
-              { title: t('ki.compliance_info_what_title'), text: t('ki.compliance_info_what_text') },
-              { title: t('ki.compliance_info_why_title'), text: t('ki.compliance_info_why_text') },
-              { title: t('ki.compliance_info_checks_title'), bullets: [t('ki.compliance_info_check1'), t('ki.compliance_info_check2'), t('ki.compliance_info_check3'), t('ki.compliance_info_check4')] },
-            ]}
-            legalText={t('ki.compliance_info_legal')}
-          />
+          <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#0071e3" t={t} />
         </div>
+        <InfoContent show={showInfo} color="#0071e3"
+          items={[
+            { title: t('ki.compliance_info_what_title'), text: t('ki.compliance_info_what_text') },
+            { title: t('ki.compliance_info_why_title'), text: t('ki.compliance_info_why_text') },
+            { title: t('ki.compliance_info_checks_title'), bullets: [t('ki.compliance_info_check1'), t('ki.compliance_info_check2'), t('ki.compliance_info_check3'), t('ki.compliance_info_check4')] },
+          ]}
+          legalText={t('ki.compliance_info_legal')}
+        />
       </Card>
 
       {data?.summary && (
@@ -291,15 +296,16 @@ function LogsTab({ t }) {
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.logs_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.logs_subtitle')}</p>
           </div>
-          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t}
-            items={[
-              { title: t('ki.logs_info_what_title'), text: t('ki.logs_info_what_text') },
-              { title: t('ki.logs_info_why_title'), text: t('ki.logs_info_why_text') },
-              { title: t('ki.logs_info_content_title'), bullets: [t('ki.logs_info_content1'), t('ki.logs_info_content2'), t('ki.logs_info_content3'), t('ki.logs_info_content4')] },
-            ]}
-            legalText={t('ki.logs_info_legal')}
-          />
+          <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
+        <InfoContent show={showInfo} color="#5e5ce6"
+          items={[
+            { title: t('ki.logs_info_what_title'), text: t('ki.logs_info_what_text') },
+            { title: t('ki.logs_info_why_title'), text: t('ki.logs_info_why_text') },
+            { title: t('ki.logs_info_content_title'), bullets: [t('ki.logs_info_content1'), t('ki.logs_info_content2'), t('ki.logs_info_content3'), t('ki.logs_info_content4')] },
+          ]}
+          legalText={t('ki.logs_info_legal')}
+        />
       </Card>
 
       <Card className="p-5">
@@ -435,15 +441,16 @@ function BiasTab({ t }) {
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.bias_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.bias_desc')}</p>
           </div>
-          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t}
-            items={[
-              { title: t('ki.bias_info_what_title'), text: t('ki.bias_info_what_text') },
-              { title: t('ki.bias_info_why_title'), text: t('ki.bias_info_why_text') },
-              { title: t('ki.bias_info_measures_title'), bullets: [t('ki.bias_info_measure1'), t('ki.bias_info_measure2'), t('ki.bias_info_measure3'), t('ki.bias_info_measure4')] },
-            ]}
-            legalText={t('ki.bias_info_legal')}
-          />
+          <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
+        <InfoContent show={showInfo} color="#5e5ce6"
+          items={[
+            { title: t('ki.bias_info_what_title'), text: t('ki.bias_info_what_text') },
+            { title: t('ki.bias_info_why_title'), text: t('ki.bias_info_why_text') },
+            { title: t('ki.bias_info_measures_title'), bullets: [t('ki.bias_info_measure1'), t('ki.bias_info_measure2'), t('ki.bias_info_measure3'), t('ki.bias_info_measure4')] },
+          ]}
+          legalText={t('ki.bias_info_legal')}
+        />
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -566,15 +573,16 @@ function ModelCardTab({ t }) {
             <h2 className="text-[20px] font-semibold text-black dark:text-white mb-1">{t('ki.mc_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.mc_subtitle')}</p>
           </div>
-          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t}
-            items={[
-              { title: t('ki.mc_info_what_title'), text: t('ki.mc_info_what_text') },
-              { title: t('ki.mc_info_why_title'), text: t('ki.mc_info_why_text') },
-              { title: t('ki.mc_info_content_title'), bullets: [t('ki.mc_info_content1'), t('ki.mc_info_content2'), t('ki.mc_info_content3'), t('ki.mc_info_content4'), t('ki.mc_info_content5')] },
-            ]}
-            legalText={t('ki.mc_info_legal')}
-          />
+          <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
+        <InfoContent show={showInfo} color="#5e5ce6"
+          items={[
+            { title: t('ki.mc_info_what_title'), text: t('ki.mc_info_what_text') },
+            { title: t('ki.mc_info_why_title'), text: t('ki.mc_info_why_text') },
+            { title: t('ki.mc_info_content_title'), bullets: [t('ki.mc_info_content1'), t('ki.mc_info_content2'), t('ki.mc_info_content3'), t('ki.mc_info_content4'), t('ki.mc_info_content5')] },
+          ]}
+          legalText={t('ki.mc_info_legal')}
+        />
       </Card>
 
       {/* Model Identity */}
@@ -795,15 +803,16 @@ function RiskRegisterTab({ t }) {
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.risk_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.risk_subtitle')}</p>
           </div>
-          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff3b30" t={t}
-            items={[
-              { title: t('ki.risk_info_what_title'), text: t('ki.risk_info_what_text') },
-              { title: t('ki.risk_info_why_title'), text: t('ki.risk_info_why_text') },
-              { title: t('ki.risk_info_levels_title'), bullets: [t('ki.risk_info_level1'), t('ki.risk_info_level2'), t('ki.risk_info_level3')] },
-            ]}
-            legalText={t('ki.risk_info_legal')}
-          />
+          <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff3b30" t={t} />
         </div>
+        <InfoContent show={showInfo} color="#ff3b30"
+          items={[
+            { title: t('ki.risk_info_what_title'), text: t('ki.risk_info_what_text') },
+            { title: t('ki.risk_info_why_title'), text: t('ki.risk_info_why_text') },
+            { title: t('ki.risk_info_levels_title'), bullets: [t('ki.risk_info_level1'), t('ki.risk_info_level2'), t('ki.risk_info_level3')] },
+          ]}
+          legalText={t('ki.risk_info_legal')}
+        />
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#ff3b30]">{data.summary.active}</p>
@@ -900,41 +909,17 @@ function BiasTestsetTab({ t }) {
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.biastest_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.biastest_subtitle')}</p>
           </div>
-          <button onClick={() => setShowInfo(!showInfo)} className={`w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
-            showInfo ? 'bg-[#5e5ce6] text-white shadow-lg shadow-[#5e5ce6]/25' : 'bg-white/60 dark:bg-white/10 text-[#5e5ce6] hover:bg-[#5e5ce6]/10'
-          }`} title={t('ki.biastest_info_toggle')}>
-            <Info className="w-[18px] h-[18px]" />
-          </button>
+          <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
 
-        {/* Collapsible info panel */}
-        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showInfo ? 'max-h-[800px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-          <div className="p-5 rounded-xl bg-white/70 dark:bg-black/20 border border-[#5e5ce6]/10 space-y-4">
-            <div>
-              <h4 className="text-[14px] font-bold text-[#5e5ce6] mb-1.5">{t('ki.biastest_info_what_title')}</h4>
-              <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.biastest_info_what_text')}</p>
-            </div>
-            <div>
-              <h4 className="text-[14px] font-bold text-[#5e5ce6] mb-1.5">{t('ki.biastest_info_why_title')}</h4>
-              <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.biastest_info_why_text')}</p>
-            </div>
-            <div>
-              <h4 className="text-[14px] font-bold text-[#5e5ce6] mb-1.5">{t('ki.biastest_info_how_title')}</h4>
-              <ul className="space-y-1.5">
-                {[1, 2, 3, 4].map(n => (
-                  <li key={n} className="flex items-start gap-2 text-[13px] text-gray-600 dark:text-gray-400">
-                    <span className="w-5 h-5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5">{n}</span>
-                    <span className="leading-relaxed">{t(`ki.biastest_info_step${n}`)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-[#5e5ce6]/5 border border-[#5e5ce6]/10">
-              <Scale className="w-4 h-4 text-[#5e5ce6] mt-0.5 flex-shrink-0" />
-              <p className="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed">{t('ki.biastest_info_legal')}</p>
-            </div>
-          </div>
-        </div>
+        <InfoContent show={showInfo} color="#5e5ce6"
+          items={[
+            { title: t('ki.biastest_info_what_title'), text: t('ki.biastest_info_what_text') },
+            { title: t('ki.biastest_info_why_title'), text: t('ki.biastest_info_why_text') },
+            { title: t('ki.biastest_info_how_title'), steps: [t('ki.biastest_info_step1'), t('ki.biastest_info_step2'), t('ki.biastest_info_step3'), t('ki.biastest_info_step4')] },
+          ]}
+          legalText={t('ki.biastest_info_legal')}
+        />
 
         {profiles && (
           <div className="flex flex-wrap gap-2 mt-3">
@@ -1092,15 +1077,16 @@ function BiasAlertsTab({ t }) {
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.alerts_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.alerts_subtitle')}</p>
           </div>
-          <InfoPanel show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff9f0a" t={t}
-            items={[
-              { title: t('ki.alerts_info_what_title'), text: t('ki.alerts_info_what_text') },
-              { title: t('ki.alerts_info_why_title'), text: t('ki.alerts_info_why_text') },
-              { title: t('ki.alerts_info_types_title'), bullets: [t('ki.alerts_info_type1'), t('ki.alerts_info_type2'), t('ki.alerts_info_type3')] },
-            ]}
-            legalText={t('ki.alerts_info_legal')}
-          />
+          <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff9f0a" t={t} />
         </div>
+        <InfoContent show={showInfo} color="#ff9f0a"
+          items={[
+            { title: t('ki.alerts_info_what_title'), text: t('ki.alerts_info_what_text') },
+            { title: t('ki.alerts_info_why_title'), text: t('ki.alerts_info_why_text') },
+            { title: t('ki.alerts_info_types_title'), bullets: [t('ki.alerts_info_type1'), t('ki.alerts_info_type2'), t('ki.alerts_info_type3')] },
+          ]}
+          legalText={t('ki.alerts_info_legal')}
+        />
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#ff3b30]">{data.summary.critical}</p>

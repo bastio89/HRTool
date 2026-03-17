@@ -787,61 +787,6 @@ router.get('/bias-alerts', (req, res) => {
 
 /**
  * @swagger
- * /ai-logs/{id}:
- *   get:
- *     summary: Einzelnes KI-Protokoll mit vollständigem Prompt/Response
- *     tags: [AI-Logs]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
- *     responses:
- *       200: { description: Vollständiges KI-Protokoll }
- */
-router.get('/:id', (req, res) => {
-  try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
-    }
-
-    const log = db.prepare(`
-      SELECT al.*, u.display_name as user_name
-      FROM ai_logs al
-      LEFT JOIN users u ON u.id = al.user_id
-      WHERE al.id = ?
-    `).get(req.params.id);
-
-    if (!log) return res.status(404).json({ error: 'Protokoll nicht gefunden' });
-
-    // Parse prompt to check for anonymization
-    let anonymizationApplied = false;
-    try {
-      const promptData = JSON.parse(log.prompt || '{}');
-      if (promptData.candidates) {
-        anonymizationApplied = promptData.candidates.some(c => /^Kandidat \d+$/.test(c.name));
-      }
-    } catch (_) {}
-
-    res.json({
-      ...log,
-      parsed_result: log.parsed_result ? JSON.parse(log.parsed_result) : null,
-      _meta: {
-        anonymizationApplied,
-        riskLevel: ['matching', 'cv-parser'].includes(log.feature) ? 'high' : 'low',
-        aiActArticles: ['matching', 'cv-parser'].includes(log.feature)
-          ? ['Art. 6 (Hochrisiko)', 'Art. 9 (Risikomanagement)', 'Art. 12 (Aufzeichnungspflicht)', 'Art. 13 (Transparenz)', 'Art. 14 (Menschliche Aufsicht)']
-          : ['Art. 50 (Transparenzpflicht)'],
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching AI log detail:', error);
-    res.status(500).json({ error: 'Fehler beim Laden des Protokolls' });
-  }
-});
-
-/**
- * @swagger
  * /ai-logs/stats/overview:
  *   get:
  *     summary: KI-Nutzungsstatistiken für Compliance-Dashboard
@@ -1224,6 +1169,50 @@ router.get('/compliance/checklist', (req, res) => {
   } catch (error) {
     console.error('Error generating compliance checklist:', error);
     res.status(500).json({ error: 'Fehler beim Erstellen der Compliance-Checkliste' });
+  }
+});
+
+// ═══════════════════════════════════════
+// Single Log Detail — MUST be last (/:id catches all)
+// ═══════════════════════════════════════
+router.get('/:id', (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    }
+
+    const log = db.prepare(`
+      SELECT al.*, u.display_name as user_name
+      FROM ai_logs al
+      LEFT JOIN users u ON u.id = al.user_id
+      WHERE al.id = ?
+    `).get(req.params.id);
+
+    if (!log) return res.status(404).json({ error: 'Protokoll nicht gefunden' });
+
+    // Parse prompt to check for anonymization
+    let anonymizationApplied = false;
+    try {
+      const promptData = JSON.parse(log.prompt || '{}');
+      if (promptData.candidates) {
+        anonymizationApplied = promptData.candidates.some(c => /^Kandidat \d+$/.test(c.name));
+      }
+    } catch (_) {}
+
+    res.json({
+      ...log,
+      parsed_result: log.parsed_result ? JSON.parse(log.parsed_result) : null,
+      _meta: {
+        anonymizationApplied,
+        riskLevel: ['matching', 'cv-parser'].includes(log.feature) ? 'high' : 'low',
+        aiActArticles: ['matching', 'cv-parser'].includes(log.feature)
+          ? ['Art. 6 (Hochrisiko)', 'Art. 9 (Risikomanagement)', 'Art. 12 (Aufzeichnungspflicht)', 'Art. 13 (Transparenz)', 'Art. 14 (Menschliche Aufsicht)']
+          : ['Art. 50 (Transparenzpflicht)'],
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching AI log detail:', error);
+    res.status(500).json({ error: 'Fehler beim Laden des Protokolls' });
   }
 });
 

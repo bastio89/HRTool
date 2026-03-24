@@ -16,6 +16,7 @@ import History from './pages/History'
 import Jobs from './pages/Jobs'
 import JobForm from './pages/JobForm'
 import Pipeline from './pages/Pipeline'
+import InterviewPrep from './pages/InterviewPrep'
 import UserManagement from './pages/UserManagement'
 import AuditLog from './pages/AuditLog'
 import DSGVO from './pages/DSGVO'
@@ -54,6 +55,7 @@ function ProtectedRoutes() {
         <Route path="jobs/new" element={<JobForm />} />
         <Route path="jobs/:id/edit" element={<JobForm />} />
         <Route path="pipeline/:jobId" element={<Pipeline />} />
+        <Route path="pipeline/:jobId/interview-prep/:entryId" element={<InterviewPrep />} />
         <Route path="matching" element={<Matching />} />
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />

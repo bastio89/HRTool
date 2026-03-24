@@ -71,18 +71,20 @@ router.delete('/work-history/:id', (req, res) => {
   }
 });
 
-// Bulk insert work history (for CV parser)
+// Bulk insert work history (for CV parser) — replaces all existing entries
 router.post('/:candidateId/work-history/bulk', (req, res) => {
   try {
     const { entries } = req.body;
     if (!Array.isArray(entries)) return res.status(400).json({ error: 'entries muss ein Array sein' });
+    const del = db.prepare('DELETE FROM candidate_work_history WHERE candidate_id = ?');
     const insert = db.prepare(`INSERT INTO candidate_work_history (candidate_id, employer, position, from_date, to_date, is_current, description, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-    const insertMany = db.transaction((items) => {
+    const replaceAll = db.transaction((items) => {
+      del.run(req.params.candidateId);
       for (const e of items) {
         insert.run(req.params.candidateId, e.employer, e.position, e.from_date || null, e.to_date || null, e.is_current ? 1 : 0, e.description || null, e.location || null);
       }
     });
-    insertMany(entries);
+    replaceAll(entries);
     const rows = db.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(req.params.candidateId);
     res.status(201).json({ data: rows });
   } catch (err) {
@@ -143,18 +145,20 @@ router.delete('/education/:id', (req, res) => {
   }
 });
 
-// Bulk insert education (for CV parser)
+// Bulk insert education (for CV parser) — replaces all existing entries
 router.post('/:candidateId/education/bulk', (req, res) => {
   try {
     const { entries } = req.body;
     if (!Array.isArray(entries)) return res.status(400).json({ error: 'entries muss ein Array sein' });
+    const del = db.prepare('DELETE FROM candidate_education WHERE candidate_id = ?');
     const insert = db.prepare(`INSERT INTO candidate_education (candidate_id, institution, degree, field_of_study, from_date, to_date, description) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    const insertMany = db.transaction((items) => {
+    const replaceAll = db.transaction((items) => {
+      del.run(req.params.candidateId);
       for (const e of items) {
         insert.run(req.params.candidateId, e.institution, e.degree || null, e.field_of_study || null, e.from_date || null, e.to_date || null, e.description || null);
       }
     });
-    insertMany(entries);
+    replaceAll(entries);
     const rows = db.prepare('SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY from_date DESC').all(req.params.candidateId);
     res.status(201).json({ data: rows });
   } catch (err) {

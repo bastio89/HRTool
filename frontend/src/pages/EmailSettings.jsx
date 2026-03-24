@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Mail, Send, Settings, FileText, Plus, Trash2, Edit3, Eye, Check, X, Loader2, AlertTriangle, TestTube, Zap, Sparkles, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Mail, Send, Settings, FileText, Plus, Trash2, Edit3, Eye, Check, X, Loader2, AlertTriangle, TestTube, Zap, Sparkles, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react'
 import { emailApi } from '../api'
 import { Card, Button, Input, LoadingSpinner } from '../components/UI'
 import { useI18n } from '../I18nContext'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
-const TEMPLATE_VARS = ['{{vorname}}', '{{nachname}}', '{{name}}', '{{email}}', '{{stelle}}', '{{unternehmen}}', '{{datum}}']
+const TEMPLATE_VARS = ['{{anrede}}', '{{vorname}}', '{{nachname}}', '{{name}}', '{{email}}', '{{stelle}}', '{{unternehmen}}', '{{datum}}']
 
 export default function EmailSettings() {
   const { t } = useI18n()
@@ -27,6 +27,9 @@ export default function EmailSettings() {
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiPurpose, setAiPurpose] = useState('')
   const [aiTone, setAiTone] = useState('')
+
+  // SMTP guide accordion
+  const [openGuide, setOpenGuide] = useState(null)
 
   // Stage trigger toggles
   const [triggers, setTriggers] = useState({})
@@ -176,6 +179,7 @@ export default function EmailSettings() {
 
   const tabs = [
     { key: 'smtp', icon: Settings, label: t('email.tab_smtp') },
+    { key: 'triggers', icon: Zap, label: t('email.triggers_title') },
     { key: 'templates', icon: FileText, label: t('email.tab_templates') },
     { key: 'log', icon: Mail, label: t('email.tab_log') },
   ]
@@ -284,7 +288,93 @@ export default function EmailSettings() {
           </div>
         </Card>
 
-        {/* Stage Trigger Toggles */}
+        {/* SMTP Provider Guides */}
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
+              <Mail className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('email.guides_title')}</h2>
+              <p className="text-[13px] text-gray-500">{t('email.guides_subtitle')}</p>
+            </div>
+          </div>
+
+          {[
+            {
+              id: 'gmail', logo: '🔵',
+              nameKey: 'email.guide_gmail_name',
+              steps: [1, 2, 3, 4].map(n => ({ titleKey: `email.guide_gmail_step${n}_title`, descKey: `email.guide_gmail_step${n}_desc` })),
+              settings: { host: 'smtp.gmail.com', port: '587' }
+            },
+            {
+              id: 'microsoft365', logo: '🟦',
+              nameKey: 'email.guide_m365_name',
+              steps: [1, 2, 3, 4].map(n => ({ titleKey: `email.guide_m365_step${n}_title`, descKey: `email.guide_m365_step${n}_desc` })),
+              settings: { host: 'smtp.office365.com', port: '587' }
+            },
+            {
+              id: 'outlook', logo: '📧',
+              nameKey: 'email.guide_outlook_name',
+              steps: [1, 2, 3].map(n => ({ titleKey: `email.guide_outlook_step${n}_title`, descKey: `email.guide_outlook_step${n}_desc` })),
+              settings: { host: 'smtp-mail.outlook.com', port: '587' }
+            },
+            {
+              id: 'ionos', logo: '🌐',
+              nameKey: 'email.guide_ionos_name',
+              steps: [1, 2, 3].map(n => ({ titleKey: `email.guide_ionos_step${n}_title`, descKey: `email.guide_ionos_step${n}_desc` })),
+              settings: { host: 'smtp.ionos.de', port: '587' }
+            },
+          ].map(provider => (
+            <div key={provider.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setOpenGuide(openGuide === provider.id ? null : provider.id)}
+                className="w-full flex items-center justify-between px-5 py-4 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{provider.logo}</span>
+                  <span className="text-[15px] font-semibold text-black dark:text-white">{t(provider.nameKey)}</span>
+                </div>
+                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${openGuide === provider.id ? 'rotate-180' : ''}`} />
+              </button>
+              {openGuide === provider.id && (
+                <div className="px-5 pb-5 space-y-4 border-t border-gray-100 dark:border-gray-700">
+                  <div className="pt-4 space-y-3">
+                    {provider.steps.map((step, i) => (
+                      <div key={i} className="flex gap-3">
+                        <div className="w-7 h-7 rounded-full bg-[#0071e3] text-white text-[13px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {i + 1}
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-semibold text-black dark:text-white">{t(step.titleKey)}</p>
+                          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{t(step.descKey)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 pt-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setSmtp(prev => ({ ...prev, smtp_host: provider.settings.host, smtp_port: provider.settings.port }))
+                        setOpenGuide(null)
+                      }}
+                    >
+                      {t('email.apply_settings')}
+                    </Button>
+                    <span className="text-[12px] text-gray-400">Host: {provider.settings.host} | Port: {provider.settings.port}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </Card>
+        </>
+      )}
+
+      {/* Pipeline-Trigger Tab */}
+      {tab === 'triggers' && (
         <Card className="p-6 space-y-5">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-purple-50 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
@@ -330,7 +420,6 @@ export default function EmailSettings() {
             {t('email.save_triggers')}
           </Button>
         </Card>
-        </>
       )}
 
       {/* Templates Tab */}

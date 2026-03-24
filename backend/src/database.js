@@ -227,6 +227,8 @@ const migrations = [
   `ALTER TABLE pipeline_entries ADD COLUMN rejection_details TEXT`,
   // Matching → Pipeline-Link
   `ALTER TABLE matching_results ADD COLUMN job_id INTEGER`,
+  // Anrede / Geschlecht
+  `ALTER TABLE candidates ADD COLUMN gender TEXT`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }
@@ -532,25 +534,25 @@ if (tplCount.count === 0) {
     {
       name: 'Bewerbungseingang',
       subject: 'Ihre Bewerbung bei {{unternehmen}}',
-      body: 'Sehr geehrte/r {{vorname}} {{nachname}},\n\nvielen Dank für Ihre Bewerbung. Wir haben Ihre Unterlagen erhalten und werden diese sorgfältig prüfen.\n\nWir melden uns zeitnah bei Ihnen.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
+      body: '{{anrede}},\n\nvielen Dank für Ihre Bewerbung. Wir haben Ihre Unterlagen erhalten und werden diese sorgfältig prüfen.\n\nWir melden uns zeitnah bei Ihnen.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
       trigger_stage: 'Beworben',
     },
     {
       name: 'Einladung zum Gespräch',
       subject: 'Einladung zum Vorstellungsgespräch – {{stelle}}',
-      body: 'Sehr geehrte/r {{vorname}} {{nachname}},\n\nwir freuen uns, Sie zu einem Vorstellungsgespräch für die Position "{{stelle}}" einzuladen.\n\nBitte teilen Sie uns Ihre Verfügbarkeit mit.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
+      body: '{{anrede}},\n\nwir freuen uns, Sie zu einem Vorstellungsgespräch für die Position "{{stelle}}" einzuladen.\n\nBitte teilen Sie uns Ihre Verfügbarkeit mit.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
       trigger_stage: 'Interview',
     },
     {
       name: 'Absage',
       subject: 'Rückmeldung zu Ihrer Bewerbung bei {{unternehmen}}',
-      body: 'Sehr geehrte/r {{vorname}} {{nachname}},\n\nvielen Dank für Ihr Interesse an unserem Unternehmen und die Zeit, die Sie in den Bewerbungsprozess investiert haben.\n\nLeider müssen wir Ihnen mitteilen, dass wir uns für andere Kandidaten entschieden haben.\n\nWir wünschen Ihnen für Ihre berufliche Zukunft alles Gute.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
+      body: '{{anrede}},\n\nvielen Dank für Ihr Interesse an unserem Unternehmen und die Zeit, die Sie in den Bewerbungsprozess investiert haben.\n\nLeider müssen wir Ihnen mitteilen, dass wir uns für andere Kandidaten entschieden haben.\n\nWir wünschen Ihnen für Ihre berufliche Zukunft alles Gute.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
       trigger_stage: 'Abgesagt',
     },
     {
       name: 'Angebot',
       subject: 'Stellenangebot – {{stelle}}',
-      body: 'Sehr geehrte/r {{vorname}} {{nachname}},\n\nes freut uns, Ihnen für die Position "{{stelle}}" ein Angebot unterbreiten zu können.\n\nBitte finden Sie die Details im Anhang. Bei Fragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
+      body: '{{anrede}},\n\nes freut uns, Ihnen für die Position "{{stelle}}" ein Angebot unterbreiten zu können.\n\nBitte finden Sie die Details im Anhang. Bei Fragen stehen wir Ihnen gerne zur Verfügung.\n\nMit freundlichen Grüßen\n{{unternehmen}}',
       trigger_stage: 'Angebot',
     },
   ];

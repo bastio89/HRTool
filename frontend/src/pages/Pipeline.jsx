@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi, ratingsApi } from '../api'
 import InterviewScheduler from '../components/InterviewScheduler'
-import ScorecardPanel from '../components/ScorecardPanel'
 import { Button, LoadingSpinner } from '../components/UI'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
@@ -42,7 +41,7 @@ export default function Pipeline() {
   const [loadingNotes, setLoadingNotes] = useState(false)
   const [matchingRunning, setMatchingRunning] = useState(false)
   const [interviewModal, setInterviewModal] = useState(null) // { entry }
-  const [scorecardModal, setScorecardModal] = useState(null) // { entry }
+  // scorecardModal removed — now uses InterviewPrep page
   const [entryInterviews, setEntryInterviews] = useState({}) // { [entryId]: interview[] }
   const [candidateRatings, setCandidateRatings] = useState({}) // { [candidateId]: { average, count } }
   const [activeStage, setActiveStage] = useState(0) // Mobile: index into STAGES
@@ -409,7 +408,7 @@ export default function Pipeline() {
                     onRemove={() => handleRemove(entry.id, stage)}
                     onOpenNotes={() => openNotes(entry.id, entry.candidate_name)}
                     onOpenInterview={() => setInterviewModal({ entry })}
-                    onOpenScorecard={() => setScorecardModal({ entry })}
+                    jobId={jobId}
                   />
                 ))}
               </div>
@@ -593,21 +592,12 @@ export default function Pipeline() {
         />
       )}
 
-      {/* Scorecard Panel Modal */}
-      {scorecardModal && (
-        <ScorecardPanel
-          open={!!scorecardModal}
-          onClose={() => setScorecardModal(null)}
-          entry={scorecardModal.entry}
-          jobId={parseInt(jobId)}
-          onSaved={() => {}}
-        />
-      )}
+
     </div>
   )
 }
 
-function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview, onOpenScorecard }) {
+function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview, jobId }) {
   return (
     <div
       draggable
@@ -699,13 +689,14 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
             <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 rounded-full bg-[#ff9f0a] text-white text-[8px] font-bold flex items-center justify-center">{interviews.length}</span>
           )}
         </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onOpenScorecard() }}
+        <Link
+          to={`/pipeline/${jobId}/interview-prep/${entry.id}`}
+          onClick={(e) => e.stopPropagation()}
           className="text-gray-400 hover:text-[#5e5ce6] transition-colors cursor-pointer"
-          title={t('pipeline.scorecard')}
+          title={t('pipeline.interview_prep')}
         >
           <ClipboardList className="w-3.5 h-3.5" />
-        </button>
+        </Link>
       </div>
     </div>
   )

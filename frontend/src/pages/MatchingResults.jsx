@@ -98,7 +98,7 @@ export default function MatchingResults() {
                 <Link to={`/pipeline/${data.job_id}`}>
                   <Button size="md" variant="secondary">
                     <GitMerge className="w-5 h-5" />
-                    <span className="hidden sm:inline">Zur Pipeline</span>
+                    <span className="hidden sm:inline">{t('matching.to_pipeline')}</span>
                   </Button>
                 </Link>
               )}
@@ -141,9 +141,9 @@ export default function MatchingResults() {
               <>
                 <CheckCircle className="w-6 h-6 text-[#34c759]" />
                 <div>
-                  <p className="text-[15px] font-semibold text-[#34c759]">Menschlich überprüft (Art. 14 EU AI Act)</p>
+                  <p className="text-[15px] font-semibold text-[#34c759]">{t('matching.human_reviewed')}</p>
                   <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                    Überprüft von {data.reviewed_by} am {new Date(data.reviewed_at).toLocaleString('de-DE')}
+                    {t('matching.reviewed_by')} {data.reviewed_by} {t('matching.reviewed_at')} {new Date(data.reviewed_at).toLocaleString('de-DE')}
                   </p>
                 </div>
               </>
@@ -162,7 +162,7 @@ export default function MatchingResults() {
           {!data?.human_reviewed && (
             <Button size="md" variant="dark" onClick={handleReview} disabled={reviewing}>
               <UserCheck className="w-5 h-5" />
-              {reviewing ? 'Wird bestätigt...' : 'Als geprüft markieren'}
+              {reviewing ? t('matching.confirming') : t('matching.mark_reviewed')}
             </Button>
           )}
         </div>
@@ -173,7 +173,7 @@ export default function MatchingResults() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{results.length}</p>
-              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Geprüft</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.checked')}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center">
               <User className="w-6 h-6 text-gray-600 dark:text-gray-400" />
@@ -186,7 +186,7 @@ export default function MatchingResults() {
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">
                 {bestScore ? (bestScore * 100).toFixed(0) + '%' : '-'}
               </p>
-              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Best Match</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.best_match')}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#34c759]/10 flex items-center justify-center">
               <Trophy className="w-6 h-6 text-[#34c759]" />
@@ -210,7 +210,7 @@ export default function MatchingResults() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#ff9f0a]">{topCount}</p>
-              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Top (≥80%)</p>
+              <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.top')}</p>
             </div>
             <div className="w-12 h-12 rounded-full bg-[#ff9f0a]/10 flex items-center justify-center">
               <Target className="w-6 h-6 text-[#ff9f0a]" />
@@ -220,7 +220,7 @@ export default function MatchingResults() {
       </div>
 
       <div>
-        <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white mb-8">Ranking</h2>
+        <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('matching.ranking')}</h2>
         <div className="space-y-6">
           {results.map((result, idx) => (
             <Card key={result.candidateId || idx} className="overflow-hidden p-0" hover>

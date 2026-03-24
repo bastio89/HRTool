@@ -5,9 +5,9 @@ import {
   ArrowLeft, Plus, Trash2, Phone, Mail, Users, GitBranch, FileText,
   MessageSquare, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Star, Clock,
   Upload, Download, File, Image, X, Printer, Eye, Calendar, Linkedin, Github, Shield,
-  DollarSign, Building2, ExternalLink, Camera
+  DollarSign, Building2, ExternalLink, Camera, ClipboardList, ChevronDown, ChevronUp, MessageCircle
 } from 'lucide-react'
-import { candidatesApi, activitiesApi, uploadsApi, ratingsApi, candidateDetailsApi } from '../api'
+import { candidatesApi, activitiesApi, uploadsApi, ratingsApi, candidateDetailsApi, scorecardsApi } from '../api'
 import { Button, LoadingSpinner } from '../components/UI'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 import SendEmailModal from '../components/SendEmailModal'
@@ -70,6 +70,8 @@ export default function CandidateDetail() {
   const [hoverRating, setHoverRating] = useState(0)
   const [ratingSubmitting, setRatingSubmitting] = useState(false)
   const [pipelineHistory, setPipelineHistory] = useState({ entries: [], stageChanges: [], interviews: [] })
+  const [scorecardResponses, setScorecardResponses] = useState([])
+  const [expandedScorecard, setExpandedScorecard] = useState(null)
   const [workHistory, setWorkHistory] = useState([])
   const [educationList, setEducationList] = useState([])
   const [customValues, setCustomValues] = useState([])
@@ -79,7 +81,7 @@ export default function CandidateDetail() {
 
   const loadData = async () => {
     try {
-      const [cRes, aRes, fRes, rRes, hRes, whRes, eduRes, cvRes] = await Promise.all([
+      const [cRes, aRes, fRes, rRes, hRes, whRes, eduRes, cvRes, scRes] = await Promise.all([
         candidatesApi.getById(candidateId),
         activitiesApi.getByCandidate(candidateId),
         uploadsApi.getByCandidate(candidateId).catch(() => ({ data: [] })),
@@ -88,6 +90,7 @@ export default function CandidateDetail() {
         candidateDetailsApi.getWorkHistory(candidateId).catch(() => ({ data: [] })),
         candidateDetailsApi.getEducation(candidateId).catch(() => ({ data: [] })),
         candidateDetailsApi.getCustomValues(candidateId).catch(() => ({ data: [] })),
+        scorecardsApi.getResponses({ candidate_id: candidateId }).catch(() => ({ data: [] })),
       ])
       setCandidate(cRes?.id ? cRes : (cRes.candidate || cRes.data))
       setActivities(aRes.data || [])
@@ -99,11 +102,25 @@ export default function CandidateDetail() {
       setWorkHistory(whRes.data || [])
       setEducationList(eduRes.data || [])
       setCustomValues((cvRes.data || []).filter(v => v.value))
+      setScorecardResponses(scRes.data || [])
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }
 
   useEffect(() => { loadData() }, [candidateId])
+
+  // Match scorecard responses to interview activities by evaluator name + close timestamp
+  const findMatchingResponse = (activity) => {
+    if (activity.type !== 'Interview' || !activity.content?.startsWith('Interview-Bewertung von ')) return null
+    const match = activity.content.match(/^Interview-Bewertung von (.+)\n/)
+    if (!match) return null
+    const evaluator = match[1].trim()
+    const actDate = new Date(activity.created_at).getTime()
+    return scorecardResponses.find(r => {
+      const rDate = new Date(r.created_at).getTime()
+      return r.evaluator_name === evaluator && Math.abs(actDate - rDate) < 120000
+    }) || null
+  }
 
   const handleAddActivity = async (e) => {
     e.preventDefault()
@@ -208,7 +225,7 @@ export default function CandidateDetail() {
   const intervalLabel = { yearly: t('form.yearly'), monthly: t('form.monthly'), hourly: t('form.hourly') }[candidate.salary_interval] || ''
 
   return (
-    <div className="fade-in max-w-[1200px] mx-auto">
+    <div className="fade-in max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-6 mb-6 sm:mb-10">
         <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -356,7 +373,7 @@ export default function CandidateDetail() {
                     {w.is_current ? <span className="px-2.5 py-0.5 rounded-full bg-[#34c759]/10 text-[#34c759] text-[12px] font-semibold">{t('form.is_current')}</span> : null}
                   </div>
                   <p className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{w.employer}{w.location ? ` \u00b7 ${w.location}` : ''}</p>
-                  <p className="text-[13px] text-gray-400 mt-1">{formatMonth(w.from_date)} \u2013 {w.is_current ? t('detail.present') : formatMonth(w.to_date)}</p>
+                  <p className="text-[13px] text-gray-400 mt-1">{formatMonth(w.from_date)} {' \u2013 '} {w.is_current ? t('detail.present') : formatMonth(w.to_date)}</p>
                   {w.description && <p className="text-[14px] text-gray-600 dark:text-gray-400 mt-2 whitespace-pre-wrap">{w.description}</p>}
                 </div>
               </div>
@@ -382,7 +399,7 @@ export default function CandidateDetail() {
                 <div className="flex-1 pb-6">
                   <h3 className="text-[16px] font-bold text-black dark:text-white">{edu.degree || edu.institution}</h3>
                   <p className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{edu.institution}{edu.field_of_study ? ` \u00b7 ${edu.field_of_study}` : ''}</p>
-                  <p className="text-[13px] text-gray-400 mt-1">{formatMonth(edu.from_date)} \u2013 {formatMonth(edu.to_date)}</p>
+                  <p className="text-[13px] text-gray-400 mt-1">{formatMonth(edu.from_date)} {' \u2013 '} {formatMonth(edu.to_date)}</p>
                   {edu.description && <p className="text-[14px] text-gray-600 dark:text-gray-400 mt-2 whitespace-pre-wrap">{edu.description}</p>}
                 </div>
               </div>
@@ -500,6 +517,58 @@ export default function CandidateDetail() {
                     {deleteConfirm !== activity.id && <span className="text-[13px] font-medium text-gray-400 group-hover:hidden">{formatDate(activity.created_at)}</span>}
                   </div>
                   <p className="text-[16px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{activity.content}</p>
+                  {/* Expandable interview scorecard details */}
+                  {(() => {
+                    const resp = findMatchingResponse(activity)
+                    if (!resp) return null
+                    const isExpanded = expandedScorecard === resp.id
+                    const ratedAnswers = (resp.answers || []).filter(a => a.score > 0)
+                    return (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => setExpandedScorecard(isExpanded ? null : resp.id)}
+                          className="flex items-center gap-2 text-[13px] font-semibold text-[#5e5ce6] hover:text-[#4b4acf] cursor-pointer transition-colors"
+                        >
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          {isExpanded ? t('detail.hide_interview_details') : t('detail.show_interview_details')} ({ratedAnswers.length} {t('detail.questions_rated')})
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-4 space-y-3">
+                            {(resp.answers || []).map((a, i) => (
+                              <div key={i} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-2xl p-4">
+                                <div className="flex items-start justify-between gap-3 mb-1">
+                                  <p className="text-[14px] font-semibold text-black dark:text-white flex-1">{i + 1}. {a.question}</p>
+                                  {a.score > 0 && (
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      <div className="flex gap-0.5">
+                                        {[1,2,3,4,5].map(s => (
+                                          <Star key={s} className={`w-3.5 h-3.5 ${s <= a.score ? 'text-[#ff9f0a] fill-[#ff9f0a]' : 'text-gray-300 dark:text-gray-600'}`} />
+                                        ))}
+                                      </div>
+                                      <span className="text-[13px] font-bold text-[#ff9f0a]">{a.score}/5</span>
+                                    </div>
+                                  )}
+                                  {a.score === 0 && <span className="text-[12px] font-medium text-gray-400 italic">{t('detail.not_rated')}</span>}
+                                </div>
+                                {a.comment && (
+                                  <div className="flex items-start gap-2 mt-2">
+                                    <MessageCircle className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                                    <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{a.comment}</p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                            {resp.notes && (
+                              <div className="bg-[#5e5ce6]/5 dark:bg-[#5e5ce6]/10 rounded-2xl p-4 border border-[#5e5ce6]/10">
+                                <p className="text-[12px] font-bold text-[#5e5ce6] uppercase tracking-wide mb-1">{t('detail.interview_fazit')}</p>
+                                <p className="text-[14px] text-gray-700 dark:text-gray-300 leading-relaxed">{resp.notes}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             )})}
@@ -524,6 +593,9 @@ export default function CandidateDetail() {
                   </div>
                   {stageChanges.length > 0 && <div className="ml-7 mt-3 space-y-1.5">{stageChanges.slice(0, 5).map(sc => (<div key={sc.id} className="flex items-center gap-2 text-[13px]"><span className="font-medium text-gray-400">{new Date(sc.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}</span><span className="text-gray-500 dark:text-gray-400">{sc.old_stage}</span><span className="text-gray-400">{'\u2192'}</span><span className="font-semibold text-black dark:text-white">{sc.new_stage}</span>{sc.content && <span className="text-gray-400 truncate max-w-[200px]">{'\u2014'} {sc.content}</span>}</div>))}</div>}
                   {interviews.length > 0 && <div className="ml-7 mt-3 flex flex-wrap gap-2">{interviews.map(iv => (<span key={iv.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ff9f0a]/10 text-[12px] font-semibold text-[#ff9f0a]"><Calendar className="w-3 h-3" />{new Date(iv.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}{iv.interview_time && ` \u00b7 ${iv.interview_time}`}<span className="text-[#ff9f0a]/60">({iv.status})</span></span>))}</div>}
+                  <div className="ml-7 mt-3 flex items-center gap-3">
+                    <Link to={`/pipeline/${entry.job_id}/interview-prep/${entry.id}`} className="flex items-center gap-1.5 text-[12px] font-semibold text-[#5e5ce6] hover:underline"><ClipboardList className="w-3.5 h-3.5" />{t('interview_prep.prepare')}</Link>
+                  </div>
                   <div className="ml-7 mt-2 text-[12px] text-gray-400">{t('detail.added_on')}: {new Date(entry.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
                 </div>
               )
@@ -540,7 +612,7 @@ export default function CandidateDetail() {
       <CandidatePrintProfile candidate={candidate} open={showPrint} onClose={() => setShowPrint(false)} />
       {showEmailModal && <SendEmailModal candidate={candidate} onClose={() => setShowEmailModal(false)} onSent={() => { activitiesApi.getByCandidate(id).then(r => setActivities(r.data || [])).catch(() => {}) }} />}
       {previewFile && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPreviewFile(null)}>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setPreviewFile(null)}>
           <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/80 flex-shrink-0">
               <div className="flex items-center gap-3 min-w-0"><Eye className="w-5 h-5 text-[#8b5cf6] flex-shrink-0" /><p className="text-[16px] font-semibold text-black dark:text-white truncate">{previewFile.original_name}</p><span className="text-[13px] text-gray-400 flex-shrink-0">{formatFileSize(previewFile.size)}</span></div>

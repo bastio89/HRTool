@@ -41,9 +41,18 @@ function createTransporter(smtp) {
   });
 }
 
+// ─── Helper: Build formal salutation from gender + name ───
+function buildAnrede(gender, vorname, nachname) {
+  if (gender === 'Frau') return `Sehr geehrte Frau ${nachname}`;
+  if (gender === 'Herr') return `Sehr geehrter Herr ${nachname}`;
+  // Divers or unknown: neutral greeting
+  return nachname ? `Guten Tag ${vorname} ${nachname}` : `Guten Tag ${vorname}`;
+}
+
 // ─── Helper: Replace template variables ───
 function resolveTemplate(text, vars) {
   return text
+    .replace(/\{\{anrede\}\}/g, vars.anrede || '')
     .replace(/\{\{vorname\}\}/g, vars.vorname || '')
     .replace(/\{\{nachname\}\}/g, vars.nachname || '')
     .replace(/\{\{name\}\}/g, vars.name || '')
@@ -118,7 +127,7 @@ router.get('/smtp/settings', (req, res) => {
 router.put('/smtp/settings', (req, res) => {
   try {
     const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from_name, email_company_name } = req.body;
-    const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime("now"))');
+    const upsert = db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`);
 
     if (smtp_host !== undefined) upsert.run('smtp_host', smtp_host);
     if (smtp_port !== undefined) upsert.run('smtp_port', String(smtp_port));
@@ -261,9 +270,12 @@ router.post('/send', async (req, res) => {
 
       const smtp = getSmtpSettings();
       const nameParts = (candidate?.name || '').split(' ');
+      const vorname = nameParts[0] || '';
+      const nachname = nameParts.slice(1).join(' ') || '';
       const vars = {
-        vorname: nameParts[0] || '',
-        nachname: nameParts.slice(1).join(' ') || '',
+        vorname,
+        nachname,
+        anrede: buildAnrede(candidate?.gender, vorname, nachname),
         name: candidate?.name || '',
         email: candidate?.email || '',
         stelle: job_title || '',
@@ -326,9 +338,12 @@ router.post('/send-with-template', async (req, res) => {
 
       const smtp = getSmtpSettings();
       const nameParts = candidate.name.split(' ');
+      const vorname = nameParts[0] || '';
+      const nachname = nameParts.slice(1).join(' ') || '';
       const vars = {
-        vorname: nameParts[0] || '',
-        nachname: nameParts.slice(1).join(' ') || '',
+        vorname,
+        nachname,
+        anrede: buildAnrede(candidate.gender, vorname, nachname),
         name: candidate.name,
         email: candidate.email,
         stelle: job_title || '',
@@ -374,9 +389,12 @@ router.post('/preview', (req, res) => {
     const candidate = candidate_id ? db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidate_id) : null;
     const smtp = getSmtpSettings();
     const nameParts = (candidate?.name || 'Max Mustermann').split(' ');
+    const vorname = nameParts[0] || 'Max';
+    const nachname = nameParts.slice(1).join(' ') || 'Mustermann';
     const vars = {
-      vorname: nameParts[0] || 'Max',
-      nachname: nameParts.slice(1).join(' ') || 'Mustermann',
+      vorname,
+      nachname,
+      anrede: buildAnrede(candidate?.gender || 'Herr', vorname, nachname),
       name: candidate?.name || 'Max Mustermann',
       email: candidate?.email || 'max@example.de',
       stelle: job_title || 'Beispiel-Stelle',
@@ -446,7 +464,7 @@ router.get('/triggers', (req, res) => {
 router.put('/triggers', (req, res) => {
   try {
     const { triggers } = req.body;
-    const upsert = db.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime("now"))');
+    const upsert = db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`);
     for (const stage of STAGES) {
       if (triggers[stage] !== undefined) {
         upsert.run(`email_trigger_${stage}`, triggers[stage] ? '1' : '0');
@@ -484,11 +502,14 @@ ${stage ? `Pipeline-Stufe: ${stage}` : ''}
 Unternehmen: ${companyName}
 
 Verwende diese Platzhalter im Text:
+- {{anrede}} = Korrekte Anrede (z.B. "Sehr geehrte Frau Hannot" oder "Sehr geehrter Herr Müller"). IMMER als Briefanrede nutzen!
 - {{vorname}} = Vorname des Bewerbers
 - {{nachname}} = Nachname des Bewerbers  
 - {{stelle}} = Stellenbezeichnung
 - {{unternehmen}} = Unternehmensname
 - {{datum}} = aktuelles Datum
+
+WICHTIG: Beginne die Anrede im Template IMMER mit {{anrede}}, gefolgt von einem Komma. Beispiel: "{{anrede}},\\n\\nvielen Dank..."
 
 Antworte NUR mit diesem exakten JSON-Format (ohne Markdown, ohne Erklärung):
 {"name": "KURZER TEMPLATE-NAME", "subject": "BETREFF-ZEILE mit Platzhaltern", "body": "VOLLSTÄNDIGER E-MAIL-TEXT mit Platzhaltern und Zeilenumbrüchen als \\n"}

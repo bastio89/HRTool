@@ -179,11 +179,12 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   try {
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
-    db.prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);
-    logAudit(req, 'gelöscht', 'Job', req.params.id, job?.title);
+    if (!job) return res.status(404).json({ error: 'Stelle nicht gefunden' });
+    db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run('Archiviert', req.params.id);
+    logAudit(req, 'archiviert', 'Job', req.params.id, job?.title);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Fehler beim Löschen der Stelle' });
+    res.status(500).json({ error: 'Fehler beim Archivieren der Stelle' });
   }
 });
 

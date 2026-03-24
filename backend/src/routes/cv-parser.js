@@ -193,6 +193,7 @@ Antworte NUR mit einem validen JSON-Objekt (KEIN Markdown, KEINE Erklärung):
   "portfolio_url": "Portfolio/Website-URL oder leer",
   "tags": "Passende Tags kommagetrennt, z.B. Senior, Remote, Freelancer",
   "notes": "Sonstige relevante Infos die in kein anderes Feld passen",
+  "gender": "Geschlecht des Bewerbers: 'Frau', 'Herr' oder 'Divers'. Versuche aus Kontexthinweisen (Vorname, Anrede, Pronomen) abzuleiten. Wenn unklar, leer lassen.",
   "work_history": [
     {
       "employer": "Arbeitgeber-Name",
@@ -240,21 +241,58 @@ ${truncated}`;
 router.post('/parse', upload.array('file', 10), async (req, res) => {
   const tempFiles = [];
 
+  // SSE progress helper
+  const useSSE = req.headers.accept === 'text/event-stream';
+  if (useSSE) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+  }
+  const sendProgress = (step, detail, progress) => {
+    if (useSSE) {
+      res.write(`data: ${JSON.stringify({ type: 'progress', step, detail, progress })}\n\n`);
+    }
+  };
+  const sendResult = (data) => {
+    if (useSSE) {
+      res.write(`data: ${JSON.stringify({ type: 'result', ...data })}\n\n`);
+      res.end();
+    } else {
+      res.json(data);
+    }
+  };
+  const sendError = (status, data) => {
+    if (useSSE) {
+      res.write(`data: ${JSON.stringify({ type: 'error', ...data })}\n\n`);
+      res.end();
+    } else {
+      res.status(status).json(data);
+    }
+  };
+
   try {
     // Support both single file ('file') and multi-file upload
     const files = req.files || (req.file ? [req.file] : []);
     if (files.length === 0) {
-      return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+      return sendError(400, { error: 'Keine Datei hochgeladen' });
     }
+
+    sendProgress('upload', `${files.length} Datei(en) empfangen`, 5);
 
     // 1. Extract text from all uploaded files
     let combinedText = '';
     const filenames = [];
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const filePath = path.join(tmpDir, file.filename);
       tempFiles.push(filePath);
       filenames.push(file.originalname);
+
+      const fileLabel = files.length > 1 ? `(${i + 1}/${files.length}) ` : '';
+      sendProgress('extract', `${fileLabel}Text wird aus ${file.originalname} extrahiert (${(file.size / 1024).toFixed(0)} KB)`, 10 + Math.round((i / files.length) * 20));
 
       console.log(`📄 CV-Parser: Text wird extrahiert aus ${file.originalname} (${(file.size / 1024).toFixed(0)} KB)...`);
       try {
@@ -264,14 +302,17 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
         }
       } catch (extractErr) {
         console.warn(`⚠️ Konnte ${file.originalname} nicht lesen:`, extractErr.message);
+        sendProgress('extract', `⚠️ ${file.originalname} konnte nicht gelesen werden`, 10 + Math.round(((i + 1) / files.length) * 20));
       }
     }
 
     if (!combinedText || combinedText.trim().length < 20) {
-      return res.status(422).json({
+      return sendError(422, {
         error: 'Kein lesbarer Text in den Dateien gefunden. Möglicherweise handelt es sich um gescannte Bilder ohne OCR-Unterstützung.',
       });
     }
+
+    sendProgress('extract_done', `${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert`, 35);
 
     console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an Ollama...`);
 
@@ -282,18 +323,29 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     const prompt = buildExtractionPrompt(combinedText.trim(), filenames);
 
     // Quick reachability check
+    sendProgress('ollama_connect', `Verbindung zu Ollama (${OLLAMA_MODEL})...`, 40);
     try {
       const pingCtrl = new AbortController();
       setTimeout(() => pingCtrl.abort(), 5000);
       await fetch(`${OLLAMA_URL}/`, { signal: pingCtrl.signal });
     } catch (pingErr) {
       console.error('Ollama not reachable:', pingErr.message);
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft (ollama serve).' });
+      return sendError(502, { error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft (ollama serve).' });
     }
+
+    sendProgress('ollama_analyze', `KI analysiert ${combinedText.length} Zeichen Text mit ${OLLAMA_MODEL}...`, 50);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min for large docs
     const startTime = Date.now();
+
+    // Send periodic progress updates during Ollama processing
+    let ollamaProgress = 50;
+    const progressInterval = setInterval(() => {
+      ollamaProgress = Math.min(ollamaProgress + 2, 88);
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      sendProgress('ollama_analyze', `KI analysiert... (${elapsed}s)`, ollamaProgress);
+    }, 3000);
 
     let response;
     try {
@@ -309,6 +361,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
         signal: controller.signal,
       });
     } catch (fetchErr) {
+      clearInterval(progressInterval);
       clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
       logAiCall({
@@ -323,10 +376,11 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
         errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >180s' : fetchErr.message,
       });
       if (fetchErr.name === 'AbortError') {
-        return res.status(504).json({ error: 'Ollama-Timeout: CV-Analyse dauerte zu lange (> 3 Min). Versuche es erneut — das Modell wird beim ersten Aufruf geladen.' });
+        return sendError(504, { error: 'Ollama-Timeout: CV-Analyse dauerte zu lange (> 3 Min). Versuche es erneut — das Modell wird beim ersten Aufruf geladen.' });
       }
       throw fetchErr;
     }
+    clearInterval(progressInterval);
     clearTimeout(timeoutId);
 
     if (!response.ok) {
@@ -343,8 +397,10 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
         success: false,
         errorMessage: `Ollama Status ${response.status}: ${errText}`,
       });
-      return res.status(502).json({ error: 'Ollama-Fehler bei CV-Analyse', details: errText });
+      return sendError(502, { error: 'Ollama-Fehler bei CV-Analyse', details: errText });
     }
+
+    sendProgress('ollama_done', 'KI-Analyse abgeschlossen, Ergebnis wird verarbeitet...', 90);
 
     const data = await response.json();
     const responseText = data.response || '';
@@ -414,7 +470,9 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       success: true,
     });
 
-    res.json({
+    sendProgress('complete', 'Felder erfolgreich extrahiert', 100);
+
+    sendResult({
       success: true,
       filenames,
       filename: filenames[0], // backward compat
@@ -424,7 +482,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     });
   } catch (error) {
     console.error('CV parse error:', error);
-    res.status(500).json({ error: 'Fehler beim Verarbeiten der Datei', details: error.message });
+    sendError(500, { error: 'Fehler beim Verarbeiten der Datei', details: error.message });
   } finally {
     // Clean up all temp files
     for (const fp of tempFiles) {

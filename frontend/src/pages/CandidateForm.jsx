@@ -23,11 +23,13 @@ const emptyCandidate = {
   nationality: '', work_permit: '', work_permit_until: '',
   referrer_name: '', referrer_email: '',
   current_employer: '', current_position: '',
+  gender: '',
 }
 
 const SOURCE_OPTIONS = ['LinkedIn', 'Xing', 'Indeed', 'Stepstone', 'Empfehlung', 'Karriereseite', 'Messe', 'Initiativ', 'Sonstige']
 const GDPR_TYPES = ['Schriftlich', 'E-Mail', 'Online-Formular', 'Mündlich']
-const WORK_PERMIT_OPTIONS = ['EU-Bürger', 'Unbefristete Arbeitserlaubnis', 'Befristete Arbeitserlaubnis', 'Visum erforderlich', 'Blue Card', 'Keine']
+const WORK_PERMIT_OPTIONS = ['EU-Bürger', 'Unbefristete Arbeitserlaubnis', 'Befristete Arbeitserlaubnis', 'Visum erforderlich', 'Blue Card', 'Ausweis B (CH)', 'Ausweis C (CH)', 'Ausweis G (CH – Grenzgänger)', 'Ausweis L (CH – Kurzaufenthalt)', 'Bewilligung 120 Tage (CH)', 'Keine']
+const GENDER_OPTIONS = ['Frau', 'Herr', 'Divers']
 const NOTICE_PERIOD_OPTIONS = ['Sofort verfügbar', '2 Wochen', '1 Monat', '2 Monate', '3 Monate', '6 Monate']
 const emptyWorkEntry = { employer: '', position: '', from_date: '', to_date: '', is_current: false, description: '', location: '' }
 const emptyEduEntry = { institution: '', degree: '', field_of_study: '', from_date: '', to_date: '', description: '' }
@@ -45,6 +47,7 @@ export default function CandidateForm() {
   const [duplicates, setDuplicates] = useState([])
   const dupTimer = useRef(null)
   const [parsing, setParsing] = useState(false)
+  const [parseProgress, setParseProgress] = useState({ step: '', detail: '', progress: 0 })
   const [parseSuccess, setParseSuccess] = useState('')
   const [attachedFiles, setAttachedFiles] = useState([])
   const fileInputRef = useRef(null)
@@ -87,9 +90,11 @@ export default function CandidateForm() {
     if (!file) return
     const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp']
     if (!allowed.includes(file.type)) { setError(t('form.only_pdf_word')); return }
-    setParsing(true); setError(''); setParseSuccess('')
+    setParsing(true); setError(''); setParseSuccess(''); setParseProgress({ step: 'upload', detail: t('cv.progress_uploading'), progress: 2 })
     try {
-      const result = await cvParserApi.parse(file)
+      const result = await cvParserApi.parse(file, (evt) => {
+        setParseProgress({ step: evt.step, detail: evt.detail, progress: evt.progress })
+      })
       if (result.error) { setError(result.error); return }
       const c = result.candidate || result
       setForm(prev => {
@@ -97,7 +102,7 @@ export default function CandidateForm() {
         const fields = ['name', 'email', 'phone', 'location', 'experience', 'skills', 'education', 'languages',
           'certificates', 'drivers_license', 'desired_salary', 'availability', 'mobility', 'tags', 'notes',
           'linkedin_url', 'xing_url', 'github_url', 'portfolio_url',
-          'nationality', 'current_employer', 'current_position', 'notice_period']
+          'nationality', 'current_employer', 'current_position', 'notice_period', 'gender']
         for (const f of fields) { if (c[f] && String(c[f]).trim()) updated[f] = String(c[f]).trim() }
         if (c.salary_min) updated.salary_min = c.salary_min
         if (c.salary_max) updated.salary_max = c.salary_max
@@ -210,7 +215,50 @@ export default function CandidateForm() {
               <div><h2 className="text-[20px] font-semibold tracking-tight text-black dark:text-white">{t('cv.title')}</h2><p className="text-[14px] text-gray-500 dark:text-gray-400">{t('cv.desc')}</p></div>
             </div>
             {parsing ? (
-              <div className="flex flex-col items-center py-10 gap-4"><div className="w-12 h-12 border-[3px] border-[#0071e3]/20 border-t-[#0071e3] rounded-full animate-spin" /><p className="text-[16px] font-medium text-[#0071e3]">{t('cv.analyzing')}</p><p className="text-[14px] text-gray-400">{t('cv.analyzing_time')}</p></div>
+              <div className="py-8 px-4 space-y-5">
+                {/* Progress bar */}
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-[#0071e3] to-[#5856d6] rounded-full transition-all duration-700 ease-out" style={{ width: `${parseProgress.progress}%` }} />
+                </div>
+                {/* Step indicators */}
+                <div className="flex items-center justify-between gap-2">
+                  {[
+                    { key: 'upload',         icon: '📎', label: t('cv.step_upload') },
+                    { key: 'extract',        icon: '📄', label: t('cv.step_extract') },
+                    { key: 'ollama_connect',  icon: '🔗', label: t('cv.step_connect') },
+                    { key: 'ollama_analyze',  icon: '🧠', label: t('cv.step_analyze') },
+                    { key: 'complete',        icon: '✅', label: t('cv.step_done') },
+                  ].map((s, i, arr) => {
+                    const stepOrder = arr.map(x => x.key)
+                    const currentIdx = stepOrder.indexOf(parseProgress.step?.replace('_done', ''))
+                    const thisIdx = i
+                    const isDone = thisIdx < currentIdx || parseProgress.step === 'complete'
+                    const isActive = thisIdx === currentIdx && parseProgress.step !== 'complete'
+                    return (
+                      <div key={s.key} className={`flex flex-col items-center gap-1.5 flex-1 ${
+                        isDone ? 'opacity-60' : isActive ? 'opacity-100' : 'opacity-30'
+                      }`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[16px] transition-all ${
+                          isActive ? 'bg-[#0071e3]/10 ring-2 ring-[#0071e3]/30 scale-110' : isDone ? 'bg-[#34c759]/10' : 'bg-gray-100 dark:bg-gray-800'
+                        }`}>
+                          {s.icon}
+                        </div>
+                        <span className={`text-[11px] font-medium text-center leading-tight ${
+                          isActive ? 'text-[#0071e3] font-semibold' : 'text-gray-500'
+                        }`}>{s.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Current detail text */}
+                <div className="text-center space-y-1">
+                  <p className="text-[15px] font-semibold text-[#0071e3] flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-[#0071e3]/30 border-t-[#0071e3] rounded-full animate-spin inline-block" />
+                    {parseProgress.detail || t('cv.analyzing')}
+                  </p>
+                  <p className="text-[12px] text-gray-400">{parseProgress.progress}%</p>
+                </div>
+              </div>
             ) : (
               <div onDrop={handleFileDrop} onDragOver={(e) => e.preventDefault()} onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center py-10 gap-4 cursor-pointer rounded-[20px] border-2 border-dashed border-gray-300 hover:border-[#0071e3]/40 hover:bg-[#0071e3]/5 transition-all">
                 <div className="w-16 h-16 bg-white dark:bg-[#1c1c1e] rounded-[20px] shadow-sm flex items-center justify-center border border-gray-200 dark:border-gray-700"><Upload className="w-7 h-7 text-[#0071e3]" /></div>
@@ -243,6 +291,13 @@ export default function CandidateForm() {
           <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.personal')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <Input label={t('form.name') + ' *'} placeholder="Max Mustermann" value={form.name} onChange={handleChange('name')} required />
+            <div className="flex flex-col gap-3">
+              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.gender')}</label>
+              <select value={form.gender} onChange={handleChange('gender')} className={selectClass}>
+                <option value="">{t('form.select')}</option>
+                {GENDER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
             <Input label={t('form.email')} type="email" placeholder="max@example.com" value={form.email} onChange={handleChange('email')} />
             <Input label={t('form.phone')} placeholder="+49 171 1234567" value={form.phone} onChange={handleChange('phone')} />
             <Input label={t('form.location')} placeholder="Berlin" value={form.location} onChange={handleChange('location')} />

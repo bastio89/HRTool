@@ -222,19 +222,80 @@ export const uploadsApi = {
 
 // CV Parser API
 export const cvParserApi = {
-  parse: async (file) => {
+  parse: async (file, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
+    const headers = authHeaders();
+    // Use SSE streaming if progress callback provided
+    if (onProgress) {
+      headers['Accept'] = 'text/event-stream';
+    }
     const response = await fetch(`${API_BASE}/cv-parser/parse`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers,
       body: formData,
     });
     if (!response.ok) {
+      // For SSE error responses, try to read the stream for error events
+      if (onProgress && response.headers.get('content-type')?.includes('text/event-stream') && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+        }
+        const errLine = buf.split('\n').find(l => l.startsWith('data: '));
+        if (errLine) {
+          try {
+            const evt = JSON.parse(errLine.slice(6));
+            if (evt.error) throw new Error(evt.error);
+          } catch (e) { if (e.message && !e.message.includes('JSON')) throw e; }
+        }
+      }
       const error = await response.json().catch(() => ({ error: 'CV-Analyse fehlgeschlagen' }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
-    return response.json();
+    // Stream mode: parse SSE events (only if server actually returns SSE)
+    const contentType = response.headers.get('content-type') || '';
+    if (onProgress && contentType.includes('text/event-stream') && response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let result = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.type === 'progress') {
+                onProgress(event);
+              } else if (event.type === 'result') {
+                result = event;
+              } else if (event.type === 'error') {
+                throw new Error(event.error || 'CV-Analyse fehlgeschlagen');
+              }
+            } catch (e) {
+              if (e.message && !e.message.includes('JSON')) throw e;
+            }
+          }
+        }
+      }
+      if (!result) throw new Error('Keine Antwort vom Server erhalten');
+      return result;
+    }
+    // Fallback: server returned regular JSON (no SSE) — still works
+    const jsonResult = await response.json();
+    if (onProgress) {
+      onProgress({ type: 'progress', step: 'complete', detail: '', progress: 100 });
+    }
+    return jsonResult;
   },
 };
 

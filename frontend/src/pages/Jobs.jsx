@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Briefcase, MapPin, Users,
-  Clock, Trash2, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft
+  Clock, Archive, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft
 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
@@ -47,7 +47,7 @@ export default function Jobs() {
   useEffect(() => { loadJobs() }, [loadJobs])
   useEffect(() => { setCurrentPage(1) }, [filterStatus])
 
-  const handleDelete = async (id) => {
+  const handleArchive = async (id) => {
     try {
       await jobsApi.delete(id)
       setDeleteConfirm(null)
@@ -58,7 +58,7 @@ export default function Jobs() {
   }
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <div className="fade-in max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 sm:mb-14 gap-4">
         <div>
@@ -109,11 +109,11 @@ export default function Jobs() {
           {jobs.map(job => (
             <Card key={job.id} className="p-0 overflow-hidden" hover>
               {deleteConfirm === job.id ? (
-                <div className="flex items-center justify-between px-10 py-6 bg-[#ff3b30]/5 border-t border-[#ff3b30]/20">
-                  <span className="text-[16px] font-medium text-[#ff3b30]">{t('jobs.delete_confirm')}</span>
+                <div className="flex items-center justify-between px-10 py-6 bg-amber-500/5 border-t border-amber-500/20">
+                  <span className="text-[16px] font-medium text-amber-600 dark:text-amber-400">{t('jobs.archive_confirm')}</span>
                   <div className="flex gap-4">
                     <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</Button>
-                    <Button variant="danger" onClick={() => handleDelete(job.id)}>{t('common.delete')}</Button>
+                    <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleArchive(job.id)}>{t('jobs.archive')}</Button>
                   </div>
                 </div>
               ) : (
@@ -172,14 +172,16 @@ export default function Jobs() {
                     >
                       {t('jobs.pipeline')} <ChevronRightIcon className="w-4 h-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-10 h-10 !p-0 rounded-full hover:bg-[#ff3b30]/10 hover:text-[#ff3b30]"
-                      onClick={() => setDeleteConfirm(job.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {job.status !== 'Archiviert' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-10 h-10 !p-0 rounded-full hover:bg-amber-500/10 hover:text-amber-600"
+                        onClick={() => setDeleteConfirm(job.id)}
+                      >
+                        <Archive className="w-4 h-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

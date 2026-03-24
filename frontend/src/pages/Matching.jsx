@@ -234,10 +234,10 @@ export default function Matching() {
                     </div>
                     {selectedJobId && (
                       <p className="mt-4 text-[14px] font-semibold text-[#34c759] flex items-center gap-2">
-                        ✓ Stelle ausgewählt – Felder unten wurden vorausgefüllt
+                        ✓ {t('matching.job_selected')}
                         {pipelineCandidateIds.length > 0 && (
                           <span className="ml-2 text-[#0071e3]">
-                            · {pipelineCandidateIds.length} Bewerber aus Pipeline vorausgewählt
+                            {t('matching.pipeline_preselected').replace('{count}', pipelineCandidateIds.length)}
                           </span>
                         )}
                       </p>
@@ -280,7 +280,7 @@ export default function Matching() {
               <div>
                 <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('matching.candidate_selection')}</h2>
                 <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-1">
-                  {selectedIds.length} von {candidates.length} ausgewählt
+                  {t('matching.selected_of').replace('{selected}', selectedIds.length).replace('{total}', candidates.length)}
                 </p>
               </div>
             </div>
@@ -311,12 +311,12 @@ export default function Matching() {
                   className="flex items-center gap-4 w-full px-5 py-4 rounded-[20px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors text-[15px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer mb-4"
                 >
                   {selectAll ? <CheckSquare className="w-6 h-6 text-[#0071e3]" /> : <Square className="w-6 h-6 text-gray-300" />}
-                  Alle auswählen
+                  {t('matching.select_all')}
                 </button>
 
                 {pipelineLoading && (
                   <div className="flex items-center gap-3 px-5 py-3 mb-3 rounded-[16px] bg-[#0071e3]/5 text-[#0071e3] text-[13px] font-medium">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Pipeline-Bewerber werden geladen…
+                    <Loader2 className="w-4 h-4 animate-spin" /> {t('matching.pipeline_loading')}
                   </div>
                 )}
 
@@ -337,7 +337,7 @@ export default function Matching() {
                             <p className="text-[16px] font-semibold text-black dark:text-white truncate">{candidate.name}</p>
                             {isFromPipeline && (
                               <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[11px] font-bold">
-                                Pipeline
+                                {t('matching.pipeline_badge')}
                               </span>
                             )}
                           </div>
@@ -373,7 +373,7 @@ export default function Matching() {
               <div className="flex items-center gap-5">
                 <div className="w-4 h-4 rounded-full bg-[#0071e3] animate-pulse" />
                 <div>
-                  <p className="text-[16px] font-semibold text-[#0071e3]">KI analysiert...</p>
+                  <p className="text-[16px] font-semibold text-[#0071e3]">{t('matching.analyzing')}</p>
                   <p className="text-[15px] font-medium text-[#0071e3]/70 mt-1">
                     {t('matching.candidates_matched').replace('{count}', selectedIds.length || candidates.length)}
                   </p>

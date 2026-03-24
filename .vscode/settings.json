@@ -1,0 +1,14 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "pkill": true,
+        "lsof": true,
+        "/^cd \"/Users/sebastianoczachowski/Desktop/Geschriebene Programme : Code/HRTool/backend\" && node -e 'const db=require\\(\"better-sqlite3\"\\)\\(\"\\./data/hrtool\\.db\"\\); try \\{ db\\.prepare\\(\"INSERT OR REPLACE INTO settings \\(key, value, updated_at\\) VALUES \\(\\?, \\?, datetime\\(\\\\\"now\\\\\"\\)\\)\"\\)\\.run\\(\"smtp_host\", \"smtp\\.gmail\\.com\"\\); console\\.log\\(\"OK\"\\); \\} catch\\(e\\) \\{ console\\.log\\(\"ERR:\", e\\.message\\); \\}'$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd \"/Users/sebastianoczachowski/Desktop/Geschriebene Programme : Code/HRTool/backend\" && node -e 'const db=require\\(\"better-sqlite3\"\\)\\(\"\\./data/hrtool\\.db\"\\); db\\.prepare\\(\"DELETE FROM settings WHERE key = \\?\"\\)\\.run\\(\"smtp_host\"\\); console\\.log\\(\"cleaned\"\\)'$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

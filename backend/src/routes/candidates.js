@@ -610,7 +610,8 @@ router.post('/', (req, res) => {
       gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
       nationality, work_permit, work_permit_until,
       referrer_name, referrer_email,
-      current_employer, current_position
+      current_employer, current_position,
+      gender
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -627,8 +628,8 @@ router.post('/', (req, res) => {
         gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
         nationality, work_permit, work_permit_until,
         referrer_name, referrer_email,
-        current_employer, current_position)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        current_employer, current_position, gender)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
@@ -641,7 +642,7 @@ router.post('/', (req, res) => {
       gdpr_consent_date || null, gdpr_consent_type || null, gdpr_consent_expires || null,
       nationality || null, work_permit || null, work_permit_until || null,
       referrer_name || null, referrer_email || null,
-      current_employer || null, current_position || null
+      current_employer || null, current_position || null, gender || null
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(result.lastInsertRowid);
@@ -690,7 +691,8 @@ router.put('/:id', (req, res) => {
       gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
       nationality, work_permit, work_permit_until,
       referrer_name, referrer_email,
-      current_employer, current_position
+      current_employer, current_position,
+      gender
     } = req.body;
 
     if (!name || name.trim() === '') {
@@ -709,7 +711,7 @@ router.put('/:id', (req, res) => {
         gdpr_consent_date = ?, gdpr_consent_type = ?, gdpr_consent_expires = ?,
         nationality = ?, work_permit = ?, work_permit_until = ?,
         referrer_name = ?, referrer_email = ?,
-        current_employer = ?, current_position = ?,
+        current_employer = ?, current_position = ?, gender = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -724,7 +726,7 @@ router.put('/:id', (req, res) => {
       gdpr_consent_date || null, gdpr_consent_type || null, gdpr_consent_expires || null,
       nationality || null, work_permit || null, work_permit_until || null,
       referrer_name || null, referrer_email || null,
-      current_employer || null, current_position || null, req.params.id
+      current_employer || null, current_position || null, gender || null, req.params.id
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);

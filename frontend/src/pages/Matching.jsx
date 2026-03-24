@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GitCompare, FileText, Users, Search, CheckSquare, Square, Loader2, Zap, Briefcase, PenLine, ChevronRight } from 'lucide-react'
-import { candidatesApi, matchingApi, jobsApi } from '../api'
+import { candidatesApi, matchingApi, jobsApi, pipelineApi } from '../api'
 import { Card, Button, Textarea, Input, EmptyState, LoadingSpinner } from '../components/UI'
 import MatchingWeights from '../components/MatchingWeights'
 import { useI18n } from '../I18nContext'
@@ -22,6 +22,8 @@ export default function Matching() {
   const [jobs, setJobs] = useState([])
   const [selectedJobId, setSelectedJobId] = useState(null)
   const [jobSearch, setJobSearch] = useState('')
+  const [pipelineCandidateIds, setPipelineCandidateIds] = useState([])
+  const [pipelineLoading, setPipelineLoading] = useState(false)
   const [weights, setWeights] = useState({
     skills: 0, experience: 0, education: 0, location: 0, languages: 0,
     salary: 0, availability: 0, certificates: 0, cultural_fit: 0, mobility: 0
@@ -40,7 +42,7 @@ export default function Matching() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleSelectJob = (job) => {
+  const handleSelectJob = async (job) => {
     setSelectedJobId(job.id)
     setJobTitle(job.title || '')
     // Build description from job fields
@@ -50,12 +52,33 @@ export default function Matching() {
     if (job.location) parts.push(`Standort: ${job.location}`)
     if (job.type) parts.push(`Arbeitsmodell: ${job.type}`)
     setJobDescription(parts.join('\n\n'))
+
+    // Auto-select candidates already in this job's pipeline
+    setPipelineLoading(true)
+    try {
+      const pipelineData = await pipelineApi.getByJob(job.id)
+      const board = pipelineData.board || {}
+      const candidateIdsFromPipeline = Object.values(board)
+        .flat()
+        .map(entry => entry.candidate_id)
+        .filter(Boolean)
+      const uniqueIds = [...new Set(candidateIdsFromPipeline)]
+      setPipelineCandidateIds(uniqueIds)
+      // Reset selection to only pipeline candidates for this job
+      setSelectedIds(uniqueIds)
+      setSelectAll(false)
+    } catch (_) {
+      setPipelineCandidateIds([])
+    } finally {
+      setPipelineLoading(false)
+    }
   }
 
   const handleModeSwitch = (mode) => {
     setJobMode(mode)
     if (mode === 'manual') {
       setSelectedJobId(null)
+      setPipelineCandidateIds([])
     }
   }
 
@@ -87,7 +110,7 @@ export default function Matching() {
     setMatching(true)
 
     try {
-      const result = await matchingApi.run(jobDescription, jobTitle, selectedIds, weights)
+      const result = await matchingApi.run(jobDescription, jobTitle, selectedIds, weights, selectedJobId || null)
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
       setError(err.message)
@@ -212,6 +235,11 @@ export default function Matching() {
                     {selectedJobId && (
                       <p className="mt-4 text-[14px] font-semibold text-[#34c759] flex items-center gap-2">
                         ✓ Stelle ausgewählt – Felder unten wurden vorausgefüllt
+                        {pipelineCandidateIds.length > 0 && (
+                          <span className="ml-2 text-[#0071e3]">
+                            · {pipelineCandidateIds.length} Bewerber aus Pipeline vorausgewählt
+                          </span>
+                        )}
                       </p>
                     )}
                   </>
@@ -286,24 +314,42 @@ export default function Matching() {
                   Alle auswählen
                 </button>
 
+                {pipelineLoading && (
+                  <div className="flex items-center gap-3 px-5 py-3 mb-3 rounded-[16px] bg-[#0071e3]/5 text-[#0071e3] text-[13px] font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Pipeline-Bewerber werden geladen…
+                  </div>
+                )}
+
                 <div className="space-y-2 max-h-[450px] overflow-y-auto pr-2">
-                  {filteredCandidates.map(candidate => (
-                    <button
-                      key={candidate.id}
-                      onClick={() => toggleCandidate(candidate.id)}
-                      className="flex items-center gap-5 w-full px-5 py-4 rounded-[20px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors text-left cursor-pointer"
-                    >
-                      {selectedIds.includes(candidate.id) ? <CheckSquare className="w-6 h-6 text-[#0071e3] flex-shrink-0" /> : <Square className="w-6 h-6 text-gray-300 flex-shrink-0" />}
-                      <div className="min-w-0">
-                        <p className="text-[16px] font-semibold text-black dark:text-white truncate">{candidate.name}</p>
-                        {candidate.skills && (
-                          <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400 truncate mt-1">
-                            {candidate.skills}
-                          </p>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                  {filteredCandidates.map(candidate => {
+                    const isFromPipeline = pipelineCandidateIds.includes(candidate.id)
+                    return (
+                      <button
+                        key={candidate.id}
+                        onClick={() => toggleCandidate(candidate.id)}
+                        className={`flex items-center gap-5 w-full px-5 py-4 rounded-[20px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors text-left cursor-pointer ${
+                          isFromPipeline && selectedIds.includes(candidate.id) ? 'bg-[#0071e3]/5 ring-1 ring-[#0071e3]/20' : ''
+                        }`}
+                      >
+                        {selectedIds.includes(candidate.id) ? <CheckSquare className="w-6 h-6 text-[#0071e3] flex-shrink-0" /> : <Square className="w-6 h-6 text-gray-300 flex-shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[16px] font-semibold text-black dark:text-white truncate">{candidate.name}</p>
+                            {isFromPipeline && (
+                              <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[11px] font-bold">
+                                Pipeline
+                              </span>
+                            )}
+                          </div>
+                          {candidate.skills && (
+                            <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400 truncate mt-1">
+                              {candidate.skills}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
               </>
             )}

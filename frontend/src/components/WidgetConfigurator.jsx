@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Settings, GripVertical, Eye, EyeOff, RotateCcw, X, BarChart2, GitMerge, GitCompare, MapPin, Share2 } from 'lucide-react'
 import { useI18n } from '../I18nContext'
 
@@ -41,7 +42,7 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
         {t('widget.title')}
       </button>
 
-      {open && (
+      {open && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
@@ -138,7 +139,8 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )

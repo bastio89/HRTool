@@ -53,6 +53,7 @@ export default function CandidateForm() {
   const [educationList, setEducationList] = useState([])
   const [customFields, setCustomFields] = useState([])
   const [customValues, setCustomValues] = useState({})
+  const [tagInput, setTagInput] = useState('')
 
   useEffect(() => {
     // Load custom field definitions
@@ -84,7 +85,7 @@ export default function CandidateForm() {
   // AI CV parsing
   const handleCVUpload = async (file) => {
     if (!file) return
-    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp']
     if (!allowed.includes(file.type)) { setError(t('form.only_pdf_word')); return }
     setParsing(true); setError(''); setParseSuccess('')
     try {
@@ -94,7 +95,7 @@ export default function CandidateForm() {
       setForm(prev => {
         const updated = { ...prev }
         const fields = ['name', 'email', 'phone', 'location', 'experience', 'skills', 'education', 'languages',
-          'certificates', 'drivers_license', 'desired_salary', 'availability',
+          'certificates', 'drivers_license', 'desired_salary', 'availability', 'mobility', 'tags', 'notes',
           'linkedin_url', 'xing_url', 'github_url', 'portfolio_url',
           'nationality', 'current_employer', 'current_position', 'notice_period']
         for (const f of fields) { if (c[f] && String(c[f]).trim()) updated[f] = String(c[f]).trim() }
@@ -484,14 +485,41 @@ export default function CandidateForm() {
                 {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            <Input label={t('form.tags')} placeholder="Top-Kandidat, Remote, Senior (kommagetrennt)" value={form.tags} onChange={handleChange('tags')} />
             {(() => {
               const currentTags = form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
               const availableSuggestions = SUGGESTED_TAGS.filter(t => !currentTags.includes(t));
               const addTag = (tag) => { const tags = form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : []; if (!tags.includes(tag)) setForm(prev => ({ ...prev, tags: [...tags, tag].join(', ') })) };
               const removeTag = (tag) => { const tags = form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : []; setForm(prev => ({ ...prev, tags: tags.filter(t => t !== tag).join(', ') })) };
+              const addCustomTag = () => {
+                const val = tagInput.trim()
+                if (val && !currentTags.includes(val)) {
+                  addTag(val)
+                }
+                setTagInput('')
+              };
               return (
                 <div className="md:col-span-2">
+                  <div className="flex flex-col gap-3 mb-4">
+                    <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.tags')}</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        placeholder="Tag eingeben…"
+                        value={tagInput}
+                        onChange={e => setTagInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
+                        className="flex-1 px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#5e5ce6]/40 focus:ring-4 focus:ring-[#5e5ce6]/10 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={addCustomTag}
+                        disabled={!tagInput.trim()}
+                        className="w-12 h-12 rounded-2xl bg-[#5e5ce6] hover:bg-[#4e4cd2] disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-default flex-shrink-0"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
                   {currentTags.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-3">
                       {currentTags.map(tag => (

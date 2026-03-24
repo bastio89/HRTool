@@ -225,6 +225,8 @@ const migrations = [
   // Absagegründe (#6)
   `ALTER TABLE pipeline_entries ADD COLUMN rejection_category TEXT`,
   `ALTER TABLE pipeline_entries ADD COLUMN rejection_details TEXT`,
+  // Matching → Pipeline-Link
+  `ALTER TABLE matching_results ADD COLUMN job_id INTEGER`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }

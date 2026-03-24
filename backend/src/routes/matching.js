@@ -29,7 +29,7 @@ const router = express.Router();
  */
 router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
   try {
-    const { jobDescription, jobTitle, candidateIds, weights } = req.body;
+    const { jobDescription, jobTitle, candidateIds, weights, jobId } = req.body;
 
     if (!jobDescription || jobDescription.trim() === '') {
       return res.status(400).json({ error: 'Stellenbeschreibung ist erforderlich' });
@@ -191,9 +191,9 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
 
     // Save results (mit echten Namen)
     const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results)
-      VALUES (?, ?, ?)
-    `).run(jobDescription, jobTitle || 'Unbenannte Stelle', JSON.stringify(matchingResults));
+      INSERT INTO matching_results (job_description, job_title, results, job_id)
+      VALUES (?, ?, ?, ?)
+    `).run(jobDescription, jobTitle || 'Unbenannte Stelle', JSON.stringify(matchingResults), jobId || null);
 
     res.json({
       id: saveResult.lastInsertRowid,

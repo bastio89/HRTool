@@ -87,10 +87,10 @@ export const candidatesApi = {
 
 // Matching API
 export const matchingApi = {
-  run: (jobDescription, jobTitle, candidateIds = [], weights = null) =>
+  run: (jobDescription, jobTitle, candidateIds = [], weights = null, jobId = null) =>
     request('/matching/run', {
       method: 'POST',
-      body: JSON.stringify({ jobDescription, jobTitle, candidateIds, weights }),
+      body: JSON.stringify({ jobDescription, jobTitle, candidateIds, weights, jobId }),
     }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),

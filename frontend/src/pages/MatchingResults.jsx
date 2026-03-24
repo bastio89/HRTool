@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, FileText } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, FileText, GitMerge } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
@@ -94,6 +94,14 @@ export default function MatchingResults() {
         <div className="flex items-center gap-3 sm:gap-4 ml-14 sm:ml-0">
           {results.length > 0 && (
             <>
+              {data?.job_id && (
+                <Link to={`/pipeline/${data.job_id}`}>
+                  <Button size="md" variant="secondary">
+                    <GitMerge className="w-5 h-5" />
+                    <span className="hidden sm:inline">Zur Pipeline</span>
+                  </Button>
+                </Link>
+              )}
               <Button size="md" variant="secondary" onClick={() => {
                 const style = document.createElement('style')
                 style.id = 'print-styles'

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell, Check, CheckCheck, MessageSquare, AtSign, X } from 'lucide-react'
 import { collaborationApi } from '../api'
 import { useI18n } from '../I18nContext'
 
 export default function NotificationBell() {
   const { t } = useI18n()
+  const navigate = useNavigate()
   const [count, setCount] = useState(0)
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
@@ -40,10 +42,32 @@ export default function NotificationBell() {
     setOpen(!open)
   }
 
+  const getNotificationPath = (notification) => {
+    const { entity_type, entity_id } = notification
+    if (!entity_type || !entity_id) return null
+    switch (entity_type) {
+      case 'candidate': return `/candidates/${entity_id}/detail`
+      case 'job': return `/jobs/${entity_id}/edit`
+      case 'pipeline': return `/pipeline/${entity_id}`
+      default: return null
+    }
+  }
+
   const markRead = async (id) => {
     await collaborationApi.markRead(id).catch(() => {})
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n))
     setCount(prev => Math.max(0, prev - 1))
+  }
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification.is_read) {
+      await markRead(notification.id)
+    }
+    const path = getNotificationPath(notification)
+    if (path) {
+      setOpen(false)
+      navigate(path)
+    }
   }
 
   const markAllRead = async () => {
@@ -91,7 +115,7 @@ export default function NotificationBell() {
               <p className="text-center text-[13px] text-gray-400 py-8">{t('collab.no_notifications')}</p>
             ) : (
               notifications.map(n => (
-                <div key={n.id} onClick={() => !n.is_read && markRead(n.id)}
+                <div key={n.id} onClick={() => handleNotificationClick(n)}
                   className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-700/50 transition-colors cursor-pointer hover:bg-[#f5f5f7] dark:hover:bg-[#3a3a3c] ${!n.is_read ? 'bg-[#0071e3]/5' : ''}`}>
                   <div className="w-8 h-8 rounded-xl bg-[#f5f5f7] dark:bg-[#1c1c1e] flex items-center justify-center flex-shrink-0">
                     {typeIcons[n.type] || <Bell className="w-4 h-4 text-gray-400" />}

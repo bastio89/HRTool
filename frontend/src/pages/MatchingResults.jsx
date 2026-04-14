@@ -40,7 +40,11 @@ export default function MatchingResults() {
     </div>
   )
 
-  const results = data?.results?.results || []
+  // Normalize scores: Ollama returns 0-100, UI expects 0-1, then sort descending
+  const results = (data?.results?.results || []).map(r => ({
+    ...r,
+    score: r.score > 1 ? r.score / 100 : r.score,
+  })).sort((a, b) => b.score - a.score)
   const matchedAt = data?.results?.matchedAt || data?.created_at
   const bestScore = results[0]?.score || 0
   const avgScore = results.length > 0 ? results.reduce((s, r) => s + r.score, 0) / results.length : 0

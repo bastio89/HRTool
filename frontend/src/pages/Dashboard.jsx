@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, AlertTriangle, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText } from 'lucide-react'
-import { candidatesApi, matchingApi, pipelineApi, healthApi, settingsApi, interviewsApi } from '../api'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText } from 'lucide-react'
+import { candidatesApi, matchingApi, pipelineApi, settingsApi, interviewsApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
@@ -25,18 +25,16 @@ export default function Dashboard() {
   const [dsgvoData, setDsgvoData] = useState(null)
   const [upcomingInterviews, setUpcomingInterviews] = useState([])
   const [loading, setLoading] = useState(true)
-  const [n8nStatus, setN8nStatus] = useState(null)
   const [periodDays, setPeriodDays] = useState(30)
   const { widgets, visibleWidgets, toggleWidget, reorder, resetToDefault } = useWidgetConfig()
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [statsData, historyData, pipelineData, healthData, sourceData, tthData] = await Promise.all([
+      const [statsData, historyData, pipelineData, sourceData, tthData] = await Promise.all([
         candidatesApi.getStats(periodDays).catch(() => ({ totalCandidates: 0, newThisWeek: 0, topLocations: [] })),
         matchingApi.getHistory().catch(() => ({ data: [] })),
         pipelineApi.getActiveJobs().catch(() => ({ data: [] })),
-        healthApi.check().catch(() => ({ n8nStatus: 'unreachable' })),
         candidatesApi.getSourceStats().catch(() => ({ sources: [], total: 0 })),
         candidatesApi.getTimeToHire().catch(() => null),
       ])
@@ -48,7 +46,6 @@ export default function Dashboard() {
       setTimeToHire(tthData)
       setRecentMatches(historyData.data?.slice(0, 4) || [])
       setActivePipelines(pipelineData.data || [])
-      setN8nStatus(healthData.n8nStatus || healthData.services?.n8n || 'unknown')
       setSourceStats(sourceData)
     } catch (err) {
       console.error(err)
@@ -63,17 +60,6 @@ export default function Dashboard() {
 
   return (
     <div className="fade-in space-y-8 sm:space-y-14">
-      {/* n8n Warning */}
-      {n8nStatus && n8nStatus !== 'ok' && (
-        <div className="flex items-center gap-4 p-5 sm:p-6 rounded-[20px] bg-[#ff9f0a]/10 border border-[#ff9f0a]/20">
-          <AlertTriangle className="w-6 h-6 text-[#ff9f0a] flex-shrink-0" />
-          <div>
-            <p className="text-[15px] sm:text-[17px] font-semibold text-[#ff9f0a]">{t('dashboard.n8n_unreachable')}</p>
-            <p className="text-[13px] sm:text-[15px] text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.n8n_desc')}</p>
-          </div>
-        </div>
-      )}
-
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.title')}</h1>
@@ -325,7 +311,9 @@ function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
         ) : (
           <div className="space-y-4">
             {matches.map((match) => {
-              const topScore = match.results?.results?.[0]?.score || 0
+              const allScores = (match.results?.results || []).map(r => r.score || 0)
+              const rawScore = allScores.length > 0 ? Math.max(...allScores) : 0
+              const topScore = rawScore > 1 ? rawScore / 100 : rawScore
               return (
                 <Link key={match.id} to={`/matching/results/${match.id}`} className="block">
                   <div className="flex items-center justify-between p-6 rounded-[24px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-all duration-300 border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50">

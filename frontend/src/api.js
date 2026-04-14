@@ -91,6 +91,7 @@ export const matchingApi = {
     request('/matching/run', {
       method: 'POST',
       body: JSON.stringify({ jobDescription, jobTitle, candidateIds, weights, jobId }),
+      timeout: 200000,
     }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),

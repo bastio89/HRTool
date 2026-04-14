@@ -29,6 +29,9 @@ export default function Breadcrumb() {
 
   if (segments.length === 0) return null
 
+  // Segments that have no standalone route (only work with sub-params)
+  const nonLinkable = new Set(['pipeline'])
+
   const crumbs = []
   let path = ''
 
@@ -40,7 +43,7 @@ export default function Breadcrumb() {
     if (/^\d+$/.test(seg)) continue
 
     const label = routeLabels[seg] || seg.charAt(0).toUpperCase() + seg.slice(1)
-    const isLast = i === segments.length - 1 || (i === segments.length - 2 && /^\d+$/.test(segments[i + 1]))
+    const isLast = nonLinkable.has(seg) || i === segments.length - 1 || (i === segments.length - 2 && /^\d+$/.test(segments[i + 1]))
 
     crumbs.push({ label, path, isLast })
   }

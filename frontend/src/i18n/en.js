@@ -77,8 +77,6 @@ export default {
   'dashboard.upcoming_interviews': 'Upcoming Interviews',
   'dashboard.no_interviews': 'No upcoming interviews in the next 14 days',
   'dashboard.pdf_export': 'Export as PDF',
-  'dashboard.n8n_unreachable': 'n8n not reachable',
-  'dashboard.n8n_desc': 'AI Matching and CV parsing are currently unavailable. Please check if n8n is running.',
   'dashboard.period_7': '7 Days',
   'dashboard.period_30': '30 Days',
   'dashboard.period_90': '90 Days',

@@ -48,11 +48,6 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
     }
 
-    // Call n8n webhook for matching (with 120s timeout for LLM processing)
-    const webhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/hr-matching';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
-    
     // Build weight instructions for the LLM prompt
     const WEIGHT_LABELS = {
       skills: 'Fachliche Qualifikation / Skills',
@@ -95,51 +90,72 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       }
     }
 
-    const matchingPrompt = JSON.stringify({
-      jobDescription: jobDescription + weightInstructions,
-      jobTitle: jobTitle || 'Unbenannte Stelle',
-      weights: weights || null,
-      candidates: candidates.map((c, idx) => ({
-        id: c.id,
-        name: `Kandidat ${idx + 1}`,
-        experience: c.experience,
-        skills: c.skills,
-        education: c.education,
-        languages: c.languages,
-        certificates: c.certificates,
-        location: c.location,
-        desired_salary: c.desired_salary,
-        availability: c.availability,
-        drivers_license: c.drivers_license,
-        mobility: c.mobility
-      }))
-    });
-
     const startTime = Date.now();
+
+    // Direct Ollama call (replaces n8n webhook)
+    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+
+    const prompt = `Du bist ein erfahrener HR-Analyst. Analysiere die folgenden Bewerber für die gegebene Stelle und bewerte jeden mit einem Score von 0-100.
+
+Stellenbeschreibung:
+${jobDescription}${weightInstructions}
+
+Stellentitel: ${jobTitle || 'Unbenannte Stelle'}
+
+Bewerber:
+${candidates.map((c, idx) => `Kandidat ${idx + 1} (ID: ${c.id}):
+- Skills: ${c.skills || 'k.A.'}
+- Erfahrung: ${c.experience || 'k.A.'}
+- Ausbildung: ${c.education || 'k.A.'}
+- Sprachen: ${c.languages || 'k.A.'}
+- Standort: ${c.location || 'k.A.'}
+- Gehaltsvorstellung: ${c.desired_salary || 'k.A.'}
+- Verfügbarkeit: ${c.availability || 'k.A.'}
+- Zertifikate: ${c.certificates || 'k.A.'}
+- Mobilität: ${c.mobility || 'k.A.'}`).join('\n\n')}
+
+Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor oder danach):
+{
+  "results": [
+    {
+      "candidateId": <id>,
+      "candidateName": "Kandidat X",
+      "score": <0-100>,
+      "strengths": ["Stärke 1", "Stärke 2"],
+      "weaknesses": ["Schwäche 1"],
+      "summary": "Kurze Begründung"
+    }
+  ]
+}`;
+
+    // Check Ollama availability (3s timeout)
+    try {
+      const pingCtrl = new AbortController();
+      const pingTimeout = setTimeout(() => pingCtrl.abort(), 3000);
+      await fetch(`${OLLAMA_URL}/`, { signal: pingCtrl.signal });
+      clearTimeout(pingTimeout);
+    } catch {
+      return res.status(503).json({ error: 'Ollama nicht erreichbar. Bitte stellen Sie sicher, dass Ollama läuft (http://localhost:11434).' });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180000);
+
     let response;
     try {
-      response = await fetch(webhookUrl, {
+      response = await fetch(`${OLLAMA_URL}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: matchingPrompt
+        body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false, format: 'json', options: { temperature: 0.2 } }),
       });
     } catch (fetchErr) {
       clearTimeout(timeout);
       const duration = Date.now() - startTime;
-      logAiCall({
-        userId: req.user?.id,
-        feature: 'matching',
-        model: process.env.OLLAMA_MODEL || 'llama3.2',
-        prompt: matchingPrompt,
-        response: null,
-        parsedResult: null,
-        durationMs: duration,
-        success: false,
-        errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >120s' : fetchErr.message,
-      });
+      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: duration, success: false, errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >180s' : fetchErr.message });
       if (fetchErr.name === 'AbortError') {
-        return res.status(504).json({ error: 'n8n Timeout – Matching dauerte zu lange (>120s)' });
+        return res.status(504).json({ error: 'Ollama Timeout – Matching dauerte zu lange (>180s). Versuche es mit weniger Bewerbern.' });
       }
       throw fetchErr;
     }
@@ -147,38 +163,21 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('n8n webhook error:', response.status, errText);
-      logAiCall({
-        userId: req.user?.id,
-        feature: 'matching',
-        model: process.env.OLLAMA_MODEL || 'llama3.2',
-        prompt: matchingPrompt,
-        response: errText,
-        parsedResult: null,
-        durationMs: Date.now() - startTime,
-        success: false,
-        errorMessage: `n8n Status ${response.status}: ${errText}`,
-      });
-      return res.status(502).json({ 
-        error: 'n8n Workflow fehlgeschlagen',
-        details: `Status ${response.status}: ${errText}`
-      });
+      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: errText, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: `Ollama HTTP ${response.status}` });
+      return res.status(502).json({ error: `Ollama-Fehler: Status ${response.status}`, details: errText });
     }
 
-    const matchingResults = await response.json();
+    const raw = await response.text();
     const matchingDuration = Date.now() - startTime;
 
-    // AI Act Art. 12: Log the AI call
-    logAiCall({
-      userId: req.user?.id,
-      feature: 'matching',
-      model: process.env.OLLAMA_MODEL || 'llama3.2',
-      prompt: matchingPrompt,
-      response: JSON.stringify(matchingResults),
-      parsedResult: matchingResults,
-      durationMs: matchingDuration,
-      success: true,
-    });
+    let matchingResults;
+    try {
+      const data = JSON.parse(raw);
+      matchingResults = JSON.parse(data.response);
+    } catch (parseErr) {
+      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: matchingDuration, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
+      return res.status(502).json({ error: 'Ollama-Antwort konnte nicht verarbeitet werden', details: parseErr.message });
+    }
 
     // De-Anonymisierung: echte Namen wieder einsetzen anhand der candidateId
     const candidateMap = new Map(candidates.map(c => [c.id, c.name]));
@@ -189,11 +188,20 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       }));
     }
 
+    logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: matchingResults, durationMs: matchingDuration, success: true });
+
     // Save results (mit echten Namen)
     const saveResult = db.prepare(`
       INSERT INTO matching_results (job_description, job_title, results, job_id)
       VALUES (?, ?, ?, ?)
     `).run(jobDescription, jobTitle || 'Unbenannte Stelle', JSON.stringify(matchingResults), jobId || null);
+
+    logAudit(req, 'ki-matching', 'Matching', saveResult.lastInsertRowid, jobTitle || 'Unbenannte Stelle', {
+      candidateCount: candidates.length,
+      topScore: matchingResults.results?.[0]?.score,
+      durationMs: matchingDuration,
+      model: OLLAMA_MODEL,
+    });
 
     res.json({
       id: saveResult.lastInsertRowid,
@@ -294,6 +302,7 @@ router.delete('/history/:id', (req, res) => {
       return res.status(404).json({ error: 'Ergebnis nicht gefunden' });
     }
     db.prepare('DELETE FROM matching_results WHERE id = ?').run(req.params.id);
+    logAudit(req, 'gelöscht', 'Matching', existing.id, existing.job_title);
     res.json({ message: 'Ergebnis gelöscht' });
   } catch (error) {
     console.error('Error deleting result:', error);

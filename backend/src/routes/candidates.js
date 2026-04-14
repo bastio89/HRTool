@@ -49,9 +49,26 @@ router.get('/stats/overview', (req, res) => {
     const lastMonth = db.prepare(
       "SELECT COUNT(*) as count FROM candidates WHERE created_at >= datetime('now', 'start of month', '-1 month') AND created_at < datetime('now', 'start of month')"
     ).get();
-    const locations = db.prepare(
-      'SELECT location, COUNT(*) as count FROM candidates WHERE location IS NOT NULL GROUP BY location ORDER BY count DESC LIMIT 5'
+    const rawLocations = db.prepare(
+      'SELECT location, COUNT(*) as count FROM candidates WHERE location IS NOT NULL GROUP BY location ORDER BY count DESC'
     ).all();
+    // Normalize: extract city from full addresses (e.g. "Musterstr. 1, Zürich" → "Zürich")
+    const extractCity = (loc) => {
+      const parts = loc.split(',');
+      let city = parts[parts.length - 1].trim();
+      // Strip leading postal code (e.g. "5600 Lenzburg" → "Lenzburg")
+      city = city.replace(/^\d+\s+/, '');
+      return city || loc;
+    };
+    const cityMap = new Map();
+    for (const row of rawLocations) {
+      const city = extractCity(row.location);
+      cityMap.set(city, (cityMap.get(city) || 0) + row.count);
+    }
+    const locations = Array.from(cityMap.entries())
+      .map(([location, count]) => ({ location, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     // Matching stats
     const matchingsThisWeek = db.prepare(

@@ -44,8 +44,8 @@ export default function History() {
       if (sort === 'newest') return new Date(b.created_at) - new Date(a.created_at)
       if (sort === 'oldest') return new Date(a.created_at) - new Date(b.created_at)
       if (sort === 'score') {
-        const scoreA = (a.results?.results || [])[0]?.score || 0
-        const scoreB = (b.results?.results || [])[0]?.score || 0
+        const scoreA = Math.max(...(a.results?.results || []).map(r => r.score || 0), 0)
+        const scoreB = Math.max(...(b.results?.results || []).map(r => r.score || 0), 0)
         return scoreB - scoreA
       }
       if (sort === 'candidates') {
@@ -130,7 +130,10 @@ export default function History() {
       ) : (
         <div className="space-y-5 sm:space-y-8">
           {filtered.map((result) => {
-            const matchResults = result.results?.results || []
+            const matchResults = (result.results?.results || []).map(r => ({
+              ...r,
+              score: r.score > 1 ? r.score / 100 : r.score,
+            })).sort((a, b) => b.score - a.score)
             const topScore = matchResults[0]?.score || 0
             const avgScore = matchResults.length > 0 ? matchResults.reduce((s, r) => s + r.score, 0) / matchResults.length : 0
 

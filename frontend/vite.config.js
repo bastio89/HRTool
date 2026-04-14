@@ -11,7 +11,18 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        timeout: 200000,
+        proxyTimeout: 200000,
       }
-    }
-  }
+    },
+    warmup: {
+      clientFiles: ['./src/main.jsx', './src/App.jsx'],
+    },
+    watch: {
+      ignored: ['**/node_modules/**', '**/dist/**', '**/*.py', '**/data/**'],
+    },
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom', 'lucide-react'],
+  },
 })

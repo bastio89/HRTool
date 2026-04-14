@@ -77,8 +77,6 @@ export default {
   'dashboard.upcoming_interviews': 'Anstehende Interviews',
   'dashboard.no_interviews': 'Keine anstehenden Interviews in den nächsten 14 Tagen',
   'dashboard.pdf_export': 'Als PDF exportieren',
-  'dashboard.n8n_unreachable': 'n8n nicht erreichbar',
-  'dashboard.n8n_desc': 'KI-Matching und CV-Analyse sind derzeit nicht verfügbar. Bitte prüfe ob n8n läuft.',
   'dashboard.period_7': '7 Tage',
   'dashboard.period_30': '30 Tage',
   'dashboard.period_90': '90 Tage',

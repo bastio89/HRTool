@@ -9,6 +9,7 @@ services:
     env_file:
       - .env
     environment:
+      TZ: ${TZ:-Europe/Berlin}
       PORT: ${PORT:-3001}
       NODE_ENV: production
       # Remote-Ollama standardmäßig nutzen; lokaler Service nur bei aktivem Profil
@@ -44,6 +45,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
     depends_on:
       backend:
         condition: service_healthy
@@ -73,6 +76,7 @@ services:
       - local-ollama
     restart: unless-stopped
     environment:
+      TZ: ${TZ:-Europe/Berlin}
       OLLAMA_HOST: 0.0.0.0:11434
     command: serve
     volumes:

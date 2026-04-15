@@ -4,3 +4,4 @@ data/
 *.db
 dist/
 .DS_Store
+tmp/

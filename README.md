@@ -18,6 +18,7 @@
   <a href="#-ki-features">KI-Features</a> •
   <a href="#-screenshots">Screenshots</a> •
   <a href="#-installation">Installation</a> •
+  <a href="#-deployment-mit-docker">Container-Deployment</a> •
   <a href="#-tech-stack">Tech Stack</a> •
   <a href="#-api-dokumentation">API</a>
 </p>
@@ -250,11 +251,88 @@ brew install tesseract tesseract-lang poppler
 ```env
 PORT=3001
 JWT_SECRET=ihr-sicherer-schlüssel
-OLLAMA_BASE_URL=http://localhost:11434
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://10.13.13.130:11434
 OLLAMA_MODEL=llama3.2
+OLLAMA_TIMEOUT_MS=180000
+OPENAI_MODEL=llama3.2
+LLM_MODEL=llama3.2
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com
+OPENAI_API_URL=https://api.openai.com
+OPENAI_TIMEOUT_MS=180000
+LLM_TIMEOUT_MS=180000
+LLM_PING_TIMEOUT_MS=5000
 N8N_BASE_URL=http://localhost:5678
 N8N_API_KEY=ihr-n8n-api-key
+TRAEFIK_HOST=hrtool.local
+TRAEFIK_ENTRYPOINT=websecure
+TRAEFIK_NETWORK=traefik
+TESSERACT_BIN=/opt/homebrew/opt/tesseract/bin/tesseract
+PDFTOPPM_BIN=/opt/homebrew/opt/poppler/bin/pdftoppm
 ```
+
+---
+
+## 🚀 Deployment mit Docker
+
+Das Projekt wird mit Traefik als Ingress ausgeliefert, inklusive optionalem lokalen Ollama-Service.
+Standard ist der Remote-Ollama-Pfad über `OLLAMA_BASE_URL`.
+
+Für lokale Container-Nutzung kann über das Profil ein lokaler Ollama-Container gestartet werden.
+
+Plattformsdetails: siehe `dockerization-documents/platform-reference.md`.
+
+### Voraussetzungen
+
+- Docker Engine 24+ / Docker Compose
+- Zugang zu einer Traefik-Installation auf dem Zielhost (`websecure` EntryPoint, gültige TLS-Konfiguration)
+- Zielpfad nach Plattformstandard: `/srv/deployments/hrtool`
+
+### Schnellstart
+
+```bash
+cp .env.example .env
+# Werte prüfen/anpassen (v. a. JWT_SECRET, LLM-/TLS-/Netzwerk-Parameter)
+docker compose up -d --build
+```
+
+### Wichtige env-Variablen für Containerbetrieb
+
+- `TRAEFIK_HOST`: Hostname unter dem HRTool erreichbar ist (z. B. `hrtool.example.com`)
+- `TRAEFIK_ENTRYPOINT`: Standard `websecure`
+- `TRAEFIK_NETWORK`: Name des bereits vorhandenen Traefik-Netzwerks (Standard `traefik`)
+
+### Optionaler lokaler Ollama-Container
+
+Standardmäßig wird ein lokaler Ollama-Service nur gestartet, wenn das Profil aktiv ist:
+
+```bash
+LLM_PROVIDER=ollama
+docker compose --profile local-ollama up -d --build
+```
+
+Für externe OpenAI-kompatible Endpunkte:
+
+```bash
+LLM_PROVIDER=openai-compatible
+OPENAI_BASE_URL=https://api.openai.com
+OPENAI_API_KEY=sk-...
+```
+
+### Healthchecks
+
+- Backend: `http://<backend>:3001/api/health`
+- Frontend: `http://<frontend>/health`
+- Optionaler Ollama-Container: `ollama ps` via Compose-Healthcheck
+
+### Wartung / Backup
+
+- Datenbackup (SQLite): `docker run --rm -v hrtool_data:/data -v $(pwd):/backup busybox cp /data/hrtool.db /backup/hrtool.db`
+- Updates: `git pull`, `docker compose pull`, `docker compose up -d --build`
+- Logs: `docker compose logs -f backend` oder `docker compose logs -f frontend`
+
+Ausführlichere Deployment-Hinweise stehen in [`docs/deployment.md`](docs/deployment.md).
 
 ---
 
@@ -287,7 +365,7 @@ N8N_API_KEY=ihr-n8n-api-key
 
 | Technologie | Zweck |
 |-------------|-------|
-| **Ollama** | Lokales LLM (llama3.2) für alle KI-Features |
+| **Ollama / OpenAI-kompatible API** | Lokale oder externe LLM-Anbindungen für KI-Features |
 | **n8n** | Workflow-Automation (optional, für CV-Parser & Matching) |
 | **Tesseract OCR** | Texterkennung in gescannten PDFs |
 | **Poppler** | PDF-zu-Bild-Konvertierung |
@@ -420,8 +498,8 @@ HRTool ist ideal für:
 
 ## 🔒 Datenschutz & Sicherheit
 
-- ✅ **Lokale KI** — Alle KI-Verarbeitungen laufen auf Ihrem eigenen Server
-- ✅ **Keine Cloud-Abhängigkeit** — Vollständig selbst gehostet
+- ✅ **Flexible KI-Verarbeitung** — Lokal (Ollama) oder OpenAI-kompatibel konfigurierbar
+- ✅ **Keine ungewollte Cloud-Abhängigkeit** — KI-Provider wird explizit per Umgebungsvariablen gesetzt
 - ✅ **DSGVO-konform** — Konfigurierbare Löschfristen, Anonymisierung
 - ✅ **Audit-Trail** — Jede Aktion nachvollziehbar
 - ✅ **Verschlüsselte Passwörter** — bcrypt-Hashing

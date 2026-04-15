@@ -3,6 +3,7 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { callLlm, checkLlmHealth } = require('../services/llmClient');
 
 const router = express.Router();
 
@@ -39,16 +40,16 @@ router.get('/templates', (req, res) => {
     let templates;
     if (job_id) {
       templates = db.prepare(`
-        SELECT st.*, j.title as job_title 
-        FROM scorecard_templates st 
+        SELECT st.*, j.title as job_title
+        FROM scorecard_templates st
         LEFT JOIN jobs j ON j.id = st.job_id
         WHERE st.job_id = ? OR st.job_id IS NULL
         ORDER BY st.created_at DESC
       `).all(job_id);
     } else {
       templates = db.prepare(`
-        SELECT st.*, j.title as job_title 
-        FROM scorecard_templates st 
+        SELECT st.*, j.title as job_title
+        FROM scorecard_templates st
         LEFT JOIN jobs j ON j.id = st.job_id
         ORDER BY st.created_at DESC
       `).all();
@@ -72,8 +73,8 @@ router.get('/templates', (req, res) => {
 router.get('/templates/:id', (req, res) => {
   try {
     const template = db.prepare(`
-      SELECT st.*, j.title as job_title 
-      FROM scorecard_templates st 
+      SELECT st.*, j.title as job_title
+      FROM scorecard_templates st
       LEFT JOIN jobs j ON j.id = st.job_id
       WHERE st.id = ?
     `).get(req.params.id);
@@ -96,11 +97,11 @@ router.post('/templates', (req, res) => {
   try {
     const { job_id, title, questions, ai_generated } = req.body;
     if (!title) return res.status(400).json({ error: 'Titel ist erforderlich' });
-    
+
     const result = db.prepare(
       'INSERT INTO scorecard_templates (job_id, title, questions, ai_generated, created_by) VALUES (?, ?, ?, ?, ?)'
     ).run(job_id || null, title, JSON.stringify(questions || []), ai_generated ? 1 : 0, req.user?.id || null);
-    
+
     logAudit(req, 'scorecard-template-erstellt', 'ScorecardTemplate', result.lastInsertRowid, title, { job_id, questionCount: (questions || []).length });
     res.json({ id: result.lastInsertRowid, success: true });
   } catch (err) {
@@ -159,13 +160,13 @@ router.get('/responses', (req, res) => {
     const { candidate_id, interview_id, template_id } = req.query;
     const conditions = [];
     const params = [];
-    
+
     if (candidate_id) { conditions.push('sr.candidate_id = ?'); params.push(candidate_id); }
     if (interview_id) { conditions.push('sr.interview_id = ?'); params.push(interview_id); }
     if (template_id) { conditions.push('sr.template_id = ?'); params.push(template_id); }
-    
+
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-    
+
     let responses = db.prepare(`
       SELECT sr.*, st.title as template_title, st.questions as template_questions,
         c.name as candidate_name
@@ -175,13 +176,13 @@ router.get('/responses', (req, res) => {
       ${where}
       ORDER BY sr.created_at DESC
     `).all(...params);
-    
+
     responses = responses.map(r => ({
       ...r,
       answers: JSON.parse(r.answers || '[]'),
       template_questions: JSON.parse(r.template_questions || '[]'),
     }));
-    
+
     res.json({ data: responses });
   } catch (err) {
     console.error('Error fetching responses:', err);
@@ -202,20 +203,20 @@ router.post('/responses', (req, res) => {
     if (!template_id || !candidate_id || !evaluator_name) {
       return res.status(400).json({ error: 'Template, Kandidat und Bewerter-Name sind erforderlich' });
     }
-    
+
     // Calculate total score (average of all answer scores)
     const answerList = answers || [];
     const scores = answerList.map(a => a.score).filter(s => typeof s === 'number');
     const total_score = scores.length > 0 ? Math.round((scores.reduce((s, v) => s + v, 0) / scores.length) * 100) / 100 : null;
-    
+
     const result = db.prepare(
       'INSERT INTO scorecard_responses (template_id, interview_id, pipeline_entry_id, candidate_id, evaluator_name, answers, total_score, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(template_id, interview_id || null, pipeline_entry_id || null, candidate_id, evaluator_name, JSON.stringify(answerList), total_score, notes || null);
-    
+
     logAudit(req, 'scorecard-bewertet', 'ScorecardResponse', result.lastInsertRowid, evaluator_name, {
       template_id, candidate_id, total_score,
     });
-    
+
     res.json({ id: result.lastInsertRowid, total_score, success: true });
   } catch (err) {
     console.error('Error creating response:', err);
@@ -252,7 +253,7 @@ router.get('/responses/compare', (req, res) => {
   try {
     const { candidate_id } = req.query;
     if (!candidate_id) return res.status(400).json({ error: 'candidate_id ist erforderlich' });
-    
+
     let responses = db.prepare(`
       SELECT sr.*, st.title as template_title, st.questions as template_questions
       FROM scorecard_responses sr
@@ -260,13 +261,13 @@ router.get('/responses/compare', (req, res) => {
       WHERE sr.candidate_id = ?
       ORDER BY sr.created_at ASC
     `).all(candidate_id);
-    
+
     responses = responses.map(r => ({
       ...r,
       answers: JSON.parse(r.answers || '[]'),
       template_questions: JSON.parse(r.template_questions || '[]'),
     }));
-    
+
     // Calculate average per question across all evaluators
     const questionAverages = {};
     for (const resp of responses) {
@@ -281,11 +282,11 @@ router.get('/responses/compare', (req, res) => {
       avgScore: q.scores.length > 0 ? Math.round((q.scores.reduce((s, v) => s + v, 0) / q.scores.length) * 100) / 100 : null,
       evaluations: q.scores.length,
     }));
-    
+
     const overallAvg = responses.length > 0
       ? Math.round((responses.reduce((s, r) => s + (r.total_score || 0), 0) / responses.length) * 100) / 100
       : null;
-    
+
     res.json({ responses, averages, overallAverage: overallAvg, evaluatorCount: responses.length });
   } catch (err) {
     console.error('Error comparing responses:', err);
@@ -303,19 +304,18 @@ router.get('/responses/compare', (req, res) => {
 router.post('/generate-questions', generatorRateLimiter, promptGuard('interview-questions'), async (req, res) => {
   try {
     const { job_id, candidate_id, question_count } = req.body;
-    
+
     // Load job and candidate data
     const job = job_id ? db.prepare('SELECT * FROM jobs WHERE id = ?').get(job_id) : null;
     const candidate = candidate_id ? db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidate_id) : null;
-    
+
     if (!job && !candidate) {
       return res.status(400).json({ error: 'Mindestens eine Stelle oder ein Kandidat ist erforderlich' });
     }
-    
-    const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+
+    const OLLAMA_MODEL = process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2';
     const count = Math.min(Math.max(3, parseInt(question_count) || 8), 15);
-    
+
     const prompt = `Du bist ein erfahrener HR-Experte und Interviewer. Erstelle ${count} strukturierte Interviewfragen.
 
 ${job ? `STELLE:
@@ -339,34 +339,27 @@ Erstelle Fragen in diesen Kategorien:
 Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
 {"questions": [{"text": "Frage hier", "category": "Fachkompetenz|Soft Skills|Motivation|Erfahrung", "hint": "Worauf bei der Antwort achten"}]}`;
 
-    // Check Ollama reachability
+    // Check LLM reachability
     try {
-      const pingController = new AbortController();
-      setTimeout(() => pingController.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingController.signal });
+      const health = await checkLlmHealth();
+      if (!health.ok) {
+        return res.status(502).json({ error: `LLM ist nicht erreichbar (HTTP ${health.status}).` });
+      }
     } catch (pingErr) {
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+      console.error('LLM not reachable:', pingErr.message);
+      return res.status(502).json({ error: 'LLM ist nicht erreichbar. Bitte Provider-URL und Konfiguration prüfen.' });
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000);
     const startTime = Date.now();
-
-    let response;
+    let llmResult;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          options: { temperature: 0.7, num_predict: 3000 }
-        }),
-        signal: controller.signal
+      llmResult = await callLlm({
+        prompt,
+        responseFormat: 'json',
+        options: { temperature: 0.7, max_tokens: 3000 },
+        timeoutMs: 180000,
       });
     } catch (fetchErr) {
-      clearTimeout(timeoutId);
       logAiCall({
         userId: req.user?.id, feature: 'interview-questions', model: OLLAMA_MODEL,
         prompt, durationMs: Date.now() - startTime, success: false,
@@ -376,22 +369,19 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
         return res.status(504).json({ error: 'Timeout: Die Generierung hat zu lange gedauert.' });
       }
       throw fetchErr;
-    } finally {
-      clearTimeout(timeoutId);
     }
 
-    if (!response.ok) {
-      const errText = await response.text();
+    if (!llmResult.ok) {
+      const errText = llmResult.rawResponseText;
       logAiCall({
         userId: req.user?.id, feature: 'interview-questions', model: OLLAMA_MODEL,
         prompt, response: errText, durationMs: Date.now() - startTime, success: false,
-        errorMessage: `Ollama Status ${response.status}`,
+        errorMessage: `LLM Status ${llmResult.status}`,
       });
-      return res.status(502).json({ error: 'Ollama-Fehler: ' + errText });
+      return res.status(502).json({ error: 'LLM-Fehler: ' + (errText || 'Unbekannter Fehler') });
     }
 
-    const data = await response.json();
-    const responseText = data.response || '';
+    const responseText = llmResult.text || '';
     const duration = Date.now() - startTime;
 
     // Parse JSON from response
@@ -401,7 +391,7 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        questions = Array.isArray(parsed.questions) ? parsed.questions : 
+        questions = Array.isArray(parsed.questions) ? parsed.questions :
           Array.isArray(parsed.fragen) ? parsed.fragen : [];
       }
     } catch (parseErr) {
@@ -419,18 +409,18 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
     }));
 
     logAiCall({
-      userId: req.user?.id, feature: 'interview-questions', model: OLLAMA_MODEL,
+      userId: req.user?.id, feature: 'interview-questions', model: llmResult.model,
       prompt, response: responseText,
       parsedResult: { questionCount: questions.length },
-      durationMs: duration, inputTokens: data.prompt_eval_count ?? null,
-      outputTokens: data.eval_count ?? null, success: true,
+      durationMs: duration, inputTokens: llmResult.inputTokens ?? null,
+      outputTokens: llmResult.outputTokens ?? null, success: true,
     });
 
     logAudit(req, 'ki-interviewfragen-generiert', 'Scorecard', null, job?.title || 'Allgemein', {
-      model: OLLAMA_MODEL, questionCount: questions.length, candidate: candidate?.name,
+      model: llmResult.model, questionCount: questions.length, candidate: candidate?.name,
     });
 
-    res.json({ questions, model: OLLAMA_MODEL });
+    res.json({ questions, model: llmResult.model });
   } catch (err) {
     console.error('Error generating questions:', err);
     res.status(500).json({ error: 'Fehler bei der KI-Generierung' });

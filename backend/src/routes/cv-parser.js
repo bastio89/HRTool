@@ -4,12 +4,13 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const { logAiCall } = require('../aiLogger');
+const { callLlm, checkLlmHealth } = require('../services/llmClient');
 
 const router = express.Router();
 
-// System OCR tool paths (homebrew on macOS)
-const TESSERACT_BIN = '/opt/homebrew/opt/tesseract/bin/tesseract';
-const PDFTOPPM_BIN = '/opt/homebrew/opt/poppler/bin/pdftoppm';
+// OCR tool paths can be overridden via env for container/manual runtime compatibility
+const TESSERACT_BIN = process.env.TESSERACT_BIN || '/opt/homebrew/opt/tesseract/bin/tesseract';
+const PDFTOPPM_BIN = process.env.PDFTOPPM_BIN || '/opt/homebrew/opt/poppler/bin/pdftoppm';
 
 // Temp uploads directory
 const tmpDir = path.join(__dirname, '..', '..', 'data', 'tmp');
@@ -314,29 +315,26 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
 
     sendProgress('extract_done', `${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert`, 35);
 
-    console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an Ollama...`);
+    console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an LLM...`);
 
-    // 2. Call Ollama directly for AI extraction
-    const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    // 2. Call configured LLM provider for AI extraction
 
     const prompt = buildExtractionPrompt(combinedText.trim(), filenames);
 
     // Quick reachability check
-    sendProgress('ollama_connect', `Verbindung zu Ollama (${OLLAMA_MODEL})...`, 40);
+    sendProgress('llm_connect', `Verbindung zur LLM-Inferenz (${process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2'})...`, 40);
     try {
-      const pingCtrl = new AbortController();
-      setTimeout(() => pingCtrl.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingCtrl.signal });
+      const health = await checkLlmHealth();
+      if (!health.ok) {
+        return sendError(502, { error: `LLM ist nicht erreichbar (HTTP ${health.status}).` });
+      }
     } catch (pingErr) {
-      console.error('Ollama not reachable:', pingErr.message);
-      return sendError(502, { error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft (ollama serve).' });
+      console.error('LLM not reachable:', pingErr.message);
+      return sendError(502, { error: 'LLM ist nicht erreichbar. Bitte Provider prüfen.' });
     }
 
-    sendProgress('ollama_analyze', `KI analysiert ${combinedText.length} Zeichen Text mit ${OLLAMA_MODEL}...`, 50);
+    sendProgress('llm_analyze', `KI analysiert ${combinedText.length} Zeichen Text...`, 50);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min for large docs
     const startTime = Date.now();
 
     // Send periodic progress updates during Ollama processing
@@ -347,27 +345,21 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       sendProgress('ollama_analyze', `KI analysiert... (${elapsed}s)`, ollamaProgress);
     }, 3000);
 
-    let response;
+    let llmResult;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          options: { temperature: 0.1, num_predict: 4096 }
-        }),
-        signal: controller.signal,
+      llmResult = await callLlm({
+        prompt,
+        responseFormat: 'json',
+        options: { temperature: 0.1, max_tokens: 4096 },
+        timeoutMs: 180000,
       });
     } catch (fetchErr) {
       clearInterval(progressInterval);
-      clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
       logAiCall({
         userId: req.user?.id,
         feature: 'cv-parser',
-        model: OLLAMA_MODEL,
+        model: process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2',
         prompt: prompt.substring(0, 500) + '...',
         response: null,
         parsedResult: null,
@@ -381,32 +373,29 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       throw fetchErr;
     }
     clearInterval(progressInterval);
-    clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Ollama CV-Parse error:', response.status, errText);
+    if (!llmResult.ok) {
+      console.error('LLM CV-Parse error:', llmResult.rawResponseText);
       logAiCall({
         userId: req.user?.id,
         feature: 'cv-parser',
-        model: OLLAMA_MODEL,
+        model: llmResult.model,
         prompt: prompt.substring(0, 500) + '...',
-        response: errText,
+        response: llmResult.rawResponseText,
         parsedResult: null,
         durationMs: Date.now() - startTime,
         success: false,
-        errorMessage: `Ollama Status ${response.status}: ${errText}`,
+        errorMessage: `LLM Status ${llmResult.status}`,
       });
-      return sendError(502, { error: 'Ollama-Fehler bei CV-Analyse', details: errText });
+      return sendError(502, { error: 'LLM-Fehler bei CV-Analyse', details: llmResult.rawResponseText });
     }
 
     sendProgress('ollama_done', 'KI-Analyse abgeschlossen, Ergebnis wird verarbeitet...', 90);
 
-    const data = await response.json();
-    const responseText = data.response || '';
+    const responseText = llmResult.text || '';
     const cvDuration = Date.now() - startTime;
 
-    console.log(`✅ CV-Parser: Ollama-Antwort erhalten (${cvDuration}ms, ${responseText.length} Zeichen)`);
+    console.log(`✅ CV-Parser: LLM-Antwort erhalten (${cvDuration}ms, ${responseText.length} Zeichen)`);
 
     // 3. Parse JSON from Ollama response
     let extracted = {};
@@ -462,7 +451,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     logAiCall({
       userId: req.user?.id,
       feature: 'cv-parser',
-      model: OLLAMA_MODEL,
+      model: llmResult.model,
       prompt: prompt.substring(0, 500) + '...',
       response: responseText.substring(0, 2000),
       parsedResult: extracted,

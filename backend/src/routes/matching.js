@@ -4,6 +4,7 @@ const { logAiCall } = require('../aiLogger');
 const { logAudit } = require('./audit');
 const { matchingRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { callLlm, checkLlmHealth } = require('../services/llmClient');
 
 const router = express.Router();
 
@@ -92,10 +93,6 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
 
     const startTime = Date.now();
 
-    // Direct Ollama call (replaces n8n webhook)
-    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
-
     const prompt = `Du bist ein erfahrener HR-Analyst. Analysiere die folgenden Bewerber für die gegebene Stelle und bewerte jeden mit einem Score von 0-100.
 
 Stellenbeschreibung:
@@ -129,53 +126,59 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
   ]
 }`;
 
-    // Check Ollama availability (3s timeout)
+    // Check LLM availability (short timeout)
     try {
-      const pingCtrl = new AbortController();
-      const pingTimeout = setTimeout(() => pingCtrl.abort(), 3000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingCtrl.signal });
-      clearTimeout(pingTimeout);
+      const health = await checkLlmHealth();
+      if (!health.ok) {
+        return res.status(503).json({ error: `LLM-Service nicht erreichbar (HTTP ${health.status}). Bitte LLM-Konfiguration prüfen.` });
+      }
     } catch {
-      return res.status(503).json({ error: 'Ollama nicht erreichbar. Bitte stellen Sie sicher, dass Ollama läuft (http://localhost:11434).' });
+      return res.status(503).json({ error: 'LLM ist nicht erreichbar. Bitte LLM-Provider-URL und Zugangsdaten prüfen.' });
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180000);
-
-    let response;
+    let llmResult;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false, format: 'json', options: { temperature: 0.2 } }),
+      llmResult = await callLlm({
+        prompt,
+        responseFormat: 'json',
+        options: { temperature: 0.2, max_tokens: 4096 },
+        timeoutMs: 180000,
       });
     } catch (fetchErr) {
-      clearTimeout(timeout);
       const duration = Date.now() - startTime;
-      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: duration, success: false, errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >180s' : fetchErr.message });
+      const model = process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2';
+      logAiCall({ userId: req.user?.id, feature: 'matching', model, prompt, response: null, parsedResult: null, durationMs: duration, success: false, errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >180s' : fetchErr.message });
       if (fetchErr.name === 'AbortError') {
         return res.status(504).json({ error: 'Ollama Timeout – Matching dauerte zu lange (>180s). Versuche es mit weniger Bewerbern.' });
       }
       throw fetchErr;
     }
-    clearTimeout(timeout);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: errText, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: `Ollama HTTP ${response.status}` });
-      return res.status(502).json({ error: `Ollama-Fehler: Status ${response.status}`, details: errText });
+    if (!llmResult.ok) {
+      logAiCall({
+        userId: req.user?.id,
+        feature: 'matching',
+        model: llmResult.model,
+        prompt,
+        response: llmResult.rawResponseText || '',
+        parsedResult: null,
+        durationMs: llmResult.durationMs,
+        success: false,
+        errorMessage: `LLM HTTP ${llmResult.status}`,
+      });
+      return res.status(502).json({ error: `LLM-Fehler: Status ${llmResult.status}`, details: llmResult.rawResponseText });
     }
 
-    const raw = await response.text();
-    const matchingDuration = Date.now() - startTime;
+    const raw = llmResult.text || '';
+    const matchingDuration = llmResult.durationMs;
 
     let matchingResults;
     try {
-      const data = JSON.parse(raw);
-      matchingResults = JSON.parse(data.response);
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      const parsedPayload = jsonMatch ? jsonMatch[0] : raw;
+      matchingResults = JSON.parse(parsedPayload);
     } catch (parseErr) {
-      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: matchingDuration, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
+      logAiCall({ userId: req.user?.id, feature: 'matching', model: llmResult.model, prompt, response: raw, parsedResult: null, durationMs: matchingDuration, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
       return res.status(502).json({ error: 'Ollama-Antwort konnte nicht verarbeitet werden', details: parseErr.message });
     }
 
@@ -188,7 +191,7 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
       }));
     }
 
-    logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: matchingResults, durationMs: matchingDuration, success: true });
+    logAiCall({ userId: req.user?.id, feature: 'matching', model: llmResult.model, prompt, response: raw, parsedResult: matchingResults, durationMs: matchingDuration, success: true });
 
     // Save results (mit echten Namen)
     const saveResult = db.prepare(`
@@ -200,7 +203,7 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
       candidateCount: candidates.length,
       topScore: matchingResults.results?.[0]?.score,
       durationMs: matchingDuration,
-      model: OLLAMA_MODEL,
+      model: llmResult.model,
     });
 
     res.json({
@@ -212,7 +215,7 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
     });
   } catch (error) {
     console.error('Error running matching:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Fehler beim Matching',
       details: error.message
     });
@@ -233,12 +236,12 @@ router.get('/history', (req, res) => {
     const results = db.prepare(
       'SELECT id, job_title, created_at, results, human_reviewed, reviewed_by, reviewed_at, review_notes FROM matching_results ORDER BY created_at DESC LIMIT 50'
     ).all();
-    
+
     const parsed = results.map(r => ({
       ...r,
       results: JSON.parse(r.results),
     }));
-    
+
     res.json({ data: parsed });
   } catch (error) {
     console.error('Error fetching matching history:', error);
@@ -267,8 +270,8 @@ router.get('/history/:id', (req, res) => {
     if (!result) {
       return res.status(404).json({ error: 'Ergebnis nicht gefunden' });
     }
-    res.json({ 
-      ...result, 
+    res.json({
+      ...result,
       results: JSON.parse(result.results),
       human_reviewed: !!result.human_reviewed,
       reviewed_by: result.reviewed_by,
@@ -337,7 +340,7 @@ router.put('/history/:id/review', (req, res) => {
     if (!result) return res.status(404).json({ error: 'Ergebnis nicht gefunden' });
 
     db.prepare(`
-      UPDATE matching_results 
+      UPDATE matching_results
       SET human_reviewed = 1, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, review_notes = ?
       WHERE id = ?
     `).run(req.user?.display_name || req.user?.username || 'Unbekannt', notes || null, req.params.id);

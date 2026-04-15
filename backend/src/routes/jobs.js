@@ -4,6 +4,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { callLlm, checkLlmHealth } = require('../services/llmClient');
 
 const router = express.Router();
 
@@ -29,24 +30,24 @@ const router = express.Router();
 router.get('/', (req, res) => {
   try {
     const { status, page, limit } = req.query;
-    
+
     let whereClause = '';
     const params = [];
     if (status) {
       whereClause = ' WHERE j.status = ?';
       params.push(status);
     }
-    
+
     // Total count
     const total = db.prepare(`SELECT COUNT(*) as count FROM jobs j${whereClause}`).get(...params).count;
-    
+
     let query = `
-      SELECT j.*, 
+      SELECT j.*,
         (SELECT COUNT(*) FROM pipeline_entries WHERE job_id = j.id) as candidate_count
       FROM jobs j${whereClause}
       ORDER BY j.created_at DESC
     `;
-    
+
     const queryParams = [...params];
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
@@ -54,7 +55,7 @@ router.get('/', (req, res) => {
       query += ' LIMIT ? OFFSET ?';
       queryParams.push(limitNum, (pageNum - 1) * limitNum);
     }
-    
+
     const jobs = db.prepare(query).all(...queryParams);
     res.json({
       data: jobs,
@@ -86,7 +87,7 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   try {
     const job = db.prepare(`
-      SELECT j.*, 
+      SELECT j.*,
         (SELECT COUNT(*) FROM pipeline_entries WHERE job_id = j.id) as candidate_count
       FROM jobs j WHERE j.id = ?
     `).get(req.params.id);
@@ -215,9 +216,6 @@ router.post('/generate-description', generatorRateLimiter, promptGuard('job-gene
       return res.status(400).json({ error: 'Jobtitel oder Stichpunkte erforderlich' });
     }
 
-    const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
-
     const prompt = `Du bist ein HR-Experte. Erstelle eine Stellenausschreibung auf Deutsch.
 
 Jobtitel: ${title || 'Nicht angegeben'}
@@ -230,41 +228,32 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown, ohne Erklärung):
 
 Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Werte sind Strings.`;
 
-    // First check if Ollama is reachable at all (quick 5s check)
+    // First check if LLM provider is reachable at all (quick 5s check)
     try {
-      const pingController = new AbortController();
-      setTimeout(() => pingController.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingController.signal });
+      const health = await checkLlmHealth();
+      if (!health.ok) {
+        return res.status(502).json({ error: `LLM ist nicht erreichbar (HTTP ${health.status}).` });
+      }
     } catch (pingErr) {
-      console.error('Ollama not reachable:', pingErr.message);
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+      console.error('LLM not reachable:', pingErr.message);
+      return res.status(502).json({ error: 'LLM ist nicht erreichbar. Bitte URL/Netzwerk und Zugangsdaten prüfen.' });
     }
 
-    // Send generation request with 180s timeout (large models need time to load)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000);
-
     const startTime = Date.now();
-    let response;
+    let llmResult;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          options: { temperature: 0.7, num_predict: 2048 }
-        }),
-        signal: controller.signal
+      llmResult = await callLlm({
+        prompt,
+        responseFormat: 'json',
+        options: { temperature: 0.7, max_tokens: 2048 },
+        timeoutMs: 180000,
       });
     } catch (fetchErr) {
-      clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
       logAiCall({
         userId: req.user?.id,
         feature: 'job-generator',
-        model: OLLAMA_MODEL,
+        model: process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2',
         prompt,
         response: null,
         parsedResult: null,
@@ -277,28 +266,26 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
       }
       throw fetchErr;
     } finally {
-      clearTimeout(timeoutId);
+      // no-op
     }
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Ollama error:', errText);
+    if (!llmResult.ok) {
+      console.error('LLM error:', llmResult.rawResponseText);
       logAiCall({
         userId: req.user?.id,
         feature: 'job-generator',
-        model: OLLAMA_MODEL,
+        model: llmResult.model,
         prompt,
-        response: errText,
+        response: llmResult.rawResponseText,
         parsedResult: null,
         durationMs: Date.now() - startTime,
         success: false,
-        errorMessage: `Ollama Status ${response.status}: ${errText}`,
+        errorMessage: `LLM Status ${llmResult.status}`,
       });
-      return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
+      return res.status(502).json({ error: 'LLM-Fehler: ' + (llmResult.rawResponseText || 'Unbekannter Fehler') });
     }
 
-    const data = await response.json();
-    const responseText = data.response || '';
+    const responseText = llmResult.text || '';
     const generationDuration = Date.now() - startTime;
 
     // Parse JSON from response (handle markdown wrapping, German keys, nested structures)
@@ -306,15 +293,15 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     try {
       // Strip markdown code blocks if present
       let cleanText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-      
+
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const raw = JSON.parse(jsonMatch[0]);
-        
+
         // Handle both English and German keys
         const desc = raw.description || raw.Beschreibung || raw.beschreibung || '';
         let req = raw.requirements || raw.Anforderungen || raw.anforderungen || '';
-        
+
         // If description is itself a nested JSON string, parse it
         if (typeof desc === 'string' && desc.trim().startsWith('{')) {
           try {
@@ -325,7 +312,7 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
         } else {
           parsed.description = typeof desc === 'string' ? desc : JSON.stringify(desc);
         }
-        
+
         // Handle requirements as array or object
         if (Array.isArray(req)) {
           parsed.requirements = req.map(r => typeof r === 'string' ? `• ${r}` : `• ${JSON.stringify(r)}`).join('\n');
@@ -362,7 +349,7 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     };
 
     logAudit(req, 'ki-generierung', 'Job', null, title, {
-      model: OLLAMA_MODEL,
+      model: llmResult.model,
       keywords: keywords?.slice(0, 200)
     });
 
@@ -373,20 +360,20 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     logAiCall({
       userId: req.user?.id,
       feature: 'job-generator',
-      model: OLLAMA_MODEL,
+      model: llmResult.model,
       prompt,
       response: responseText,
       parsedResult: { description: finalDescription, requirements: finalRequirements },
       durationMs: generationDuration,
-      inputTokens: data.prompt_eval_count ?? null,
-      outputTokens: data.eval_count ?? null,
+      inputTokens: llmResult.inputTokens,
+      outputTokens: llmResult.outputTokens,
       success: true,
     });
 
     res.json({
       description: finalDescription,
       requirements: finalRequirements,
-      model: OLLAMA_MODEL
+      model: llmResult.model
     });
   } catch (error) {
     console.error('Error generating job description:', error);

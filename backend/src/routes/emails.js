@@ -5,6 +5,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { callLlm, checkLlmHealth } = require('../services/llmClient');
 
 const router = express.Router();
 
@@ -488,9 +489,6 @@ router.post('/generate-template', generatorRateLimiter, promptGuard('email-templ
       return res.status(400).json({ error: 'Zweck des Templates ist erforderlich' });
     }
 
-    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
-
     const smtp = getSmtpSettings();
     const companyName = smtp.email_company_name || 'Unser Unternehmen';
 
@@ -504,7 +502,7 @@ Unternehmen: ${companyName}
 Verwende diese Platzhalter im Text:
 - {{anrede}} = Korrekte Anrede (z.B. "Sehr geehrte Frau Hannot" oder "Sehr geehrter Herr Müller"). IMMER als Briefanrede nutzen!
 - {{vorname}} = Vorname des Bewerbers
-- {{nachname}} = Nachname des Bewerbers  
+- {{nachname}} = Nachname des Bewerbers
 - {{stelle}} = Stellenbezeichnung
 - {{unternehmen}} = Unternehmensname
 - {{datum}} = aktuelles Datum
@@ -518,51 +516,42 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
 
     const startTime = Date.now();
 
-    // Ping Ollama
+    // Ping LLM provider
     try {
-      const pc = new AbortController();
-      setTimeout(() => pc.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pc.signal });
+      const health = await checkLlmHealth();
+      if (!health.ok) {
+        logAiCall({ userId: req.user?.id, feature: 'email-template', model: process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2', prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: `LLM HTTP ${health.status}` });
+        return res.status(502).json({ error: `LLM ist nicht erreichbar (HTTP ${health.status}).` });
+      }
     } catch (_) {
-      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Ollama nicht erreichbar' });
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2', prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'LLM nicht erreichbar' });
+      return res.status(502).json({ error: 'LLM ist nicht erreichbar. Bitte Provider-URL und Zugangsdaten prüfen.' });
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-    let response;
+    let llmResult;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          options: { temperature: 0.7, num_predict: 1500 }
-        }),
-        signal: controller.signal
+      llmResult = await callLlm({
+        prompt,
+        responseFormat: 'json',
+        options: { temperature: 0.7, max_tokens: 1500 },
+        timeoutMs: 120000,
       });
     } catch (err) {
-      clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
-        logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Timeout' });
+        logAiCall({ userId: req.user?.id, feature: 'email-template', model: process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2', prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Timeout' });
         return res.status(504).json({ error: 'Timeout: KI-Generierung hat zu lange gedauert.' });
       }
       throw err;
     } finally {
-      clearTimeout(timeoutId);
+      // no-op
     }
 
-    if (!response.ok) {
-      const errText = await response.text();
-      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: errText, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Ollama HTTP ' + response.status });
-      return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
+    if (!llmResult.ok) {
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: llmResult.model, prompt, response: llmResult.rawResponseText || '', parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: `LLM HTTP ${llmResult.status}` });
+      return res.status(502).json({ error: 'LLM-Fehler: ' + (llmResult.rawResponseText || 'Unbekannter Fehler') });
     }
 
-    const data = await response.json();
-    const raw = data.response || '';
+    const raw = llmResult.text || '';
 
     let parsed = { name: '', subject: '', body: '' };
     try {
@@ -576,19 +565,19 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
         throw new Error('Kein JSON in Antwort');
       }
     } catch (parseErr) {
-      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: Date.now() - startTime, inputTokens: data.prompt_eval_count || null, outputTokens: data.eval_count || null, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: llmResult.model, prompt, response: raw, parsedResult: null, durationMs: Date.now() - startTime, inputTokens: llmResult.inputTokens || null, outputTokens: llmResult.outputTokens || null, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
       return res.status(502).json({ error: 'KI-Antwort konnte nicht verarbeitet werden: ' + parseErr.message });
     }
 
     const durationMs = Date.now() - startTime;
-    logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: parsed, durationMs, inputTokens: data.prompt_eval_count || null, outputTokens: data.eval_count || null, success: true });
-    logAudit(req, 'ki-email-template', 'EmailTemplate', null, parsed.name, { purpose, model: OLLAMA_MODEL });
+    logAiCall({ userId: req.user?.id, feature: 'email-template', model: llmResult.model, prompt, response: raw, parsedResult: parsed, durationMs, inputTokens: llmResult.inputTokens || null, outputTokens: llmResult.outputTokens || null, success: true });
+    logAudit(req, 'ki-email-template', 'EmailTemplate', null, parsed.name, { purpose, model: llmResult.model });
 
     res.json({
       name: parsed.name || parsed.Name || '',
       subject: parsed.subject || parsed.Subject || parsed.Betreff || parsed.betreff || '',
       body: parsed.body || parsed.Body || parsed.Text || parsed.text || '',
-      model: OLLAMA_MODEL,
+      model: llmResult.model,
     });
   } catch (err) {
     console.error('AI template generation error:', err);

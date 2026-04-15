@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { callLlm, getLlmConfig } = require('../services/llmClient');
 
 const router = express.Router();
 
@@ -103,7 +104,7 @@ router.get('/model-card', (req, res) => {
     }
 
     const modelStats = db.prepare(`
-      SELECT model, 
+      SELECT model,
              COUNT(*) as total_calls,
              SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
              ROUND(AVG(duration_ms)) as avg_duration_ms,
@@ -122,16 +123,20 @@ router.get('/model-card', (req, res) => {
       ORDER BY feature, count DESC
     `).all();
 
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const llmConfig = getLlmConfig();
+    const llmProvider = (llmConfig.provider || 'ollama').toLowerCase();
+    const isRemoteProvider = llmProvider === 'openai' || llmProvider === 'openai-compatible';
 
     const modelCard = {
       model: {
-        name: OLLAMA_MODEL,
-        provider: 'Ollama (lokal)',
+        name: llmConfig.model,
+        provider: isRemoteProvider
+          ? 'OpenAI-kompatibler API-Provider'
+          : 'Ollama (lokal)',
         type: 'Large Language Model (LLM)',
         architecture: 'Transformer-basiert',
-        deployment: 'On-Premise / lokale Ausführung',
-        endpoint: (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost'),
+        deployment: isRemoteProvider ? 'Remote API' : 'On-Premise / lokale Ausführung',
+        endpoint: llmConfig.baseUrl,
       },
       intendedUse: {
         primaryUses: [
@@ -152,8 +157,10 @@ router.get('/model-card', (req, res) => {
         inputDataTypes: ['Bewerberprofile (Name, Skills, Erfahrung)', 'Stellenbeschreibungen', 'Lebenslauf-Text (extrahiert)', 'Stichpunkte für Stellenbeschreibungen'],
         anonymization: 'Bewerbernamen werden beim Matching durch Platzhalter ersetzt (Kandidat 1, 2, 3...)',
         dataMinimization: 'Nur jobrelevante Felder werden übermittelt. Keine Adressen, Geburtsdaten oder Fotos.',
-        dataRetention: 'Alle KI-Aufrufe werden in der lokalen Datenbank protokolliert (ai_logs). Keine Cloud-Übertragung.',
-        thirdPartySharing: 'Nein — Das LLM läuft vollständig lokal via Ollama.',
+        dataRetention: 'Alle KI-Aufrufe werden in der lokalen Datenbank protokolliert (ai_logs).',
+        thirdPartySharing: isRemoteProvider
+          ? 'Daten können je nach Provider-Konfiguration an externe API-Endpunkte übertragen werden.'
+          : 'Nein — Das LLM läuft vollständig lokal via Ollama.',
       },
       performance: {
         modelStats,
@@ -384,7 +391,7 @@ router.get('/bias-testset', (req, res) => {
       { id: 'T20', name: 'Kandidat T', location: 'Mannheim', experience: '5 Jahre ML Engineer', skills: 'PyTorch, MLOps, Kubeflow, Python, Spark', education: 'Ph.D. Informatik', source: 'Konferenz' },
     ];
 
-    // Check if we have past test results 
+    // Check if we have past test results
     const pastTests = db.prepare("SELECT * FROM ai_logs WHERE feature = 'bias-test' ORDER BY created_at DESC LIMIT 20").all();
 
     res.json({
@@ -411,8 +418,7 @@ router.post('/bias-testset/run', async (req, res) => {
       return res.status(400).json({ error: 'Stellenbeschreibung erforderlich' });
     }
 
-    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const OLLAMA_MODEL = process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2';
 
     // 20 diverse test profiles
     const testProfiles = [
@@ -440,7 +446,7 @@ router.post('/bias-testset/run', async (req, res) => {
 
     // Evaluate each candidate individually for reliability with small models
     const start = Date.now();
-    const CONCURRENCY = 4; // parallel requests to Ollama
+    const CONCURRENCY = 4; // parallel requests to configured LLM
 
     async function evaluateCandidate(profile) {
       const singlePrompt = `Du bist ein HR-Matching-System. Bewerte die Passung dieses Kandidaten zur folgenden Stelle.
@@ -458,14 +464,13 @@ Antworte als JSON: {"score": 0.75, "reasoning": "Kurze Begründung"}
 Score von 0.0 (keine Passung) bis 1.0 (perfekte Passung).`;
 
       try {
-        const resp = await fetch(`${OLLAMA_URL}/api/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: OLLAMA_MODEL, prompt: singlePrompt, stream: false, format: 'json', options: { temperature: 0.3 } }),
+        const llmResult = await callLlm({
+          prompt: singlePrompt,
+          responseFormat: 'json',
+          options: { temperature: 0.3 },
         });
-        if (!resp.ok) return { score: null, reasoning: null };
-        const d = await resp.json();
-        const raw = d.response || '';
+        if (!llmResult.ok) return { score: null, reasoning: null };
+        const raw = llmResult.text || '';
         const parsed = JSON.parse(raw);
         const score = typeof parsed.score === 'number' ? Math.max(0, Math.min(1, parsed.score)) : null;
         return { score, reasoning: parsed.reasoning || null };
@@ -662,7 +667,7 @@ router.get('/bias-alerts', (req, res) => {
     if (allScores.length > 5) {
       const avg = allScores.reduce((a, b) => a + b, 0) / allScores.length;
       const stdDev = Math.sqrt(allScores.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / allScores.length);
-      
+
       // Alert if scores cluster too tightly (no differentiation)
       if (stdDev < 5 && allScores.length > 10) {
         alerts.push({
@@ -757,7 +762,7 @@ router.get('/bias-alerts', (req, res) => {
         id: 'BA-006', type: 'reliability', severity: 'critical', createdAt: new Date().toISOString(),
         title: 'Hohe KI-Fehlerrate',
         message: `${Math.round(errors / total7d * 100)}% der KI-Aufrufe in den letzten 7 Tagen sind fehlgeschlagen (${errors}/${total7d}).`,
-        recommendation: 'Prüfen Sie die Ollama-Verbindung und Modellkonfiguration.',
+        recommendation: 'Prüfen Sie die LLM-Verbindung, Provider-Einstellungen und Modellkonfiguration.',
         metric: { errorRate: Math.round(errors / total7d * 100), errors, total: total7d },
       });
     }
@@ -930,7 +935,7 @@ router.get('/stats/bias-report', (req, res) => {
 
     // Score by candidate location (from pipeline data cross-referencing)
     const locationAnalysis = db.prepare(`
-      SELECT c.location, 
+      SELECT c.location,
              COUNT(*) as total_in_matchings,
              AVG(CASE WHEN pe.stage = 'Hired' THEN 1 ELSE 0 END) * 100 as hired_rate
       FROM candidates c
@@ -1028,7 +1033,7 @@ router.get('/compliance/checklist', (req, res) => {
     const logsWithUser = db.prepare('SELECT COUNT(*) as count FROM ai_logs WHERE user_id IS NOT NULL').get().count;
 
     const matchingAnonymized = db.prepare(`
-      SELECT COUNT(*) as count FROM ai_logs 
+      SELECT COUNT(*) as count FROM ai_logs
       WHERE feature = 'matching' AND success = 1 AND (prompt LIKE '%Kandidat 1%' OR prompt LIKE '%Kandidat 2%')
     `).get().count;
     const matchingTotal = db.prepare(`
@@ -1056,6 +1061,12 @@ router.get('/compliance/checklist', (req, res) => {
     const aiCallsLastHour = db.prepare(`
       SELECT COUNT(*) as count FROM ai_logs WHERE created_at >= datetime('now', '-1 hour')
     `).get().count;
+
+    const llmConfig = getLlmConfig();
+    const isRemoteProvider = (llmConfig.provider || 'ollama') !== 'ollama';
+    const dataGovernanceDetails = isRemoteProvider
+      ? 'Bei externem LLM-Provider können Daten je nach API-Konfiguration an den Provider übertragen werden. Die Datenminimierung bleibt in der Anwendung aktiv.'
+      : 'Datenminimierung aktiv: Nur jobspezifische Felder werden an das LLM übermittelt. Keine sensiblen Daten (Adresse, Geburtsdatum).';
 
     const checks = [
       {
@@ -1117,10 +1128,12 @@ router.get('/compliance/checklist', (req, res) => {
       {
         id: 'local-processing',
         article: 'Art. 10/25',
-        title: 'Lokale Verarbeitung',
-        description: 'LLM läuft lokal (Ollama) — keine Datenübertragung an Dritte',
+        title: isRemoteProvider ? 'Externer LLM-Provider' : 'Lokale Verarbeitung',
+        description: isRemoteProvider
+          ? 'LLM-Provider ist extern konfiguriert; Datenfluss erfolgt nach der konfigurierten Ziel-API.'
+          : 'LLM verarbeitet lokal in der gleichen Umgebung.',
         status: 'passed',
-        details: 'Ollama verarbeitet alle Anfragen lokal. Keine Cloud-API-Aufrufe.',
+        details: dataGovernanceDetails,
       },
       {
         id: 'user-tracking',

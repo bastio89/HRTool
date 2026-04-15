@@ -1,0 +1,98 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: hrtool/backend:local
+    container_name: hrtool-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-3001}
+      NODE_ENV: production
+      # Remote-Ollama standardmäßig nutzen; lokaler Service nur bei aktivem Profil
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://10.13.13.130:11434}
+    volumes:
+      - hrtool_data:/app/data
+    networks:
+      - traefik
+      - hrtool_internal
+    healthcheck:
+      test: ["CMD", "node", "-e", "const port = process.env.PORT || 3001; const url = 'http://127.0.0.1:' + port + '/api/health'; fetch(url).then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.hrtool-api.rule=Host(`${TRAEFIK_HOST:-hrtool.local}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.hrtool-api.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.hrtool-api.tls=true"
+      - "traefik.http.routers.hrtool-api.tls.certresolver=myresolver"
+      - "traefik.http.services.hrtool-api.loadbalancer.server.port=3001"
+      - "traefik.http.services.hrtool-api.loadbalancer.passHostHeader=true"
+      - "traefik.http.routers.hrtool-api.priority=100"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: hrtool/frontend:local
+    container_name: hrtool-frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - traefik
+      - hrtool_internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.hrtool-frontend.rule=Host(`${TRAEFIK_HOST:-hrtool.local}`)"
+      - "traefik.http.routers.hrtool-frontend.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.hrtool-frontend.tls=true"
+      - "traefik.http.routers.hrtool-frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.hrtool-frontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.hrtool-frontend.priority=10"
+
+  ollama:
+    image: ollama/ollama:0.4.1
+    container_name: hrtool-ollama
+    profiles:
+      - local-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    command: serve
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - hrtool_internal
+    healthcheck:
+      test: ["CMD", "ollama", "ps"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  hrtool_data:
+  ollama_data:
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik}
+    external: true
+  hrtool_internal:
+    name: hrtool_internal

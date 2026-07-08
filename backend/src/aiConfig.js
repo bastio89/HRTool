@@ -13,12 +13,16 @@ function readSetting(key) {
   }
 }
 
+function normalizeAiBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
 /**
  * Central AI (LLM) configuration resolver.
  *
  * Precedence: DB settings (admin-configurable) → environment variables → hardcoded defaults.
- * `host.docker.internal` is normalized to `localhost` so the URL works both inside
- * and outside of Docker.
+ * The URL is only trimmed and normalized; Docker-specific hosts such as
+ * host.docker.internal must be preserved for container networking.
  *
  * @returns {{ baseUrl: string, model: string, source: { baseUrl: string, model: string } }}
  */
@@ -32,7 +36,7 @@ function getAiConfig() {
   const rawBaseUrl = dbBaseUrl || envBaseUrl || DEFAULT_BASE_URL;
   const model = dbModel || envModel || DEFAULT_MODEL;
 
-  const baseUrl = rawBaseUrl.replace('host.docker.internal', 'localhost').replace(/\/+$/, '');
+  const baseUrl = normalizeAiBaseUrl(rawBaseUrl);
 
   return {
     baseUrl,
@@ -44,4 +48,4 @@ function getAiConfig() {
   };
 }
 
-module.exports = { getAiConfig, DEFAULT_BASE_URL, DEFAULT_MODEL };
+module.exports = { getAiConfig, normalizeAiBaseUrl, DEFAULT_BASE_URL, DEFAULT_MODEL };

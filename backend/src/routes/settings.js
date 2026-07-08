@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig, DEFAULT_BASE_URL, DEFAULT_MODEL } = require('../aiConfig');
+const { getAiConfig, normalizeAiBaseUrl, DEFAULT_BASE_URL, DEFAULT_MODEL } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -126,7 +126,7 @@ router.put('/ai/config', (req, res) => {
 router.get('/ai/models', async (req, res) => {
   try {
     const override = typeof req.query.baseUrl === 'string' && req.query.baseUrl.trim()
-      ? req.query.baseUrl.trim().replace('host.docker.internal', 'localhost').replace(/\/+$/, '')
+      ? normalizeAiBaseUrl(req.query.baseUrl)
       : null;
     const baseUrl = override || getAiConfig().baseUrl;
 
@@ -175,7 +175,7 @@ router.get('/ai/models', async (req, res) => {
 router.post('/ai/test', async (req, res) => {
   try {
     const override = typeof req.body?.baseUrl === 'string' && req.body.baseUrl.trim()
-      ? req.body.baseUrl.trim().replace('host.docker.internal', 'localhost').replace(/\/+$/, '')
+      ? normalizeAiBaseUrl(req.body.baseUrl)
       : null;
     const baseUrl = override || getAiConfig().baseUrl;
 

@@ -210,6 +210,33 @@ ollama serve
 ollama pull llama3.2
 ```
 
+### Schnellstart mit Docker Compose
+
+HRTool kann komplett über Docker Compose gestartet werden. Backend, Frontend, SQLite-Daten und Uploads werden automatisch eingerichtet; Ollama läuft standardmäßig auf dem Host und wird aus den Containern über `host.docker.internal` erreicht.
+
+```bash
+cp .env.docker.example .env
+# JWT_SECRET und optional EXTERNAL_API_KEY in .env anpassen
+docker compose up --build
+```
+
+Danach ist HRTool erreichbar unter:
+
+| Service | URL |
+|---------|-----|
+| **Frontend** | `http://localhost:5173` |
+| **Backend API** | `http://localhost:3001/api` |
+| **Swagger UI** | `http://localhost:3001/api/docs` |
+
+Persistente Daten liegen im Docker-Volume `hrtool-data`. Für lokale KI muss Ollama auf dem Host laufen:
+
+```bash
+ollama serve
+ollama pull llama3.2
+```
+
+> Hinweis: Wenn Ollama ebenfalls containerisiert oder auf einem anderen Server läuft, setzen Sie `OLLAMA_BASE_URL` in `.env` entsprechend, z.B. `http://ollama:11434` oder `http://ki-server:11434`.
+
 ### Schritt 3: Backend starten
 
 ```bash
@@ -399,7 +426,10 @@ HRTool ist für alle Geräte optimiert:
 
 ```
 HRTool/
+├── docker-compose.yml         # Docker-Start für Backend, Frontend & Volumes
+├── .env.docker.example        # Beispiel-Konfiguration für Docker Compose
 ├── backend/
+│   ├── Dockerfile             # Backend-Container
 │   ├── server.js              # Express-Server & DB-Initialisierung
 │   ├── src/
 │   │   ├── routes/
@@ -421,6 +451,8 @@ HRTool/
 │   ├── uploads/               # Hochgeladene Dateien
 │   └── hrtool.db              # SQLite-Datenbank
 ├── frontend/
+│   ├── Dockerfile             # Frontend-Build & Nginx-Auslieferung
+│   ├── nginx.conf             # SPA-Routing & API-Proxy
 │   ├── src/
 │   │   ├── pages/             # 14 Seiten (Dashboard, Candidates, etc.)
 │   │   ├── components/        # Wiederverwendbare UI-Komponenten

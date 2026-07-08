@@ -40,6 +40,134 @@ export default function MatchingResults() {
     </div>
   )
 
+  const matrixData = data?.results?.type === 'matrix' ? data.results : null
+
+  if (matrixData) {
+    const matrixRows = matrixData.matrix || []
+    const topRows = matrixRows.slice(0, 12)
+    const bestScoreMatrix = topRows[0]?.score || 0
+    const pairCount = matrixRows.length
+
+    const exportMatrixCSV = () => {
+      const escape = (v) => {
+        if (!v) return ''
+        const s = String(v).replace(/"/g, '""')
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s
+      }
+      const headers = ['Stelle', 'Bewerber', 'Score', 'Zusammenfassung', 'Stärken', 'Schwächen']
+      const rows = matrixRows.map((row) => [
+        row.jobTitle,
+        row.candidateName,
+        row.score,
+        row.summary,
+        (row.strengths || []).join('; '),
+        (row.weaknesses || []).join('; '),
+      ].map(escape).join(','))
+      const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `matrix_matching_${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
+
+    return (
+      <div className="fade-in max-w-[1400px] mx-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
+          <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
+            <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Matrix-Matching</h1>
+              <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
+                <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
+                {matrixData.matchedAt && (
+                  <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
+                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    {new Date(matrixData.matchedAt).toLocaleString('de-DE')}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-4 ml-14 sm:ml-0">
+            <Button size="md" variant="secondary" onClick={exportMatrixCSV}>
+              <Download className="w-5 h-5" />
+              <span className="hidden sm:inline">CSV Export</span>
+            </Button>
+            <Link to="/matching"><Button size="md" variant="dark">{t('matching.new')}</Button></Link>
+          </div>
+        </div>
+
+        <KiDisclaimer feature="matching" className="mb-6" />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.jobs?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Stellen</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.candidates?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Bewerber</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">{pairCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Paarungen</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">{bestScoreMatrix}%</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Bester Match</p></Card>
+        </div>
+
+        <Card className="p-8 sm:p-10 mb-12">
+          <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Beste Paarungen übergreifend</h2>
+          <div className="space-y-4">
+            {topRows.map((row, idx) => (
+              <div key={`${row.jobId}-${row.candidateId}-${idx}`} className="grid grid-cols-1 lg:grid-cols-[64px_1fr_1fr_96px] gap-4 items-center p-5 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+                <div className="text-[18px] font-semibold text-gray-400">#{idx + 1}</div>
+                <div><p className="text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p><p className="text-[13px] text-gray-500 mt-1">Bewerber</p></div>
+                <div><p className="text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p><p className="text-[13px] text-gray-500 mt-1">Stelle</p></div>
+                <div className="text-[26px] font-semibold text-[#0071e3]">{row.score}%</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          <Card className="p-8 sm:p-10">
+            <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Ranking pro Stelle</h2>
+            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2">
+              {(matrixData.jobsRanked || []).map((job) => (
+                <div key={job.jobId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
+                  <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{job.jobTitle}</h3>
+                  <div className="space-y-2">
+                    {job.results.slice(0, 5).map((row, idx) => (
+                      <div key={`${job.jobId}-${row.candidateId}`} className="flex items-center justify-between gap-4 text-[14px]">
+                        <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.candidateName}</span>
+                        <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-8 sm:p-10">
+            <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Ranking pro Bewerber</h2>
+            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2">
+              {(matrixData.candidatesRanked || []).map((candidate) => (
+                <div key={candidate.candidateId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
+                  <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{candidate.candidateName}</h3>
+                  <div className="space-y-2">
+                    {candidate.results.slice(0, 5).map((row, idx) => (
+                      <div key={`${candidate.candidateId}-${row.jobId}`} className="flex items-center justify-between gap-4 text-[14px]">
+                        <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.jobTitle}</span>
+                        <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
   // Normalize scores: Ollama returns 0-100, UI expects 0-1, then sort descending
   const results = (data?.results?.results || []).map(r => ({
     ...r,

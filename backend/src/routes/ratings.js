@@ -146,6 +146,15 @@ router.post('/candidates/averages', (req, res) => {
  */
 router.post('/candidate/:candidateId', (req, res) => {
   try {
+    // Fachbereich: only rate candidates in their assigned pipeline jobs
+    if (req.user?.role === 'fachbereich') {
+      const inPipeline = db.prepare(`
+        SELECT 1 FROM pipeline_entries pe
+        JOIN user_job_access uja ON uja.job_id = pe.job_id
+        WHERE pe.candidate_id = ? AND uja.user_id = ?
+      `).get(req.params.candidateId, req.user.id);
+      if (!inPipeline) return res.status(403).json({ error: 'Kein Zugriff auf diesen Bewerber' });
+    }
     const { category = 'gesamt', rating, comment } = req.body;
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({ error: 'Bewertung muss zwischen 1 und 5 liegen' });

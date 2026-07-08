@@ -349,8 +349,10 @@ const indexes = [
   `CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at)`,
   // Files: FK-Lookup
   `CREATE INDEX IF NOT EXISTS idx_files_candidate_id ON candidate_files(candidate_id)`,
-  // Matching: Sortierung
+  // Matching: Sortierung & Lookup (Pipeline-Override-Check, Matrix-Matching)
   `CREATE INDEX IF NOT EXISTS idx_matching_created_at ON matching_results(created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_matching_job_id ON matching_results(job_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_matching_job_title ON matching_results(job_title)`,
   // Audit Log: Lookup & Sortierung
   `CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log(user_id)`,
@@ -494,6 +496,24 @@ db.exec(`
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
   )
 `);
+
+// --- Rollen-Scoping: Fachbereich-Job-Zuweisungen ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_job_access (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    job_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    UNIQUE(user_id, job_id)
+  )
+`);
+
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_user_job_access_user ON user_job_access(user_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_user_job_access_job ON user_job_access(job_id)`);
+} catch (_) {}
 
 // --- Compliance-Aktionen & Risiko-Maßnahmen ---
 db.exec(`

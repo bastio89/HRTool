@@ -17,6 +17,7 @@ export default function Matching() {
   const [selectAll, setSelectAll] = useState(false)
   const [loading, setLoading] = useState(true)
   const [matching, setMatching] = useState(false)
+  const [matrixMatching, setMatrixMatching] = useState(false)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [jobs, setJobs] = useState([])
@@ -31,7 +32,7 @@ export default function Matching() {
 
   useEffect(() => {
     Promise.all([
-      candidatesApi.getAll(),
+      candidatesApi.getAll({ fields: 'matching' }),
       jobsApi.getAll({}).catch(() => ({ data: [] })),
     ]).then(([candidateData, jobsData]) => {
         setCandidates(candidateData.data || [])
@@ -116,6 +117,32 @@ export default function Matching() {
       setError(err.message)
     } finally {
       setMatching(false)
+    }
+  }
+
+  const handleMatrixMatch = async (mode) => {
+    if (jobs.length === 0) {
+      setError('Für ein Matrix-Matching muss mindestens eine Stelle vorhanden sein.')
+      return
+    }
+    if (mode === 'candidate_to_jobs' && selectedIds.length !== 1) {
+      setError('Bitte genau einen Bewerber auswählen, um ihn gegen alle Stellen zu matchen.')
+      return
+    }
+    setError('')
+    setMatrixMatching(true)
+
+    try {
+      const result = await matchingApi.runMatrix({
+        mode,
+        candidateIds: mode === 'candidate_to_jobs' ? selectedIds : [],
+        weights,
+      })
+      navigate(`/matching/results/${result.id}`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setMatrixMatching(false)
     }
   }
 
@@ -358,7 +385,7 @@ export default function Matching() {
           <Button
             className="w-full py-5 text-[18px]"
             variant="dark"
-            disabled={matching || !jobDescription.trim() || selectedIds.length === 0}
+            disabled={matching || matrixMatching || !jobDescription.trim() || selectedIds.length === 0}
             onClick={handleMatch}
           >
             {matching ? (
@@ -368,14 +395,52 @@ export default function Matching() {
             )}
           </Button>
 
-          {matching && (
+          <Card className="p-7 border-[#0071e3]/10 bg-[#0071e3]/5">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-11 h-11 rounded-full bg-white dark:bg-[#1c1c1e] flex items-center justify-center flex-shrink-0">
+                <GitCompare className="w-5 h-5 text-[#0071e3]" />
+              </div>
+              <div>
+                <h3 className="text-[17px] font-semibold text-black dark:text-white">Matrix-Matching</h3>
+                <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                  Deckt die übergreifenden Konstellationen ab: alle Stellen gegen alle Bewerber oder ein Bewerber gegen alle Stellen.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              <Button
+                className="w-full"
+                variant="secondary"
+                disabled={matrixMatching || matching || jobs.length === 0 || candidates.length === 0}
+                onClick={() => handleMatrixMatch('all_jobs_all_candidates')}
+              >
+                {matrixMatching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Briefcase className="w-5 h-5" />}
+                Alle Stellen × alle Bewerber
+              </Button>
+              <Button
+                className="w-full"
+                variant="secondary"
+                disabled={matrixMatching || matching || jobs.length === 0 || selectedIds.length !== 1}
+                onClick={() => handleMatrixMatch('candidate_to_jobs')}
+              >
+                {matrixMatching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Users className="w-5 h-5" />}
+                Ausgewählter Bewerber × alle Stellen
+              </Button>
+            </div>
+          </Card>
+
+          {(matching || matrixMatching) && (
             <Card className="p-8 border-[#0071e3]/20 bg-[#0071e3]/5">
               <div className="flex items-center gap-5">
                 <div className="w-4 h-4 rounded-full bg-[#0071e3] animate-pulse" />
                 <div>
-                  <p className="text-[16px] font-semibold text-[#0071e3]">{t('matching.analyzing')}</p>
+                  <p className="text-[16px] font-semibold text-[#0071e3]">
+                    {matrixMatching ? 'Matrix-Matching läuft...' : t('matching.analyzing')}
+                  </p>
                   <p className="text-[15px] font-medium text-[#0071e3]/70 mt-1">
-                    {t('matching.candidates_matched').replace('{count}', selectedIds.length || candidates.length)}
+                    {matrixMatching
+                      ? `${jobs.length} Stellen × ${selectedIds.length === 1 ? 1 : candidates.length} Bewerber werden bewertet.`
+                      : t('matching.candidates_matched').replace('{count}', selectedIds.length || candidates.length)}
                   </p>
                 </div>
               </div>

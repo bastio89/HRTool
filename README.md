@@ -252,6 +252,7 @@ PORT=3001
 JWT_SECRET=ihr-sicherer-schlüssel
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2
+EXTERNAL_API_KEY=ihr-externer-api-key
 N8N_BASE_URL=http://localhost:5678
 N8N_API_KEY=ihr-n8n-api-key
 ```
@@ -321,7 +322,51 @@ Die vollständige API-Dokumentation ist über **Swagger UI** verfügbar:
 http://localhost:3001/api/docs
 ```
 
-### Übersicht: 62+ Endpunkte
+### Matching-only REST API für Integrationen
+
+Kunden können die Matching-Funktion auch ohne HRTool-Frontend und ohne lokale Bewerber-/Stellenverwaltung verwenden. Dafür steht eine API-Key-geschützte OpenAPI-Schnittstelle bereit:
+
+```http
+POST /api/matching/external/run
+X-API-Key: ihr-externer-api-key
+Content-Type: application/json
+```
+
+Beispiel-Request:
+
+```json
+{
+  "job": {
+    "id": "job-frontend-01",
+    "title": "Frontend Developer",
+    "description": "React-Anwendung fuer ein SaaS-Produkt weiterentwickeln.",
+    "requirements": "React, TypeScript, REST APIs, 3+ Jahre Erfahrung",
+    "location": "Berlin / Remote",
+    "type": "Vollzeit"
+  },
+  "candidates": [
+    {
+      "id": "cand-4711",
+      "name": "Kandidat 4711",
+      "skills": "React, Node.js, SQL",
+      "experience": "5 Jahre Frontend-Entwicklung",
+      "education": "B.Sc. Informatik",
+      "languages": "Deutsch C2, Englisch C1",
+      "location": "Berlin",
+      "availability": "ab 01.09."
+    }
+  ],
+  "weights": {
+    "skills": 5,
+    "experience": 3,
+    "location": 1
+  }
+}
+```
+
+Die Antwort enthält Score, Stärken, Schwächen und Kurzbegründung je Kandidat. Die Daten werden nicht als Bewerber oder Stelle im HRTool gespeichert; die Schnittstelle nutzt nur das konfigurierte lokale KI-Modell.
+
+### Übersicht: 63+ Endpunkte
 
 | Bereich | Endpunkte | Beschreibung |
 |---------|-----------|--------------|
@@ -329,7 +374,7 @@ http://localhost:3001/api/docs
 | **Candidates** | 11 | CRUD, Suche, Filter, Batch-Operationen, Import |
 | **Jobs** | 6 | CRUD, KI-Stellenbeschreibung |
 | **Pipeline** | 7 | Kanban-Board, Stufenwechsel, Notizen |
-| **Matching** | 4 | KI-Matching starten, Historie |
+| **Matching** | 5 | KI-Matching starten, externe Matching-API, Historie |
 | **Activities** | 3 | Aktivitätsprotokoll pro Bewerber |
 | **Uploads** | 5 | Datei-Upload, Download, Vorschau |
 | **CV-Parser** | 1 | KI-Lebenslauf-Analyse |
@@ -394,7 +439,7 @@ HRTool/
 | Metrik | Wert |
 |--------|------|
 | **Frontend-Seiten** | 14 |
-| **API-Endpunkte** | 62+ |
+| **API-Endpunkte** | 63+ |
 | **Datenbank-Tabellen** | 12 |
 | **Datenbank-Indizes** | 24 |
 | **KI-Features** | 3 (CV-Parser, Matching, Stellengenerator) |

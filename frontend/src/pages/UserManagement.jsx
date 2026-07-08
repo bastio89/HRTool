@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
-import { authApi } from '../api'
-import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle, Key, Lock, Database, Download } from 'lucide-react'
+import { authApi, jobsApi } from '../api'
+import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle, Key, Lock, Database, Download, Eye, Briefcase } from 'lucide-react'
 import PasswordStrength, { isPasswordValid } from '../components/PasswordStrength'
 import { useToast } from '../components/Toast'
 
@@ -22,6 +22,8 @@ export default function UserManagement() {
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [changeForm, setChangeForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [backupLoading, setBackupLoading] = useState(false)
+  const [jobs, setJobs] = useState([])
+  const [selectedJobIds, setSelectedJobIds] = useState([])
 
   const handleBackup = async () => {
     setBackupLoading(true)
@@ -64,7 +66,10 @@ export default function UserManagement() {
     }
   }
 
-  useEffect(() => { loadUsers() }, [])
+  useEffect(() => {
+    loadUsers()
+    jobsApi.getAll().then(res => setJobs(res.data || [])).catch(() => {})
+  }, [])
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -76,10 +81,14 @@ export default function UserManagement() {
     }
     setSaving(true)
     try {
-      await authApi.createUser(form)
+      const payload = form.role === 'fachbereich'
+        ? { ...form, job_ids: selectedJobIds }
+        : form
+      await authApi.createUser(payload)
       toast.success(t('users.user_created').replace('{name}', form.username))
       setSuccess(t('users.user_created').replace('{name}', form.username))
       setForm({ username: '', password: '', display_name: '', role: 'recruiter' })
+      setSelectedJobIds([])
       setShowForm(false)
       loadUsers()
     } catch (err) {
@@ -252,13 +261,42 @@ export default function UserManagement() {
               <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.role')}</label>
               <select
                 value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                onChange={(e) => { setForm({ ...form, role: e.target.value }); setSelectedJobIds([]) }}
                 className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all appearance-none"
               >
                 <option value="recruiter">Recruiter</option>
                 <option value="admin">Admin</option>
+                <option value="revisor">Revisor</option>
+                <option value="fachbereich">Fachbereich</option>
               </select>
             </div>
+            {/* Job assignment for Fachbereich */}
+            {form.role === 'fachbereich' && (
+              <div className="col-span-2">
+                <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">
+                  Zugewiesene Stellen <span className="text-gray-400 font-normal">(mindestens eine auswählen)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl p-3">
+                  {jobs.filter(j => j.status === 'Offen').map(job => (
+                    <label key={job.id} className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-[#2c2c2e] cursor-pointer text-[13px]">
+                      <input
+                        type="checkbox"
+                        checked={selectedJobIds.includes(job.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedJobIds(prev => [...prev, job.id])
+                          else setSelectedJobIds(prev => prev.filter(id => id !== job.id))
+                        }}
+                        className="rounded"
+                      />
+                      <span className="truncate">{job.title}</span>
+                    </label>
+                  ))}
+                  {jobs.filter(j => j.status === 'Offen').length === 0 && (
+                    <p className="text-[13px] text-gray-400 col-span-2 py-2 text-center">Keine offenen Stellen</p>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="col-span-2 flex justify-end gap-3 mt-2">
               <button
                 type="button"
@@ -406,10 +444,20 @@ export default function UserManagement() {
                 <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[13px] font-semibold ${
                   u.role === 'admin'
                     ? 'bg-purple-50 text-purple-600'
+                    : u.role === 'revisor'
+                    ? 'bg-amber-50 text-amber-600'
+                    : u.role === 'fachbereich'
+                    ? 'bg-teal-50 text-teal-600'
                     : 'bg-blue-50 text-[#0071e3]'
                 }`}>
-                  {u.role === 'admin' ? <Shield className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
-                  {u.role === 'admin' ? 'Admin' : 'Recruiter'}
+                  {u.role === 'admin' ? <Shield className="w-3.5 h-3.5" />
+                    : u.role === 'revisor' ? <Eye className="w-3.5 h-3.5" />
+                    : u.role === 'fachbereich' ? <Briefcase className="w-3.5 h-3.5" />
+                    : <User className="w-3.5 h-3.5" />}
+                  {u.role === 'admin' ? 'Admin'
+                    : u.role === 'revisor' ? 'Revisor'
+                    : u.role === 'fachbereich' ? 'Fachbereich'
+                    : 'Recruiter'}
                 </span>
                 {u.id !== currentUser.id && (
                   <>

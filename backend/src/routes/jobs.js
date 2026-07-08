@@ -4,6 +4,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { getAiConfig } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -215,8 +216,7 @@ router.post('/generate-description', generatorRateLimiter, promptGuard('job-gene
       return res.status(400).json({ error: 'Jobtitel oder Stichpunkte erforderlich' });
     }
 
-    const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
 
     const prompt = `Du bist ein HR-Experte. Erstelle eine Stellenausschreibung auf Deutsch.
 

@@ -3,6 +3,7 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { getAiConfig } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -202,6 +203,16 @@ router.post('/responses', (req, res) => {
     if (!template_id || !candidate_id || !evaluator_name) {
       return res.status(400).json({ error: 'Template, Kandidat und Bewerter-Name sind erforderlich' });
     }
+
+    // Fachbereich: only submit scorecards for candidates in their assigned jobs
+    if (req.user?.role === 'fachbereich') {
+      const inPipeline = db.prepare(`
+        SELECT 1 FROM pipeline_entries pe
+        JOIN user_job_access uja ON uja.job_id = pe.job_id
+        WHERE pe.candidate_id = ? AND uja.user_id = ?
+      `).get(candidate_id, req.user.id);
+      if (!inPipeline) return res.status(403).json({ error: 'Kein Zugriff auf diesen Bewerber' });
+    }
     
     // Calculate total score (average of all answer scores)
     const answerList = answers || [];
@@ -312,8 +323,7 @@ router.post('/generate-questions', generatorRateLimiter, promptGuard('interview-
       return res.status(400).json({ error: 'Mindestens eine Stelle oder ein Kandidat ist erforderlich' });
     }
     
-    const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
     const count = Math.min(Math.max(3, parseInt(question_count) || 8), 15);
     
     const prompt = `Du bist ein erfahrener HR-Experte und Interviewer. Erstelle ${count} strukturierte Interviewfragen.

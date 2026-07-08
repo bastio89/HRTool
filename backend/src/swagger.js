@@ -1,3 +1,4 @@
+const path = require('path');
 const swaggerJsdoc = require('swagger-jsdoc');
 
 const options = {
@@ -16,6 +17,11 @@ const options = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
+        },
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
         },
       },
       schemas: {
@@ -81,6 +87,63 @@ const options = {
             created_at: { type: 'string', format: 'date-time' },
           },
         },
+        ExternalMatchingRequest: {
+          type: 'object',
+          required: ['job', 'candidates'],
+          properties: {
+            job: {
+              type: 'object',
+              required: ['title'],
+              properties: {
+                id: { type: 'string', example: 'job-frontend-01' },
+                title: { type: 'string', example: 'Frontend Developer' },
+                description: { type: 'string', example: 'React-Anwendung fuer ein SaaS-Produkt weiterentwickeln.' },
+                requirements: { type: 'string', example: 'React, TypeScript, REST APIs, 3+ Jahre Erfahrung' },
+                location: { type: 'string', example: 'Berlin / Remote' },
+                type: { type: 'string', example: 'Vollzeit' },
+              },
+            },
+            candidates: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 50,
+              items: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string', example: 'cand-4711' },
+                  name: { type: 'string', example: 'Kandidat 4711' },
+                  skills: { type: 'string', example: 'React, Node.js, SQL' },
+                  experience: { type: 'string', example: '5 Jahre Frontend-Entwicklung' },
+                  education: { type: 'string', example: 'B.Sc. Informatik' },
+                  languages: { type: 'string', example: 'Deutsch C2, Englisch C1' },
+                  location: { type: 'string', example: 'Berlin' },
+                  desired_salary: { type: 'string', example: '65000 EUR' },
+                  availability: { type: 'string', example: 'ab 01.09.' },
+                  certificates: { type: 'string', example: 'Scrum Master' },
+                  mobility: { type: 'string', example: 'Remote, Reisebereitschaft 20%' },
+                },
+              },
+            },
+            weights: { type: 'object', description: 'Optionale Gewichtung -10 bis +10 je Kriterium' },
+            options: {
+              type: 'object',
+              properties: {
+                timeoutMs: { type: 'integer', example: 180000 },
+              },
+            },
+          },
+        },
+        ExternalMatchingResponse: {
+          type: 'object',
+          properties: {
+            job: { type: 'object' },
+            results: { type: 'array', items: { type: 'object' } },
+            candidateCount: { type: 'integer' },
+            model: { type: 'string' },
+            timestamp: { type: 'string', format: 'date-time' },
+          },
+        },
         Activity: {
           type: 'object',
           properties: {
@@ -121,7 +184,7 @@ const options = {
     },
     security: [{ BearerAuth: [] }],
   },
-  apis: ['./src/routes/*.js'],
+  apis: [path.join(__dirname, 'routes', '*.js')],
 };
 
 module.exports = swaggerJsdoc(options);

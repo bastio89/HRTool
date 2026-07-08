@@ -1,8 +1,11 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { getAiConfig, DEFAULT_BASE_URL, DEFAULT_MODEL } = require('../aiConfig');
 
 const router = express.Router();
+
+const isAdmin = (req) => req.user?.role === 'admin';
 
 /**
  * @swagger
@@ -24,6 +27,177 @@ router.get('/', (req, res) => {
   } catch (error) {
     console.error('Error fetching settings:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Einstellungen' });
+  }
+});
+
+/**
+ * @swagger
+ * /settings/ai/config:
+ *   get:
+ *     summary: Aktuelle KI-Konfiguration (Host & Modell) laden
+ *     tags: [Settings]
+ *     responses:
+ *       200: { description: Base-URL, Modell und Herkunft der Werte }
+ */
+router.get('/ai/config', (req, res) => {
+  try {
+    const config = getAiConfig();
+    res.json({
+      baseUrl: config.baseUrl,
+      model: config.model,
+      source: config.source,
+      defaults: { baseUrl: DEFAULT_BASE_URL, model: DEFAULT_MODEL },
+    });
+  } catch (error) {
+    console.error('Error fetching AI config:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der KI-Konfiguration' });
+  }
+});
+
+/**
+ * @swagger
+ * /settings/ai/config:
+ *   put:
+ *     summary: KI-Konfiguration (Host & Modell) speichern (nur Admin)
+ *     tags: [Settings]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               baseUrl: { type: string }
+ *               model: { type: string }
+ *     responses:
+ *       200: { description: Konfiguration gespeichert }
+ */
+router.put('/ai/config', (req, res) => {
+  try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({ error: 'Nur Administratoren dürfen die KI-Konfiguration ändern' });
+    }
+
+    const { baseUrl, model } = req.body;
+
+    if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
+      return res.status(400).json({ error: 'Host / Base-URL ist erforderlich' });
+    }
+    if (typeof model !== 'string' || !model.trim()) {
+      return res.status(400).json({ error: 'Modell ist erforderlich' });
+    }
+
+    const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
+    try {
+      const parsed = new URL(trimmedUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return res.status(400).json({ error: 'Host muss mit http:// oder https:// beginnen' });
+      }
+    } catch (_) {
+      return res.status(400).json({ error: 'Ungültige Host-URL' });
+    }
+
+    const upsert = db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`);
+    upsert.run('ai_base_url', trimmedUrl);
+    upsert.run('ai_model', model.trim());
+
+    logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', { baseUrl: trimmedUrl, model: model.trim() });
+
+    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim() });
+  } catch (error) {
+    console.error('Error saving AI config:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern der KI-Konfiguration' });
+  }
+});
+
+/**
+ * @swagger
+ * /settings/ai/models:
+ *   get:
+ *     summary: Verfügbare Modelle vom KI-Host laden (Ollama /api/tags)
+ *     tags: [Settings]
+ *     parameters:
+ *       - in: query
+ *         name: baseUrl
+ *         schema: { type: string }
+ *         description: Optionaler Host zum Testen, bevor er gespeichert wird
+ *     responses:
+ *       200: { description: Liste verfügbarer Modelle }
+ */
+router.get('/ai/models', async (req, res) => {
+  try {
+    const override = typeof req.query.baseUrl === 'string' && req.query.baseUrl.trim()
+      ? req.query.baseUrl.trim().replace('host.docker.internal', 'localhost').replace(/\/+$/, '')
+      : null;
+    const baseUrl = override || getAiConfig().baseUrl;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    let response;
+    try {
+      response = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
+    } catch (err) {
+      clearTimeout(timeout);
+      return res.status(502).json({
+        error: 'KI-Host nicht erreichbar',
+        reachable: false,
+        baseUrl,
+        details: err.name === 'AbortError' ? 'Zeitüberschreitung' : err.message,
+        models: [],
+      });
+    }
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return res.status(502).json({ error: `KI-Host antwortete mit HTTP ${response.status}`, reachable: false, baseUrl, models: [] });
+    }
+
+    const data = await response.json().catch(() => ({}));
+    const models = Array.isArray(data.models)
+      ? data.models.map((m) => ({ name: m.name, size: m.size ?? null, modified_at: m.modified_at ?? null }))
+      : [];
+
+    res.json({ reachable: true, baseUrl, models });
+  } catch (error) {
+    console.error('Error listing AI models:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Modelle', models: [] });
+  }
+});
+
+/**
+ * @swagger
+ * /settings/ai/test:
+ *   post:
+ *     summary: Verbindung zum KI-Host testen
+ *     tags: [Settings]
+ *     responses:
+ *       200: { description: Erreichbarkeitsstatus }
+ */
+router.post('/ai/test', async (req, res) => {
+  try {
+    const override = typeof req.body?.baseUrl === 'string' && req.body.baseUrl.trim()
+      ? req.body.baseUrl.trim().replace('host.docker.internal', 'localhost').replace(/\/+$/, '')
+      : null;
+    const baseUrl = override || getAiConfig().baseUrl;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const started = Date.now();
+    let response;
+    try {
+      response = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
+    } catch (err) {
+      clearTimeout(timeout);
+      return res.json({ reachable: false, baseUrl, error: err.name === 'AbortError' ? 'Zeitüberschreitung (>5s)' : err.message });
+    }
+    clearTimeout(timeout);
+
+    const data = await response.json().catch(() => ({}));
+    const modelCount = Array.isArray(data.models) ? data.models.length : 0;
+
+    res.json({ reachable: response.ok, baseUrl, status: response.status, latencyMs: Date.now() - started, modelCount });
+  } catch (error) {
+    console.error('Error testing AI connection:', error);
+    res.status(500).json({ error: 'Fehler beim Verbindungstest' });
   }
 });
 
@@ -65,7 +239,7 @@ router.put('/:key', (req, res) => {
       }
     }
 
-    db.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime("now"))').run(key, String(value));
+    db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`).run(key, String(value));
 
     logAudit(req, 'einstellung-geändert', 'Setting', null, key, { value });
 

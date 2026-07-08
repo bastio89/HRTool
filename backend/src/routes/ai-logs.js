@@ -1,8 +1,12 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { getAiConfig } = require('../aiConfig');
 
 const router = express.Router();
+
+// Revisor darf alle KI-Logs lesen (EU AI Act Art. 12 — Transparenz)
+const canViewKI = (req) => ['admin', 'revisor'].includes(req.user?.role);
 
 /**
  * @swagger
@@ -34,9 +38,8 @@ const router = express.Router();
  */
 router.get('/', (req, res) => {
   try {
-    // Admin check
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff auf KI-Protokolle' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff auf KI-Protokolle' });
     }
 
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -98,8 +101,8 @@ router.get('/', (req, res) => {
 
 router.get('/model-card', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     const modelStats = db.prepare(`
@@ -122,7 +125,7 @@ router.get('/model-card', (req, res) => {
       ORDER BY feature, count DESC
     `).all();
 
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const { baseUrl: OLLAMA_BASE_URL, model: OLLAMA_MODEL } = getAiConfig();
 
     const modelCard = {
       model: {
@@ -131,7 +134,7 @@ router.get('/model-card', (req, res) => {
         type: 'Large Language Model (LLM)',
         architecture: 'Transformer-basiert',
         deployment: 'On-Premise / lokale Ausführung',
-        endpoint: (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost'),
+        endpoint: OLLAMA_BASE_URL,
       },
       intendedUse: {
         primaryUses: [
@@ -203,8 +206,8 @@ router.get('/model-card', (req, res) => {
 // ═══════════════════════════════════════
 router.get('/risk-register', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     // Collect real metrics for risk assessment
@@ -356,8 +359,8 @@ router.get('/risk-register', (req, res) => {
 // ═══════════════════════════════════════
 router.get('/bias-testset', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     // 20 diverse fictional test profiles for bias detection
@@ -411,8 +414,7 @@ router.post('/bias-testset/run', async (req, res) => {
       return res.status(400).json({ error: 'Stellenbeschreibung erforderlich' });
     }
 
-    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
 
     // 20 diverse test profiles
     const testProfiles = [
@@ -558,8 +560,8 @@ Score von 0.0 (keine Passung) bis 1.0 (perfekte Passung).`;
 // ═══════════════════════════════════════
 router.get('/explain/:logId', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     const log = db.prepare('SELECT * FROM ai_logs WHERE id = ?').get(req.params.logId);
@@ -640,8 +642,8 @@ router.get('/explain/:logId', (req, res) => {
 // ═══════════════════════════════════════
 router.get('/bias-alerts', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     const alerts = [];
@@ -806,8 +808,8 @@ router.get('/bias-alerts', (req, res) => {
  */
 router.get('/stats/overview', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     // Total counts by feature
@@ -895,8 +897,8 @@ router.get('/stats/overview', (req, res) => {
  */
 router.get('/stats/bias-report', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     // Analyze matching results for potential bias patterns
@@ -1015,8 +1017,8 @@ router.get('/stats/bias-report', (req, res) => {
  */
 router.get('/compliance/checklist', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     // Check various compliance requirements automatically
@@ -1187,8 +1189,8 @@ router.get('/compliance/checklist', (req, res) => {
 // ═══════════════════════════════════════
 router.get('/:id', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!canViewKI(req)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     const log = db.prepare(`

@@ -51,6 +51,8 @@ export const authApi = {
     request(`/auth/users/${id}/reset-password`, { method: 'PUT', body: JSON.stringify({ newPassword }) }),
   changePassword: (currentPassword, newPassword) =>
     request('/auth/change-password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
+  assignJobs: (id, job_ids) =>
+    request(`/auth/users/${id}/jobs`, { method: 'PUT', body: JSON.stringify({ job_ids }) }),
 };
 
 // Candidates API
@@ -66,6 +68,7 @@ export const candidatesApi = {
     if (params.status) q.set('status', params.status);
     if (params.location) q.set('location', params.location);
     if (params.tags) q.set('tags', params.tags);
+    if (params.fields) q.set('fields', params.fields);
     const qs = q.toString();
     return request(`/candidates${qs ? `?${qs}` : ''}`);
   },
@@ -92,6 +95,12 @@ export const matchingApi = {
       method: 'POST',
       body: JSON.stringify({ jobDescription, jobTitle, candidateIds, weights, jobId }),
       timeout: 200000,
+    }),
+  runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null } = {}) =>
+    request('/matching/run-matrix', {
+      method: 'POST',
+      body: JSON.stringify({ mode, jobIds, candidateIds, weights }),
+      timeout: 600000,
     }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),
@@ -387,6 +396,11 @@ export const settingsApi = {
   update: (key, value) => request(`/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   getExpired: () => request('/settings/dsgvo/expired'),
   deleteExpired: () => request('/settings/dsgvo/delete-expired', { method: 'DELETE' }),
+  // KI-Konfiguration (Host & Modell)
+  getAiConfig: () => request('/settings/ai/config'),
+  saveAiConfig: (data) => request('/settings/ai/config', { method: 'PUT', body: JSON.stringify(data) }),
+  getAiModels: (baseUrl) => request(`/settings/ai/models${baseUrl ? `?baseUrl=${encodeURIComponent(baseUrl)}` : ''}`, { timeout: 8000 }),
+  testAiConnection: (baseUrl) => request('/settings/ai/test', { method: 'POST', body: JSON.stringify(baseUrl ? { baseUrl } : {}), timeout: 8000 }),
 };
 
 // Ratings API

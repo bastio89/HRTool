@@ -23,10 +23,17 @@ import DSGVO from './pages/DSGVO'
 import KITransparenz from './pages/KITransparenz'
 import EmailSettings from './pages/EmailSettings'
 import Reports from './pages/Reports'
+import AISettings from './pages/AISettings'
 
 function AdminRoute({ children }) {
   const { user } = useAuth()
   if (user?.role !== 'admin') return <Navigate to="/" replace />
+  return children
+}
+
+function RevisorRoute({ children }) {
+  const { user } = useAuth()
+  if (!['admin', 'revisor'].includes(user?.role)) return <Navigate to="/" replace />
   return children
 }
 
@@ -61,11 +68,12 @@ function ProtectedRoutes() {
         <Route path="history" element={<History />} />
         <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
         <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-        <Route path="admin/audit" element={<AdminRoute><AuditLog /></AdminRoute>} />
+        <Route path="admin/audit" element={<RevisorRoute><AuditLog /></RevisorRoute>} />
         <Route path="admin/dsgvo" element={<AdminRoute><DSGVO /></AdminRoute>} />
-        <Route path="admin/ki-transparenz" element={<AdminRoute><KITransparenz /></AdminRoute>} />
+        <Route path="admin/ki-transparenz" element={<RevisorRoute><KITransparenz /></RevisorRoute>} />
         <Route path="admin/email" element={<AdminRoute><EmailSettings /></AdminRoute>} />
-        <Route path="admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+        <Route path="admin/ai" element={<AdminRoute><AISettings /></AdminRoute>} />
+        <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />
       </Route>
     </Routes>
   )

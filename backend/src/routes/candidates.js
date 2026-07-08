@@ -391,7 +391,7 @@ router.get('/stats/sources', (req, res) => {
  */
 router.get('/', (req, res) => {
   try {
-    const { search, skills, status, location, sort = 'created_at', order = 'desc', page, limit } = req.query;
+    const { search, skills, status, location, sort = 'created_at', order = 'desc', page, limit, fields } = req.query;
     
     const conditions = [];
     const params = [];
@@ -446,7 +446,10 @@ router.get('/', (req, res) => {
     const sortCol = allowedSorts.includes(sort) ? sort : 'created_at';
     const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
     
-    let query = `SELECT * FROM candidates${whereClause} ORDER BY ${sortCol} ${sortOrder}`;
+    const selectFields = fields === 'matching'
+      ? 'id, name, email, location, skills, experience, education, languages, desired_salary, availability, certificates, mobility, status, tags, source, created_at, updated_at'
+      : '*';
+    let query = `SELECT ${selectFields} FROM candidates${whereClause} ORDER BY ${sortCol} ${sortOrder}`;
     
     // Pagination (optional - if page/limit not provided, return all)
     const pageNum = parseInt(page);

@@ -5,6 +5,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { getAiConfig } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -488,8 +489,7 @@ router.post('/generate-template', generatorRateLimiter, promptGuard('email-templ
       return res.status(400).json({ error: 'Zweck des Templates ist erforderlich' });
     }
 
-    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
 
     const smtp = getSmtpSettings();
     const companyName = smtp.email_company_name || 'Unser Unternehmen';

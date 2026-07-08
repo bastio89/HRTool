@@ -53,8 +53,8 @@ function logAudit(req, action, entityType, entityId, entityLabel, details) {
  *       403: { description: Keine Berechtigung }
  */
 router.get('/', (req, res) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Nur Admins können das Audit-Log einsehen' });
+  if (!req.user || !['admin', 'revisor'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Kein Zugriff auf das Audit-Log' });
   }
 
   try {
@@ -121,8 +121,8 @@ router.get('/', (req, res) => {
  *       200: { description: Aktivitäten der letzten 7 Tage }
  */
 router.get('/stats', (req, res) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Nur Admins' });
+  if (!req.user || !['admin', 'revisor'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Kein Zugriff auf Audit-Statistiken' });
   }
 
   try {
@@ -173,8 +173,8 @@ router.get('/stats', (req, res) => {
  *       403: { description: Keine Berechtigung }
  */
 router.get('/export', (req, res) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Nur Admins können das Audit-Log exportieren' });
+  if (!req.user || !['admin', 'revisor'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Kein Zugriff auf Audit-Export' });
   }
 
   try {

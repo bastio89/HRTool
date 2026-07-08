@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const { logAiCall } = require('../aiLogger');
+const { getAiConfig } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -317,8 +318,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an Ollama...`);
 
     // 2. Call Ollama directly for AI extraction
-    const OLLAMA_URL = process.env.OLLAMA_BASE_URL?.replace('host.docker.internal', 'localhost') || 'http://localhost:11434';
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
 
     const prompt = buildExtractionPrompt(combinedText.trim(), filenames);
 

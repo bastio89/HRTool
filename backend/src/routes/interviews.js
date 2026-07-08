@@ -30,6 +30,14 @@ router.get('/', (req, res) => {
     let where = [];
     let params = [];
 
+    // Fachbereich: only see interviews for their assigned jobs
+    if (req.user?.role === 'fachbereich') {
+      const assignedIds = db.prepare('SELECT job_id FROM user_job_access WHERE user_id = ?').all(req.user.id).map(r => r.job_id);
+      if (assignedIds.length === 0) return res.json({ data: [] });
+      where.push(`i.job_id IN (${assignedIds.map(() => '?').join(',')})`);
+      params.push(...assignedIds);
+    }
+
     if (from) {
       where.push('i.interview_date >= ?');
       params.push(from);
@@ -73,6 +81,14 @@ router.get('/', (req, res) => {
  */
 router.get('/upcoming', (req, res) => {
   try {
+    let jobFilter = '';
+    let jobParams = [];
+    if (req.user?.role === 'fachbereich') {
+      const assignedIds = db.prepare('SELECT job_id FROM user_job_access WHERE user_id = ?').all(req.user.id).map(r => r.job_id);
+      if (assignedIds.length === 0) return res.json({ data: [] });
+      jobFilter = `AND i.job_id IN (${assignedIds.map(() => '?').join(',')})`;
+      jobParams = assignedIds;
+    }
     const interviews = db.prepare(`
       SELECT i.*, c.name as candidate_name, c.email as candidate_email,
              j.title as job_title, j.location as job_location
@@ -82,8 +98,9 @@ router.get('/upcoming', (req, res) => {
       WHERE i.interview_date >= date('now')
         AND i.interview_date <= date('now', '+14 days')
         AND i.status != 'abgesagt'
+        ${jobFilter}
       ORDER BY i.interview_date ASC, i.interview_time ASC
-    `).all();
+    `).all(...jobParams);
 
     res.json({ data: interviews });
   } catch (error) {

@@ -29,8 +29,8 @@ const router = express.Router();
  */
 router.get('/', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!['admin', 'revisor'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Kein Zugriff auf Compliance-Aktionen' });
     }
 
     let where = [];
@@ -217,8 +217,8 @@ router.delete('/:id', (req, res) => {
  */
 router.get('/risk-overrides', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!['admin', 'revisor'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
     const overrides = db.prepare('SELECT * FROM risk_overrides').all();
     res.json({ data: overrides });
@@ -284,8 +284,8 @@ router.put('/risk-overrides/:riskId', (req, res) => {
 
 router.get('/summary', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren haben Zugriff' });
+    if (!['admin', 'revisor'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Kein Zugriff' });
     }
 
     const total = db.prepare('SELECT COUNT(*) as c FROM compliance_actions').get().c;

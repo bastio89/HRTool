@@ -17,7 +17,23 @@ export function AuthProvider({ children }) {
           if (!res.ok) throw new Error('Token invalid')
           return res.json()
         })
-        .then(u => setUser(u))
+        .then(u => {
+          setUser(u)
+          // Load assigned job IDs for fachbereich
+          if (u.role === 'fachbereich') {
+            fetch('/api/auth/users', {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+              .then(r => r.ok ? r.json() : null)
+              .then(d => {
+                if (d?.data) {
+                  const me = d.data.find(x => x.id === u.id)
+                  if (me?.job_ids) setUser(prev => ({ ...prev, job_ids: me.job_ids }))
+                }
+              })
+              .catch(() => {})
+          }
+        })
         .catch(() => {
           localStorage.removeItem('hrtool_token')
           setToken(null)
@@ -53,7 +69,17 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider value={{
+      user,
+      token,
+      login,
+      logout,
+      loading,
+      isAdmin: user?.role === 'admin',
+      isRevisor: user?.role === 'revisor',
+      isFachbereich: user?.role === 'fachbereich',
+      assignedJobIds: user?.job_ids || [],
+    }}>
       {children}
     </AuthContext.Provider>
   )

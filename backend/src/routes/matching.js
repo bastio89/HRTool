@@ -4,99 +4,96 @@ const { logAiCall } = require('../aiLogger');
 const { logAudit } = require('./audit');
 const { matchingRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
+const { sanitizeObject } = require('../middleware/promptSanitizer');
+const apiKeyAuth = require('../middleware/apiKey');
+const { getAiConfig } = require('../aiConfig');
 
 const router = express.Router();
 
-/**
- * @swagger
- * /matching/run:
- *   post:
- *     summary: KI-Matching starten
- *     tags: [Matching]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             properties:
- *               jobDescription: { type: string, description: Stellenbeschreibung }
- *               jobTitle: { type: string }
- *               candidateIds: { type: array, items: { type: integer }, description: Optional - sonst alle Bewerber }
- *     responses:
- *       200: { description: Matching-Ergebnis mit Scores }
- *       400: { description: Keine Beschreibung oder keine Bewerber }
- *       502: { description: n8n Workflow fehlgeschlagen }
- */
-router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
-  try {
-    const { jobDescription, jobTitle, candidateIds, weights, jobId } = req.body;
+const MATCHING_CANDIDATE_FIELDS = `
+  id, name, email, location, experience, skills, education,
+  desired_salary, availability, languages, certificates, mobility
+`;
 
-    if (!jobDescription || jobDescription.trim() === '') {
-      return res.status(400).json({ error: 'Stellenbeschreibung ist erforderlich' });
+const MATCHING_JOB_FIELDS = `
+  id, title, description, requirements, location, type, status, url
+`;
+
+const WEIGHT_LABELS = {
+  skills: 'Fachliche Qualifikation / Skills',
+  experience: 'Berufserfahrung',
+  education: 'Ausbildung / Hochschulabschluss',
+  location: 'Wohnortnähe / Standort',
+  languages: 'Sprachkenntnisse',
+  salary: 'Gehaltsvorstellung',
+  availability: 'Verfügbarkeit / Startdatum',
+  certificates: 'Zertifikate / Weiterbildungen',
+  cultural_fit: 'Kulturelle Passung / Soft Skills',
+  mobility: 'Mobilität / Führerschein'
+};
+
+function getCandidates(candidateIds) {
+  if (candidateIds && candidateIds.length > 0) {
+    const ids = candidateIds.map(Number).filter(Boolean);
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    return db.prepare(`SELECT ${MATCHING_CANDIDATE_FIELDS} FROM candidates WHERE id IN (${placeholders})`).all(...ids);
+  }
+  return db.prepare(`SELECT ${MATCHING_CANDIDATE_FIELDS} FROM candidates`).all();
+}
+
+function getJobs(jobIds) {
+  if (jobIds && jobIds.length > 0) {
+    const ids = jobIds.map(Number).filter(Boolean);
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE id IN (${placeholders})`).all(...ids);
+  }
+  return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE status IS NULL OR status != 'Archiviert' ORDER BY created_at DESC`).all();
+}
+
+function buildJobDescription(job) {
+  const parts = [];
+  if (job.description) parts.push(job.description);
+  if (job.requirements) parts.push(`Anforderungen:\n${job.requirements}`);
+  if (job.location) parts.push(`Standort: ${job.location}`);
+  if (job.type) parts.push(`Arbeitsmodell: ${job.type}`);
+  return parts.join('\n\n').trim() || job.title || 'Unbenannte Stelle';
+}
+
+function buildWeightInstructions(weights) {
+  if (!weights || typeof weights !== 'object') return '';
+
+  const nonZero = Object.entries(weights).filter(([key, value]) => value !== 0 && WEIGHT_LABELS[key]);
+  if (nonZero.length === 0) return '';
+
+  const increased = nonZero.filter(([, value]) => value > 0).sort((a, b) => b[1] - a[1]);
+  const decreased = nonZero.filter(([, value]) => value < 0).sort((a, b) => a[1] - b[1]);
+
+  let instructions = '\n\nWICHTIG – GEWICHTUNG DER BEWERTUNGSKRITERIEN:\n';
+  instructions += 'Der Recruiter hat folgende Gewichtungsanpassungen vorgenommen (Skala -10 bis +10, 0=Standard):\n';
+
+  if (increased.length > 0) {
+    instructions += '\nSTÄRKER GEWICHTEN (höhere Priorität):\n';
+    for (const [key, value] of increased) {
+      const intensity = value >= 7 ? 'SEHR STARK' : value >= 4 ? 'STARK' : 'LEICHT';
+      instructions += `- ${WEIGHT_LABELS[key]}: +${value} → ${intensity} höher gewichten\n`;
     }
-
-    // Get candidates - either specific ones or all
-    let candidates;
-    if (candidateIds && candidateIds.length > 0) {
-      const placeholders = candidateIds.map(() => '?').join(',');
-      candidates = db.prepare(`SELECT * FROM candidates WHERE id IN (${placeholders})`).all(...candidateIds);
-    } else {
-      candidates = db.prepare('SELECT * FROM candidates').all();
+  }
+  if (decreased.length > 0) {
+    instructions += '\nWENIGER GEWICHTEN (niedrigere Priorität):\n';
+    for (const [key, value] of decreased) {
+      const intensity = value <= -7 ? 'FAST IGNORIEREN' : value <= -4 ? 'DEUTLICH WENIGER' : 'ETWAS WENIGER';
+      instructions += `- ${WEIGHT_LABELS[key]}: ${value} → ${intensity} gewichten\n`;
     }
+  }
+  instructions += '\nPasse deinen Score entsprechend dieser Gewichtung an. Kriterien mit hoher Gewichtung sollen überproportional in den Score einfließen.\n';
+  return instructions;
+}
 
-    if (candidates.length === 0) {
-      return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
-    }
-
-    // Build weight instructions for the LLM prompt
-    const WEIGHT_LABELS = {
-      skills: 'Fachliche Qualifikation / Skills',
-      experience: 'Berufserfahrung',
-      education: 'Ausbildung / Hochschulabschluss',
-      location: 'Wohnortnähe / Standort',
-      languages: 'Sprachkenntnisse',
-      salary: 'Gehaltsvorstellung',
-      availability: 'Verfügbarkeit / Startdatum',
-      certificates: 'Zertifikate / Weiterbildungen',
-      cultural_fit: 'Kulturelle Passung / Soft Skills',
-      mobility: 'Mobilität / Führerschein'
-    };
-
-    let weightInstructions = '';
-    if (weights && typeof weights === 'object') {
-      const nonZero = Object.entries(weights).filter(([k, v]) => v !== 0 && WEIGHT_LABELS[k]);
-      if (nonZero.length > 0) {
-        const increased = nonZero.filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-        const decreased = nonZero.filter(([, v]) => v < 0).sort((a, b) => a[1] - b[1]);
-
-        weightInstructions = '\n\nWICHTIG – GEWICHTUNG DER BEWERTUNGSKRITERIEN:\n';
-        weightInstructions += 'Der Recruiter hat folgende Gewichtungsanpassungen vorgenommen (Skala -10 bis +10, 0=Standard):\n';
-
-        if (increased.length > 0) {
-          weightInstructions += '\nSTÄRKER GEWICHTEN (höhere Priorität):\n';
-          for (const [key, val] of increased) {
-            const intensity = val >= 7 ? 'SEHR STARK' : val >= 4 ? 'STARK' : 'LEICHT';
-            weightInstructions += `- ${WEIGHT_LABELS[key]}: +${val} → ${intensity} höher gewichten\n`;
-          }
-        }
-        if (decreased.length > 0) {
-          weightInstructions += '\nWENIGER GEWICHTEN (niedrigere Priorität):\n';
-          for (const [key, val] of decreased) {
-            const intensity = val <= -7 ? 'FAST IGNORIEREN' : val <= -4 ? 'DEUTLICH WENIGER' : 'ETWAS WENIGER';
-            weightInstructions += `- ${WEIGHT_LABELS[key]}: ${val} → ${intensity} gewichten\n`;
-          }
-        }
-        weightInstructions += '\nPasse deinen Score entsprechend dieser Gewichtung an. Kriterien mit hoher Gewichtung sollen überproportional in den Score einfließen.\n';
-      }
-    }
-
-    const startTime = Date.now();
-
-    // Direct Ollama call (replaces n8n webhook)
-    const OLLAMA_URL = (process.env.OLLAMA_BASE_URL || 'http://localhost:11434').replace('host.docker.internal', 'localhost');
-    const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
-
-    const prompt = `Du bist ein erfahrener HR-Analyst. Analysiere die folgenden Bewerber für die gegebene Stelle und bewerte jeden mit einem Score von 0-100.
+function buildJobToCandidatesPrompt({ jobDescription, jobTitle, candidates, weights }) {
+  const weightInstructions = buildWeightInstructions(weights);
+  return `Du bist ein erfahrener HR-Analyst. Analysiere die folgenden Bewerber für die gegebene Stelle und bewerte jeden mit einem Score von 0-100.
 
 Stellenbeschreibung:
 ${jobDescription}${weightInstructions}
@@ -128,13 +125,273 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
     }
   ]
 }`;
+}
+
+async function assertAiReachable(baseUrl) {
+  const pingCtrl = new AbortController();
+  const pingTimeout = setTimeout(() => pingCtrl.abort(), 3000);
+  try {
+    await fetch(`${baseUrl}/`, { signal: pingCtrl.signal });
+  } finally {
+    clearTimeout(pingTimeout);
+  }
+}
+
+async function generateJson({ baseUrl, model, prompt, timeoutMs = 180000 }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({ model, prompt, stream: false, format: 'json', options: { temperature: 0.2 } }),
+    });
+
+    const raw = await response.text();
+    if (!response.ok) {
+      const error = new Error(`Ollama HTTP ${response.status}`);
+      error.status = response.status;
+      error.raw = raw;
+      throw error;
+    }
+
+    const data = JSON.parse(raw);
+    return { raw, parsed: JSON.parse(data.response) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeJobResults({ parsed, job, candidates }) {
+  const candidateMap = new Map(candidates.map(c => [c.id, c.name]));
+  const results = Array.isArray(parsed?.results) ? parsed.results : [];
+  return results.map((result) => ({
+    ...result,
+    jobId: job.id,
+    jobTitle: job.title,
+    candidateName: candidateMap.get(result.candidateId) || result.candidateName,
+    score: Math.max(0, Math.min(100, Number(result.score) || 0)),
+  })).sort((a, b) => b.score - a.score);
+}
+
+function buildMatrixResult({ jobs, candidates, rows, mode, model }) {
+  const candidateMap = new Map(candidates.map(c => [c.id, c.name]));
+  const jobsRanked = jobs.map(job => ({
+    jobId: job.id,
+    jobTitle: job.title,
+    results: rows.filter(row => row.jobId === job.id).sort((a, b) => b.score - a.score),
+  }));
+  const candidatesRanked = candidates.map(candidate => ({
+    candidateId: candidate.id,
+    candidateName: candidateMap.get(candidate.id) || candidate.name,
+    results: rows.filter(row => row.candidateId === candidate.id).sort((a, b) => b.score - a.score),
+  }));
+
+  return {
+    type: 'matrix',
+    mode,
+    model,
+    matchedAt: new Date().toISOString(),
+    jobs: jobs.map(job => ({ id: job.id, title: job.title })),
+    candidates: candidates.map(candidate => ({ id: candidate.id, name: candidate.name })),
+    matrix: rows.sort((a, b) => b.score - a.score),
+    jobsRanked,
+    candidatesRanked,
+  };
+}
+
+function sanitizeExternalPayload({ job, candidates }) {
+  const sanitizedJob = sanitizeObject(job || {}, 'matching').sanitized;
+  const sanitizedCandidates = candidates.map(candidate => sanitizeObject(candidate || {}, 'matching').sanitized);
+  return { sanitizedJob, sanitizedCandidates };
+}
+
+function normalizeExternalCandidates(candidates) {
+  return candidates.map((candidate, index) => ({
+    id: index + 1,
+    externalId: String(candidate.id || `candidate-${index + 1}`),
+    name: candidate.name || `Kandidat ${index + 1}`,
+    location: candidate.location,
+    experience: candidate.experience,
+    skills: candidate.skills,
+    education: candidate.education,
+    desired_salary: candidate.desired_salary,
+    availability: candidate.availability,
+    languages: candidate.languages,
+    certificates: candidate.certificates,
+    mobility: candidate.mobility,
+  }));
+}
+
+/**
+ * @swagger
+ * /matching/external/run:
+ *   post:
+ *     summary: Externes Matching per OpenAPI REST starten
+ *     description: Matching-only Schnittstelle fuer Kunden, die HRTool ohne UI und ohne lokale Kandidaten-/Stellenspeicherung nutzen moechten.
+ *     tags: [Matching]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ExternalMatchingRequest'
+ *     responses:
+ *       200:
+ *         description: Matching-Ergebnis mit Scores
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ExternalMatchingResponse'
+ *       400: { description: Ungueltige Eingabe }
+ *       401: { description: API-Key fehlt oder ist ungueltig }
+ *       503: { description: KI-Host nicht erreichbar oder externe API nicht konfiguriert }
+ */
+router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { job, candidates, weights, options = {} } = req.body;
+    if (!job || typeof job !== 'object') return res.status(400).json({ error: 'job ist erforderlich' });
+    if (!Array.isArray(candidates) || candidates.length === 0) return res.status(400).json({ error: 'Mindestens ein Kandidat ist erforderlich' });
+    if (candidates.length > 50) return res.status(400).json({ error: 'Maximal 50 Kandidaten pro Anfrage erlaubt' });
+
+    const { sanitizedJob, sanitizedCandidates } = sanitizeExternalPayload({ job, candidates });
+    const normalizedCandidates = normalizeExternalCandidates(sanitizedCandidates);
+    const normalizedJob = {
+      id: sanitizedJob.id || null,
+      title: sanitizedJob.title || 'Unbenannte Stelle',
+      description: sanitizedJob.description,
+      requirements: sanitizedJob.requirements,
+      location: sanitizedJob.location,
+      type: sanitizedJob.type,
+    };
+
+    const jobDescription = buildJobDescription(normalizedJob);
+    if (!jobDescription || jobDescription === 'Unbenannte Stelle') {
+      return res.status(400).json({ error: 'Stellentitel, Beschreibung oder Anforderungen sind erforderlich' });
+    }
+
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    try {
+      await assertAiReachable(OLLAMA_URL);
+    } catch {
+      return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte pruefen Sie die KI-Konfiguration.' });
+    }
+
+    const prompt = buildJobToCandidatesPrompt({
+      jobDescription,
+      jobTitle: normalizedJob.title,
+      candidates: normalizedCandidates,
+      weights,
+    });
+    const timeoutMs = Math.min(Math.max(Number(options.timeoutMs) || 180000, 30000), 300000);
+    const { parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, prompt, timeoutMs });
+    const rows = normalizeJobResults({ parsed, job: normalizedJob, candidates: normalizedCandidates });
+
+    const byInternalId = new Map(normalizedCandidates.map(candidate => [candidate.id, candidate]));
+    const results = rows.map(row => {
+      const candidate = byInternalId.get(Number(row.candidateId));
+      return {
+        externalCandidateId: candidate?.externalId || String(row.candidateId),
+        candidateName: candidate?.name || row.candidateName,
+        score: row.score,
+        strengths: row.strengths || [],
+        weaknesses: row.weaknesses || [],
+        summary: row.summary || '',
+      };
+    });
+
+    const durationMs = Date.now() - startTime;
+    logAiCall({
+      userId: null,
+      feature: 'external-matching',
+      model: OLLAMA_MODEL,
+      prompt: `External matching (${normalizedCandidates.length} candidates)` ,
+      response: JSON.stringify({ resultCount: results.length }),
+      parsedResult: { resultCount: results.length, topScore: results[0]?.score ?? null },
+      durationMs,
+      success: true,
+    });
+
+    res.json({
+      job: {
+        externalJobId: normalizedJob.id,
+        title: normalizedJob.title,
+      },
+      results,
+      candidateCount: normalizedCandidates.length,
+      model: OLLAMA_MODEL,
+      durationMs,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    const durationMs = Date.now() - startTime;
+    console.error('Error running external matching:', error);
+    logAiCall({
+      userId: null,
+      feature: 'external-matching',
+      model: getAiConfig().model,
+      prompt: 'External matching failed',
+      response: error.raw || null,
+      parsedResult: null,
+      durationMs,
+      success: false,
+      errorMessage: error.name === 'AbortError' ? 'Timeout' : error.message,
+    });
+    res.status(error.name === 'AbortError' ? 504 : 500).json({
+      error: error.name === 'AbortError' ? 'KI-Timeout beim externen Matching' : 'Fehler beim externen Matching',
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /matching/run:
+ *   post:
+ *     summary: KI-Matching starten
+ *     tags: [Matching]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             properties:
+ *               jobDescription: { type: string, description: Stellenbeschreibung }
+ *               jobTitle: { type: string }
+ *               candidateIds: { type: array, items: { type: integer }, description: Optional - sonst alle Bewerber }
+ *     responses:
+ *       200: { description: Matching-Ergebnis mit Scores }
+ *       400: { description: Keine Beschreibung oder keine Bewerber }
+ *       502: { description: n8n Workflow fehlgeschlagen }
+ */
+router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
+  try {
+    const { jobDescription, jobTitle, candidateIds, weights, jobId } = req.body;
+
+    if (!jobDescription || jobDescription.trim() === '') {
+      return res.status(400).json({ error: 'Stellenbeschreibung ist erforderlich' });
+    }
+
+    const candidates = getCandidates(candidateIds);
+
+    if (candidates.length === 0) {
+      return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
+    }
+
+    const startTime = Date.now();
+
+    // Direct Ollama call (replaces n8n webhook)
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+
+    const prompt = buildJobToCandidatesPrompt({ jobDescription, jobTitle, candidates, weights });
 
     // Check Ollama availability (3s timeout)
     try {
-      const pingCtrl = new AbortController();
-      const pingTimeout = setTimeout(() => pingCtrl.abort(), 3000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingCtrl.signal });
-      clearTimeout(pingTimeout);
+      await assertAiReachable(OLLAMA_URL);
     } catch {
       return res.status(503).json({ error: 'Ollama nicht erreichbar. Bitte stellen Sie sicher, dass Ollama läuft (http://localhost:11434).' });
     }
@@ -215,6 +472,109 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
     res.status(500).json({ 
       error: 'Fehler beim Matching',
       details: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /matching/run-matrix:
+ *   post:
+ *     summary: Matrix-Matching starten (alle Stellen gegen alle Bewerber oder Bewerber gegen alle Stellen)
+ *     tags: [Matching]
+ */
+router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
+  const startTime = Date.now();
+  const { mode = 'all_jobs_all_candidates', jobIds, candidateIds, weights } = req.body;
+
+  try {
+    const jobs = getJobs(jobIds);
+    const candidates = getCandidates(candidateIds);
+
+    if (jobs.length === 0) return res.status(400).json({ error: 'Keine Stellen vorhanden' });
+    if (candidates.length === 0) return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
+
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    try {
+      await assertAiReachable(OLLAMA_URL);
+    } catch {
+      return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte prüfen Sie die KI-Konfiguration unter Administration → KI-Modell.' });
+    }
+
+    const rows = [];
+    const rawResponses = [];
+
+    for (const job of jobs) {
+      const jobDescription = buildJobDescription(job);
+      const prompt = buildJobToCandidatesPrompt({ jobDescription, jobTitle: job.title, candidates, weights });
+      const { raw, parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, prompt });
+      rawResponses.push({ jobId: job.id, raw });
+      rows.push(...normalizeJobResults({ parsed, job, candidates }));
+    }
+
+    const matrixResult = buildMatrixResult({ jobs, candidates, rows, mode, model: OLLAMA_MODEL });
+    const durationMs = Date.now() - startTime;
+    const resultTitle = mode === 'candidate_to_jobs'
+      ? `Bewerber → alle Stellen (${candidates.length} × ${jobs.length})`
+      : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber)`;
+
+    const saveResult = db.prepare(`
+      INSERT INTO matching_results (job_description, job_title, results, job_id)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
+      resultTitle,
+      JSON.stringify(matrixResult),
+      null
+    );
+
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'matching-matrix',
+      model: OLLAMA_MODEL,
+      prompt: `Matrix matching (${jobs.length} jobs x ${candidates.length} candidates)`,
+      response: JSON.stringify(rawResponses),
+      parsedResult: matrixResult,
+      durationMs,
+      success: true,
+    });
+
+    logAudit(req, 'ki-matching-matrix', 'Matching', saveResult.lastInsertRowid, resultTitle, {
+      jobCount: jobs.length,
+      candidateCount: candidates.length,
+      pairCount: rows.length,
+      durationMs,
+      model: OLLAMA_MODEL,
+    });
+
+    res.json({
+      id: saveResult.lastInsertRowid,
+      jobTitle: resultTitle,
+      results: matrixResult,
+      jobCount: jobs.length,
+      candidateCount: candidates.length,
+      pairCount: rows.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    const durationMs = Date.now() - startTime;
+    console.error('Error running matrix matching:', error);
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'matching-matrix',
+      model: getAiConfig().model,
+      prompt: `Matrix matching failed (${mode})`,
+      response: error.raw || null,
+      parsedResult: null,
+      durationMs,
+      success: false,
+      errorMessage: error.name === 'AbortError' ? 'Timeout >180s' : error.message,
+    });
+    res.status(error.name === 'AbortError' ? 504 : 500).json({
+      error: error.name === 'AbortError'
+        ? 'KI-Timeout – Matrix-Matching dauerte zu lange. Versuche weniger Stellen oder Bewerber.'
+        : 'Fehler beim Matrix-Matching',
+      details: error.message,
     });
   }
 });

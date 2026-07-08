@@ -228,8 +228,8 @@ router.get('/activity-timeline', (req, res) => {
 // GET /reports/team-performance
 router.get('/team-performance', (req, res) => {
   try {
-    if (req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Nur Administratoren' });
+    if (!['admin', 'revisor'].includes(req.user?.role)) {
+      return res.status(403).json({ error: 'Kein Zugriff auf Team-Performance' });
     }
 
     const days = parseInt(req.query.days) || 30;

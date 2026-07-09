@@ -10,7 +10,11 @@ import Dashboard from './pages/Dashboard'
 import Candidates from './pages/Candidates'
 import CandidateForm from './pages/CandidateForm'
 import CandidateDetail from './pages/CandidateDetail'
-import Matching from './pages/Matching'
+import MatchingHub from './pages/MatchingHub'
+import MatchingLayout from './components/MatchingLayout'
+import JobToCandidates from './pages/JobToCandidates'
+import CandidateToJobs from './pages/CandidateToJobs'
+import MatrixMatching from './pages/MatrixMatching'
 import MatchingResults from './pages/MatchingResults'
 import History from './pages/History'
 import Jobs from './pages/Jobs'
@@ -63,7 +67,12 @@ function ProtectedRoutes() {
         <Route path="jobs/:id/edit" element={<JobForm />} />
         <Route path="pipeline/:jobId" element={<Pipeline />} />
         <Route path="pipeline/:jobId/interview-prep/:entryId" element={<InterviewPrep />} />
-        <Route path="matching" element={<Matching />} />
+        <Route path="matching" element={<MatchingHub />} />
+        <Route path="matching" element={<MatchingLayout />}>
+          <Route path="job" element={<JobToCandidates />} />
+          <Route path="candidate" element={<CandidateToJobs />} />
+          <Route path="matrix" element={<MatrixMatching />} />
+        </Route>
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />
         <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />

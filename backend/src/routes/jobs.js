@@ -4,7 +4,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
-const { getAiConfig } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -254,7 +254,8 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
           model: OLLAMA_MODEL,
           prompt,
           stream: false,
-          options: { temperature: 0.7, num_predict: 2048 }
+          format: 'json',
+          options: { temperature: 0.7, num_predict: 4096 }
         }),
         signal: controller.signal
       });
@@ -305,7 +306,7 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     let parsed = { description: '', requirements: '' };
     try {
       // Strip markdown code blocks if present
-      let cleanText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      let cleanText = stripReasoningTags(responseText);
       
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {

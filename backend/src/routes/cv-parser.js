@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const { logAiCall } = require('../aiLogger');
-const { getAiConfig } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -356,7 +356,8 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
           model: OLLAMA_MODEL,
           prompt,
           stream: false,
-          options: { temperature: 0.1, num_predict: 4096 }
+          format: 'json',
+          options: { temperature: 0.1, num_predict: 8192 }
         }),
         signal: controller.signal,
       });
@@ -411,7 +412,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     // 3. Parse JSON from Ollama response
     let extracted = {};
     try {
-      let cleanText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      let cleanText = stripReasoningTags(responseText);
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         extracted = JSON.parse(jsonMatch[0]);

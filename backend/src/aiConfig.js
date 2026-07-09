@@ -48,4 +48,22 @@ function getAiConfig() {
   };
 }
 
-module.exports = { getAiConfig, normalizeAiBaseUrl, DEFAULT_BASE_URL, DEFAULT_MODEL };
+/**
+ * Strip reasoning/thinking blocks emitted by models like Qwen3, DeepSeek-R1, etc.
+ * Also strips markdown code fences. Returns clean text ready for JSON.parse().
+ *
+ * Handles:
+ *   - <think>...</think>  (Qwen3, DeepSeek-R1)
+ *   - <thinking>...</thinking>  (some DeepSeek variants)
+ *   - ```json ... ```  (markdown code fences)
+ */
+function stripReasoningTags(text) {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .trim();
+}
+
+module.exports = { getAiConfig, normalizeAiBaseUrl, stripReasoningTags, DEFAULT_BASE_URL, DEFAULT_MODEL };

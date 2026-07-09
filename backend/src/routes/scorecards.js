@@ -3,7 +3,7 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
-const { getAiConfig } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -371,7 +371,8 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
           model: OLLAMA_MODEL,
           prompt,
           stream: false,
-          options: { temperature: 0.7, num_predict: 3000 }
+          format: 'json',
+          options: { temperature: 0.7, num_predict: 6144 }
         }),
         signal: controller.signal
       });
@@ -407,7 +408,7 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
     // Parse JSON from response
     let questions = [];
     try {
-      const cleanText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      const cleanText = stripReasoningTags(responseText);
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);

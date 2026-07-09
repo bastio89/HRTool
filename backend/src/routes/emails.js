@@ -5,7 +5,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
-const { getAiConfig } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -540,7 +540,8 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
           model: OLLAMA_MODEL,
           prompt,
           stream: false,
-          options: { temperature: 0.7, num_predict: 1500 }
+          format: 'json',
+          options: { temperature: 0.7, num_predict: 3000 }
         }),
         signal: controller.signal
       });
@@ -566,7 +567,7 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
 
     let parsed = { name: '', subject: '', body: '' };
     try {
-      const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      const clean = stripReasoningTags(raw);
       const match = clean.match(/\{[\s\S]*\}/);
       if (match) {
         parsed = JSON.parse(match[0]);

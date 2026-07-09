@@ -6,7 +6,7 @@ const { matchingRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
-const { getAiConfig } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -157,7 +157,7 @@ async function generateJson({ baseUrl, model, prompt, timeoutMs = 180000 }) {
     }
 
     const data = JSON.parse(raw);
-    return { raw, parsed: JSON.parse(data.response) };
+    return { raw, parsed: JSON.parse(stripReasoningTags(data.response)) };
   } finally {
     clearTimeout(timeout);
   }
@@ -430,7 +430,7 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
     let matchingResults;
     try {
       const data = JSON.parse(raw);
-      matchingResults = JSON.parse(data.response);
+      matchingResults = JSON.parse(stripReasoningTags(data.response));
     } catch (parseErr) {
       logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: matchingDuration, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
       return res.status(502).json({ error: 'Ollama-Antwort konnte nicht verarbeitet werden', details: parseErr.message });

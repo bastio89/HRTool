@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig, normalizeAiBaseUrl, DEFAULT_BASE_URL, DEFAULT_MODEL } = require('../aiConfig');
+const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, fetchAiModels, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -45,8 +45,9 @@ router.get('/ai/config', (req, res) => {
     res.json({
       baseUrl: config.baseUrl,
       model: config.model,
+      provider: config.provider,
       source: config.source,
-      defaults: { baseUrl: DEFAULT_BASE_URL, model: DEFAULT_MODEL },
+      defaults: { baseUrl: DEFAULT_BASE_URL, model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER },
     });
   } catch (error) {
     console.error('Error fetching AI config:', error);
@@ -77,7 +78,7 @@ router.put('/ai/config', (req, res) => {
       return res.status(403).json({ error: 'Nur Administratoren dürfen die KI-Konfiguration ändern' });
     }
 
-    const { baseUrl, model } = req.body;
+    const { baseUrl, model, provider } = req.body;
 
     if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
       return res.status(400).json({ error: 'Host / Base-URL ist erforderlich' });
@@ -85,6 +86,8 @@ router.put('/ai/config', (req, res) => {
     if (typeof model !== 'string' || !model.trim()) {
       return res.status(400).json({ error: 'Modell ist erforderlich' });
     }
+    const validProviders = ['auto', 'ollama', 'openai'];
+    const normalizedProvider = (typeof provider === 'string' && validProviders.includes(provider.trim())) ? provider.trim() : 'auto';
 
     const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
     try {
@@ -99,10 +102,14 @@ router.put('/ai/config', (req, res) => {
     const upsert = db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`);
     upsert.run('ai_base_url', trimmedUrl);
     upsert.run('ai_model', model.trim());
+    upsert.run('ai_provider', normalizedProvider);
 
-    logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', { baseUrl: trimmedUrl, model: model.trim() });
+    // Invalidate cached provider detection for the old and new URLs
+    invalidateProviderCache();
 
-    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim() });
+    logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', { baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider });
+
+    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider });
   } catch (error) {
     console.error('Error saving AI config:', error);
     res.status(500).json({ error: 'Fehler beim Speichern der KI-Konfiguration' });
@@ -128,35 +135,32 @@ router.get('/ai/models', async (req, res) => {
     const override = typeof req.query.baseUrl === 'string' && req.query.baseUrl.trim()
       ? normalizeAiBaseUrl(req.query.baseUrl)
       : null;
-    const baseUrl = override || getAiConfig().baseUrl;
+    const cfg = getAiConfig();
+    const baseUrl = override || cfg.baseUrl;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    let response;
+    // Resolve provider (may auto-detect via /api/tags probe)
+    let provider;
     try {
-      response = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
+      provider = await resolveAiProvider(baseUrl, cfg.provider);
+    } catch {
+      provider = 'ollama';
+    }
+
+    let models = [];
+    try {
+      models = await fetchAiModels(baseUrl, provider, 5000);
     } catch (err) {
-      clearTimeout(timeout);
       return res.status(502).json({
         error: 'KI-Host nicht erreichbar',
         reachable: false,
         baseUrl,
+        provider,
         details: err.name === 'AbortError' ? 'Zeitüberschreitung' : err.message,
         models: [],
       });
     }
-    clearTimeout(timeout);
 
-    if (!response.ok) {
-      return res.status(502).json({ error: `KI-Host antwortete mit HTTP ${response.status}`, reachable: false, baseUrl, models: [] });
-    }
-
-    const data = await response.json().catch(() => ({}));
-    const models = Array.isArray(data.models)
-      ? data.models.map((m) => ({ name: m.name, size: m.size ?? null, modified_at: m.modified_at ?? null }))
-      : [];
-
-    res.json({ reachable: true, baseUrl, models });
+    res.json({ reachable: true, baseUrl, provider, models });
   } catch (error) {
     console.error('Error listing AI models:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Modelle', models: [] });
@@ -177,24 +181,29 @@ router.post('/ai/test', async (req, res) => {
     const override = typeof req.body?.baseUrl === 'string' && req.body.baseUrl.trim()
       ? normalizeAiBaseUrl(req.body.baseUrl)
       : null;
-    const baseUrl = override || getAiConfig().baseUrl;
+    const cfg = getAiConfig();
+    const baseUrl = override || cfg.baseUrl;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const started = Date.now();
-    let response;
+    // Detect provider
+    let provider;
     try {
-      response = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal });
-    } catch (err) {
-      clearTimeout(timeout);
-      return res.json({ reachable: false, baseUrl, error: err.name === 'AbortError' ? 'Zeitüberschreitung (>5s)' : err.message });
+      provider = await resolveAiProvider(baseUrl, cfg.provider);
+    } catch {
+      provider = 'auto';
     }
-    clearTimeout(timeout);
 
-    const data = await response.json().catch(() => ({}));
-    const modelCount = Array.isArray(data.models) ? data.models.length : 0;
+    const started = Date.now();
+    let models = [];
+    let reachable = false;
+    let errorMsg = null;
+    try {
+      models = await fetchAiModels(baseUrl, provider === 'auto' ? 'ollama' : provider, 5000);
+      reachable = true;
+    } catch (err) {
+      errorMsg = err.name === 'AbortError' ? 'Zeitüberschreitung (>5s)' : err.message;
+    }
 
-    res.json({ reachable: response.ok, baseUrl, status: response.status, latencyMs: Date.now() - started, modelCount });
+    res.json({ reachable, baseUrl, provider, latencyMs: Date.now() - started, modelCount: models.length, ...(errorMsg ? { error: errorMsg } : {}) });
   } catch (error) {
     console.error('Error testing AI connection:', error);
     res.status(500).json({ error: 'Fehler beim Verbindungstest' });

@@ -3,7 +3,7 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
-const { getAiConfig, stripReasoningTags } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -323,7 +323,7 @@ router.post('/generate-questions', generatorRateLimiter, promptGuard('interview-
       return res.status(400).json({ error: 'Mindestens eine Stelle oder ein Kandidat ist erforderlich' });
     }
     
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
     const count = Math.min(Math.max(3, parseInt(question_count) || 8), 15);
     
     const prompt = `Du bist ein erfahrener HR-Experte und Interviewer. Erstelle ${count} strukturierte Interviewfragen.
@@ -349,13 +349,16 @@ Erstelle Fragen in diesen Kategorien:
 Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
 {"questions": [{"text": "Frage hier", "category": "Fachkompetenz|Soft Skills|Motivation|Erfahrung", "hint": "Worauf bei der Antwort achten"}]}`;
 
-    // Check Ollama reachability
+    // Check AI host reachability
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
+    const { url: aiUrl, body: aiBody } = buildAiRequest({
+      baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
+      prompt, format: 'json', options: { temperature: 0.7, num_predict: 6144 },
+    });
     try {
-      const pingController = new AbortController();
-      setTimeout(() => pingController.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingController.signal });
+      await pingAiService(OLLAMA_URL, aiProvider, 5000);
     } catch (pingErr) {
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+      return res.status(502).json({ error: 'KI-Host ist nicht erreichbar. Bitte sicherstellen, dass der KI-Server läuft.' });
     }
 
     const controller = new AbortController();
@@ -364,16 +367,10 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
 
     let response;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      response = await fetch(aiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          format: 'json',
-          options: { temperature: 0.7, num_predict: 6144 }
-        }),
+        body: JSON.stringify(aiBody),
         signal: controller.signal
       });
     } catch (fetchErr) {
@@ -396,13 +393,13 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
       logAiCall({
         userId: req.user?.id, feature: 'interview-questions', model: OLLAMA_MODEL,
         prompt, response: errText, durationMs: Date.now() - startTime, success: false,
-        errorMessage: `Ollama Status ${response.status}`,
+        errorMessage: `KI-Status ${response.status}`,
       });
-      return res.status(502).json({ error: 'Ollama-Fehler: ' + errText });
+      return res.status(502).json({ error: 'KI-Fehler: ' + errText });
     }
 
     const data = await response.json();
-    const responseText = data.response || '';
+    const { text: responseText, promptTokens: inputTokens, evalTokens: outputTokens } = extractAiText(data, aiProvider);
     const duration = Date.now() - startTime;
 
     // Parse JSON from response
@@ -433,8 +430,8 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
       userId: req.user?.id, feature: 'interview-questions', model: OLLAMA_MODEL,
       prompt, response: responseText,
       parsedResult: { questionCount: questions.length },
-      durationMs: duration, inputTokens: data.prompt_eval_count ?? null,
-      outputTokens: data.eval_count ?? null, success: true,
+      durationMs: duration, inputTokens: inputTokens ?? null,
+      outputTokens: outputTokens ?? null, success: true,
     });
 
     logAudit(req, 'ki-interviewfragen-generiert', 'Scorecard', null, job?.title || 'Allgemein', {

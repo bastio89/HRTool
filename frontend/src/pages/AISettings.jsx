@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Bot, Server, Check, Loader2, AlertTriangle, RefreshCw, Wifi, WifiOff, Info, ChevronDown } from 'lucide-react'
+import { Bot, Server, Check, Loader2, AlertTriangle, RefreshCw, Wifi, WifiOff, Info, ChevronDown, Cpu } from 'lucide-react'
 import { settingsApi } from '../api'
 import { Card, Button, Input, LoadingSpinner } from '../components/UI'
 import { useI18n } from '../I18nContext'
@@ -12,11 +12,18 @@ const HOST_PRESETS = [
   { label: 'Text Generation WebUI', url: 'http://localhost:5000' },
 ]
 
+const PROVIDER_OPTIONS = [
+  { value: 'auto', label: 'Auto-Erkennung', desc: 'Erkennt Ollama oder OpenAI-kompatible API automatisch' },
+  { value: 'ollama', label: 'Ollama', desc: 'Ollama-API (/api/generate)' },
+  { value: 'openai', label: 'OpenAI-kompatibel', desc: 'LM Studio, Jan, Text Generation WebUI u.a. (/v1/chat/completions)' },
+]
+
 export default function AISettings() {
   const { t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
+  const [provider, setProvider] = useState('auto')
   const [source, setSource] = useState({ baseUrl: 'default', model: 'default' })
 
   const [models, setModels] = useState([])
@@ -37,6 +44,7 @@ export default function AISettings() {
       const cfg = await settingsApi.getAiConfig()
       setBaseUrl(cfg.baseUrl || '')
       setModel(cfg.model || '')
+      setProvider(cfg.provider || 'auto')
       setSource(cfg.source || { baseUrl: 'default', model: 'default' })
       // Load available models for the current host
       await loadModels(cfg.baseUrl, cfg.model)
@@ -93,9 +101,10 @@ export default function AISettings() {
     setError('')
     setSuccessMsg('')
     try {
-      const res = await settingsApi.saveAiConfig({ baseUrl: baseUrl.trim(), model: model.trim() })
+      const res = await settingsApi.saveAiConfig({ baseUrl: baseUrl.trim(), model: model.trim(), provider })
       setBaseUrl(res.baseUrl)
       setModel(res.model)
+      setProvider(res.provider || 'auto')
       setSource({ baseUrl: 'settings', model: 'settings' })
       setSuccessMsg(t('ai_settings.saved'))
       setTimeout(() => setSuccessMsg(''), 3000)
@@ -143,6 +152,33 @@ export default function AISettings() {
           {t('ai_settings.info')}
         </p>
       </div>
+
+        {/* Provider / API dialect */}
+      <Card className="space-y-5">
+        <div className="flex items-center gap-3">
+          <Cpu className="w-5 h-5 text-gray-400" />
+          <h2 className="text-[19px] font-semibold text-black dark:text-white">API-Dialekt</h2>
+        </div>
+        <p className="text-[14px] text-gray-500 dark:text-gray-400 leading-relaxed">
+          Wähle den API-Dialekt deines KI-Servers. <strong>Auto</strong> erkennt automatisch, ob Ollama oder eine OpenAI-kompatible API (LM Studio, Jan, etc.) verwendet wird.
+        </p>
+        <div className="grid sm:grid-cols-3 gap-3">
+          {PROVIDER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setProvider(opt.value)}
+              className={`text-left px-4 py-3 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                provider === opt.value
+                  ? 'bg-[#0071e3]/10 border-[#0071e3]/40 text-[#0071e3]'
+                  : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] border-transparent text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
+              }`}
+            >
+              <div className="font-semibold text-[14px]">{opt.label}</div>
+              <div className="text-[12px] opacity-70 mt-0.5 leading-snug">{opt.desc}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
 
       {/* Host / Base URL */}
       <Card className="space-y-6">

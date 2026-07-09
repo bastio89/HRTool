@@ -4,7 +4,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
-const { getAiConfig, stripReasoningTags } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -247,16 +247,10 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     const startTime = Date.now();
     let response;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      response = await fetch(aiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          format: 'json',
-          options: { temperature: 0.7, num_predict: 4096 }
-        }),
+        body: JSON.stringify(aiBody),
         signal: controller.signal
       });
     } catch (fetchErr) {
@@ -299,7 +293,7 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     }
 
     const data = await response.json();
-    const responseText = data.response || '';
+    const { text: responseText, promptTokens: inputTokens, evalTokens: outputTokens } = extractAiText(data, aiProvider);
     const generationDuration = Date.now() - startTime;
 
     // Parse JSON from response (handle markdown wrapping, German keys, nested structures)
@@ -379,8 +373,8 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
       response: responseText,
       parsedResult: { description: finalDescription, requirements: finalRequirements },
       durationMs: generationDuration,
-      inputTokens: data.prompt_eval_count ?? null,
-      outputTokens: data.eval_count ?? null,
+      inputTokens: inputTokens ?? null,
+      outputTokens: outputTokens ?? null,
       success: true,
     });
 

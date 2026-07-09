@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const { logAiCall } = require('../aiLogger');
-const { getAiConfig, stripReasoningTags } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -318,19 +318,23 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an Ollama...`);
 
     // 2. Call Ollama directly for AI extraction
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
 
     const prompt = buildExtractionPrompt(combinedText.trim(), filenames);
 
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
+    const { url: aiUrl, body: aiBody } = buildAiRequest({
+      baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
+      prompt, format: 'json', options: { temperature: 0.1, num_predict: 8192 },
+    });
+
     // Quick reachability check
-    sendProgress('ollama_connect', `Verbindung zu Ollama (${OLLAMA_MODEL})...`, 40);
+    sendProgress('ollama_connect', `Verbindung zu KI-Host (${OLLAMA_MODEL})...`, 40);
     try {
-      const pingCtrl = new AbortController();
-      setTimeout(() => pingCtrl.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingCtrl.signal });
+      await pingAiService(OLLAMA_URL, aiProvider, 5000);
     } catch (pingErr) {
-      console.error('Ollama not reachable:', pingErr.message);
-      return sendError(502, { error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft (ollama serve).' });
+      console.error('AI host not reachable:', pingErr.message);
+      return sendError(502, { error: 'KI-Host ist nicht erreichbar. Bitte sicherstellen, dass der KI-Server läuft.' });
     }
 
     sendProgress('ollama_analyze', `KI analysiert ${combinedText.length} Zeichen Text mit ${OLLAMA_MODEL}...`, 50);
@@ -339,7 +343,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min for large docs
     const startTime = Date.now();
 
-    // Send periodic progress updates during Ollama processing
+    // Send periodic progress updates during AI processing
     let ollamaProgress = 50;
     const progressInterval = setInterval(() => {
       ollamaProgress = Math.min(ollamaProgress + 2, 88);
@@ -349,16 +353,10 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
 
     let response;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      response = await fetch(aiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          format: 'json',
-          options: { temperature: 0.1, num_predict: 8192 }
-        }),
+        body: JSON.stringify(aiBody),
         signal: controller.signal,
       });
     } catch (fetchErr) {
@@ -404,7 +402,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     sendProgress('ollama_done', 'KI-Analyse abgeschlossen, Ergebnis wird verarbeitet...', 90);
 
     const data = await response.json();
-    const responseText = data.response || '';
+    const { text: responseText } = extractAiText(data, aiProvider);
     const cvDuration = Date.now() - startTime;
 
     console.log(`✅ CV-Parser: Ollama-Antwort erhalten (${cvDuration}ms, ${responseText.length} Zeichen)`);

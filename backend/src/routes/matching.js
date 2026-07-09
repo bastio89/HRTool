@@ -6,7 +6,7 @@ const { matchingRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
-const { getAiConfig, stripReasoningTags } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -127,37 +127,40 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
 }`;
 }
 
-async function assertAiReachable(baseUrl) {
+async function assertAiReachable(baseUrl, provider) {
   const pingCtrl = new AbortController();
   const pingTimeout = setTimeout(() => pingCtrl.abort(), 3000);
   try {
-    await fetch(`${baseUrl}/`, { signal: pingCtrl.signal });
+    const url = provider === 'openai' ? `${baseUrl}/v1/models` : `${baseUrl}/`;
+    await fetch(url, { signal: pingCtrl.signal });
   } finally {
     clearTimeout(pingTimeout);
   }
 }
 
-async function generateJson({ baseUrl, model, prompt, timeoutMs = 180000 }) {
+async function generateJson({ baseUrl, model, provider, prompt, timeoutMs = 180000 }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${baseUrl}/api/generate`, {
+    const { url, body } = buildAiRequest({ baseUrl, model, provider, prompt, format: 'json', options: { temperature: 0.2 } });
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
-      body: JSON.stringify({ model, prompt, stream: false, format: 'json', options: { temperature: 0.2 } }),
+      body: JSON.stringify(body),
     });
 
     const raw = await response.text();
     if (!response.ok) {
-      const error = new Error(`Ollama HTTP ${response.status}`);
+      const error = new Error(`AI HTTP ${response.status}`);
       error.status = response.status;
       error.raw = raw;
       throw error;
     }
 
     const data = JSON.parse(raw);
-    return { raw, parsed: JSON.parse(stripReasoningTags(data.response)) };
+    const { text } = extractAiText(data, provider);
+    return { raw, parsed: JSON.parse(stripReasoningTags(text)) };
   } finally {
     clearTimeout(timeout);
   }
@@ -274,9 +277,10 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
       return res.status(400).json({ error: 'Stellentitel, Beschreibung oder Anforderungen sind erforderlich' });
     }
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
     try {
-      await assertAiReachable(OLLAMA_URL);
+      await assertAiReachable(OLLAMA_URL, aiProvider);
     } catch {
       return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte pruefen Sie die KI-Konfiguration.' });
     }
@@ -288,7 +292,7 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
       weights,
     });
     const timeoutMs = Math.min(Math.max(Number(options.timeoutMs) || 180000, 30000), 300000);
-    const { parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, prompt, timeoutMs });
+    const { parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider, prompt, timeoutMs });
     const rows = normalizeJobResults({ parsed, job: normalizedJob, candidates: normalizedCandidates });
 
     const byInternalId = new Map(normalizedCandidates.map(candidate => [candidate.id, candidate]));
@@ -384,35 +388,41 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
 
     const startTime = Date.now();
 
-    // Direct Ollama call (replaces n8n webhook)
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    // Direct AI call (supports Ollama + OpenAI-compatible)
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
 
     const prompt = buildJobToCandidatesPrompt({ jobDescription, jobTitle, candidates, weights });
 
-    // Check Ollama availability (3s timeout)
+    // Check AI host availability (3s timeout)
     try {
-      await assertAiReachable(OLLAMA_URL);
+      await assertAiReachable(OLLAMA_URL, aiProvider);
     } catch {
-      return res.status(503).json({ error: 'Ollama nicht erreichbar. Bitte stellen Sie sicher, dass Ollama läuft (http://localhost:11434).' });
+      return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte stellen Sie sicher, dass der KI-Server läuft.' });
     }
+
+    const { url: aiUrl, body: aiBody } = buildAiRequest({
+      baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
+      prompt, format: 'json', options: { temperature: 0.2 },
+    });
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 180000);
 
     let response;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      response = await fetch(aiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false, format: 'json', options: { temperature: 0.2 } }),
+        body: JSON.stringify(aiBody),
       });
     } catch (fetchErr) {
       clearTimeout(timeout);
       const duration = Date.now() - startTime;
       logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: duration, success: false, errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >180s' : fetchErr.message });
       if (fetchErr.name === 'AbortError') {
-        return res.status(504).json({ error: 'Ollama Timeout – Matching dauerte zu lange (>180s). Versuche es mit weniger Bewerbern.' });
+        return res.status(504).json({ error: 'KI-Timeout – Matching dauerte zu lange (>180s). Versuche es mit weniger Bewerbern.' });
       }
       throw fetchErr;
     }
@@ -430,7 +440,8 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
     let matchingResults;
     try {
       const data = JSON.parse(raw);
-      matchingResults = JSON.parse(stripReasoningTags(data.response));
+      const { text } = extractAiText(data, aiProvider);
+      matchingResults = JSON.parse(stripReasoningTags(text));
     } catch (parseErr) {
       logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: matchingDuration, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
       return res.status(502).json({ error: 'Ollama-Antwort konnte nicht verarbeitet werden', details: parseErr.message });
@@ -494,9 +505,10 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
     if (jobs.length === 0) return res.status(400).json({ error: 'Keine Stellen vorhanden' });
     if (candidates.length === 0) return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
     try {
-      await assertAiReachable(OLLAMA_URL);
+      await assertAiReachable(OLLAMA_URL, aiProvider);
     } catch {
       return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte prüfen Sie die KI-Konfiguration unter Administration → KI-Modell.' });
     }
@@ -507,7 +519,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
     for (const job of jobs) {
       const jobDescription = buildJobDescription(job);
       const prompt = buildJobToCandidatesPrompt({ jobDescription, jobTitle: job.title, candidates, weights });
-      const { raw, parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, prompt });
+      const { raw, parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider, prompt });
       rawResponses.push({ jobId: job.id, raw });
       rows.push(...normalizeJobResults({ parsed, job, candidates }));
     }

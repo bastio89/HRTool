@@ -5,7 +5,7 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
-const { getAiConfig, stripReasoningTags } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -489,7 +489,7 @@ router.post('/generate-template', generatorRateLimiter, promptGuard('email-templ
       return res.status(400).json({ error: 'Zweck des Templates ist erforderlich' });
     }
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
 
     const smtp = getSmtpSettings();
     const companyName = smtp.email_company_name || 'Unser Unternehmen';
@@ -518,14 +518,18 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
 
     const startTime = Date.now();
 
-    // Ping Ollama
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
+    const { url: aiUrl, body: aiBody } = buildAiRequest({
+      baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
+      prompt, format: 'json', options: { temperature: 0.7, num_predict: 3000 },
+    });
+
+    // Ping AI host
     try {
-      const pc = new AbortController();
-      setTimeout(() => pc.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pc.signal });
+      await pingAiService(OLLAMA_URL, aiProvider, 5000);
     } catch (_) {
-      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'Ollama nicht erreichbar' });
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'KI-Host nicht erreichbar' });
+      return res.status(502).json({ error: 'KI-Host ist nicht erreichbar. Bitte sicherstellen, dass der KI-Server läuft.' });
     }
 
     const controller = new AbortController();
@@ -533,16 +537,10 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
 
     let response;
     try {
-      response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      response = await fetch(aiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OLLAMA_MODEL,
-          prompt,
-          stream: false,
-          format: 'json',
-          options: { temperature: 0.7, num_predict: 3000 }
-        }),
+        body: JSON.stringify(aiBody),
         signal: controller.signal
       });
     } catch (err) {
@@ -562,8 +560,7 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
       return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
     }
 
-    const data = await response.json();
-    const raw = data.response || '';
+    const { text: raw, promptTokens: _pt, evalTokens: _et } = extractAiText(await response.json(), aiProvider);
 
     let parsed = { name: '', subject: '', body: '' };
     try {
@@ -577,12 +574,12 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
         throw new Error('Kein JSON in Antwort');
       }
     } catch (parseErr) {
-      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: Date.now() - startTime, inputTokens: data.prompt_eval_count || null, outputTokens: data.eval_count || null, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
+      logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
       return res.status(502).json({ error: 'KI-Antwort konnte nicht verarbeitet werden: ' + parseErr.message });
     }
 
     const durationMs = Date.now() - startTime;
-    logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: parsed, durationMs, inputTokens: data.prompt_eval_count || null, outputTokens: data.eval_count || null, success: true });
+    logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: parsed, durationMs, success: true });
     logAudit(req, 'ki-email-template', 'EmailTemplate', null, parsed.name, { purpose, model: OLLAMA_MODEL });
 
     res.json({

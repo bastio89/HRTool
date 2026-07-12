@@ -1,0 +1,55 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug backend Jest: current test file",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/node_modules/jest/bin/jest.js",
+      "args": [
+        "${file}",
+        "--runInBand"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Debug backend Jest: regression-flows",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/node_modules/jest/bin/jest.js",
+      "args": [
+        "${workspaceFolder}/backend/src/__tests__/regression-flows.test.js",
+        "--runInBand"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Debug backend Jest: Thomas fixture test",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/node_modules/jest/bin/jest.js",
+      "args": [
+        "${workspaceFolder}/backend/src/__tests__/regression-flows.test.js",
+        "--runInBand",
+        "--testNamePattern",
+        "CV parser parses Thomas fixture PDF with spaces in filename"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ]
+}

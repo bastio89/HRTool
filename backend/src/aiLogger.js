@@ -1,10 +1,24 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const db = require('./database');
 
 const insertStmt = db.prepare(`
   INSERT INTO ai_logs (user_id, feature, model, model_version, prompt_hash, prompt, response, parsed_result, duration_ms, input_tokens, output_tokens, success, error_message)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
+
+const logDir = path.join(__dirname, '..', 'data');
+const logFilePath = path.join(logDir, 'ai-logs.jsonl');
+
+function appendDebugLog(entry) {
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.appendFileSync(logFilePath, `${JSON.stringify(entry)}\n`, 'utf-8');
+  } catch (err) {
+    console.error('⚠️ AI-Log-Datei Fehler:', err.message);
+  }
+}
 
 /**
  * Log an AI/LLM call for EU AI Act compliance (Art. 12).
@@ -52,6 +66,24 @@ function logAiCall(opts) {
       opts.success ? 1 : 0,
       opts.errorMessage ?? null,
     );
+
+    appendDebugLog({
+      ts: new Date().toISOString(),
+      source: opts.source || (process.env.NODE_ENV === 'test' ? 'test' : 'runtime'),
+      userId: opts.userId ?? null,
+      feature: opts.feature,
+      model: opts.model ?? null,
+      modelVersion: opts.modelVersion ?? null,
+      promptHash,
+      prompt: opts.prompt ?? null,
+      response: responseStr,
+      parsedResult: parsedStr,
+      durationMs: opts.durationMs ?? null,
+      inputTokens: opts.inputTokens ?? null,
+      outputTokens: opts.outputTokens ?? null,
+      success: !!opts.success,
+      errorMessage: opts.errorMessage ?? null,
+    });
   } catch (err) {
     // Logging must never break the main flow
     console.error('⚠️ AI-Log Fehler:', err.message);

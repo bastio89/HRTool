@@ -33,6 +33,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([])
   const [running, setRunning] = useState(false)
+  const [thinking, setThinking] = useState(false)
   const fileInputRef = useRef(null)
   const timerRef = useRef(null)
 
@@ -98,7 +99,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
       updateFile(item.id, { status: STATUS.PROCESSING, error: null, startedAt: Date.now(), elapsed: 0 })
       try {
         // Step 1: parse file for sections
-        const parsed = await jobsApi.parseDescriptionFile(item.file)
+        const parsed = await jobsApi.parseDescriptionFile(item.file, thinking)
 
         const title = parsed.title || filenameToTitle(parsed.filename || item.file.name)
 
@@ -282,7 +283,21 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
             <Button variant="secondary" size="md" onClick={onClose} disabled={running}>
               {allDone ? t('batch_job_import.close') : t('batch_job_import.cancel')}
             </Button>
-            <Button variant="dark" size="md" onClick={processAll} disabled={!canRun}>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setThinking(v => !v)}
+                disabled={running}
+                className="flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+              >
+                <div className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${thinking ? 'bg-[#5e5ce6]' : 'bg-gray-200 dark:bg-gray-600'}`}>
+                  <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform ring-0 transition duration-200 ${thinking ? 'translate-x-4' : 'translate-x-0'}`} />
+                </div>
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  {thinking ? 'Mit Reasoning' : 'Ohne Reasoning'}
+                </span>
+              </button>
+              <Button variant="dark" size="md" onClick={processAll} disabled={!canRun}>
               {running ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -295,6 +310,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
                 </>
               )}
             </Button>
+            </div>
           </div>
         </div>
       </div>

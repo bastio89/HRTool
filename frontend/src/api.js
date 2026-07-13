@@ -134,10 +134,11 @@ export const jobsApi = {
   create: (data) => request('/jobs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/jobs/${id}`, { method: 'DELETE' }),
-  parseDescriptionFile: async (file) => {
+  parseDescriptionFile: async (file, thinking = false) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(`${API_BASE}/jobs/parse-description`, {
+    const url = thinking ? `${API_BASE}/jobs/parse-description?thinking=1` : `${API_BASE}/jobs/parse-description`;
+    const response = await fetch(url, {
       method: 'POST',
       headers: authHeaders(),
       body: formData,

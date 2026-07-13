@@ -250,6 +250,8 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   }
 
   const parseStartTime = Date.now();
+  const useThinking = req.query.thinking === '1';
+  console.log(`[parse-description] thinking=${useThinking}`);
 
   try {
     const text = await extractText(req.file.path, req.file.mimetype);
@@ -298,7 +300,7 @@ ${textForAi}
 
       const { url: aiUrl, body: aiBody } = buildAiRequest({
         baseUrl, model, provider: aiProvider, prompt,
-        options: { think: false, num_predict: 1024 },
+        options: { think: useThinking, num_predict: 1024 },
       });
 
       const controller = new AbortController();

@@ -229,6 +229,9 @@ const migrations = [
   `ALTER TABLE matching_results ADD COLUMN job_id INTEGER`,
   // Anrede / Geschlecht
   `ALTER TABLE candidates ADD COLUMN gender TEXT`,
+  // Stellenbeschreibung: strukturierte Sektionen
+  `ALTER TABLE jobs ADD COLUMN about_us TEXT`,
+  `ALTER TABLE jobs ADD COLUMN benefits TEXT`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }

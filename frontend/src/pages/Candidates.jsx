@@ -4,6 +4,7 @@ import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, A
 import { candidatesApi, ratingsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 import CSVImportDialog from '../components/CSVImportDialog'
+import BatchCVImportDialog from '../components/BatchCVImportDialog'
 import { useToast } from '../components/Toast'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 import { useI18n } from '../I18nContext'
@@ -44,6 +45,7 @@ export default function Candidates() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showBatchImport, setShowBatchImport] = useState(false)
   const [printCandidate, setPrintCandidate] = useState(null)
   const [candidateRatings, setCandidateRatings] = useState({})
   const [filterTags, setFilterTags] = useState([])
@@ -272,6 +274,10 @@ export default function Candidates() {
           <Button size="md" variant="secondary" onClick={() => setShowImport(true)}>
             <Upload className="w-5 h-5" />
             <span className="hidden sm:inline">CSV Import</span>
+          </Button>
+          <Button size="md" variant="secondary" onClick={() => setShowBatchImport(true)}>
+            <Upload className="w-5 h-5" />
+            <span className="hidden sm:inline">{t('batch_import.button')}</span>
           </Button>
           <Link to="/candidates/new">
             <Button size="md" variant="dark">
@@ -736,6 +742,13 @@ export default function Candidates() {
         onClose={() => setShowImport(false)}
         onImported={loadCandidates}
       />
+
+      {showBatchImport && (
+        <BatchCVImportDialog
+          onClose={() => { setShowBatchImport(false); loadCandidates() }}
+          onImported={loadCandidates}
+        />
+      )}
 
       <CandidatePrintProfile
         candidate={printCandidate}

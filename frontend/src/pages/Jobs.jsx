@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Briefcase, MapPin, Users,
-  Clock, Archive, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft
+  Clock, Archive, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft, Upload
 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
+import BatchJobImportDialog from '../components/BatchJobImportDialog'
 import { useI18n } from '../I18nContext'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
@@ -29,6 +30,7 @@ export default function Jobs() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [showBatchImport, setShowBatchImport] = useState(false)
 
   const loadJobs = useCallback(async () => {
     setLoading(true)
@@ -58,6 +60,7 @@ export default function Jobs() {
   }
 
   return (
+    <>
     <div className="fade-in max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 sm:mb-14 gap-4">
@@ -67,9 +70,14 @@ export default function Jobs() {
             {t('jobs.count').replace('{count}', totalCount)}{filterStatus ? ` (${filterStatus})` : ''}
           </p>
         </div>
-        <Button size="md" variant="dark" onClick={() => navigate('/jobs/new')}>
-          <Plus className="w-5 h-5" /> {t('jobs.new')}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button size="md" variant="secondary" onClick={() => setShowBatchImport(true)}>
+            <Upload className="w-5 h-5" />{t('batch_job_import.button')}
+          </Button>
+          <Button size="md" variant="dark" onClick={() => navigate('/jobs/new')}>
+            <Plus className="w-5 h-5" /> {t('jobs.new')}
+          </Button>
+        </div>
       </div>
 
       {/* Status Filter */}
@@ -234,5 +242,13 @@ export default function Jobs() {
         </div>
       )}
     </div>
+
+      {showBatchImport && (
+        <BatchJobImportDialog
+          onClose={() => { setShowBatchImport(false); loadJobs() }}
+          onImported={loadJobs}
+        />
+      )}
+    </>
   )
 }

@@ -11,7 +11,7 @@ const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstuden
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
 
 const emptyJob = {
-  title: '', description: '', requirements: '',
+  title: '', about_us: '', description: '', requirements: '', benefits: '',
   location: '', type: 'Vollzeit', status: 'Offen', url: ''
 }
 
@@ -44,8 +44,10 @@ export default function JobForm() {
       jobsApi.getById(id)
         .then(data => setForm({
           title: data.title || '',
+          about_us: data.about_us || '',
           description: data.description || '',
           requirements: data.requirements || '',
+          benefits: data.benefits || '',
           location: data.location || '',
           type: data.type || 'Vollzeit',
           status: data.status || 'Offen',
@@ -92,7 +94,7 @@ export default function JobForm() {
       setForm(f => ({
         ...f,
         description: result.description || f.description,
-        requirements: result.requirements || f.requirements
+        requirements: result.requirements || f.requirements,
       }))
       setAiModel(result.model || '')
     } catch (err) {
@@ -113,8 +115,10 @@ export default function JobForm() {
       setForm(current => ({
         ...current,
         title: importedTitle || current.title,
-        description: parsed.description || parsed.text || current.description,
+        about_us: parsed.about_us || current.about_us,
+        description: parsed.description || (!parsed.about_us && !parsed.requirements && !parsed.benefits ? (parsed.text || '') : '') || current.description,
         requirements: parsed.requirements || current.requirements,
+        benefits: parsed.benefits || current.benefits,
       }))
       setUploadedFilename(importedFilename)
       toast.success(t('jobs.upload_success'))
@@ -305,6 +309,13 @@ export default function JobForm() {
               </div>
             </div>
             <Textarea
+              label="Über uns"
+              placeholder="Wer sind wir? Was macht unser Unternehmen besonders? Kurze Vorstellung der Firma."
+              value={form.about_us}
+              onChange={e => setForm(f => ({ ...f, about_us: e.target.value }))}
+              rows={5}
+            />
+            <Textarea
               label={t('jobs.description')}
               placeholder="Was sind die Hauptaufgaben und Verantwortlichkeiten dieser Rolle?"
               value={form.description}
@@ -317,6 +328,13 @@ export default function JobForm() {
               value={form.requirements}
               onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))}
               rows={8}
+            />
+            <Textarea
+              label="Was wir bieten"
+              placeholder="Welche Benefits, Vorteile und Angebote haben wir für unsere Mitarbeiter?"
+              value={form.benefits}
+              onChange={e => setForm(f => ({ ...f, benefits: e.target.value }))}
+              rows={5}
             />
           </div>
         </Card>

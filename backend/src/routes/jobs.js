@@ -50,52 +50,57 @@ function splitJobTextSections(text) {
     .trim();
 
   if (!normalized) {
-    return { description: '', requirements: '' };
+    return { about_us: '', description: '', requirements: '', benefits: '' };
   }
 
   const lines = normalized.split('\n').map(line => line.trim());
-  const requirementHeading = /^(anforderungen|profil|qualifikationen|voraussetzungen|must[- ]haves|requirements|qualifications|your profile|dein profil|ihr profil|gesuchtes profil|skills)\b/i;
-  const descriptionHeading = /^(stellenbeschreibung|aufgaben|tätigkeiten|rolle|position|responsibilities|about the role|deine aufgaben|ihre aufgaben|job description)\b/i;
+
+  // Section heading patterns
+  const headings = {
+    about_us:     /^(über uns|about us|wir sind|unternehmen|wer wir sind|das unternehmen|unsere firma|company|who we are)\b/i,
+    description:  /^(stellenbeschreibung|aufgaben|tätigkeiten|deine aufgaben|ihre aufgaben|deine aufgabe|job description|responsibilities|your responsibilities|was du machst|what you.ll do|aufgabenbeschreibung|das erwartet dich)\b/i,
+    requirements: /^(anforderungen|profil|qualifikationen|voraussetzungen|must[- ]haves|requirements|qualifications|your profile|dein profil|ihr profil|gesuchtes profil|skills|was du mitbringst|what you bring|das bringst du mit)\b/i,
+    benefits:     /^(was wir bieten|benefits|vorteile|wir bieten|wir bieten dir|das bieten wir|das bieten wir dir|unser angebot|perks|what we offer|our offer|deine vorteile)\b/i,
+  };
 
   let currentSection = 'description';
-  let descriptionLines = [];
-  let requirementLines = [];
+  const buckets = { about_us: [], description: [], requirements: [], benefits: [] };
 
   for (const line of lines) {
     if (!line) {
-      if (currentSection === 'description') descriptionLines.push('');
-      if (currentSection === 'requirements') requirementLines.push('');
+      buckets[currentSection].push('');
       continue;
     }
 
-    if (requirementHeading.test(line)) {
-      currentSection = 'requirements';
-      continue;
+    let matched = false;
+    for (const [section, pattern] of Object.entries(headings)) {
+      if (pattern.test(line)) {
+        currentSection = section;
+        matched = true;
+        break;
+      }
     }
 
-    if (descriptionHeading.test(line)) {
-      currentSection = 'description';
-      continue;
-    }
-
-    if (currentSection === 'requirements') {
-      requirementLines.push(line);
-    } else {
-      descriptionLines.push(line);
+    if (!matched) {
+      buckets[currentSection].push(line);
     }
   }
 
-  const description = descriptionLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  const requirements = requirementLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const clean = (arr) => arr.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 
-  if (!requirements) {
-    return { description: normalized, requirements: '' };
-  }
-
-  return {
-    description: description || normalized,
-    requirements,
+  const result = {
+    about_us:     clean(buckets.about_us),
+    description:  clean(buckets.description),
+    requirements: clean(buckets.requirements),
+    benefits:     clean(buckets.benefits),
   };
+
+  // Fallback: if nothing was split into separate sections, put everything in description
+  if (!result.about_us && !result.requirements && !result.benefits) {
+    result.description = normalized;
+  }
+
+  return result;
 }
 
 /**
@@ -204,14 +209,14 @@ router.get('/:id', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { title, description, requirements, location, type, status, url } = req.body;
+    const { title, description, requirements, location, type, status, url, about_us, benefits } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
     const result = db.prepare(`
-      INSERT INTO jobs (title, description, requirements, location, type, status, url)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO jobs (title, about_us, description, requirements, benefits, location, type, status, url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      title, description || null, requirements || null,
+      title, about_us || null, description || null, requirements || null, benefits || null,
       location || null, type || 'Vollzeit', status || 'Offen', url || null
     );
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
@@ -244,6 +249,8 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
     return res.status(400).json({ error: 'Datei ist erforderlich' });
   }
 
+  const parseStartTime = Date.now();
+
   try {
     const text = await extractText(req.file.path, req.file.mimetype);
     const trimmedText = String(text || '').trim();
@@ -252,13 +259,104 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       return res.status(400).json({ error: 'Aus der Datei konnte kein Text extrahiert werden' });
     }
 
-    const sections = splitJobTextSections(trimmedText);
+    // ── KI-Extraktion ──────────────────────────────────────────────────────────
+    let sections = null;
+    let aiModel = null;
+    let aiPromptTokens = null;
+    let aiEvalTokens = null;
+
+    try {
+      const { baseUrl, model, provider: cfgProvider } = getAiConfig();
+      aiModel = model;
+
+      let aiProvider = 'ollama';
+      try { aiProvider = await resolveAiProvider(baseUrl, cfgProvider); } catch (_) {}
+
+      const textForAi = trimmedText.length > 6000 ? trimmedText.slice(0, 6000) + '\n...' : trimmedText;
+
+      const prompt = `Du bist ein HR-Experte und analysierst Stellenausschreibungen.
+Analysiere den folgenden Stellenanzeigen-Text und extrahiere die vier Hauptabschnitte.
+
+WICHTIG:
+- "title": Jobtitel der Stelle (kurz und prägnant, z.B. "Senior Software Engineer", "HR Manager")
+- "about_us": Unternehmensvorstellung / Wer wir sind (leer wenn nicht vorhanden)
+- "description": Aufgaben / Tätigkeiten – mit konkreten Details
+- "requirements": Anforderungen / Qualifikationen
+- "benefits": Was wir bieten / Benefits (leer wenn nicht vorhanden)
+
+Antworte direkt und prägnant. Überspringe langes Nachdenken (Reasoning) und halte die Denkphase so kurz wie möglich. Komm direkt zum Punkt.
+
+Antworte NUR mit diesem JSON (kein Markdown, keine Erklärung, kein <think>-Block):
+{"title":"...","about_us":"...","description":"...","requirements":"...","benefits":"..."}
+
+Stellenanzeige:
+---
+${textForAi}
+---
+
+/no_think`;
+
+      const { url: aiUrl, body: aiBody } = buildAiRequest({
+        baseUrl, model, provider: aiProvider, prompt,
+        options: { think: false, num_predict: 1024 },
+      });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      let aiResponse;
+      try {
+        aiResponse = await fetch(aiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(aiBody),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (!aiResponse.ok) throw new Error(`AI HTTP ${aiResponse.status}`);
+
+      const aiData = await aiResponse.json();
+      const { text: rawText, promptTokens: pt, evalTokens: et } = extractAiText(aiData, aiProvider);
+      aiPromptTokens = pt;
+      aiEvalTokens = et;
+
+      const cleaned = stripReasoningTags(rawText);
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        sections = JSON.parse(jsonMatch[0]);
+      }
+    } catch (aiErr) {
+      console.warn('[parse-description] AI fehlgeschlagen, Fallback auf Regex:', aiErr.message);
+    }
+
+    // Fallback: Regex-basierte Zerlegung
+    if (!sections || !sections.description) {
+      sections = splitJobTextSections(trimmedText);
+    }
+
+    const durationMs = Date.now() - parseStartTime;
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'job-parser',
+      model: aiModel,
+      durationMs,
+      inputTokens: aiPromptTokens,
+      outputTokens: aiEvalTokens,
+      success: !!sections,
+    });
+
     res.json({
       success: true,
       filename: req.file.originalname,
       text: trimmedText,
-      description: sections.description,
-      requirements: sections.requirements,
+      title:        sections.title        || '',
+      about_us:     sections.about_us     || '',
+      description:  sections.description  || '',
+      requirements: sections.requirements || '',
+      benefits:     sections.benefits     || '',
     });
   } catch (err) {
     console.error('Job description upload error:', err);
@@ -284,13 +382,13 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
  */
 router.put('/:id', (req, res) => {
   try {
-    const { title, description, requirements, location, type, status, url } = req.body;
+    const { title, description, requirements, location, type, status, url, about_us, benefits } = req.body;
     db.prepare(`
-      UPDATE jobs SET title=?, description=?, requirements=?, location=?, type=?, status=?, url=?,
+      UPDATE jobs SET title=?, about_us=?, description=?, requirements=?, benefits=?, location=?, type=?, status=?, url=?,
         updated_at=CURRENT_TIMESTAMP
       WHERE id=?
-    `).run(title, description || null, requirements || null, location || null,
-      type || 'Vollzeit', status || 'Offen', url || null, req.params.id);
+    `).run(title, about_us || null, description || null, requirements || null, benefits || null,
+      location || null, type || 'Vollzeit', status || 'Offen', url || null, req.params.id);
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     logAudit(req, 'aktualisiert', 'Job', job.id, job.title);
     res.json(job);
@@ -361,6 +459,8 @@ ${type ? `Anstellungsart: ${type}` : ''}
 ${location ? `Standort: ${location}` : ''}
 ${keywords ? `Stichpunkte: ${keywords}` : ''}
 
+Antworte direkt und prägnant. Überspringe langes Nachdenken (Reasoning) und halte die Denkphase so kurz wie möglich. Komm direkt zum Punkt.
+
 Antworte NUR mit diesem exakten JSON-Format (ohne Markdown, ohne Erklärung):
 {"description": "HIER die Stellenbeschreibung als Fließtext (3-4 Absätze)", "requirements": "HIER die Anforderungen, jeweils mit • am Anfang, getrennt durch Zeilenumbruch"}
 
@@ -375,6 +475,17 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
       console.error('Ollama not reachable:', pingErr.message);
       return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
     }
+
+    let aiProvider = 'ollama';
+    try {
+      const { provider: cfgProvider } = getAiConfig();
+      aiProvider = await resolveAiProvider(OLLAMA_URL, cfgProvider);
+    } catch (_) {}
+
+    const { url: aiUrl, body: aiBody } = buildAiRequest({
+      baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider, prompt,
+      options: { think: false, num_predict: 2048 },
+    });
 
     // Send generation request with 180s timeout (large models need time to load)
     const controller = new AbortController();

@@ -183,16 +183,31 @@ function createMockDb(seed = {}) {
           }
 
           if (q.includes('INSERT INTO jobs')) {
-            const [title, description, requirements, location, type, status, url] = args;
+            const [
+              title,
+              maybeAboutUs,
+              maybeDescription,
+              maybeRequirements,
+              maybeBenefits,
+              maybeLocation,
+              maybeType,
+              maybeStatus,
+              maybeUrl,
+            ] = args;
+
+            // Support both legacy 7-arg and current 9-arg INSERT signatures.
+            const hasExtendedShape = args.length >= 9;
             const row = {
               id: state.seq.jobId++,
               title,
-              description,
-              requirements,
-              location,
-              type,
-              status,
-              url,
+              about_us: hasExtendedShape ? maybeAboutUs : null,
+              description: hasExtendedShape ? maybeDescription : maybeAboutUs,
+              requirements: hasExtendedShape ? maybeRequirements : maybeDescription,
+              benefits: hasExtendedShape ? maybeBenefits : null,
+              location: hasExtendedShape ? maybeLocation : maybeRequirements,
+              type: hasExtendedShape ? maybeType : maybeLocation,
+              status: hasExtendedShape ? maybeStatus : maybeType,
+              url: hasExtendedShape ? maybeUrl : maybeStatus,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             };
@@ -585,6 +600,79 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(mockDb.__state.jobs).toHaveLength(1);
   });
 
+  test('Jobs generate-description API flow persists generated job data in database', async () => {
+    const mockDb = createMockDb();
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      generatorRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+    }));
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model', provider: 'ollama' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
+      extractAiText: () => ({
+        text: JSON.stringify({
+          description: 'Wir suchen eine erfahrene Person fuer die Backend-Entwicklung.',
+          requirements: '• Node.js\n• REST APIs\n• Teamarbeit',
+        }),
+      }),
+      pingAiService: async () => true,
+    }));
+
+    global.fetch = jest.fn(async (url, options) => {
+      if (String(url) === 'http://fake-ai/') {
+        return { ok: true, json: async () => ({}) };
+      }
+
+      if (String(url) === 'http://fake-ai/api/generate' && options?.method === 'POST') {
+        return { ok: true, json: async () => ({}) };
+      }
+
+      return { ok: false, text: async () => 'unexpected fetch call' };
+    });
+
+    const jobsRouter = require('../routes/jobs');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const generateResponse = await request(app)
+      .post('/api/jobs/generate-description')
+      .send({
+        title: 'Senior Backend Engineer',
+        keywords: 'Node.js, REST API, Microservices',
+        type: 'Vollzeit',
+        location: 'Berlin',
+      });
+
+    expect(generateResponse.status).toBe(200);
+    expect(generateResponse.body.description).toMatch(/Backend-Entwicklung/i);
+    expect(generateResponse.body.requirements).toMatch(/Node\.js/i);
+
+    const createResponse = await request(app)
+      .post('/api/jobs')
+      .send({
+        title: 'Senior Backend Engineer',
+        description: generateResponse.body.description,
+        requirements: generateResponse.body.requirements,
+        location: 'Berlin',
+        type: 'Vollzeit',
+        status: 'Offen',
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(mockDb.__state.jobs).toHaveLength(1);
+    expect(mockDb.__state.jobs[0].title).toBe('Senior Backend Engineer');
+    expect(mockDb.__state.jobs[0].description).toBe(generateResponse.body.description);
+    expect(mockDb.__state.jobs[0].requirements).toBe(generateResponse.body.requirements);
+  });
+
   test('Jobs endpoint returns 400 when title is missing', async () => {
     const mockDb = createMockDb();
 
@@ -708,6 +796,51 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.description).toMatch(/Unternehmensbeschreibung/i);
     expect(response.body.description).toMatch(/Sopra Steria ist einer der führenden europäischen IT-Dienstleister/i);
   });
+
+  test('Jobs parse-description with real AI parses Senior Data Engineer fixture and persists job', async () => {
+    const mockDb = createMockDb();
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.dontMock('../aiConfig');
+    global.fetch = nativeFetch;
+
+    const jobsRouter = require('../routes/jobs');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const fixturePath = path.join(__dirname, 'fixtures', 'Senior Data Engineer (Job Cloud).pdf');
+    const parseResponse = await request(app)
+      .post('/api/jobs/parse-description')
+      .attach('file', fixturePath);
+
+    expect(parseResponse.status).toBe(200);
+    expect(parseResponse.body.success).toBe(true);
+    expect(parseResponse.body.filename).toBe('Senior Data Engineer (Job Cloud).pdf');
+    expect(String(parseResponse.body.title || '').trim().length).toBeGreaterThan(0);
+    expect(String(parseResponse.body.description || '').trim().length).toBeGreaterThan(80);
+    expect(String(parseResponse.body.requirements || '').trim().length).toBeGreaterThan(30);
+
+    const createResponse = await request(app)
+      .post('/api/jobs')
+      .send({
+        title: parseResponse.body.title,
+        about_us: parseResponse.body.about_us,
+        description: parseResponse.body.description,
+        requirements: parseResponse.body.requirements,
+        benefits: parseResponse.body.benefits,
+        location: 'Remote',
+        type: 'Vollzeit',
+        status: 'Offen',
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(mockDb.__state.jobs).toHaveLength(1);
+    expect(mockDb.__state.jobs[0].title).toBe(parseResponse.body.title);
+    expect(mockDb.__state.jobs[0].description).toBe(parseResponse.body.description);
+    expect(mockDb.__state.jobs[0].requirements).toBe(parseResponse.body.requirements);
+  }, 180000);
 
   test('Matching run evaluates candidates and persists a regression-safe result', async () => {
     const mockDb = createMockDb({

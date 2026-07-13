@@ -9,6 +9,10 @@
         "/^cd \"/Users/sebastianoczachowski/Desktop/Geschriebene Programme : Code/HRTool/backend\" && node -e 'const db=require\\(\"better-sqlite3\"\\)\\(\"\\./data/hrtool\\.db\"\\); db\\.prepare\\(\"DELETE FROM settings WHERE key = \\?\"\\)\\.run\\(\"smtp_host\"\\); console\\.log\\(\"cleaned\"\\)'$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd /Users/pak/HRTool/HRTool/backend && /Users/pak/HRTool/HRTool/\\.venv/bin/python -m py_compile import_jobs_from_pdfs\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

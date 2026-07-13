@@ -1,12 +1,102 @@
 const express = require('express');
+const fs = require('fs');
+const multer = require('multer');
+const path = require('path');
 const db = require('../database');
 const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
+const { tmpDir, extractText } = require('../utils/documentText');
 
 const router = express.Router();
+
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, tmpDir),
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `job-${uniqueSuffix}${ext}`);
+  },
+});
+
+const uploadFilter = (req, file, cb) => {
+  const allowed = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain',
+    'text/markdown',
+  ];
+
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Nur PDF-, Word-, TXT- und Markdown-Dateien erlaubt'), false);
+  }
+};
+
+const descriptionUpload = multer({
+  storage: uploadStorage,
+  fileFilter: uploadFilter,
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
+
+function splitJobTextSections(text) {
+  const normalized = String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return { description: '', requirements: '' };
+  }
+
+  const lines = normalized.split('\n').map(line => line.trim());
+  const requirementHeading = /^(anforderungen|profil|qualifikationen|voraussetzungen|must[- ]haves|requirements|qualifications|your profile|dein profil|ihr profil|gesuchtes profil|skills)\b/i;
+  const descriptionHeading = /^(stellenbeschreibung|aufgaben|tätigkeiten|rolle|position|responsibilities|about the role|deine aufgaben|ihre aufgaben|job description)\b/i;
+
+  let currentSection = 'description';
+  let descriptionLines = [];
+  let requirementLines = [];
+
+  for (const line of lines) {
+    if (!line) {
+      if (currentSection === 'description') descriptionLines.push('');
+      if (currentSection === 'requirements') requirementLines.push('');
+      continue;
+    }
+
+    if (requirementHeading.test(line)) {
+      currentSection = 'requirements';
+      continue;
+    }
+
+    if (descriptionHeading.test(line)) {
+      currentSection = 'description';
+      continue;
+    }
+
+    if (currentSection === 'requirements') {
+      requirementLines.push(line);
+    } else {
+      descriptionLines.push(line);
+    }
+  }
+
+  const description = descriptionLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const requirements = requirementLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+  if (!requirements) {
+    return { description: normalized, requirements: '' };
+  }
+
+  return {
+    description: description || normalized,
+    requirements,
+  };
+}
 
 /**
  * @swagger
@@ -129,6 +219,52 @@ router.post('/', (req, res) => {
     res.status(201).json(job);
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Erstellen der Stelle' });
+  }
+});
+
+/**
+ * @swagger
+ * /jobs/parse-description:
+ *   post:
+ *     summary: Stellenbeschreibung aus Datei extrahieren
+ *     tags: [Jobs]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             properties:
+ *               file: { type: string, format: binary, description: PDF, Word, TXT oder Markdown-Datei }
+ *     responses:
+ *       200: { description: Extrahierter Text inkl. aufgeteilter Beschreibung und Anforderungen }
+ *       400: { description: Keine Datei oder ungültiges Format }
+ */
+router.post('/parse-description', descriptionUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'Datei ist erforderlich' });
+  }
+
+  try {
+    const text = await extractText(req.file.path, req.file.mimetype);
+    const trimmedText = String(text || '').trim();
+
+    if (!trimmedText) {
+      return res.status(400).json({ error: 'Aus der Datei konnte kein Text extrahiert werden' });
+    }
+
+    const sections = splitJobTextSections(trimmedText);
+    res.json({
+      success: true,
+      filename: req.file.originalname,
+      text: trimmedText,
+      description: sections.description,
+      requirements: sections.requirements,
+    });
+  } catch (err) {
+    console.error('Job description upload error:', err);
+    res.status(500).json({ error: 'Fehler beim Verarbeiten der Stellenbeschreibung' });
+  } finally {
+    try { fs.unlinkSync(req.file.path); } catch {}
   }
 });
 

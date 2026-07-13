@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, Loader2, Upload, FileText } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
@@ -15,6 +15,12 @@ const emptyJob = {
   location: '', type: 'Vollzeit', status: 'Offen', url: ''
 }
 
+function filenameToJobTitle(filename) {
+  return String(filename || '')
+    .replace(/\.[^.]+$/, '')
+    .trim()
+}
+
 export default function JobForm() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -25,9 +31,13 @@ export default function JobForm() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [uploadingDescription, setUploadingDescription] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [uploadedFilename, setUploadedFilename] = useState('')
   const [aiKeywords, setAiKeywords] = useState('')
   const [aiModel, setAiModel] = useState('')
   const [error, setError] = useState('')
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (isEdit) {
@@ -90,6 +100,42 @@ export default function JobForm() {
     } finally {
       setGenerating(false)
     }
+  }
+
+  const handleDescriptionUpload = async (file) => {
+    if (!file) return
+    setError('')
+    setUploadingDescription(true)
+    try {
+      const parsed = await jobsApi.parseDescriptionFile(file)
+      const importedFilename = parsed.filename || file.name
+      const importedTitle = filenameToJobTitle(importedFilename)
+      setForm(current => ({
+        ...current,
+        title: importedTitle || current.title,
+        description: parsed.description || parsed.text || current.description,
+        requirements: parsed.requirements || current.requirements,
+      }))
+      setUploadedFilename(importedFilename)
+      toast.success(t('jobs.upload_success'))
+    } catch (err) {
+      setError(err.message || t('jobs.upload_failed'))
+    } finally {
+      setUploadingDescription(false)
+      setDragOver(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    const file = e.dataTransfer?.files?.[0]
+    if (file) handleDescriptionUpload(file)
+  }
+
+  const handleSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (file) handleDescriptionUpload(file)
   }
 
   if (loading) return <LoadingSpinner text={t('jobs.job_loading')} />
@@ -224,6 +270,40 @@ export default function JobForm() {
           </div>
 
           <div className="space-y-8">
+            <div className="space-y-3">
+              <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
+                {t('jobs.upload_label')}
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,.md"
+                onChange={handleSelect}
+                className="hidden"
+              />
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                onClick={() => !uploadingDescription && fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-[24px] p-6 sm:p-8 transition-all cursor-pointer ${dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'}`}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className={`w-14 h-14 rounded-[18px] flex items-center justify-center mb-4 ${dragOver ? 'bg-[#0071e3]/10' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e]'}`}>
+                    {uploadingDescription ? <Loader2 className="w-6 h-6 text-[#0071e3] animate-spin" /> : <Upload className={`w-6 h-6 ${dragOver ? 'text-[#0071e3]' : 'text-gray-400'}`} />}
+                  </div>
+                  <p className="text-[15px] font-semibold text-black dark:text-white">{uploadingDescription ? t('jobs.uploading') : t('jobs.upload_title')}</p>
+                  <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('jobs.upload_hint')}</p>
+                  <p className="text-[12px] text-gray-400 mt-2">{t('jobs.upload_supported')}</p>
+                  {uploadedFilename && !uploadingDescription && (
+                    <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#34c759]/10 text-[#248a3d] text-[13px] font-medium">
+                      <FileText className="w-4 h-4" />
+                      {uploadedFilename}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
             <Textarea
               label={t('jobs.description')}
               placeholder="Was sind die Hauptaufgaben und Verantwortlichkeiten dieser Rolle?"

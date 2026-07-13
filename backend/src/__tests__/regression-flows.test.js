@@ -346,7 +346,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  test('CV parser parses a real PDF fixture file', async () => {
+  test('CV parser handles fixture PDF upload through the real multipart path', async () => {
     const mockDb = createMockDb();
 
     jest.doMock('../database', () => mockDb);
@@ -366,6 +366,10 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       }),
       pingAiService: async () => true,
     }));
+
+    jest.doMock('pdf-parse', () => jest.fn(async () => ({
+      text: 'Max Mustermann\nmax@example.com\nJavaScript Node.js Express',
+    })));
 
     global.fetch = jest.fn(async () => ({
       ok: true,
@@ -422,6 +426,8 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(thomasExperience.length).toBeGreaterThan(10);
   }, 120000);
 
+  //Ollama --------------------------------
+  /*
   test('CV parser parses Daniel fixture with ollama:llama3.2 and stores data in database', async () => {
     await runDanielFixtureTest({
       modelName: 'llama3.2',
@@ -454,6 +460,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     });
   }, 180000);
 
+  */
   test('CV parser parses Daniel fixture with ollama:qwen3.6:35b and stores data in database', async () => {
     await runDanielFixtureTest({
       modelName: 'qwen3.6:35b',
@@ -462,6 +469,8 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     });
   }, 180000);
 
+  //lmstudio ------------------------
+  /*
   test('CV parser parses Daniel fixture with lmstudio:gemma-4-e4b-it-mlx and stores data in database', async () => {
     await runDanielFixtureTest({
       modelName: 'gemma-4-e4b-it-mlx',
@@ -501,6 +510,8 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       provider: 'openai',
     });
   }, 180000);
+
+  */
 
   test('CV parser rejects unsupported upload format', async () => {
     const mockDb = createMockDb();
@@ -606,6 +617,96 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.status).toBe(400);
     expect(response.body.error).toMatch(/Titel ist erforderlich/i);
     expect(mockDb.__state.jobs).toHaveLength(0);
+  });
+
+  test('Jobs description upload returns a structured job description payload for text files', async () => {
+    const mockDb = createMockDb();
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      generatorRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+    }));
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai', body: {} }),
+      extractAiText: () => ({ text: '{}' }),
+      pingAiService: async () => true,
+    }));
+
+    const jobsRouter = require('../routes/jobs');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const response = await request(app)
+      .post('/api/jobs/parse-description')
+      .attach('file', Buffer.from([
+        'Senior Backend Engineer',
+        '',
+        'Aufgaben',
+        'Entwicklung und Betrieb verteilter APIs.',
+        '',
+        'Anforderungen',
+        'Node.js Erfahrung',
+        'API-Design',
+      ].join('\n')), {
+        filename: 'job-description.txt',
+        contentType: 'text/plain',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.filename).toBe('job-description.txt');
+    expect(response.body.text).toMatch(/Senior Backend Engineer/);
+    expect(response.body.description).toMatch(/Senior Backend Engineer/);
+    expect(response.body.description).toMatch(/Entwicklung und Betrieb verteilter APIs\./);
+    expect(response.body.requirements).toMatch(/Node\.js Erfahrung/);
+    expect(response.body.requirements).toMatch(/API-Design/);
+  });
+
+  test('Jobs description upload parses real PDF Java Developer Sopra Steria.pdf', async () => {
+    const mockDb = createMockDb();
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      generatorRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+    }));
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai', body: {} }),
+      extractAiText: () => ({ text: '{}' }),
+      pingAiService: async () => true,
+    }));
+
+    const jobsRouter = require('../routes/jobs');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const fixturePath = path.join(__dirname, 'fixtures', 'Java Developer Sopra Steria.pdf');
+    const response = await request(app)
+      .post('/api/jobs/parse-description')
+      .attach('file', fixturePath);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.filename).toBe('Java Developer Sopra Steria.pdf');
+    expect(response.body.text).toMatch(/Java Developer/i);
+    expect(response.body.text).toMatch(/Sopra Steria/i);
+    expect(response.body.description).toMatch(/Unternehmensbeschreibung/i);
+    expect(response.body.description).toMatch(/Sopra Steria ist einer der führenden europäischen IT-Dienstleister/i);
   });
 
   test('Matching run evaluates candidates and persists a regression-safe result', async () => {

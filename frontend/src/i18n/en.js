@@ -345,6 +345,13 @@ export default {
   'jobs.ai_failed': 'AI generation failed',
   'jobs.ai_hint': 'Please enter a job title or keywords first.',
   'jobs.job_loading': 'Loading job...',
+  'jobs.upload_label': 'Job description from file',
+  'jobs.upload_title': 'Drop a file here or click to upload',
+  'jobs.upload_hint': 'The file will be parsed and applied to description and requirements.',
+  'jobs.upload_supported': 'Supported: PDF, DOC, DOCX, TXT, MD',
+  'jobs.uploading': 'Processing file...',
+  'jobs.upload_success': 'Job description imported',
+  'jobs.upload_failed': 'Job description upload failed',
 
   // Matching
   'matching.title': 'Job Matching',

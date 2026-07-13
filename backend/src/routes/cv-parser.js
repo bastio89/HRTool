@@ -2,21 +2,11 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
 const { logAiCall } = require('../aiLogger');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
+const { tmpDir, extractText } = require('../utils/documentText');
 
 const router = express.Router();
-
-// System OCR tool paths (homebrew on macOS)
-const TESSERACT_BIN = '/opt/homebrew/opt/tesseract/bin/tesseract';
-const PDFTOPPM_BIN = '/opt/homebrew/opt/poppler/bin/pdftoppm';
-
-// Temp uploads directory
-const tmpDir = path.join(__dirname, '..', '..', 'data', 'tmp');
-if (!fs.existsSync(tmpDir)) {
-  fs.mkdirSync(tmpDir, { recursive: true });
-}
 
 // Multer config for temp file — accept multiple files
 const storage = multer.diskStorage({
@@ -43,114 +33,6 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: 20 * 1024 * 1024 } });
-
-// Check if OCR tools are available
-function hasOcrTools() {
-  return fs.existsSync(TESSERACT_BIN) && fs.existsSync(PDFTOPPM_BIN);
-}
-
-// OCR fallback for scanned PDFs: convert PDF pages to images, then run tesseract
-async function ocrPdf(filePath) {
-  if (!hasOcrTools()) {
-    console.warn('⚠️ OCR-Tools (tesseract/poppler) nicht gefunden. Scanned PDFs können nicht verarbeitet werden.');
-    return '';
-  }
-
-  const ocrTmpDir = path.join(tmpDir, `ocr-${Date.now()}`);
-  fs.mkdirSync(ocrTmpDir, { recursive: true });
-
-  try {
-    const imgPrefix = path.join(ocrTmpDir, 'page');
-    console.log('🔍 OCR: Konvertiere PDF-Seiten zu Bildern...');
-    execSync(`"${PDFTOPPM_BIN}" -png -r 300 "${filePath}" "${imgPrefix}"`, {
-      timeout: 120000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    const pageFiles = fs.readdirSync(ocrTmpDir)
-      .filter(f => f.startsWith('page-') && f.endsWith('.png'))
-      .sort();
-
-    if (pageFiles.length === 0) {
-      console.warn('⚠️ OCR: Keine Seitenbilder erzeugt');
-      return '';
-    }
-
-    console.log(`🔍 OCR: ${pageFiles.length} Seite(n) gefunden, starte Texterkennung (deu+eng)...`);
-
-    let fullText = '';
-    for (const pageFile of pageFiles) {
-      const imgPath = path.join(ocrTmpDir, pageFile);
-      try {
-        const pageText = execSync(
-          `"${TESSERACT_BIN}" "${imgPath}" stdout -l deu+eng --psm 1 2>/dev/null`,
-          { timeout: 30000, encoding: 'utf-8' }
-        );
-        fullText += pageText + '\n';
-      } catch (tessErr) {
-        console.warn(`⚠️ OCR: Fehler bei Seite ${pageFile}:`, tessErr.message);
-      }
-    }
-
-    console.log(`🔍 OCR: ${fullText.trim().length} Zeichen via OCR extrahiert`);
-    return fullText.trim();
-  } finally {
-    try { fs.rmSync(ocrTmpDir, { recursive: true, force: true }); } catch {}
-  }
-}
-
-// OCR for images (certificates etc.)
-async function ocrImage(filePath) {
-  if (!fs.existsSync(TESSERACT_BIN)) return '';
-  try {
-    const text = execSync(
-      `"${TESSERACT_BIN}" "${filePath}" stdout -l deu+eng --psm 1 2>/dev/null`,
-      { timeout: 30000, encoding: 'utf-8' }
-    );
-    return text.trim();
-  } catch {
-    return '';
-  }
-}
-
-// Extract text from file (with OCR fallback for scanned PDFs)
-async function extractText(filePath, mimetype) {
-  // Images → OCR directly
-  if (mimetype.startsWith('image/')) {
-    return ocrImage(filePath);
-  }
-
-  if (mimetype === 'application/pdf') {
-    const pdfParse = require('pdf-parse');
-    const buffer = fs.readFileSync(filePath);
-
-    let text = '';
-    try {
-      const data = await pdfParse(buffer);
-      text = (data.text || '').trim();
-    } catch (pdfErr) {
-      console.warn('PDF parse Warnung:', pdfErr.message);
-    }
-
-    // If no usable text, try OCR
-    if (!text || text.length < 20) {
-      console.log('📄 Kein eingebetteter Text gefunden — versuche OCR...');
-      const ocrText = await ocrPdf(filePath);
-      if (ocrText && ocrText.length >= 20) return ocrText;
-      return text || ocrText || '';
-    }
-
-    return text;
-  } else if (
-    mimetype === 'application/msword' ||
-    mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
-    const mammoth = require('mammoth');
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value;
-  }
-  throw new Error('Nicht unterstütztes Dateiformat');
-}
 
 // ─── Build the extraction prompt for Ollama ───
 function buildExtractionPrompt(text, filenames) {

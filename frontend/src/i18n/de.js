@@ -345,6 +345,13 @@ export default {
   'jobs.ai_failed': 'KI-Generierung fehlgeschlagen',
   'jobs.ai_hint': 'Bitte zuerst einen Jobtitel oder Stichpunkte eingeben.',
   'jobs.job_loading': 'Stelle wird geladen...',
+  'jobs.upload_label': 'Stellenbeschreibung aus Datei',
+  'jobs.upload_title': 'Datei hier ablegen oder klicken zum Hochladen',
+  'jobs.upload_hint': 'Die Datei wird eingelesen und in Beschreibung sowie Anforderungen übernommen.',
+  'jobs.upload_supported': 'Unterstützt: PDF, DOC, DOCX, TXT, MD',
+  'jobs.uploading': 'Datei wird verarbeitet...',
+  'jobs.upload_success': 'Stellenbeschreibung übernommen',
+  'jobs.upload_failed': 'Upload der Stellenbeschreibung fehlgeschlagen',
 
   // Matching
   'matching.title': 'Stellen-Matching',

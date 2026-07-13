@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, FileText, GitMerge } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, FileText, GitMerge, Loader2 } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
@@ -15,6 +15,8 @@ export default function MatchingResults() {
   const [expandedIdx, setExpandedIdx] = useState(null)
   const [error, setError] = useState('')
   const [reviewing, setReviewing] = useState(false)
+  const [matchingRow, setMatchingRow] = useState(null)
+  const [matchingError, setMatchingError] = useState('')
 
   useEffect(() => {
     matchingApi.getResult(id)
@@ -30,6 +32,23 @@ export default function MatchingResults() {
       setData(prev => ({ ...prev, human_reviewed: 1, reviewed_by: 'Du', reviewed_at: new Date().toISOString() }))
     } catch (err) { setError(err.message) }
     finally { setReviewing(false) }
+  }
+
+  const handleMatchingRow = async (row) => {
+    setMatchingRow(`${row.candidateId}-${row.jobId}`)
+    setMatchingError('')
+    try {
+      const result = await matchingApi.run(
+        row.jobDescription || row.jobTitle,
+        row.jobTitle,
+        [row.candidateId],
+        {}
+      )
+      navigate(`/matching/results/${result.id}`)
+    } catch (err) {
+      setMatchingError(err.message)
+      setMatchingRow(null)
+    }
   }
 
   if (loading) return <LoadingSpinner text={t('matching.results_loading')} />
@@ -113,15 +132,43 @@ export default function MatchingResults() {
 
         <Card className="p-8 sm:p-10 mb-12">
           <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Beste Paarungen übergreifend</h2>
+          {matchingError && (
+            <div className="p-4 rounded-[14px] bg-[#ff3b30]/10 text-[#ff3b30] text-[14px] font-medium mb-4">
+              {matchingError}
+            </div>
+          )}
           <div className="space-y-4">
-            {topRows.map((row, idx) => (
-              <div key={`${row.jobId}-${row.candidateId}-${idx}`} className="grid grid-cols-1 lg:grid-cols-[64px_1fr_1fr_96px] gap-4 items-center p-5 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                <div className="text-[18px] font-semibold text-gray-400">#{idx + 1}</div>
-                <div><p className="text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p><p className="text-[13px] text-gray-500 mt-1">Bewerber</p></div>
-                <div><p className="text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p><p className="text-[13px] text-gray-500 mt-1">Stelle</p></div>
-                <div className="text-[26px] font-semibold text-[#0071e3]">{row.score}%</div>
-              </div>
-            ))}
+            {topRows.map((row, idx) => {
+              const isLoading = matchingRow === `${row.candidateId}-${row.jobId}`
+              return (
+                <button
+                  key={`${row.jobId}-${row.candidateId}-${idx}`}
+                  onClick={() => handleMatchingRow(row)}
+                  disabled={isLoading || matchingRow !== null}
+                  className="w-full grid grid-cols-1 lg:grid-cols-[64px_1fr_1fr_96px] gap-4 items-center p-5 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                >
+                  <div className="text-[18px] font-semibold text-gray-400">#{idx + 1}</div>
+                  <div>
+                    <p className="text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p>
+                    <p className="text-[13px] text-gray-500 mt-1">Bewerber</p>
+                  </div>
+                  <div>
+                    <p className="text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p>
+                    <p className="text-[13px] text-gray-500 mt-1">Stelle</p>
+                  </div>
+                  <div className="flex items-center justify-end gap-3">
+                    {isLoading ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-[#0071e3]" />
+                    ) : (
+                      <>
+                        <div className="text-[26px] font-semibold text-[#0071e3]">{row.score}%</div>
+                        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      </>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </Card>
 

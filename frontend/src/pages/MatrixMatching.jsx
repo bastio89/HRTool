@@ -4,6 +4,7 @@ import { GitCompare, Briefcase, Users, Loader2, Zap, AlertTriangle } from 'lucid
 import { candidatesApi, matchingApi, jobsApi } from '../api'
 import { Card, Button, LoadingSpinner } from '../components/UI'
 import MatchingWeights from '../components/MatchingWeights'
+import MatchingProgress from '../components/MatchingProgress'
 import { useI18n } from '../I18nContext'
 
 export default function MatrixMatching() {
@@ -133,19 +134,7 @@ export default function MatrixMatching() {
             )}
           </Button>
 
-          {matching && (
-            <Card className="p-8 border-[#8b5cf6]/20 bg-[#8b5cf6]/5">
-              <div className="flex items-center gap-5">
-                <div className="w-4 h-4 rounded-full bg-[#8b5cf6] animate-pulse" />
-                <div>
-                  <p className="text-[16px] font-semibold text-[#8b5cf6]">{t('matching.matrix_running')}</p>
-                  <p className="text-[15px] font-medium text-[#8b5cf6]/70 mt-1">
-                    {t('matching.matrix_summary').replace('{jobs}', jobs.length).replace('{candidates}', candidates.length)}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          )}
+          <MatchingProgress running={matching} totalPairs={pairCount} color="#8b5cf6" />
         </div>
       </div>
     </div>

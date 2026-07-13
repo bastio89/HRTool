@@ -4,6 +4,7 @@ import { FileText, Users, Loader2, Zap, Briefcase, PenLine } from 'lucide-react'
 import { candidatesApi, matchingApi, jobsApi, pipelineApi } from '../api'
 import { Card, Button, Textarea, Input, LoadingSpinner } from '../components/UI'
 import MatchingWeights from '../components/MatchingWeights'
+import MatchingProgress from '../components/MatchingProgress'
 import CandidatePicker from '../components/CandidatePicker'
 import JobPicker from '../components/JobPicker'
 import { useI18n } from '../I18nContext'
@@ -254,19 +255,7 @@ export default function JobToCandidates() {
             )}
           </Button>
 
-          {matching && (
-            <Card className="p-8 border-[#0071e3]/20 bg-[#0071e3]/5">
-              <div className="flex items-center gap-5">
-                <div className="w-4 h-4 rounded-full bg-[#0071e3] animate-pulse" />
-                <div>
-                  <p className="text-[16px] font-semibold text-[#0071e3]">{t('matching.analyzing')}</p>
-                  <p className="text-[15px] font-medium text-[#0071e3]/70 mt-1">
-                    {t('matching.candidates_matched').replace('{count}', selectedIds.length || candidates.length)}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          )}
+          <MatchingProgress running={matching} totalPairs={selectedIds.length} color="#0071e3" />
         </div>
       </div>
     </div>

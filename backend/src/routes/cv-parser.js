@@ -165,6 +165,7 @@ WICHTIG:
 - Für den Bildungsweg (education_history): Erstelle für JEDE genannte Ausbildung/Studium einen eigenen Eintrag. Sortiere absteigend (neueste zuerst).
 - Datumsformate: Nutze "YYYY-MM" Format (z.B. "2020-01"). Falls nur das Jahr bekannt ist, nutze "YYYY-01".
 - Wenn eine Tätigkeit aktuell ist (z.B. "seit 2022", "bis heute"), setze is_current auf true und to_date auf "".
+- Antworte direkt und prägnant. Überspringe langes Nachdenken (Reasoning) und halte die Denkphase so kurz wie möglich. Komm direkt zum Punkt.
 
 Antworte NUR mit einem validen JSON-Objekt (KEIN Markdown, KEINE Erklärung):
 
@@ -423,11 +424,21 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       const nameMatch = responseText.match(/"name"\s*:\s*"([^"]+)"/);
       const emailMatch = responseText.match(/"email"\s*:\s*"([^"]+)"/);
       const phoneMatch = responseText.match(/"phone"\s*:\s*"([^"]+)"/);
+      const locationMatch = responseText.match(/"location"\s*:\s*"([^"]+)"/);
+      const experienceMatch = responseText.match(/"experience"\s*:\s*"([^"]+)"/);
       const skillsMatch = responseText.match(/"skills"\s*:\s*"([^"]+)"/);
+      const educationMatch = responseText.match(/"education"\s*:\s*"([^"]+)"/);
+      const languagesMatch = responseText.match(/"languages"\s*:\s*"([^"]+)"/);
+      const tagsMatch = responseText.match(/"tags"\s*:\s*"([^"]+)"/);
       if (nameMatch) extracted.name = nameMatch[1];
       if (emailMatch) extracted.email = emailMatch[1];
       if (phoneMatch) extracted.phone = phoneMatch[1];
+      if (locationMatch) extracted.location = locationMatch[1];
+      if (experienceMatch) extracted.experience = experienceMatch[1];
       if (skillsMatch) extracted.skills = skillsMatch[1];
+      if (educationMatch) extracted.education = educationMatch[1];
+      if (languagesMatch) extracted.languages = languagesMatch[1];
+      if (tagsMatch) extracted.tags = tagsMatch[1];
     }
 
     // 4. Post-process: ensure work_history and education_history are sorted (newest first)

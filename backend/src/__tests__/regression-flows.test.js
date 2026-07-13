@@ -3,6 +3,9 @@ const request = require('supertest');
 const path = require('path');
 
 const nativeFetch = globalThis.fetch;
+const nativeOllamaModel = process.env.OLLAMA_MODEL;
+const nativeOllamaBaseUrl = process.env.OLLAMA_BASE_URL;
+const nativeAiProvider = process.env.AI_PROVIDER;
 
 function createMockDb(seed = {}) {
   const state = {
@@ -227,7 +230,72 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     jest.dontMock('pdf-parse');
     jest.dontMock('../aiConfig');
     global.fetch = nativeFetch;
+    if (nativeOllamaModel === undefined) {
+      delete process.env.OLLAMA_MODEL;
+    } else {
+      process.env.OLLAMA_MODEL = nativeOllamaModel;
+    }
+    if (nativeOllamaBaseUrl === undefined) {
+      delete process.env.OLLAMA_BASE_URL;
+    } else {
+      process.env.OLLAMA_BASE_URL = nativeOllamaBaseUrl;
+    }
+    if (nativeAiProvider === undefined) {
+      delete process.env.AI_PROVIDER;
+    } else {
+      process.env.AI_PROVIDER = nativeAiProvider;
+    }
   });
+
+  async function runDanielFixtureTest({ modelName, baseUrl, provider }) {
+    const mockDb = createMockDb();
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.dontMock('../aiConfig');
+    global.fetch = nativeFetch;
+    process.env.OLLAMA_MODEL = modelName;
+    if (baseUrl) process.env.OLLAMA_BASE_URL = baseUrl;
+    if (provider) process.env.AI_PROVIDER = provider;
+
+    const cvParserRouter = require('../routes/cv-parser');
+    const candidatesRouter = require('../routes/candidates');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/cv-parser', cvParserRouter);
+    app.use('/api/candidates', candidatesRouter);
+
+    const fixtureName = 'CV 2 - Daniel Huber.pdf';
+    const fixturePath = path.join(__dirname, 'fixtures', fixtureName);
+    const sendParseRequest = () => request(app)
+      .post('/api/cv-parser/parse')
+      .attach('file', fixturePath);
+
+    let parseResponse = await sendParseRequest();
+    if (parseResponse.status === 502 && /model has crashed/i.test(String(parseResponse.body?.details || ''))) {
+      parseResponse = await sendParseRequest();
+    }
+
+    expect(parseResponse.status).toBe(200);
+    expect(parseResponse.body.success).toBe(true);
+    expect(parseResponse.body.filename).toBe(fixtureName);
+    expect(parseResponse.body.candidate.name).toBeTruthy();
+
+    const createResponse = await request(app)
+      .post('/api/candidates')
+      .send(parseResponse.body.candidate);
+
+    expect(createResponse.status).toBe(201);
+    expect(mockDb.__state.candidates).toHaveLength(1);
+    const educationValue = String(mockDb.__state.candidates[0].education || '');
+    expect(educationValue).toMatch(/Wirtschaftsinformatik/i);
+    expect(educationValue).toMatch(/FHNW/i);
+    expect(educationValue).toMatch(/Bachelor of Science|BSc/i);
+    const storedPhone = String(mockDb.__state.candidates[0].phone || '');
+    const normalizedStoredPhone = storedPhone.replace(/\D+/g, '');
+    const normalizedExpectedPhone = '+41 79 555 01 02'.replace(/\D+/g, '');
+    expect(normalizedStoredPhone).toBe(normalizedExpectedPhone);
+  }
 
   test('CV parser accepts PDF upload and returns extracted candidate fields', async () => {
     const mockDb = createMockDb();
@@ -354,46 +422,84 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(thomasExperience.length).toBeGreaterThan(10);
   }, 120000);
 
-  test('CV parser parses Daniel fixture and stores education in database', async () => {
-    const mockDb = createMockDb();
+  test('CV parser parses Daniel fixture with ollama:llama3.2 and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'llama3.2',
+      baseUrl: 'http://localhost:11434',
+      provider: 'ollama',
+    });
+  }, 180000);
 
-    jest.doMock('../database', () => mockDb);
-    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
-    jest.dontMock('../aiConfig');
-    global.fetch = nativeFetch;
+  test('CV parser parses Daniel fixture with ollama:gemma4:latest and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'gemma4:latest',
+      baseUrl: 'http://localhost:11434',
+      provider: 'ollama',
+    });
+  }, 180000);
 
-    const cvParserRouter = require('../routes/cv-parser');
-    const candidatesRouter = require('../routes/candidates');
-    const app = express();
-    app.use(express.json());
-    app.use('/api/cv-parser', cvParserRouter);
-    app.use('/api/candidates', candidatesRouter);
+  test('CV parser parses Daniel fixture with ollama:gemma4:26b and stores data in database', async () => {
+    await runDanielFixtureTest({ 
+      modelName: 'gemma4:26b',
+      baseUrl: 'http://localhost:11434',
+      provider: 'ollama',
+    });
+  }, 180000);
 
-    const fixtureName = 'CV 2 - Daniel Huber.pdf';
-    const fixturePath = path.join(__dirname, 'fixtures', fixtureName);
-    const parseResponse = await request(app)
-      .post('/api/cv-parser/parse')
-      .attach('file', fixturePath);
+    test('CV parser parses Daniel fixture with ollama:gemma4:31b and stores data in database', async () => {
+    await runDanielFixtureTest({ 
+      modelName: 'gemma4:31b',
+      baseUrl: 'http://localhost:11434',
+      provider: 'ollama',
+    });
+  }, 180000);
 
-    expect(parseResponse.status).toBe(200);
-    expect(parseResponse.body.success).toBe(true);
-    expect(parseResponse.body.filename).toBe(fixtureName);
-    expect(parseResponse.body.candidate.name).toBeTruthy();
+  test('CV parser parses Daniel fixture with ollama:qwen3.6:35b and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'qwen3.6:35b',
+      baseUrl: 'http://localhost:11434',
+      provider: 'ollama',
+    });
+  }, 180000);
 
-    const createResponse = await request(app)
-      .post('/api/candidates')
-      .send(parseResponse.body.candidate);
+  test('CV parser parses Daniel fixture with lmstudio:gemma-4-e4b-it-mlx and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'gemma-4-e4b-it-mlx',
+      baseUrl: 'http://localhost:1234',
+      provider: 'openai',
+    });
+  }, 180000);
 
-    expect(createResponse.status).toBe(201);
-    expect(mockDb.__state.candidates).toHaveLength(1);
-    const educationValue = String(mockDb.__state.candidates[0].education || '');
-    expect(educationValue).toMatch(/Wirtschaftsinformatik/i);
-    expect(educationValue).toMatch(/FHNW/i);
-    expect(educationValue).toMatch(/Bachelor of Science|BSc/i);
-    const storedPhone = String(mockDb.__state.candidates[0].phone || '');
-    const normalizedStoredPhone = storedPhone.replace(/\D+/g, '');
-    const normalizedExpectedPhone = '+41 79 555 01 02'.replace(/\D+/g, '');
-    expect(normalizedStoredPhone).toBe(normalizedExpectedPhone);
+  test('CV parser parses Daniel fixture with lmstudio:gemma-4-26b-a4b-it-mlx and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'gemma-4-26b-a4b-it-mlx',
+      baseUrl: 'http://localhost:1234',
+      provider: 'openai',
+    });
+  }, 180000);
+
+    test('CV parser parses Daniel fixture with lmstudio:gemma-4-31b-a4b-it-mlx and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'gemma-4-31b-a4b-it-mlx',
+      baseUrl: 'http://localhost:1234',
+      provider: 'openai',
+    });
+  }, 180000);
+
+  test('CV parser parses Daniel fixture with lmstudio:qwen3.6-35b-a3b-ud-mlx and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'qwen3.6-35b-a3b-ud-mlx',
+      baseUrl: 'http://localhost:1234',
+      provider: 'openai',
+    });
+  }, 180000);
+
+  test('CV parser parses Daniel fixture with lmstudio:llama-3.2-3b-instruct  and stores data in database', async () => {
+    await runDanielFixtureTest({
+      modelName: 'llama-3.2-3b-instruct',
+      baseUrl: 'http://localhost:1234',
+      provider: 'openai',
+    });
   }, 180000);
 
   test('CV parser rejects unsupported upload format', async () => {

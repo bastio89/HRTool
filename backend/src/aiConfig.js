@@ -119,7 +119,7 @@ function buildAiRequest({ baseUrl, model, provider, prompt, format, options = {}
     };
     if (typeof options.temperature === 'number') body.temperature = options.temperature;
     if (typeof options.num_predict === 'number') body.max_tokens = options.num_predict;
-    if (format === 'json') body.response_format = { type: 'json_object' };
+    if (format === 'json') body.response_format = { type: 'text' };
     return { url: `${baseUrl}/v1/chat/completions`, body };
   }
   // Ollama
@@ -143,7 +143,7 @@ function extractAiText(data, provider) {
     };
   }
   return {
-    text: data.response || '',
+    text: data.response || data.thinking || '',
     promptTokens: data.prompt_eval_count ?? null,
     evalTokens: data.eval_count ?? null,
   };

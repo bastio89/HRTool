@@ -2,21 +2,11 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
 const { logAiCall } = require('../aiLogger');
-const { callLlm, checkLlmHealth } = require('../services/llmClient');
+const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
+const { tmpDir, extractText } = require('../utils/documentText');
 
 const router = express.Router();
-
-// OCR tool paths can be overridden via env for container/manual runtime compatibility
-const TESSERACT_BIN = process.env.TESSERACT_BIN || '/opt/homebrew/opt/tesseract/bin/tesseract';
-const PDFTOPPM_BIN = process.env.PDFTOPPM_BIN || '/opt/homebrew/opt/poppler/bin/pdftoppm';
-
-// Temp uploads directory
-const tmpDir = path.join(__dirname, '..', '..', 'data', 'tmp');
-if (!fs.existsSync(tmpDir)) {
-  fs.mkdirSync(tmpDir, { recursive: true });
-}
 
 // Multer config for temp file — accept multiple files
 const storage = multer.diskStorage({
@@ -44,114 +34,6 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: 20 * 1024 * 1024 } });
 
-// Check if OCR tools are available
-function hasOcrTools() {
-  return fs.existsSync(TESSERACT_BIN) && fs.existsSync(PDFTOPPM_BIN);
-}
-
-// OCR fallback for scanned PDFs: convert PDF pages to images, then run tesseract
-async function ocrPdf(filePath) {
-  if (!hasOcrTools()) {
-    console.warn('⚠️ OCR-Tools (tesseract/poppler) nicht gefunden. Scanned PDFs können nicht verarbeitet werden.');
-    return '';
-  }
-
-  const ocrTmpDir = path.join(tmpDir, `ocr-${Date.now()}`);
-  fs.mkdirSync(ocrTmpDir, { recursive: true });
-
-  try {
-    const imgPrefix = path.join(ocrTmpDir, 'page');
-    console.log('🔍 OCR: Konvertiere PDF-Seiten zu Bildern...');
-    execSync(`"${PDFTOPPM_BIN}" -png -r 300 "${filePath}" "${imgPrefix}"`, {
-      timeout: 120000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    const pageFiles = fs.readdirSync(ocrTmpDir)
-      .filter(f => f.startsWith('page-') && f.endsWith('.png'))
-      .sort();
-
-    if (pageFiles.length === 0) {
-      console.warn('⚠️ OCR: Keine Seitenbilder erzeugt');
-      return '';
-    }
-
-    console.log(`🔍 OCR: ${pageFiles.length} Seite(n) gefunden, starte Texterkennung (deu+eng)...`);
-
-    let fullText = '';
-    for (const pageFile of pageFiles) {
-      const imgPath = path.join(ocrTmpDir, pageFile);
-      try {
-        const pageText = execSync(
-          `"${TESSERACT_BIN}" "${imgPath}" stdout -l deu+eng --psm 1 2>/dev/null`,
-          { timeout: 30000, encoding: 'utf-8' }
-        );
-        fullText += pageText + '\n';
-      } catch (tessErr) {
-        console.warn(`⚠️ OCR: Fehler bei Seite ${pageFile}:`, tessErr.message);
-      }
-    }
-
-    console.log(`🔍 OCR: ${fullText.trim().length} Zeichen via OCR extrahiert`);
-    return fullText.trim();
-  } finally {
-    try { fs.rmSync(ocrTmpDir, { recursive: true, force: true }); } catch {}
-  }
-}
-
-// OCR for images (certificates etc.)
-async function ocrImage(filePath) {
-  if (!fs.existsSync(TESSERACT_BIN)) return '';
-  try {
-    const text = execSync(
-      `"${TESSERACT_BIN}" "${filePath}" stdout -l deu+eng --psm 1 2>/dev/null`,
-      { timeout: 30000, encoding: 'utf-8' }
-    );
-    return text.trim();
-  } catch {
-    return '';
-  }
-}
-
-// Extract text from file (with OCR fallback for scanned PDFs)
-async function extractText(filePath, mimetype) {
-  // Images → OCR directly
-  if (mimetype.startsWith('image/')) {
-    return ocrImage(filePath);
-  }
-
-  if (mimetype === 'application/pdf') {
-    const pdfParse = require('pdf-parse');
-    const buffer = fs.readFileSync(filePath);
-
-    let text = '';
-    try {
-      const data = await pdfParse(buffer);
-      text = (data.text || '').trim();
-    } catch (pdfErr) {
-      console.warn('PDF parse Warnung:', pdfErr.message);
-    }
-
-    // If no usable text, try OCR
-    if (!text || text.length < 20) {
-      console.log('📄 Kein eingebetteter Text gefunden — versuche OCR...');
-      const ocrText = await ocrPdf(filePath);
-      if (ocrText && ocrText.length >= 20) return ocrText;
-      return text || ocrText || '';
-    }
-
-    return text;
-  } else if (
-    mimetype === 'application/msword' ||
-    mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
-    const mammoth = require('mammoth');
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value;
-  }
-  throw new Error('Nicht unterstütztes Dateiformat');
-}
-
 // ─── Build the extraction prompt for Ollama ───
 function buildExtractionPrompt(text, filenames) {
   // Truncate to ~12000 chars to stay within context window for smaller models
@@ -165,6 +47,7 @@ WICHTIG:
 - Für den Bildungsweg (education_history): Erstelle für JEDE genannte Ausbildung/Studium einen eigenen Eintrag. Sortiere absteigend (neueste zuerst).
 - Datumsformate: Nutze "YYYY-MM" Format (z.B. "2020-01"). Falls nur das Jahr bekannt ist, nutze "YYYY-01".
 - Wenn eine Tätigkeit aktuell ist (z.B. "seit 2022", "bis heute"), setze is_current auf true und to_date auf "".
+- Antworte direkt und prägnant. Überspringe langes Nachdenken (Reasoning) und halte die Denkphase so kurz wie möglich. Komm direkt zum Punkt.
 
 Antworte NUR mit einem validen JSON-Objekt (KEIN Markdown, KEINE Erklärung):
 
@@ -315,29 +198,35 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
 
     sendProgress('extract_done', `${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert`, 35);
 
-    console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an LLM...`);
+    console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an Ollama...`);
 
-    // 2. Call configured LLM provider for AI extraction
+    // 2. Call Ollama directly for AI extraction
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
 
     const prompt = buildExtractionPrompt(combinedText.trim(), filenames);
 
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
+    const { url: aiUrl, body: aiBody } = buildAiRequest({
+      baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
+      prompt, format: 'json', options: { temperature: 0.1, num_predict: 8192 },
+    });
+
     // Quick reachability check
-    sendProgress('llm_connect', `Verbindung zur LLM-Inferenz (${process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2'})...`, 40);
+    sendProgress('ollama_connect', `Verbindung zu KI-Host (${OLLAMA_MODEL})...`, 40);
     try {
-      const health = await checkLlmHealth();
-      if (!health.ok) {
-        return sendError(502, { error: `LLM ist nicht erreichbar (HTTP ${health.status}).` });
-      }
+      await pingAiService(OLLAMA_URL, aiProvider, 5000);
     } catch (pingErr) {
-      console.error('LLM not reachable:', pingErr.message);
-      return sendError(502, { error: 'LLM ist nicht erreichbar. Bitte Provider prüfen.' });
+      console.error('AI host not reachable:', pingErr.message);
+      return sendError(502, { error: 'KI-Host ist nicht erreichbar. Bitte sicherstellen, dass der KI-Server läuft.' });
     }
 
-    sendProgress('llm_analyze', `KI analysiert ${combinedText.length} Zeichen Text...`, 50);
+    sendProgress('ollama_analyze', `KI analysiert ${combinedText.length} Zeichen Text mit ${OLLAMA_MODEL}...`, 50);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min for large docs
     const startTime = Date.now();
 
-    // Send periodic progress updates during Ollama processing
+    // Send periodic progress updates during AI processing
     let ollamaProgress = 50;
     const progressInterval = setInterval(() => {
       ollamaProgress = Math.min(ollamaProgress + 2, 88);
@@ -345,21 +234,22 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       sendProgress('ollama_analyze', `KI analysiert... (${elapsed}s)`, ollamaProgress);
     }, 3000);
 
-    let llmResult;
+    let response;
     try {
-      llmResult = await callLlm({
-        prompt,
-        responseFormat: 'json',
-        options: { temperature: 0.1, max_tokens: 4096 },
-        timeoutMs: 180000,
+      response = await fetch(aiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiBody),
+        signal: controller.signal,
       });
     } catch (fetchErr) {
       clearInterval(progressInterval);
+      clearTimeout(timeoutId);
       const duration = Date.now() - startTime;
       logAiCall({
         userId: req.user?.id,
         feature: 'cv-parser',
-        model: process.env.LLM_MODEL || process.env.OLLAMA_MODEL || 'llama3.2',
+        model: OLLAMA_MODEL,
         prompt: prompt.substring(0, 500) + '...',
         response: null,
         parsedResult: null,
@@ -373,34 +263,37 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       throw fetchErr;
     }
     clearInterval(progressInterval);
+    clearTimeout(timeoutId);
 
-    if (!llmResult.ok) {
-      console.error('LLM CV-Parse error:', llmResult.rawResponseText);
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Ollama CV-Parse error:', response.status, errText);
       logAiCall({
         userId: req.user?.id,
         feature: 'cv-parser',
-        model: llmResult.model,
+        model: OLLAMA_MODEL,
         prompt: prompt.substring(0, 500) + '...',
-        response: llmResult.rawResponseText,
+        response: errText,
         parsedResult: null,
         durationMs: Date.now() - startTime,
         success: false,
-        errorMessage: `LLM Status ${llmResult.status}`,
+        errorMessage: `Ollama Status ${response.status}: ${errText}`,
       });
-      return sendError(502, { error: 'LLM-Fehler bei CV-Analyse', details: llmResult.rawResponseText });
+      return sendError(502, { error: 'Ollama-Fehler bei CV-Analyse', details: errText });
     }
 
     sendProgress('ollama_done', 'KI-Analyse abgeschlossen, Ergebnis wird verarbeitet...', 90);
 
-    const responseText = llmResult.text || '';
+    const data = await response.json();
+    const { text: responseText } = extractAiText(data, aiProvider);
     const cvDuration = Date.now() - startTime;
 
-    console.log(`✅ CV-Parser: LLM-Antwort erhalten (${cvDuration}ms, ${responseText.length} Zeichen)`);
+    console.log(`✅ CV-Parser: Ollama-Antwort erhalten (${cvDuration}ms, ${responseText.length} Zeichen)`);
 
     // 3. Parse JSON from Ollama response
     let extracted = {};
     try {
-      let cleanText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+      let cleanText = stripReasoningTags(responseText);
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         extracted = JSON.parse(jsonMatch[0]);
@@ -413,11 +306,21 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       const nameMatch = responseText.match(/"name"\s*:\s*"([^"]+)"/);
       const emailMatch = responseText.match(/"email"\s*:\s*"([^"]+)"/);
       const phoneMatch = responseText.match(/"phone"\s*:\s*"([^"]+)"/);
+      const locationMatch = responseText.match(/"location"\s*:\s*"([^"]+)"/);
+      const experienceMatch = responseText.match(/"experience"\s*:\s*"([^"]+)"/);
       const skillsMatch = responseText.match(/"skills"\s*:\s*"([^"]+)"/);
+      const educationMatch = responseText.match(/"education"\s*:\s*"([^"]+)"/);
+      const languagesMatch = responseText.match(/"languages"\s*:\s*"([^"]+)"/);
+      const tagsMatch = responseText.match(/"tags"\s*:\s*"([^"]+)"/);
       if (nameMatch) extracted.name = nameMatch[1];
       if (emailMatch) extracted.email = emailMatch[1];
       if (phoneMatch) extracted.phone = phoneMatch[1];
+      if (locationMatch) extracted.location = locationMatch[1];
+      if (experienceMatch) extracted.experience = experienceMatch[1];
       if (skillsMatch) extracted.skills = skillsMatch[1];
+      if (educationMatch) extracted.education = educationMatch[1];
+      if (languagesMatch) extracted.languages = languagesMatch[1];
+      if (tagsMatch) extracted.tags = tagsMatch[1];
     }
 
     // 4. Post-process: ensure work_history and education_history are sorted (newest first)
@@ -451,7 +354,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     logAiCall({
       userId: req.user?.id,
       feature: 'cv-parser',
-      model: llmResult.model,
+      model: OLLAMA_MODEL,
       prompt: prompt.substring(0, 500) + '...',
       response: responseText.substring(0, 2000),
       parsedResult: extracted,

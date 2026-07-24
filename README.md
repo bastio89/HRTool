@@ -211,6 +211,33 @@ ollama serve
 ollama pull llama3.2
 ```
 
+### Schnellstart mit Docker Compose
+
+HRTool kann komplett über Docker Compose gestartet werden. Backend, Frontend, SQLite-Daten und Uploads werden automatisch eingerichtet; Ollama läuft standardmäßig auf dem Host und wird aus den Containern über `host.docker.internal` erreicht.
+
+```bash
+cp .env.docker.example .env
+# JWT_SECRET und optional EXTERNAL_API_KEY in .env anpassen
+docker compose up --build
+```
+
+Danach ist HRTool erreichbar unter:
+
+| Service | URL |
+|---------|-----|
+| **Frontend** | `http://localhost:5173` |
+| **Backend API** | `http://localhost:3001/api` |
+| **Swagger UI** | `http://localhost:3001/api/docs` |
+
+Persistente Daten liegen im Docker-Volume `hrtool-data`. Für lokale KI muss Ollama auf dem Host laufen:
+
+```bash
+ollama serve
+ollama pull llama3.2
+```
+
+> Hinweis: Wenn Ollama ebenfalls containerisiert oder auf einem anderen Server läuft, setzen Sie `OLLAMA_BASE_URL` in `.env` entsprechend, z.B. `http://ollama:11434` oder `http://ki-server:11434`.
+
 ### Schritt 3: Backend starten
 
 ```bash
@@ -263,6 +290,7 @@ OPENAI_API_URL=https://api.openai.com
 OPENAI_TIMEOUT_MS=180000
 LLM_TIMEOUT_MS=180000
 LLM_PING_TIMEOUT_MS=5000
+EXTERNAL_API_KEY=ihr-externer-api-key
 N8N_BASE_URL=http://localhost:5678
 N8N_API_KEY=ihr-n8n-api-key
 TRAEFIK_HOST=hrtool.local
@@ -399,7 +427,51 @@ Die vollständige API-Dokumentation ist über **Swagger UI** verfügbar:
 http://localhost:3001/api/docs
 ```
 
-### Übersicht: 62+ Endpunkte
+### Matching-only REST API für Integrationen
+
+Kunden können die Matching-Funktion auch ohne HRTool-Frontend und ohne lokale Bewerber-/Stellenverwaltung verwenden. Dafür steht eine API-Key-geschützte OpenAPI-Schnittstelle bereit:
+
+```http
+POST /api/matching/external/run
+X-API-Key: ihr-externer-api-key
+Content-Type: application/json
+```
+
+Beispiel-Request:
+
+```json
+{
+  "job": {
+    "id": "job-frontend-01",
+    "title": "Frontend Developer",
+    "description": "React-Anwendung fuer ein SaaS-Produkt weiterentwickeln.",
+    "requirements": "React, TypeScript, REST APIs, 3+ Jahre Erfahrung",
+    "location": "Berlin / Remote",
+    "type": "Vollzeit"
+  },
+  "candidates": [
+    {
+      "id": "cand-4711",
+      "name": "Kandidat 4711",
+      "skills": "React, Node.js, SQL",
+      "experience": "5 Jahre Frontend-Entwicklung",
+      "education": "B.Sc. Informatik",
+      "languages": "Deutsch C2, Englisch C1",
+      "location": "Berlin",
+      "availability": "ab 01.09."
+    }
+  ],
+  "weights": {
+    "skills": 5,
+    "experience": 3,
+    "location": 1
+  }
+}
+```
+
+Die Antwort enthält Score, Stärken, Schwächen und Kurzbegründung je Kandidat. Die Daten werden nicht als Bewerber oder Stelle im HRTool gespeichert; die Schnittstelle nutzt nur das konfigurierte lokale KI-Modell.
+
+### Übersicht: 63+ Endpunkte
 
 | Bereich | Endpunkte | Beschreibung |
 |---------|-----------|--------------|
@@ -407,7 +479,7 @@ http://localhost:3001/api/docs
 | **Candidates** | 11 | CRUD, Suche, Filter, Batch-Operationen, Import |
 | **Jobs** | 6 | CRUD, KI-Stellenbeschreibung |
 | **Pipeline** | 7 | Kanban-Board, Stufenwechsel, Notizen |
-| **Matching** | 4 | KI-Matching starten, Historie |
+| **Matching** | 5 | KI-Matching starten, externe Matching-API, Historie |
 | **Activities** | 3 | Aktivitätsprotokoll pro Bewerber |
 | **Uploads** | 5 | Datei-Upload, Download, Vorschau |
 | **CV-Parser** | 1 | KI-Lebenslauf-Analyse |
@@ -432,7 +504,10 @@ HRTool ist für alle Geräte optimiert:
 
 ```
 HRTool/
+├── compose.yml                # Docker-Start für Backend, Frontend & Volumes
+├── .env.example               # Beispiel-Konfiguration für Docker Compose
 ├── backend/
+│   ├── Dockerfile             # Backend-Container
 │   ├── server.js              # Express-Server & DB-Initialisierung
 │   ├── src/
 │   │   ├── routes/
@@ -454,6 +529,8 @@ HRTool/
 │   ├── uploads/               # Hochgeladene Dateien
 │   └── hrtool.db              # SQLite-Datenbank
 ├── frontend/
+│   ├── Dockerfile             # Frontend-Build & Nginx-Auslieferung
+│   ├── nginx.conf             # SPA-Routing & API-Proxy
 │   ├── src/
 │   │   ├── pages/             # 14 Seiten (Dashboard, Candidates, etc.)
 │   │   ├── components/        # Wiederverwendbare UI-Komponenten
@@ -472,7 +549,7 @@ HRTool/
 | Metrik | Wert |
 |--------|------|
 | **Frontend-Seiten** | 14 |
-| **API-Endpunkte** | 62+ |
+| **API-Endpunkte** | 63+ |
 | **Datenbank-Tabellen** | 12 |
 | **Datenbank-Indizes** | 24 |
 | **KI-Features** | 3 (CV-Parser, Matching, Stellengenerator) |

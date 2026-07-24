@@ -12,7 +12,7 @@ FROM node:18-bookworm-slim
 WORKDIR /app
 
 RUN apt-get update && \
-  apt-get install -y --no-install-recommends tesseract-ocr poppler-utils ca-certificates \
+  apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng poppler-utils ca-certificates \
   vim sqlite3 sudo curl ncurses-term procps binutils \
   gnupg-utils jq && \
   rm -rf /var/lib/apt/lists/*

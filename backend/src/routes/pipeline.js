@@ -27,6 +27,12 @@ const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abge
  */
 router.get('/job/:jobId', (req, res) => {
   try {
+    // Fachbereich darf nur ihre zugewiesenen Jobs sehen
+    if (req.user?.role === 'fachbereich') {
+      const access = db.prepare('SELECT 1 FROM user_job_access WHERE user_id = ? AND job_id = ?').get(req.user.id, req.params.jobId);
+      if (!access) return res.status(403).json({ error: 'Kein Zugriff auf diese Pipeline' });
+    }
+
     const entries = db.prepare(`
       SELECT pe.id, pe.job_id, pe.candidate_id, pe.stage, pe.notes, pe.created_at, pe.updated_at,
         c.name as candidate_name, c.location, c.skills, c.availability, c.status, c.tags, c.email
@@ -147,6 +153,12 @@ router.put('/:entryId/stage', (req, res) => {
 
     const entry = db.prepare('SELECT * FROM pipeline_entries WHERE id = ?').get(req.params.entryId);
     if (!entry) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+
+    // Fachbereich: check job access
+    if (req.user?.role === 'fachbereich') {
+      const access = db.prepare('SELECT 1 FROM user_job_access WHERE user_id = ? AND job_id = ?').get(req.user.id, entry.job_id);
+      if (!access) return res.status(403).json({ error: 'Kein Zugriff auf diese Pipeline' });
+    }
 
     const oldStage = entry.stage;
 
@@ -286,6 +298,12 @@ router.post('/:entryId/notes', (req, res) => {
     const entry = db.prepare('SELECT * FROM pipeline_entries WHERE id = ?').get(req.params.entryId);
     if (!entry) return res.status(404).json({ error: 'Eintrag nicht gefunden' });
 
+    // Fachbereich: check job access
+    if (req.user?.role === 'fachbereich') {
+      const access = db.prepare('SELECT 1 FROM user_job_access WHERE user_id = ? AND job_id = ?').get(req.user.id, entry.job_id);
+      if (!access) return res.status(403).json({ error: 'Kein Zugriff auf diese Pipeline' });
+    }
+
     const result = db.prepare(
       'INSERT INTO pipeline_notes (pipeline_entry_id, content, old_stage, new_stage) VALUES (?, ?, ?, ?)'
     ).run(req.params.entryId, content.trim(), entry.stage, entry.stage);
@@ -308,14 +326,24 @@ router.post('/:entryId/notes', (req, res) => {
  */
 router.get('/active-jobs', (req, res) => {
   try {
+    // Fachbereich only sees their assigned jobs
+    let jobFilter = '';
+    let filterParams = [];
+    if (req.user?.role === 'fachbereich') {
+      const assignedIds = db.prepare('SELECT job_id FROM user_job_access WHERE user_id = ?').all(req.user.id).map(r => r.job_id);
+      if (assignedIds.length === 0) return res.json({ data: [] });
+      jobFilter = `WHERE pe.job_id IN (${assignedIds.map(() => '?').join(',')})`;
+      filterParams = assignedIds;
+    }
     const rows = db.prepare(`
       SELECT j.id, j.title, j.location, j.type, j.status,
         pe.stage, COUNT(*) as count
       FROM pipeline_entries pe
       JOIN jobs j ON j.id = pe.job_id
+      ${jobFilter}
       GROUP BY pe.job_id, pe.stage
       ORDER BY j.title, pe.stage
-    `).all();
+    `).all(...filterParams);
 
     // Group by job
     const jobMap = new Map();

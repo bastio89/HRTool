@@ -1,20 +1,51 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server, AlertOctagon, TestTubes, Lightbulb, Bell, Play, Plus, ExternalLink, Pencil, Trash2, ChevronDown, ChevronUp, ListTodo, CircleDot, CircleCheck } from 'lucide-react'
+import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server, AlertOctagon, TestTubes, Lightbulb, Bell, Play, Plus, ExternalLink, Pencil, Trash2, ChevronDown, ChevronUp, ListTodo, CircleDot, CircleCheck, LayoutDashboard, Download, HelpCircle } from 'lucide-react'
 import { Card, LoadingSpinner } from '../components/UI'
 import { aiLogsApi, complianceApi } from '../api'
 import { useI18n } from '../I18nContext'
 
-const TABS = [
-  { id: 'compliance', labelKey: 'ki.tab_compliance', icon: Shield },
-  { id: 'logs', labelKey: 'ki.tab_logs', icon: FileText },
-  { id: 'bias', labelKey: 'ki.tab_bias', icon: Scale },
-  { id: 'riskreg', labelKey: 'ki.tab_risk_register', icon: AlertOctagon },
-  { id: 'biastest', labelKey: 'ki.tab_bias_testset', icon: TestTubes },
-  { id: 'alerts', labelKey: 'ki.tab_bias_alerts', icon: Bell },
-  { id: 'modelcard', labelKey: 'ki.tab_modelcard', icon: CreditCard },
-  { id: 'info', labelKey: 'ki.tab_info', icon: Info },
+// Two-level navigation: an entry dashboard, two thematic groups, and a help area.
+// This replaces the old flat list of 8 equally-weighted tabs.
+const GROUPS = [
+  { id: 'overview', labelKey: 'ki.group_overview', icon: LayoutDashboard },
+  {
+    id: 'audit', labelKey: 'ki.group_audit', icon: Shield, subs: [
+      { id: 'compliance', labelKey: 'ki.tab_compliance', icon: Shield },
+      { id: 'riskreg', labelKey: 'ki.tab_risk_register', icon: AlertOctagon },
+      { id: 'modelcard', labelKey: 'ki.tab_modelcard', icon: CreditCard },
+      { id: 'logs', labelKey: 'ki.tab_logs', icon: FileText },
+    ],
+  },
+  {
+    id: 'fairness', labelKey: 'ki.group_fairness', icon: Scale, subs: [
+      { id: 'bias', labelKey: 'ki.tab_bias', icon: Scale },
+      { id: 'biastest', labelKey: 'ki.tab_bias_testset', icon: TestTubes },
+    ],
+  },
+  { id: 'info', labelKey: 'ki.group_info', icon: Info },
 ]
+
+const GROUP_DEFAULT_SUB = { audit: 'compliance', fairness: 'bias' }
+
+// Small "Why?" tooltip to explain thresholds and metrics in plain language.
+function WhyTooltip({ text }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative inline-flex align-middle">
+      <button type="button" onClick={() => setOpen(o => !o)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="w-5 h-5 rounded-full flex items-center justify-center text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
+        aria-label="Erklärung">
+        <HelpCircle className="w-[15px] h-[15px]" />
+      </button>
+      {open && (
+        <span className="absolute z-30 left-1/2 -translate-x-1/2 top-7 w-64 p-3 rounded-xl bg-black/90 text-white text-[12px] font-medium leading-relaxed shadow-xl text-left normal-case">
+          {text}
+        </span>
+      )}
+    </span>
+  )
+}
 
 // Info toggle button (place inside header flex row)
 function InfoButton({ show, onToggle, color, t }) {
@@ -72,7 +103,21 @@ function InfoContent({ show, color, items, legalText }) {
 export default function KITransparenz() {
   const navigate = useNavigate()
   const { t, locale } = useI18n()
-  const [tab, setTab] = useState('compliance')
+  const [group, setGroup] = useState('overview')
+  const [sub, setSub] = useState(null)
+
+  const selectGroup = (g) => {
+    setGroup(g)
+    setSub(GROUP_DEFAULT_SUB[g] || null)
+  }
+  // Allow the overview dashboard to deep-link into a specific area.
+  const goTo = (g, s = null) => {
+    setGroup(g)
+    setSub(s || GROUP_DEFAULT_SUB[g] || null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const activeGroup = GROUPS.find(g => g.id === group)
 
   return (
     <div className="fade-in max-w-[1400px] mx-auto">
@@ -86,13 +131,15 @@ export default function KITransparenz() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-2xl p-1.5 mb-8 overflow-x-auto">
-        {TABS.map(item => {
+      {/* Primary group navigation */}
+      <div className="flex items-center gap-1 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-2xl p-1.5 mb-4 overflow-x-auto">
+        {GROUPS.map(item => {
           const Icon = item.icon
+          const active = group === item.id
           return (
-            <button key={item.id} onClick={() => setTab(item.id)}
+            <button key={item.id} onClick={() => selectGroup(item.id)}
               className={`flex items-center gap-2 px-5 py-3 rounded-xl text-[14px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                tab === item.id ? 'bg-white dark:bg-[#3a3a3c] text-[#0071e3] dark:text-[#0a84ff] shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                active ? 'bg-white dark:bg-[#3a3a3c] text-[#0071e3] dark:text-[#0a84ff] shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
               }`}>
               <Icon className="w-4 h-4" />{t(item.labelKey)}
             </button>
@@ -100,14 +147,190 @@ export default function KITransparenz() {
         })}
       </div>
 
-      {tab === 'compliance' && <ComplianceTab t={t} />}
-      {tab === 'logs' && <LogsTab t={t} />}
-      {tab === 'bias' && <BiasTab t={t} />}
-      {tab === 'riskreg' && <RiskRegisterTab t={t} />}
-      {tab === 'biastest' && <BiasTestsetTab t={t} />}
-      {tab === 'alerts' && <BiasAlertsTab t={t} />}
-      {tab === 'modelcard' && <ModelCardTab t={t} />}
-      {tab === 'info' && <InfoTab t={t} locale={locale} />}
+      {/* Secondary sub-navigation (only for grouped areas) */}
+      {activeGroup?.subs ? (
+        <div className="flex items-center gap-1.5 mb-8 overflow-x-auto px-1 py-1">
+          {activeGroup.subs.map(s => {
+            const Icon = s.icon
+            const active = sub === s.id
+            return (
+              <button key={s.id} onClick={() => setSub(s.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  active ? 'bg-[#0071e3]/10 text-[#0071e3] dark:text-[#0a84ff]' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                }`}>
+                <Icon className="w-4 h-4" />{t(s.labelKey)}
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="mb-8" />
+      )}
+
+      {group === 'overview' && <OverviewTab t={t} goTo={goTo} />}
+      {group === 'info' && <InfoTab t={t} locale={locale} />}
+      {group === 'audit' && sub === 'compliance' && <ComplianceTab t={t} />}
+      {group === 'audit' && sub === 'riskreg' && <RiskRegisterTab t={t} />}
+      {group === 'audit' && sub === 'modelcard' && <ModelCardTab t={t} />}
+      {group === 'audit' && sub === 'logs' && <LogsTab t={t} />}
+      {group === 'fairness' && sub === 'bias' && (
+        <div className="space-y-8">
+          <BiasTab t={t} />
+          <BiasAlertsTab t={t} />
+        </div>
+      )}
+      {group === 'fairness' && sub === 'biastest' && <BiasTestsetTab t={t} />}
+    </div>
+  )
+}
+
+function OverviewTab({ t, goTo }) {
+  const [compliance, setCompliance] = useState(null)
+  const [stats, setStats] = useState(null)
+  const [actionSummary, setActionSummary] = useState(null)
+  const [alerts, setAlerts] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    Promise.all([
+      aiLogsApi.getCompliance().catch(() => null),
+      aiLogsApi.getStats().catch(() => null),
+      complianceApi.getSummary().catch(() => null),
+      aiLogsApi.getBiasAlerts().catch(() => null),
+    ]).then(([c, s, sum, al]) => {
+      setCompliance(c); setStats(s); setActionSummary(sum); setAlerts(al)
+    }).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <LoadingSpinner text={t('ki.overview_loading')} />
+
+  const score = compliance?.summary?.complianceScore ?? 0
+  const passed = compliance?.summary?.passed ?? 0
+  const failed = compliance?.summary?.failed ?? 0
+  const warnings = compliance?.summary?.warnings ?? 0
+  const totalChecks = compliance?.checks?.length ?? 0
+  const criticalAlerts = alerts?.summary?.critical ?? 0
+  const warningAlerts = alerts?.summary?.warning ?? 0
+  const openActions = (actionSummary?.open ?? 0) + (actionSummary?.inProgress ?? 0)
+  const overdue = actionSummary?.overdue ?? 0
+
+  // Traffic-light status: the single answer to "is my AI OK?"
+  let status = 'green'
+  if (failed > 0 || criticalAlerts > 0 || overdue > 0) status = 'red'
+  else if (warnings > 0 || warningAlerts > 0 || score < 80) status = 'yellow'
+
+  const statusMeta = {
+    green: { color: '#34c759', title: t('ki.overview_status_green'), sub: t('ki.overview_status_green_sub'), icon: CheckCircle },
+    yellow: { color: '#ff9f0a', title: t('ki.overview_status_yellow'), sub: t('ki.overview_status_yellow_sub'), icon: AlertTriangle },
+    red: { color: '#ff3b30', title: t('ki.overview_status_red'), sub: t('ki.overview_status_red_sub'), icon: AlertOctagon },
+  }[status]
+  const StatusIcon = statusMeta.icon
+
+  // Build the actionable to-do list from failed/warning checks + open alerts + overdue tasks.
+  const todos = []
+  ;(compliance?.checks || []).forEach(c => {
+    if (c.status === 'failed') todos.push({ sev: 'red', text: c.title, detail: c.description, go: () => goTo('audit', 'compliance') })
+    else if (c.status === 'warning') todos.push({ sev: 'yellow', text: c.title, detail: c.description, go: () => goTo('audit', 'compliance') })
+  })
+  ;(alerts?.alerts || []).filter(a => a.severity === 'critical' || a.severity === 'warning').forEach(a => {
+    todos.push({ sev: a.severity === 'critical' ? 'red' : 'yellow', text: a.title, detail: a.message, go: () => goTo('fairness', 'bias') })
+  })
+  if (overdue > 0) todos.push({ sev: 'red', text: t('ki.overview_todo_overdue').replace('{count}', overdue), detail: '', go: () => goTo('audit', 'compliance') })
+
+  const sevColor = { red: '#ff3b30', yellow: '#ff9f0a' }
+
+  return (
+    <div className="space-y-8">
+      {/* Traffic-light status */}
+      <Card className="p-8" style={{ backgroundColor: `${statusMeta.color}0d`, borderColor: `${statusMeta.color}33`, borderWidth: 1 }}>
+        <div className="flex items-center gap-5">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${statusMeta.color}1a` }}>
+            <StatusIcon className="w-9 h-9" style={{ color: statusMeta.color }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[22px] sm:text-[26px] font-bold tracking-tight text-black dark:text-white">{statusMeta.title}</h2>
+            <p className="text-[14px] sm:text-[15px] text-gray-600 dark:text-gray-400 mt-1">{statusMeta.sub}</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Key numbers */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        <Card className="p-6 text-center">
+          <div className={`text-[40px] font-bold tracking-tight ${score >= 80 ? 'text-[#34c759]' : score >= 50 ? 'text-[#ff9f0a]' : 'text-[#ff3b30]'}`}>{score}%</div>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.compliance_score')}</p>
+        </Card>
+        <Card className="p-6 text-center">
+          <div className="text-[40px] font-bold tracking-tight text-black dark:text-white">{stats?.totals?.total ?? 0}</div>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.total_calls')}</p>
+        </Card>
+        <Card className="p-6 text-center">
+          <div className={`text-[40px] font-bold tracking-tight ${openActions > 0 ? 'text-[#ff9f0a]' : 'text-[#34c759]'}`}>{openActions}</div>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.overview_open_actions')}</p>
+        </Card>
+        <Card className="p-6 text-center">
+          <div className={`text-[40px] font-bold tracking-tight ${criticalAlerts > 0 ? 'text-[#ff3b30]' : 'text-[#34c759]'}`}>{criticalAlerts}</div>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.overview_critical_warnings')}</p>
+        </Card>
+      </div>
+
+      {/* What to do */}
+      <Card className="p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <ListTodo className="w-6 h-6 text-[#0071e3]" />
+          <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('ki.overview_todo_title')}</h3>
+        </div>
+        {todos.length === 0 ? (
+          <div className="flex items-center gap-3 p-5 rounded-2xl bg-[#34c759]/5 border border-[#34c759]/20">
+            <CheckCircle className="w-6 h-6 text-[#34c759] flex-shrink-0" />
+            <p className="text-[15px] font-medium text-gray-700 dark:text-gray-300">{t('ki.overview_todo_empty')}</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {todos.slice(0, 8).map((todo, i) => (
+              <button key={i} onClick={todo.go}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors text-left cursor-pointer group">
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: sevColor[todo.sev] }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-semibold text-black dark:text-white truncate">{todo.text}</p>
+                  {todo.detail && <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate mt-0.5">{todo.detail}</p>}
+                </div>
+                <span className="flex items-center gap-1 text-[13px] font-semibold text-[#0071e3] flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {t('ki.overview_review')} <ChevronRight className="w-4 h-4" />
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Area shortcuts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <button onClick={() => goTo('audit')} className="text-left group cursor-pointer">
+          <Card className="p-8 h-full transition-all group-hover:shadow-lg group-hover:-translate-y-0.5">
+            <div className="w-14 h-14 rounded-2xl bg-[#0071e3]/10 flex items-center justify-center mb-6">
+              <Shield className="w-7 h-7 text-[#0071e3]" />
+            </div>
+            <h3 className="text-[19px] font-semibold text-black dark:text-white">{t('ki.group_audit')}</h3>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">{t('ki.overview_area_audit_desc')}</p>
+            <span className="inline-flex items-center gap-1.5 mt-6 text-[14px] font-semibold text-[#0071e3] group-hover:translate-x-1 transition-transform">
+              {t('ki.overview_open')} <ChevronRight className="w-4 h-4" />
+            </span>
+          </Card>
+        </button>
+        <button onClick={() => goTo('fairness')} className="text-left group cursor-pointer">
+          <Card className="p-8 h-full transition-all group-hover:shadow-lg group-hover:-translate-y-0.5">
+            <div className="w-14 h-14 rounded-2xl bg-[#34c759]/10 flex items-center justify-center mb-6">
+              <Scale className="w-7 h-7 text-[#34c759]" />
+            </div>
+            <h3 className="text-[19px] font-semibold text-black dark:text-white">{t('ki.group_fairness')}</h3>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">{t('ki.overview_area_fairness_desc')}</p>
+            <span className="inline-flex items-center gap-1.5 mt-6 text-[14px] font-semibold text-[#34c759] group-hover:translate-x-1 transition-transform">
+              {t('ki.overview_open')} <ChevronRight className="w-4 h-4" />
+            </span>
+          </Card>
+        </button>
+      </div>
     </div>
   )
 }
@@ -186,6 +409,27 @@ function ComplianceTab({ t }) {
     } catch (err) { console.error(err) }
   }
 
+  // Export the compliance checklist as CSV — the primary audit artifact.
+  const handleExportCsv = () => {
+    if (!data?.checks) return
+    const statusLabel = { passed: t('ki.passed'), failed: t('ki.failed'), warning: t('ki.warnings'), 'not-applicable': t('ki.not_applicable') }
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const header = ['ID', t('ki.export_col_article'), t('ki.export_col_check'), t('ki.export_col_status'), t('ki.export_col_detail')]
+    const rows = data.checks.map(c => [c.id, c.article, c.title, statusLabel[c.status] || c.status, c.details || c.description || ''].map(esc).join(','))
+    const meta = [
+      esc(t('ki.export_meta_score')) + ',' + esc(`${data.summary?.complianceScore ?? 0}%`),
+      esc(t('ki.export_meta_date')) + ',' + esc(new Date().toLocaleString('de-DE')),
+    ]
+    const csv = '\uFEFF' + meta.join('\n') + '\n\n' + header.map(esc).join(',') + '\n' + rows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ki-compliance_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   if (loading) return <LoadingSpinner text={t('ki.compliance_loading')} />
 
   const statusIcons = {
@@ -210,6 +454,10 @@ function ComplianceTab({ t }) {
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.compliance_title')}</h2>
             <p className="text-[14px] text-gray-500">{t('ki.compliance_subtitle')}</p>
           </div>
+          <button onClick={handleExportCsv} disabled={!data?.checks}
+            className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-bold bg-white/70 dark:bg-black/20 text-[#0071e3] hover:bg-white dark:hover:bg-black/40 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            <Download className="w-4 h-4" />{t('ki.export_csv')}
+          </button>
           <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#0071e3" t={t} />
         </div>
         <InfoContent show={showInfo} color="#0071e3"
@@ -228,7 +476,11 @@ function ComplianceTab({ t }) {
             <div className={`text-[52px] font-bold tracking-tight ${data.summary.complianceScore >= 80 ? 'text-[#34c759]' : data.summary.complianceScore >= 50 ? 'text-[#ff9f0a]' : 'text-[#ff3b30]'}`}>
               {data.summary.complianceScore}%
             </div>
-            <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400 mt-2">{t('ki.compliance_score')}</p>
+            <div className="flex items-center justify-center gap-1 mt-2">
+              <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400">{t('ki.compliance_score')}</p>
+              <WhyTooltip text={t('ki.compliance_score_why')} />
+            </div>
+            <p className="text-[12px] text-gray-400 mt-1">{data.summary.passed}/{data.checks?.length || 0} {t('ki.checks_passed_short')}</p>
           </Card>
           <Card className="p-8 text-center">
             <div className="text-[52px] font-bold tracking-tight text-[#34c759]">{data.summary.passed}</div>

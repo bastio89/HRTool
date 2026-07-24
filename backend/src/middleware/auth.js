@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/api/health',
   '/api/docs',
   '/api/docs.json',
+  '/api/matching/external',
 ];
 
 function isPublicPath(path) {

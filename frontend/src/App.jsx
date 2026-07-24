@@ -10,7 +10,11 @@ import Dashboard from './pages/Dashboard'
 import Candidates from './pages/Candidates'
 import CandidateForm from './pages/CandidateForm'
 import CandidateDetail from './pages/CandidateDetail'
-import Matching from './pages/Matching'
+import MatchingHub from './pages/MatchingHub'
+import MatchingLayout from './components/MatchingLayout'
+import JobToCandidates from './pages/JobToCandidates'
+import CandidateToJobs from './pages/CandidateToJobs'
+import MatrixMatching from './pages/MatrixMatching'
 import MatchingResults from './pages/MatchingResults'
 import History from './pages/History'
 import Jobs from './pages/Jobs'
@@ -23,10 +27,17 @@ import DSGVO from './pages/DSGVO'
 import KITransparenz from './pages/KITransparenz'
 import EmailSettings from './pages/EmailSettings'
 import Reports from './pages/Reports'
+import AISettings from './pages/AISettings'
 
 function AdminRoute({ children }) {
   const { user } = useAuth()
   if (user?.role !== 'admin') return <Navigate to="/" replace />
+  return children
+}
+
+function RevisorRoute({ children }) {
+  const { user } = useAuth()
+  if (!['admin', 'revisor'].includes(user?.role)) return <Navigate to="/" replace />
   return children
 }
 
@@ -56,16 +67,22 @@ function ProtectedRoutes() {
         <Route path="jobs/:id/edit" element={<JobForm />} />
         <Route path="pipeline/:jobId" element={<Pipeline />} />
         <Route path="pipeline/:jobId/interview-prep/:entryId" element={<InterviewPrep />} />
-        <Route path="matching" element={<Matching />} />
+        <Route path="matching" element={<MatchingHub />} />
+        <Route path="matching" element={<MatchingLayout />}>
+          <Route path="job" element={<JobToCandidates />} />
+          <Route path="candidate" element={<CandidateToJobs />} />
+          <Route path="matrix" element={<MatrixMatching />} />
+        </Route>
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />
         <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
         <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-        <Route path="admin/audit" element={<AdminRoute><AuditLog /></AdminRoute>} />
+        <Route path="admin/audit" element={<RevisorRoute><AuditLog /></RevisorRoute>} />
         <Route path="admin/dsgvo" element={<AdminRoute><DSGVO /></AdminRoute>} />
-        <Route path="admin/ki-transparenz" element={<AdminRoute><KITransparenz /></AdminRoute>} />
+        <Route path="admin/ki-transparenz" element={<RevisorRoute><KITransparenz /></RevisorRoute>} />
         <Route path="admin/email" element={<AdminRoute><EmailSettings /></AdminRoute>} />
-        <Route path="admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+        <Route path="admin/ai" element={<AdminRoute><AISettings /></AdminRoute>} />
+        <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />
       </Route>
     </Routes>
   )

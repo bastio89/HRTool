@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
@@ -18,6 +18,7 @@ const navItems = [
 const adminItems = [
   { to: '/admin/users', icon: Shield, labelKey: 'nav.users' },
   { to: '/admin/email', icon: Mail, labelKey: 'nav.email' },
+  { to: '/admin/ai', icon: Cpu, labelKey: 'nav.ai_settings' },
   { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
   { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
   { to: '/admin/dsgvo', icon: ShieldAlert, labelKey: 'nav.dsgvo' },
@@ -25,7 +26,7 @@ const adminItems = [
 ]
 
 export default function Layout() {
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, isRevisor, isFachbereich } = useAuth()
   const { isDark, toggleTheme } = useTheme()
   const { locale, changeLocale, t } = useI18n()
   const location = useLocation()
@@ -74,62 +75,112 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 space-y-2">
-          {navItems.map(({ to, icon: Icon, labelKey }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
-                  isActive
-                    ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
-                    : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
-                }`
-              }
-            >
-              <Icon className="w-5 h-5" />
-              {t(labelKey)}
-            </NavLink>
-          ))}
-          {isAdmin && (
-            <div className="mt-2">
-              <button
-                onClick={() => setAdminOpen(!adminOpen)}
-                className={`flex items-center justify-between w-full px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 cursor-pointer ${
-                  isAdminRoute && !adminOpen
-                    ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
-                    : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
-                }`}
+          {/* Fachbereich: minimal nav — only dashboard and assigned pipelines */}
+          {isFachbereich ? (
+            <>
+              <NavLink
+                to="/"
+                end
+                onClick={closeSidebar}
+                className={({ isActive }) =>
+                  `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
+                    isActive
+                      ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                      : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                  }`
+                }
               >
-                <span className="flex items-center gap-4">
-                  <Settings className="w-5 h-5" />
-                  {t('nav.admin')}
-                </span>
-                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${adminOpen ? 'rotate-180' : ''}`} />
-              </button>
-              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${adminOpen ? 'max-h-[360px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
-                <div className="space-y-1 pl-4">
-                  {adminItems.map(({ to, icon: Icon, labelKey }) => (
+                <LayoutDashboard className="w-5 h-5" />
+                {t('nav.overview')}
+              </NavLink>
+            </>
+          ) : (
+            <>
+              {navItems.map(({ to, icon: Icon, labelKey }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  onClick={closeSidebar}
+                  className={({ isActive }) =>
+                    `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
+                      isActive
+                        ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                        : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                    }`
+                  }
+                >
+                  <Icon className="w-5 h-5" />
+                  {t(labelKey)}
+                </NavLink>
+              ))}
+              {/* Revisor: show audit/reports/ki section */}
+              {isRevisor && (
+                <div className="mt-2">
+                  <p className="px-5 py-2 text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-gray-600">{t('nav.review')}</p>
+                  {[
+                    { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
+                    { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
+                    { to: '/admin/ki-transparenz', icon: Bot, labelKey: 'nav.ai_transparency' },
+                  ].map(({ to, icon: Icon, labelKey }) => (
                     <NavLink
                       key={to}
                       to={to}
                       onClick={closeSidebar}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-300 ${
+                        `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
                           isActive
                             ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
                             : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
                         }`
                       }
                     >
-                      <Icon className="w-4 h-4" />
+                      <Icon className="w-5 h-5" />
                       {t(labelKey)}
                     </NavLink>
                   ))}
                 </div>
-              </div>
-            </div>
+              )}
+              {isAdmin && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setAdminOpen(!adminOpen)}
+                    className={`flex items-center justify-between w-full px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 cursor-pointer ${
+                      isAdminRoute && !adminOpen
+                        ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                        : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                    }`}
+                  >
+                    <span className="flex items-center gap-4">
+                      <Settings className="w-5 h-5" />
+                      {t('nav.admin')}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${adminOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  <div className={`overflow-hidden transition-all duration-300 ease-in-out ${adminOpen ? 'max-h-[360px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                    <div className="space-y-1 pl-4">
+                      {adminItems.map(({ to, icon: Icon, labelKey }) => (
+                        <NavLink
+                          key={to}
+                          to={to}
+                          onClick={closeSidebar}
+                          className={({ isActive }) =>
+                            `flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-300 ${
+                              isActive
+                                ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                                : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                            }`
+                          }
+                        >
+                          <Icon className="w-4 h-4" />
+                          {t(labelKey)}
+                        </NavLink>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </nav>
 
@@ -175,7 +226,12 @@ export default function Layout() {
             <NotificationBell />
             <div className="text-right hidden sm:block">
               <p className="text-[14px] sm:text-[16px] font-semibold text-black dark:text-white tracking-tight">{user?.display_name || user?.username}</p>
-              <p className="text-[12px] sm:text-[14px] text-gray-500 font-medium">{user?.role === 'admin' ? t('auth.administrator') : t('auth.recruiter')}</p>
+              <p className="text-[12px] sm:text-[14px] text-gray-500 font-medium">{
+                user?.role === 'admin' ? t('auth.administrator')
+                : user?.role === 'revisor' ? 'Revisor'
+                : user?.role === 'fachbereich' ? 'Fachbereich'
+                : t('auth.recruiter')
+              }</p>
             </div>
             <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.display_name || user?.username}`} alt="Profile" className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-100 border border-gray-200 shadow-sm" />
             <button onClick={logout} className="p-2 sm:p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title={t('auth.logout')}>

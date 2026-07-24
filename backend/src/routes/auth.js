@@ -112,7 +112,13 @@ router.get('/users', (req, res) => {
     return res.status(403).json({ error: 'Nur Admins dürfen Benutzer verwalten' });
   }
   const users = db.prepare('SELECT id, username, display_name, role, created_at FROM users ORDER BY created_at DESC').all();
-  res.json({ data: users });
+  // Include assigned job_ids for fachbereich users
+  const getJobIds = db.prepare('SELECT job_id FROM user_job_access WHERE user_id = ?');
+  const data = users.map(u => ({
+    ...u,
+    job_ids: u.role === 'fachbereich' ? getJobIds.all(u.id).map(r => r.job_id) : [],
+  }));
+  res.json({ data });
 });
 
 /**
@@ -143,7 +149,7 @@ router.post('/users', (req, res) => {
     if (!username || !password || !display_name) {
       return res.status(400).json({ error: 'Benutzername, Passwort und Anzeigename erforderlich' });
     }
-    if (!['admin', 'recruiter'].includes(role)) {
+    if (!['admin', 'recruiter', 'revisor', 'fachbereich'].includes(role)) {
       return res.status(400).json({ error: 'Ungültige Rolle' });
     }
 
@@ -162,9 +168,23 @@ router.post('/users', (req, res) => {
       'INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)'
     ).run(username, hash, display_name, role || 'recruiter');
 
-    const user = db.prepare('SELECT id, username, display_name, role, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const userId = result.lastInsertRowid;
+
+    // Assign jobs for fachbereich
+    const { job_ids } = req.body;
+    if (role === 'fachbereich' && Array.isArray(job_ids) && job_ids.length > 0) {
+      const insertAccess = db.prepare('INSERT OR IGNORE INTO user_job_access (user_id, job_id) VALUES (?, ?)');
+      for (const jobId of job_ids) {
+        insertAccess.run(userId, jobId);
+      }
+    }
+
+    const user = db.prepare('SELECT id, username, display_name, role, created_at FROM users WHERE id = ?').get(userId);
+    const assignedJobIds = role === 'fachbereich'
+      ? db.prepare('SELECT job_id FROM user_job_access WHERE user_id = ?').all(userId).map(r => r.job_id)
+      : [];
     logAudit(req, 'benutzer-erstellt', 'User', user.id, user.display_name, { role: user.role });
-    res.status(201).json(user);
+    res.status(201).json({ ...user, job_ids: assignedJobIds });
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({ error: 'Fehler beim Anlegen des Benutzers' });
@@ -346,6 +366,42 @@ router.get('/admin/backup', (req, res) => {
   } catch (error) {
     console.error('Backup error:', error);
     res.status(500).json({ error: 'Fehler beim Erstellen des Backups' });
+  }
+});
+
+/**
+ * PUT /auth/users/:id/jobs — Job-Zuweisungen für Fachbereich-User setzen (Admin)
+ */
+router.put('/users/:id/jobs', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Nur Admins dürfen Job-Zuweisungen verwalten' });
+  }
+  try {
+    const userId = parseInt(req.params.id);
+    const target = db.prepare('SELECT id, role FROM users WHERE id = ?').get(userId);
+    if (!target) return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    if (target.role !== 'fachbereich') {
+      return res.status(400).json({ error: 'Job-Zuweisung nur für Fachbereich-Benutzer' });
+    }
+
+    const { job_ids } = req.body;
+    if (!Array.isArray(job_ids)) {
+      return res.status(400).json({ error: 'job_ids muss ein Array sein' });
+    }
+
+    // Replace all existing assignments
+    db.prepare('DELETE FROM user_job_access WHERE user_id = ?').run(userId);
+    const insert = db.prepare('INSERT OR IGNORE INTO user_job_access (user_id, job_id) VALUES (?, ?)');
+    for (const jobId of job_ids) {
+      insert.run(userId, jobId);
+    }
+
+    const assigned = db.prepare('SELECT job_id FROM user_job_access WHERE user_id = ?').all(userId).map(r => r.job_id);
+    logAudit(req, 'jobs-zugewiesen', 'User', userId, null, { job_ids: assigned });
+    res.json({ job_ids: assigned });
+  } catch (error) {
+    console.error('Assign jobs error:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern der Job-Zuweisungen' });
   }
 });
 

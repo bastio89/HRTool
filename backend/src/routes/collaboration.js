@@ -45,6 +45,27 @@ router.post('/comments', (req, res) => {
       return res.status(400).json({ error: 'entity_type, entity_id und content sind erforderlich' });
     }
 
+    // Fachbereich: only comment on candidates/pipeline entries in their assigned jobs
+    if (req.user?.role === 'fachbereich') {
+      let hasAccess = false;
+      if (entity_type === 'candidate') {
+        const inPipeline = db.prepare(`
+          SELECT 1 FROM pipeline_entries pe
+          JOIN user_job_access uja ON uja.job_id = pe.job_id
+          WHERE pe.candidate_id = ? AND uja.user_id = ?
+        `).get(entity_id, req.user.id);
+        hasAccess = !!inPipeline;
+      } else if (entity_type === 'pipeline_entry') {
+        const inPipeline = db.prepare(`
+          SELECT 1 FROM pipeline_entries pe
+          JOIN user_job_access uja ON uja.job_id = pe.job_id
+          WHERE pe.id = ? AND uja.user_id = ?
+        `).get(entity_id, req.user.id);
+        hasAccess = !!inPipeline;
+      }
+      if (!hasAccess) return res.status(403).json({ error: 'Kein Zugriff' });
+    }
+
     // Extract @mentions from content
     const mentionPattern = /@(\w+)/g;
     const mentionMatches = [...content.matchAll(mentionPattern)];

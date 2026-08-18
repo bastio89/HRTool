@@ -33,7 +33,7 @@ export default function Login() {
             <Command className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-[28px] font-semibold tracking-tight text-black dark:text-white">HR System</h1>
-          <p className="text-[16px] text-gray-500 dark:text-gray-400 mt-1">Melde dich an, um fortzufahren</p>
+          <p className="text-[16px] text-gray-500 dark:text-gray-400 mt-1">{t('auth.subtitle')}</p>
         </div>
 
         {/* Login Card */}
@@ -87,10 +87,6 @@ export default function Login() {
             </button>
           </form>
         </div>
-
-        <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mt-6">
-          Standardzugang: admin / admin123
-        </p>
       </div>
     </div>
   )

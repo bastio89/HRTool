@@ -25,6 +25,7 @@ export default {
   'auth.administrator': 'Administrator',
   'auth.recruiter': 'Recruiter',
   'auth.login_failed': 'Anmeldung fehlgeschlagen',
+  'auth.subtitle': 'Melde dich an, um fortzufahren',
   'auth.enter_username': 'Benutzername eingeben',
   'auth.enter_password': 'Passwort eingeben',
 

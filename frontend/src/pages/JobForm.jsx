@@ -6,6 +6,7 @@ import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../I18nContext'
+import { jobStatusLabel, jobTypeLabel } from '../i18n/stageLabels'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
@@ -173,10 +174,10 @@ export default function JobForm() {
 
       <form onSubmit={handleSubmit} className="space-y-10">
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Allgemeine Angaben</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('jobs.general_info')}</h2>
           <div className="space-y-8">
             <Input
-              label="Jobtitel *"
+              label={`${t('jobs.title_field')} *`}
               placeholder="z.B. Senior Frontend Developer (m/w/d)"
               value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -189,7 +190,7 @@ export default function JobForm() {
               onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
             />
             <Input
-              label="Link zur Stelle"
+              label={t('jobs.url_label')}
               placeholder="https://karriere.unternehmen.de/stelle/..."
               value={form.url}
               onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
@@ -197,14 +198,14 @@ export default function JobForm() {
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col gap-3">
-                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">Anstellungsart</label>
+                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">{t('jobs.employment_type')}</label>
                 <select
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                   className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
                     focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
                 >
-                  {JOB_TYPES.map(type => <option key={type}>{type}</option>)}
+                  {JOB_TYPES.map(type => <option key={type} value={type}>{jobTypeLabel(t, type)}</option>)}
                 </select>
               </div>
               <div className="flex flex-col gap-3">
@@ -215,7 +216,7 @@ export default function JobForm() {
                   className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
                     focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
                 >
-                  {JOB_STATUSES.map(s => <option key={s}>{s}</option>)}
+                  {JOB_STATUSES.map(s => <option key={s} value={s}>{jobStatusLabel(t, s)}</option>)}
                 </select>
               </div>
             </div>
@@ -227,8 +228,8 @@ export default function JobForm() {
             <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">Details</h2>
             {aiModel && (
               <div className="flex items-center gap-3">
-                <KiBadge label="KI-generiert" tooltip="Beschreibung und Anforderungen wurden von einer KI generiert. Bitte prüfe den Text." />
-                <span className="text-[12px] font-medium text-gray-400 dark:text-gray-500">Modell: {aiModel}</span>
+                <KiBadge label={t('jobs.ai_generated_badge')} tooltip={t('jobs.ai_generated_tooltip')} />
+                <span className="text-[12px] font-medium text-gray-400 dark:text-gray-500">{t('jobs.ai_model_label')}: {aiModel}</span>
               </div>
             )}
           </div>
@@ -292,7 +293,7 @@ export default function JobForm() {
                   }`} />
                 </button>
                 <span className="text-[13px] text-gray-500 dark:text-gray-400">
-                  {parseThinking ? 'Mit Reasoning (langsamer, genauer)' : 'Ohne Reasoning (schneller)'}
+                  {parseThinking ? t('jobs.reasoning_on') : t('jobs.reasoning_off')}
                 </span>
               </div>
               <input
@@ -326,29 +327,29 @@ export default function JobForm() {
               </div>
             </div>
             <Textarea
-              label="Über uns"
-              placeholder="Wer sind wir? Was macht unser Unternehmen besonders? Kurze Vorstellung der Firma."
+              label={t('jobs.about_us_label')}
+              placeholder={t('jobs.about_us_placeholder')}
               value={form.about_us}
               onChange={e => setForm(f => ({ ...f, about_us: e.target.value }))}
               rows={5}
             />
             <Textarea
               label={t('jobs.description')}
-              placeholder="Was sind die Hauptaufgaben und Verantwortlichkeiten dieser Rolle?"
+              placeholder={t('jobs.description_placeholder')}
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               rows={8}
             />
             <Textarea
               label={t('jobs.requirements')}
-              placeholder="Welche Skills, Erfahrungen und Qualifikationen werden erwartet?"
+              placeholder={t('jobs.requirements_placeholder')}
               value={form.requirements}
               onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))}
               rows={8}
             />
             <Textarea
-              label="Was wir bieten"
-              placeholder="Welche Benefits, Vorteile und Angebote haben wir für unsere Mitarbeiter?"
+              label={t('jobs.benefits_label')}
+              placeholder={t('jobs.benefits_placeholder')}
               value={form.benefits}
               onChange={e => setForm(f => ({ ...f, benefits: e.target.value }))}
               rows={5}

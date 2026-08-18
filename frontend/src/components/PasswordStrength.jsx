@@ -1,15 +1,17 @@
 import { useMemo } from 'react'
 import { Check, X } from 'lucide-react'
+import { useI18n } from '../I18nContext'
 
 const RULES = [
-  { test: pw => pw.length >= 8, label: 'Mind. 8 Zeichen' },
-  { test: pw => /[A-Z]/.test(pw), label: 'Großbuchstabe' },
-  { test: pw => /[a-z]/.test(pw), label: 'Kleinbuchstabe' },
-  { test: pw => /[0-9]/.test(pw), label: 'Zahl' },
-  { test: pw => /[^A-Za-z0-9]/.test(pw), label: 'Sonderzeichen' },
+  { test: pw => pw.length >= 8, labelKey: 'password_strength.min_length' },
+  { test: pw => /[A-Z]/.test(pw), labelKey: 'password_strength.uppercase' },
+  { test: pw => /[a-z]/.test(pw), labelKey: 'password_strength.lowercase' },
+  { test: pw => /[0-9]/.test(pw), labelKey: 'password_strength.number' },
+  { test: pw => /[^A-Za-z0-9]/.test(pw), labelKey: 'password_strength.special' },
 ]
 
 export default function PasswordStrength({ password = '' }) {
+  const { t } = useI18n()
   const results = useMemo(() =>
     RULES.map(r => ({ ...r, pass: r.test(password) })),
     [password]
@@ -39,16 +41,16 @@ export default function PasswordStrength({ password = '' }) {
           />
         </div>
         <span className="text-[12px] font-semibold" style={{ color: barColor }}>
-          {strength <= 40 ? 'Schwach' : strength <= 60 ? 'Mittel' : strength <= 80 ? 'Gut' : 'Stark'}
+          {strength <= 40 ? t('password_strength.weak') : strength <= 60 ? t('password_strength.medium') : strength <= 80 ? t('password_strength.good') : t('password_strength.strong')}
         </span>
       </div>
 
       {/* Rules checklist */}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {results.map(r => (
-          <span key={r.label} className={`flex items-center gap-1 text-[12px] font-medium transition-colors ${r.pass ? 'text-[#34c759]' : 'text-gray-400 dark:text-gray-500'}`}>
+          <span key={r.labelKey} className={`flex items-center gap-1 text-[12px] font-medium transition-colors ${r.pass ? 'text-[#34c759]' : 'text-gray-400 dark:text-gray-500'}`}>
             {r.pass ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-            {r.label}
+            {t(r.labelKey)}
           </span>
         ))}
       </div>

@@ -7,6 +7,7 @@ import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
 import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
+import { stageLabel } from '../i18n/stageLabels'
 
 const PERIOD_OPTIONS = [
   { value: 7, labelKey: 'dashboard.period_7' },
@@ -257,7 +258,7 @@ function PipelinesWidget({ pipelines, t }) {
               <div className="flex flex-wrap gap-2">
                 {Object.entries(job.stages).map(([stage, count]) => (
                   <span key={stage} className={`px-3 py-1 rounded-full text-[13px] font-semibold ${stageColors[stage] || 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
-                    {count} {stage}
+                    {count} {stageLabel(t, stage)}
                   </span>
                 ))}
               </div>
@@ -417,7 +418,7 @@ function TimeToHireWidget({ data, t }) {
         {bottleneck && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#ff3b30]/10">
             <Zap className="w-3.5 h-3.5 text-[#ff3b30]" />
-            <span className="text-[12px] font-semibold text-[#ff3b30]">{t('dashboard.tth_bottleneck')}: {bottleneck.stage} ({bottleneck.avgDays}d)</span>
+            <span className="text-[12px] font-semibold text-[#ff3b30]">{t('dashboard.tth_bottleneck')}: {stageLabel(t, bottleneck.stage)} ({bottleneck.avgDays}d)</span>
           </div>
         )}
       </div>
@@ -465,7 +466,7 @@ function TimeToHireWidget({ data, t }) {
               return (
                 <div key={s.stage}>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[14px] font-medium text-black dark:text-white">{s.stage}</span>
+                    <span className="text-[14px] font-medium text-black dark:text-white">{stageLabel(t, s.stage)}</span>
                     <span className="text-[14px] font-semibold" style={{ color }}>
                       {s.avgDays != null ? `${s.avgDays} ${t('common.days')}` : '—'}
                       {s.count > 0 && <span className="text-[11px] text-gray-400 ml-1">({s.count}x)</span>}

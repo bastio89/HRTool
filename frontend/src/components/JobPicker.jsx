@@ -1,6 +1,7 @@
 import { Search, Briefcase, ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../I18nContext'
+import { jobStatusLabel, jobTypeLabel } from '../i18n/stageLabels'
 
 /**
  * Reusable job selection list for the matching pages.
@@ -70,7 +71,7 @@ export default function JobPicker({ jobs, selectedJobId, onSelect, search, onSea
             <div className="min-w-0 flex-1">
               <p className="text-[16px] font-semibold truncate">{job.title}</p>
               <p className={`text-[13px] font-medium mt-0.5 truncate ${selectedJobId === job.id ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`}>
-                {[job.location, job.type, job.status].filter(Boolean).join(' · ')}
+                {[job.location, jobTypeLabel(t, job.type), jobStatusLabel(t, job.status)].filter(Boolean).join(' · ')}
               </p>
             </div>
             <ChevronRight className={`w-5 h-5 flex-shrink-0 ${selectedJobId === job.id ? 'text-white' : 'text-gray-400'}`} />

@@ -8,6 +8,7 @@ import {
 import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi, ratingsApi } from '../api'
 import InterviewScheduler from '../components/InterviewScheduler'
 import { Button, LoadingSpinner } from '../components/UI'
+import { stageLabel } from '../i18n/stageLabels'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
 
@@ -279,7 +280,7 @@ export default function Pipeline() {
                     : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-400'}`}
               >
                 <span className={`w-2 h-2 rounded-full ${idx === activeStage ? style.dot : 'bg-gray-300 dark:bg-gray-600'}`} />
-                {stage}
+                {stageLabel(t, stage)}
                 <span className={`ml-0.5 text-[12px] px-1.5 py-0.5 rounded-full ${idx === activeStage ? 'bg-white/50 dark:bg-black/20' : 'bg-gray-200 dark:bg-gray-700'}`}>
                   {count}
                 </span>
@@ -313,7 +314,7 @@ export default function Pipeline() {
                 </button>
                 <div className="flex items-center gap-2">
                   <span className={`w-3 h-3 rounded-full ${style.dot}`} />
-                  <span className={`text-[17px] font-bold ${style.header}`}>{stage}</span>
+                  <span className={`text-[17px] font-bold ${style.header}`}>{stageLabel(t, stage)}</span>
                   <span className="text-[15px] font-semibold text-gray-400 bg-white dark:bg-[#1c1c1e] px-2.5 py-0.5 rounded-full ml-1">
                     {cards.length}
                   </span>
@@ -381,7 +382,7 @@ export default function Pipeline() {
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${style.dot}`} />
                   <span className={`text-[13px] font-bold uppercase tracking-wider ${style.header}`}>
-                    {stage}
+                    {stageLabel(t, stage)}
                   </span>
                 </div>
                 <span className="text-[13px] font-semibold text-gray-400 bg-white dark:bg-[#1c1c1e] px-2 py-0.5 rounded-full">
@@ -492,8 +493,8 @@ export default function Pipeline() {
             <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-2">{t('pipeline.stage_change')}</h2>
             <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-6">
               <span className="font-semibold text-black dark:text-white">{stageChangeModal.entry.candidate_name}</span>
-              {' '}{t('pipeline.stage_from')} <span className="font-semibold">{stageChangeModal.entry.stage}</span>
-              {' '}{t('pipeline.stage_to')} <span className="font-semibold">{stageChangeModal.targetStage}</span>
+              {' '}{t('pipeline.stage_from')} <span className="font-semibold">{stageLabel(t, stageChangeModal.entry.stage)}</span>
+              {' '}{t('pipeline.stage_to')} <span className="font-semibold">{stageLabel(t, stageChangeModal.targetStage)}</span>
             </p>
             <textarea
               value={stageNote}
@@ -764,7 +765,7 @@ function MobileKanbanCard({ entry, t, interviews, rating, prevStage, nextStage, 
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] active:scale-95 transition-transform cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4" style={{ color: stageColor(prevStage) }} />
-            <span className="text-[12px] font-bold text-gray-600 dark:text-gray-400">{prevStage}</span>
+            <span className="text-[12px] font-bold text-gray-600 dark:text-gray-400">{stageLabel(t, prevStage)}</span>
           </button>
         )}
         {nextStage && (
@@ -772,7 +773,7 @@ function MobileKanbanCard({ entry, t, interviews, rating, prevStage, nextStage, 
             onClick={() => onMove(nextStage)}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] active:scale-95 transition-transform cursor-pointer"
           >
-            <span className="text-[12px] font-bold text-gray-600 dark:text-gray-400">{nextStage}</span>
+            <span className="text-[12px] font-bold text-gray-600 dark:text-gray-400">{stageLabel(t, nextStage)}</span>
             <ChevronRight className="w-4 h-4" style={{ color: stageColor(nextStage) }} />
           </button>
         )}

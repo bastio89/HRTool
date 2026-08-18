@@ -12,10 +12,10 @@ const HOST_PRESETS = [
   { label: 'Text Generation WebUI', url: 'http://localhost:5000' },
 ]
 
-const PROVIDER_OPTIONS = [
-  { value: 'auto', label: 'Auto-Erkennung', desc: 'Erkennt Ollama oder OpenAI-kompatible API automatisch' },
-  { value: 'ollama', label: 'Ollama', desc: 'Ollama-API (/api/generate)' },
-  { value: 'openai', label: 'OpenAI-kompatibel', desc: 'LM Studio, Jan, Text Generation WebUI u.a. (/v1/chat/completions)' },
+const PROVIDER_OPTION_KEYS = [
+  { value: 'auto', labelKey: 'ai_settings.provider_auto_label', descKey: 'ai_settings.provider_auto_desc' },
+  { value: 'ollama', labelKey: 'ai_settings.provider_ollama_label', descKey: 'ai_settings.provider_ollama_desc' },
+  { value: 'openai', labelKey: 'ai_settings.provider_openai_label', descKey: 'ai_settings.provider_openai_desc' },
 ]
 
 export default function AISettings() {
@@ -157,13 +157,13 @@ export default function AISettings() {
       <Card className="space-y-5">
         <div className="flex items-center gap-3">
           <Cpu className="w-5 h-5 text-gray-400" />
-          <h2 className="text-[19px] font-semibold text-black dark:text-white">API-Dialekt</h2>
+          <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.provider_title')}</h2>
         </div>
         <p className="text-[14px] text-gray-500 dark:text-gray-400 leading-relaxed">
-          Wähle den API-Dialekt deines KI-Servers. <strong>Auto</strong> erkennt automatisch, ob Ollama oder eine OpenAI-kompatible API (LM Studio, Jan, etc.) verwendet wird.
+          {t('ai_settings.provider_desc_pre')} <strong>{t('ai_settings.provider_desc_auto')}</strong> {t('ai_settings.provider_desc_post')}
         </p>
         <div className="grid sm:grid-cols-3 gap-3">
-          {PROVIDER_OPTIONS.map((opt) => (
+          {PROVIDER_OPTION_KEYS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => setProvider(opt.value)}
@@ -173,8 +173,8 @@ export default function AISettings() {
                   : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] border-transparent text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
               }`}
             >
-              <div className="font-semibold text-[14px]">{opt.label}</div>
-              <div className="text-[12px] opacity-70 mt-0.5 leading-snug">{opt.desc}</div>
+              <div className="font-semibold text-[14px]">{t(opt.labelKey)}</div>
+              <div className="text-[12px] opacity-70 mt-0.5 leading-snug">{t(opt.descKey)}</div>
             </button>
           ))}
         </div>

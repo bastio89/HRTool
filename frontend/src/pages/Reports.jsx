@@ -4,6 +4,7 @@ import { ArrowLeft, BarChart3, Download, TrendingUp, Users, Briefcase, Clock, Ta
 import { Card, LoadingSpinner } from '../components/UI'
 import { reportsApi, jobsApi } from '../api'
 import { useI18n } from '../I18nContext'
+import { stageLabel } from '../i18n/stageLabels'
 
 const TABS = [
   { id: 'overview', labelKey: 'reports.tab_overview', icon: BarChart3 },
@@ -121,7 +122,7 @@ function OverviewTab({ t }) {
             const colors = { 'Beworben': '#0071e3', 'Screening': '#5e5ce6', 'Interview': '#ff9f0a', 'Angebot': '#34c759', 'Hired': '#30d158', 'Abgesagt': '#ff3b30' }
             return (
               <div key={i} className="flex items-center gap-4">
-                <span className="text-[13px] font-medium text-gray-600 dark:text-gray-400 w-24">{s.stage}</span>
+                <span className="text-[13px] font-medium text-gray-600 dark:text-gray-400 w-24">{stageLabel(t, s.stage)}</span>
                 <div className="flex-1 h-8 bg-[#f5f5f7] dark:bg-[#1c1c1e] rounded-lg overflow-hidden">
                   <div className="h-full rounded-lg flex items-center px-3 transition-all" style={{ width: `${Math.max(pct, 5)}%`, backgroundColor: colors[s.stage] || '#0071e3' }}>
                     <span className="text-[12px] font-bold text-white">{s.count}</span>
@@ -181,7 +182,7 @@ function FunnelTab({ t }) {
             return (
               <div key={i} className="text-center">
                 <div className="h-14 mx-auto rounded-xl flex items-center justify-center transition-all relative" style={{ width: `${pct}%`, backgroundColor: funnelColors[i] || '#0071e3', minWidth: '120px' }}>
-                  <span className="text-white font-bold text-[14px]">{step.stage}</span>
+                  <span className="text-white font-bold text-[14px]">{stageLabel(t, step.stage)}</span>
                   <span className="absolute right-3 text-white/80 text-[13px] font-semibold">{step.count}</span>
                 </div>
                 <div className="flex justify-center gap-4 mt-1">

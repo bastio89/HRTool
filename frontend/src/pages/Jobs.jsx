@@ -8,6 +8,7 @@ import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
 import BatchJobImportDialog from '../components/BatchJobImportDialog'
 import { useI18n } from '../I18nContext'
+import { jobStatusLabel, jobTypeLabel } from '../i18n/stageLabels'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
@@ -136,7 +137,7 @@ export default function Jobs() {
                     <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
                       <h3 className="text-[18px] sm:text-[22px] font-semibold tracking-tight text-black dark:text-white">{job.title}</h3>
                       <span className={`px-3 py-1 rounded-full text-[12px] sm:text-[13px] font-semibold ${statusColor[job.status] || 'bg-gray-100 dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400'}`}>
-                        {job.status}
+                        {jobStatusLabel(t, job.status)}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 sm:gap-6 mt-2 sm:mt-3 flex-wrap">
@@ -145,7 +146,7 @@ export default function Jobs() {
                           <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.location}
                         </span>
                       )}
-                      <span className="text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">{job.type}</span>
+                      <span className="text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">{jobTypeLabel(t, job.type)}</span>
                       <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.candidate_count || 0} {t('jobs.in_pipeline')}
                       </span>

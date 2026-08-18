@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Zap, Clock, CheckCircle2, Hourglass, BarChart3 } from 'lucide-react'
+import { useI18n } from '../I18nContext'
 
 /**
  * MatchingProgress – zeigt einen Fortschrittsbalken mit Statistiken während
@@ -11,6 +12,7 @@ import { Zap, Clock, CheckCircle2, Hourglass, BarChart3 } from 'lucide-react'
  *  - color:     string  – Akzentfarbe (hex), default '#8b5cf6'
  */
 export default function MatchingProgress({ running, totalPairs = 1, color = '#8b5cf6' }) {
+  const { t } = useI18n()
   const [elapsed, setElapsed] = useState(0)        // Sekunden seit Start
   const [history, setHistory] = useState([])        // frühere Laufzeiten (s)
   const startRef = useRef(null)
@@ -83,7 +85,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
             }
           </div>
           <span className="text-[15px] font-semibold text-black dark:text-white">
-            {running ? 'KI-Matching läuft…' : 'Matching abgeschlossen'}
+            {running ? t('matching_progress.running') : t('matching_progress.done')}
           </span>
         </div>
         {running && (
@@ -114,7 +116,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
             <BarChart3 className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none">{totalPairs}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Paare gesamt</p>
+          <p className="text-[11px] text-gray-400 mt-1">{t('matching_progress.total_pairs')}</p>
         </div>
 
         {/* Verstrichene Zeit */}
@@ -123,7 +125,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
             <Clock className="w-4 h-4 text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none tabular-nums">{fmt(elapsed)}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Verstrichene Zeit</p>
+          <p className="text-[11px] text-gray-400 mt-1">{t('matching_progress.elapsed')}</p>
         </div>
 
         {/* ETA / Fertig */}
@@ -137,7 +139,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
               : fmt(elapsed)
             }
           </p>
-          <p className="text-[11px] text-gray-400 mt-1">{running ? 'Noch ca.' : 'Dauer gesamt'}</p>
+          <p className="text-[11px] text-gray-400 mt-1">{running ? t('matching_progress.eta') : t('matching_progress.duration')}</p>
         </div>
 
         {/* Durchschnitt */}
@@ -148,7 +150,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
           <p className="text-[18px] font-bold text-black dark:text-white leading-none tabular-nums">
             {avgTime !== null ? fmt(avgTime) : '–'}
           </p>
-          <p className="text-[11px] text-gray-400 mt-1">Ø letzte {history.length} Runs</p>
+          <p className="text-[11px] text-gray-400 mt-1">{t('matching_progress.avg_runs').replace('{count}', history.length)}</p>
         </div>
       </div>
     </div>

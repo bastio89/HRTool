@@ -3,6 +3,7 @@ import { Mail, Send, Settings, FileText, Plus, Trash2, Edit3, Eye, Check, X, Loa
 import { emailApi } from '../api'
 import { Card, Button, Input, LoadingSpinner } from '../components/UI'
 import { useI18n } from '../I18nContext'
+import { stageLabel } from '../i18n/stageLabels'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
 const TEMPLATE_VARS = ['{{anrede}}', '{{vorname}}', '{{nachname}}', '{{name}}', '{{email}}', '{{stelle}}', '{{unternehmen}}', '{{datum}}']
@@ -392,7 +393,7 @@ export default function EmailSettings() {
               return (
                 <div key={stage} className="flex items-center justify-between px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
                   <div className="flex items-center gap-3">
-                    <span className="text-[15px] font-medium text-black dark:text-white">{stage}</span>
+                    <span className="text-[15px] font-medium text-black dark:text-white">{stageLabel(t, stage)}</span>
                     {templates.some(t => t.trigger_stage === stage && t.is_active) && (
                       <span className="text-[11px] text-green-600 dark:text-green-400 font-medium bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-lg">
                         {t('email.has_template')}
@@ -451,7 +452,7 @@ export default function EmailSettings() {
                     className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition-all"
                   >
                     <option value="">{t('email.no_trigger')}</option>
-                    {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {STAGES.map(s => <option key={s} value={s}>{stageLabel(t, s)}</option>)}
                   </select>
                 </div>
               </div>
@@ -570,7 +571,7 @@ export default function EmailSettings() {
                     {tpl.trigger_stage && (
                       <span className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
                         <Zap className="w-3 h-3" />
-                        {tpl.trigger_stage}
+                        {stageLabel(t, tpl.trigger_stage)}
                       </span>
                     )}
                     <span className={`w-2 h-2 rounded-full ${tpl.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />

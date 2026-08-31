@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig } = require('../aiConfig');
+const { getAiConfig, resolveAiProvider, buildAiRequest, extractAiText, stripReasoningTags } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -414,7 +414,8 @@ router.post('/bias-testset/run', async (req, res) => {
       return res.status(400).json({ error: 'Stellenbeschreibung erforderlich' });
     }
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG, apiKey: AI_API_KEY } = getAiConfig();
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
 
     // 20 diverse test profiles
     const testProfiles = [
@@ -460,15 +461,19 @@ Antworte als JSON: {"score": 0.75, "reasoning": "Kurze Begründung"}
 Score von 0.0 (keine Passung) bis 1.0 (perfekte Passung).`;
 
       try {
-        const resp = await fetch(`${OLLAMA_URL}/api/generate`, {
+        const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
+          baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider, apiKey: AI_API_KEY,
+          prompt: singlePrompt, format: 'json', options: { temperature: 0.3 },
+        });
+        const resp = await fetch(aiUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: OLLAMA_MODEL, prompt: singlePrompt, stream: false, format: 'json', options: { temperature: 0.3 } }),
+          headers: aiHeaders,
+          body: JSON.stringify(aiBody),
         });
         if (!resp.ok) return { score: null, reasoning: null };
         const d = await resp.json();
-        const raw = d.response || '';
-        const parsed = JSON.parse(raw);
+        const { text } = extractAiText(d, aiProvider);
+        const parsed = JSON.parse(stripReasoningTags(text));
         const score = typeof parsed.score === 'number' ? Math.max(0, Math.min(1, parsed.score)) : null;
         return { score, reasoning: parsed.reasoning || null };
       } catch (_) {

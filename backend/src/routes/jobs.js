@@ -268,7 +268,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
     let aiEvalTokens = null;
 
     try {
-      const { baseUrl, model, provider: cfgProvider } = getAiConfig();
+      const { baseUrl, model, provider: cfgProvider, apiKey } = getAiConfig();
       aiModel = model;
 
       let aiProvider = 'ollama';
@@ -298,8 +298,8 @@ ${textForAi}
 
 /no_think`;
 
-      const { url: aiUrl, body: aiBody } = buildAiRequest({
-        baseUrl, model, provider: aiProvider, prompt,
+      const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
+        baseUrl, model, provider: aiProvider, apiKey, prompt,
         options: { think: useThinking, num_predict: 1024 },
       });
 
@@ -310,7 +310,7 @@ ${textForAi}
       try {
         aiResponse = await fetch(aiUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: aiHeaders,
           body: JSON.stringify(aiBody),
           signal: controller.signal,
         });
@@ -452,7 +452,7 @@ router.post('/generate-description', generatorRateLimiter, promptGuard('job-gene
       return res.status(400).json({ error: 'Jobtitel oder Stichpunkte erforderlich' });
     }
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, apiKey: AI_API_KEY } = getAiConfig();
 
     const prompt = `Du bist ein HR-Experte. Erstelle eine Stellenausschreibung auf Deutsch.
 
@@ -468,14 +468,14 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown, ohne Erklärung):
 
 Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Werte sind Strings.`;
 
-    // First check if Ollama is reachable at all (quick 5s check)
+    // First check if the configured AI service is reachable.
     try {
-      const pingController = new AbortController();
-      setTimeout(() => pingController.abort(), 5000);
-      await fetch(`${OLLAMA_URL}/`, { signal: pingController.signal });
+      const { provider: cfgProvider } = getAiConfig();
+      const aiProvider = await resolveAiProvider(OLLAMA_URL, cfgProvider);
+      await pingAiService(OLLAMA_URL, aiProvider, 5000, AI_API_KEY);
     } catch (pingErr) {
-      console.error('Ollama not reachable:', pingErr.message);
-      return res.status(502).json({ error: 'Ollama ist nicht erreichbar. Bitte sicherstellen, dass Ollama läuft.' });
+      console.error('AI service not reachable:', pingErr.message);
+      return res.status(502).json({ error: 'KI-Host ist nicht erreichbar. Bitte Konfiguration und API-Key prüfen.' });
     }
 
     let aiProvider = 'ollama';
@@ -484,9 +484,9 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
       aiProvider = await resolveAiProvider(OLLAMA_URL, cfgProvider);
     } catch (_) {}
 
-    const { url: aiUrl, body: aiBody } = buildAiRequest({
+    const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
       baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider, prompt,
-      options: { think: false, num_predict: 2048 },
+      apiKey: AI_API_KEY, options: { think: false, num_predict: 2048 },
     });
 
     // Send generation request with 180s timeout (large models need time to load)
@@ -498,7 +498,7 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
     try {
       response = await fetch(aiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiHeaders,
         body: JSON.stringify(aiBody),
         signal: controller.signal
       });

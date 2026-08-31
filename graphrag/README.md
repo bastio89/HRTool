@@ -165,3 +165,5 @@ export NEO4J_USER=neo4j
 export NEO4J_PASSWORD=your_real_password
 /Users/pak/HRGraphRAG/.venv/bin/python -m pytest -q tests/test_pdf_db_integration.py
 ```
+
+Wenn der Graphrag-Server gegen den Neo4j-Container aus dem Hauptprojekt laufen soll, verwenden Sie stattdessen `NEO4J_URI=bolt://neo4j:7687` und denselben `NEO4J_PASSWORD` wie in der Compose-Datei.

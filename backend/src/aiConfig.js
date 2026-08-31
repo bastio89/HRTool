@@ -4,6 +4,7 @@ const db = require('./database');
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 const DEFAULT_MODEL = 'llama3.2';
 const DEFAULT_PROVIDER = 'auto'; // 'auto' | 'ollama' | 'openai'
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 function readSetting(key) {
   try {
@@ -18,6 +19,10 @@ function normalizeAiBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
+function openAiApiBase(baseUrl) {
+  return baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
+}
+
 /**
  * Central AI (LLM) configuration resolver.
  *
@@ -29,14 +34,17 @@ function getAiConfig() {
   const dbBaseUrl = readSetting('ai_base_url');
   const dbModel = readSetting('ai_model');
   const dbProvider = readSetting('ai_provider');
+  const dbApiKey = readSetting('ai_api_key');
 
   const envBaseUrl = process.env.OLLAMA_BASE_URL?.trim() || null;
   const envModel = process.env.OLLAMA_MODEL?.trim() || null;
   const envProvider = process.env.AI_PROVIDER?.trim() || null;
+  const envApiKey = process.env.OPENROUTER_API_KEY?.trim() || null;
 
   const rawBaseUrl = dbBaseUrl || envBaseUrl || DEFAULT_BASE_URL;
   const model = dbModel || envModel || DEFAULT_MODEL;
   const provider = dbProvider || envProvider || DEFAULT_PROVIDER;
+  const apiKey = dbApiKey || envApiKey || null;
 
   const baseUrl = normalizeAiBaseUrl(rawBaseUrl);
 
@@ -44,10 +52,12 @@ function getAiConfig() {
     baseUrl,
     model,
     provider,
+    apiKey,
     source: {
       baseUrl: dbBaseUrl ? 'settings' : envBaseUrl ? 'env' : 'default',
       model: dbModel ? 'settings' : envModel ? 'env' : 'default',
       provider: dbProvider ? 'settings' : envProvider ? 'env' : 'default',
+      apiKey: dbApiKey ? 'settings' : envApiKey ? 'env' : 'default',
     },
   };
 }
@@ -110,7 +120,9 @@ function invalidateProviderCache(baseUrl) {
  * @param {{ baseUrl, model, provider: 'ollama'|'openai', prompt, format, options }} params
  * @returns {{ url: string, body: object }}
  */
-function buildAiRequest({ baseUrl, model, provider, prompt, format, options = {} }) {
+function buildAiRequest({ baseUrl, model, provider, prompt, format, options = {}, apiKey }) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (!apiKey) apiKey = getAiConfig().apiKey;
   if (provider === 'openai') {
     const body = {
       model,
@@ -120,12 +132,17 @@ function buildAiRequest({ baseUrl, model, provider, prompt, format, options = {}
     if (typeof options.temperature === 'number') body.temperature = options.temperature;
     if (typeof options.num_predict === 'number') body.max_tokens = options.num_predict;
     if (format === 'json') body.response_format = { type: 'text' };
-    return { url: `${baseUrl}/v1/chat/completions`, body };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    if (baseUrl.includes('openrouter.ai')) {
+      headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'http://localhost:5173';
+      headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'HRTool';
+    }
+    return { url: `${openAiApiBase(baseUrl)}/chat/completions`, body, headers };
   }
   // Ollama
   const body = { model, prompt, stream: false, options };
   if (format) body.format = format;
-  return { url: `${baseUrl}/api/generate`, body };
+  return { url: `${baseUrl}/api/generate`, body, headers };
 }
 
 /**
@@ -156,12 +173,13 @@ function extractAiText(data, provider) {
  * @param {'ollama'|'openai'} provider  Must be resolved (not 'auto')
  * @param {number} timeoutMs
  */
-async function pingAiService(baseUrl, provider, timeoutMs = 5000) {
+async function pingAiService(baseUrl, provider, timeoutMs = 5000, apiKey = null) {
+  if (!apiKey) apiKey = getAiConfig().apiKey;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const url = provider === 'openai' ? `${baseUrl}/v1/models` : `${baseUrl}/`;
-    await fetch(url, { signal: ctrl.signal });
+    const url = provider === 'openai' ? `${openAiApiBase(baseUrl)}/models` : `${baseUrl}/`;
+    await fetch(url, { signal: ctrl.signal, headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined });
   } finally {
     clearTimeout(t);
   }
@@ -174,12 +192,12 @@ async function pingAiService(baseUrl, provider, timeoutMs = 5000) {
  * @param {number} timeoutMs
  * @returns {Promise<Array<{name:string, size:number|null, modified_at:string|null}>>}
  */
-async function fetchAiModels(baseUrl, provider, timeoutMs = 5000) {
+async function fetchAiModels(baseUrl, provider, timeoutMs = 5000, apiKey = null) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     if (provider === 'openai') {
-      const res = await fetch(`${baseUrl}/v1/models`, { signal: ctrl.signal });
+      const res = await fetch(`${openAiApiBase(baseUrl)}/models`, { signal: ctrl.signal, headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       // OpenAI /v1/models returns { data: [{id, ...}] }
@@ -230,4 +248,5 @@ module.exports = {
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
   DEFAULT_PROVIDER,
+  OPENROUTER_BASE_URL,
 };

@@ -212,13 +212,18 @@ ollama pull llama3.2
 
 ### Schnellstart mit Docker Compose
 
-HRTool kann komplett über Docker Compose gestartet werden. Backend, Frontend, SQLite-Daten und Uploads werden automatisch eingerichtet; Ollama läuft standardmäßig auf dem Host und wird aus den Containern über `host.docker.internal` erreicht.
+HRTool kann komplett über Docker Compose gestartet werden. Backend, Frontend, Graphrag, SQLite-Daten, Uploads und jetzt auch Neo4j werden automatisch eingerichtet; Ollama läuft standardmäßig auf dem Host und wird aus den Containern über `host.docker.internal` erreicht.
 
 ```bash
 cp .env.docker.example .env
 # JWT_SECRET und optional EXTERNAL_API_KEY in .env anpassen
+# NEO4J_PASSWORD setzen, wenn Sie den Graphrag-Server gegen den Neo4j-Container nutzen möchten
 docker compose up --build
 ```
+
+Wenn Sie den FastAPI-Server aus dem Verzeichnis `graphrag` direkt im Host starten, bleibt `NEO4J_URI=bolt://localhost:7687` korrekt. Läuft der Graphrag-Server ebenfalls in Docker Compose, muss die URI auf `bolt://neo4j:7687` zeigen.
+
+Der Graphrag-Container ist danach unter `http://localhost:8000` erreichbar.
 
 Danach ist HRTool erreichbar unter:
 

@@ -6,7 +6,7 @@ const { matchingRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
-const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText } = require('../aiConfig');
+const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -128,24 +128,22 @@ Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor ode
 }
 
 async function assertAiReachable(baseUrl, provider) {
-  const pingCtrl = new AbortController();
-  const pingTimeout = setTimeout(() => pingCtrl.abort(), 3000);
-  try {
-    const url = provider === 'openai' ? `${baseUrl}/v1/models` : `${baseUrl}/`;
-    await fetch(url, { signal: pingCtrl.signal });
-  } finally {
-    clearTimeout(pingTimeout);
+  if (typeof pingAiService === 'function') {
+    await pingAiService(baseUrl, provider, 3000);
+    return;
   }
+  const url = provider === 'openai' ? `${baseUrl}/v1/models` : `${baseUrl}/`;
+  await fetch(url);
 }
 
 async function generateJson({ baseUrl, model, provider, prompt, timeoutMs = 180000 }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const { url, body } = buildAiRequest({ baseUrl, model, provider, prompt, format: 'json', options: { temperature: 0.2 } });
+    const { url, body, headers } = buildAiRequest({ baseUrl, model, provider, prompt, format: 'json', options: { temperature: 0.2 } });
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: controller.signal,
       body: JSON.stringify(body),
     });
@@ -401,7 +399,7 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte stellen Sie sicher, dass der KI-Server läuft.' });
     }
 
-    const { url: aiUrl, body: aiBody } = buildAiRequest({
+    const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
       baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
       prompt, format: 'json', options: { temperature: 0.2 },
     });
@@ -413,7 +411,7 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
     try {
       response = await fetch(aiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiHeaders,
         signal: controller.signal,
         body: JSON.stringify(aiBody),
       });

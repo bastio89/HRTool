@@ -414,8 +414,8 @@ export const settingsApi = {
   // KI-Konfiguration (Host & Modell)
   getAiConfig: () => request('/settings/ai/config'),
   saveAiConfig: (data) => request('/settings/ai/config', { method: 'PUT', body: JSON.stringify(data) }),
-  getAiModels: (baseUrl) => request(`/settings/ai/models${baseUrl ? `?baseUrl=${encodeURIComponent(baseUrl)}` : ''}`, { timeout: 8000 }),
-  testAiConnection: (baseUrl) => request('/settings/ai/test', { method: 'POST', body: JSON.stringify(baseUrl ? { baseUrl } : {}), timeout: 8000 }),
+  getAiModels: (baseUrl, apiKey, provider) => request(`/settings/ai/models?${new URLSearchParams({ ...(baseUrl ? { baseUrl } : {}), ...(provider ? { provider } : {}) })}`, { timeout: 8000, headers: apiKey ? { 'X-OpenRouter-Key': apiKey } : {} }),
+  testAiConnection: (baseUrl, apiKey, provider) => request('/settings/ai/test', { method: 'POST', body: JSON.stringify({ ...(baseUrl ? { baseUrl } : {}), ...(apiKey ? { apiKey } : {}), ...(provider ? { provider } : {}) }), timeout: 8000 }),
 };
 
 // Ratings API

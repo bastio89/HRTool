@@ -201,20 +201,20 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     console.log(`📄 CV-Parser: ${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert, sende an Ollama...`);
 
     // 2. Call Ollama directly for AI extraction
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG, apiKey: AI_API_KEY } = getAiConfig();
 
     const prompt = buildExtractionPrompt(combinedText.trim(), filenames);
 
     const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
-    const { url: aiUrl, body: aiBody } = buildAiRequest({
+    const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
       baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
-      prompt, format: 'json', options: { temperature: 0.1, num_predict: 8192 },
+      prompt, format: 'json', apiKey: AI_API_KEY, options: { temperature: 0.1, num_predict: 8192 },
     });
 
     // Quick reachability check
     sendProgress('ollama_connect', `Verbindung zu KI-Host (${OLLAMA_MODEL})...`, 40);
     try {
-      await pingAiService(OLLAMA_URL, aiProvider, 5000);
+      await pingAiService(OLLAMA_URL, aiProvider, 5000, AI_API_KEY);
     } catch (pingErr) {
       console.error('AI host not reachable:', pingErr.message);
       return sendError(502, { error: 'KI-Host ist nicht erreichbar. Bitte sicherstellen, dass der KI-Server läuft.' });
@@ -238,7 +238,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     try {
       response = await fetch(aiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiHeaders,
         body: JSON.stringify(aiBody),
         signal: controller.signal,
       });

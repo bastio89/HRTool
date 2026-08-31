@@ -323,7 +323,7 @@ router.post('/generate-questions', generatorRateLimiter, promptGuard('interview-
       return res.status(400).json({ error: 'Mindestens eine Stelle oder ein Kandidat ist erforderlich' });
     }
     
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG, apiKey: AI_API_KEY } = getAiConfig();
     const count = Math.min(Math.max(3, parseInt(question_count) || 8), 15);
     
     const prompt = `Du bist ein erfahrener HR-Experte und Interviewer. Erstelle ${count} strukturierte Interviewfragen.
@@ -351,12 +351,12 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
 
     // Check AI host reachability
     const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
-    const { url: aiUrl, body: aiBody } = buildAiRequest({
+    const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
       baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
-      prompt, format: 'json', options: { temperature: 0.7, num_predict: 6144 },
+      prompt, format: 'json', apiKey: AI_API_KEY, options: { temperature: 0.7, num_predict: 6144 },
     });
     try {
-      await pingAiService(OLLAMA_URL, aiProvider, 5000);
+      await pingAiService(OLLAMA_URL, aiProvider, 5000, AI_API_KEY);
     } catch (pingErr) {
       return res.status(502).json({ error: 'KI-Host ist nicht erreichbar. Bitte sicherstellen, dass der KI-Server läuft.' });
     }
@@ -369,7 +369,7 @@ Antworte NUR mit diesem exakten JSON-Format (ohne Markdown):
     try {
       response = await fetch(aiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiHeaders,
         body: JSON.stringify(aiBody),
         signal: controller.signal
       });

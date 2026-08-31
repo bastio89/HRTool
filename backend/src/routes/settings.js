@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, fetchAiModels, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER } = require('../aiConfig');
+const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, fetchAiModels, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, OPENROUTER_BASE_URL } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -21,6 +21,7 @@ router.get('/', (req, res) => {
     const rows = db.prepare('SELECT key, value FROM settings').all();
     const settings = {};
     for (const row of rows) {
+      if (row.key === 'ai_api_key') continue;
       settings[row.key] = row.value;
     }
     res.json(settings);
@@ -46,8 +47,9 @@ router.get('/ai/config', (req, res) => {
       baseUrl: config.baseUrl,
       model: config.model,
       provider: config.provider,
+      apiKeyConfigured: Boolean(config.apiKey),
       source: config.source,
-      defaults: { baseUrl: DEFAULT_BASE_URL, model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER },
+      defaults: { baseUrl: DEFAULT_BASE_URL, model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER, openRouterBaseUrl: OPENROUTER_BASE_URL },
     });
   } catch (error) {
     console.error('Error fetching AI config:', error);
@@ -78,7 +80,7 @@ router.put('/ai/config', (req, res) => {
       return res.status(403).json({ error: 'Nur Administratoren dürfen die KI-Konfiguration ändern' });
     }
 
-    const { baseUrl, model, provider } = req.body;
+    const { baseUrl, model, provider, apiKey } = req.body;
 
     if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
       return res.status(400).json({ error: 'Host / Base-URL ist erforderlich' });
@@ -103,13 +105,14 @@ router.put('/ai/config', (req, res) => {
     upsert.run('ai_base_url', trimmedUrl);
     upsert.run('ai_model', model.trim());
     upsert.run('ai_provider', normalizedProvider);
+    if (typeof apiKey === 'string' && apiKey.trim()) upsert.run('ai_api_key', apiKey.trim());
 
     // Invalidate cached provider detection for the old and new URLs
     invalidateProviderCache();
 
     logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', { baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider });
 
-    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider });
+    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider, apiKeyConfigured: Boolean(getAiConfig().apiKey) });
   } catch (error) {
     console.error('Error saving AI config:', error);
     res.status(500).json({ error: 'Fehler beim Speichern der KI-Konfiguration' });
@@ -137,18 +140,21 @@ router.get('/ai/models', async (req, res) => {
       : null;
     const cfg = getAiConfig();
     const baseUrl = override || cfg.baseUrl;
+    const requestApiKey = req.get('X-OpenRouter-Key') || cfg.apiKey;
+    const requestedProvider = typeof req.query.provider === 'string' ? req.query.provider.trim() : '';
+    const configuredProvider = ['auto', 'ollama', 'openai'].includes(requestedProvider) ? requestedProvider : cfg.provider;
 
     // Resolve provider (may auto-detect via /api/tags probe)
     let provider;
     try {
-      provider = await resolveAiProvider(baseUrl, cfg.provider);
+      provider = await resolveAiProvider(baseUrl, configuredProvider);
     } catch {
       provider = 'ollama';
     }
 
     let models = [];
     try {
-      models = await fetchAiModels(baseUrl, provider, 5000);
+      models = await fetchAiModels(baseUrl, provider, 5000, requestApiKey);
     } catch (err) {
       return res.status(502).json({
         error: 'KI-Host nicht erreichbar',
@@ -182,12 +188,14 @@ router.post('/ai/test', async (req, res) => {
       ? normalizeAiBaseUrl(req.body.baseUrl)
       : null;
     const cfg = getAiConfig();
+    const requestApiKey = typeof req.body?.apiKey === 'string' && req.body.apiKey.trim() ? req.body.apiKey.trim() : cfg.apiKey;
     const baseUrl = override || cfg.baseUrl;
+    const configuredProvider = ['auto', 'ollama', 'openai'].includes(req.body?.provider) ? req.body.provider : cfg.provider;
 
     // Detect provider
     let provider;
     try {
-      provider = await resolveAiProvider(baseUrl, cfg.provider);
+      provider = await resolveAiProvider(baseUrl, configuredProvider);
     } catch {
       provider = 'auto';
     }
@@ -197,7 +205,7 @@ router.post('/ai/test', async (req, res) => {
     let reachable = false;
     let errorMsg = null;
     try {
-      models = await fetchAiModels(baseUrl, provider === 'auto' ? 'ollama' : provider, 5000);
+      models = await fetchAiModels(baseUrl, provider === 'auto' ? 'ollama' : provider, 5000, requestApiKey);
       reachable = true;
     } catch (err) {
       errorMsg = err.name === 'AbortError' ? 'Zeitüberschreitung (>5s)' : err.message;

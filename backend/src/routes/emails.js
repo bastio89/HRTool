@@ -489,7 +489,7 @@ router.post('/generate-template', generatorRateLimiter, promptGuard('email-templ
       return res.status(400).json({ error: 'Zweck des Templates ist erforderlich' });
     }
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG, apiKey: AI_API_KEY } = getAiConfig();
 
     const smtp = getSmtpSettings();
     const companyName = smtp.email_company_name || 'Unser Unternehmen';
@@ -519,14 +519,14 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
     const startTime = Date.now();
 
     const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
-    const { url: aiUrl, body: aiBody } = buildAiRequest({
+    const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
       baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
-      prompt, format: 'json', options: { temperature: 0.7, num_predict: 3000 },
+      prompt, format: 'json', apiKey: AI_API_KEY, options: { temperature: 0.7, num_predict: 3000 },
     });
 
     // Ping AI host
     try {
-      await pingAiService(OLLAMA_URL, aiProvider, 5000);
+      await pingAiService(OLLAMA_URL, aiProvider, 5000, AI_API_KEY);
     } catch (_) {
       logAiCall({ userId: req.user?.id, feature: 'email-template', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: 'KI-Host nicht erreichbar' });
       return res.status(502).json({ error: 'KI-Host ist nicht erreichbar. Bitte sicherstellen, dass der KI-Server läuft.' });
@@ -539,7 +539,7 @@ Die Werte MÜSSEN Strings sein. Verwende \\n für Zeilenumbrüche im body.`;
     try {
       response = await fetch(aiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: aiHeaders,
         body: JSON.stringify(aiBody),
         signal: controller.signal
       });

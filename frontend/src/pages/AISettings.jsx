@@ -7,6 +7,7 @@ import { useI18n } from '../I18nContext'
 // Common presets to help users who switch away from Ollama's default host.
 const HOST_PRESETS = [
   { label: 'Ollama', url: 'http://localhost:11434' },
+  { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', provider: 'openai' },
   { label: 'LM Studio', url: 'http://localhost:1234' },
   { label: 'Jan / llama.cpp', url: 'http://localhost:1337' },
   { label: 'Text Generation WebUI', url: 'http://localhost:5000' },
@@ -23,6 +24,8 @@ export default function AISettings() {
   const [loading, setLoading] = useState(true)
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
   const [provider, setProvider] = useState('auto')
   const [source, setSource] = useState({ baseUrl: 'default', model: 'default' })
 
@@ -45,9 +48,10 @@ export default function AISettings() {
       setBaseUrl(cfg.baseUrl || '')
       setModel(cfg.model || '')
       setProvider(cfg.provider || 'auto')
+      setApiKeyConfigured(Boolean(cfg.apiKeyConfigured))
       setSource(cfg.source || { baseUrl: 'default', model: 'default' })
       // Load available models for the current host
-      await loadModels(cfg.baseUrl, cfg.model)
+      await loadModels(cfg.baseUrl, cfg.model, cfg.provider)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -55,11 +59,11 @@ export default function AISettings() {
     }
   }
 
-  const loadModels = async (url, currentModel) => {
+  const loadModels = async (url, currentModel, requestedProvider = provider) => {
     setModelsLoading(true)
     setModelsError('')
     try {
-      const res = await settingsApi.getAiModels(url)
+      const res = await settingsApi.getAiModels(url, apiKey, requestedProvider)
       const names = (res.models || []).map((m) => m.name)
       setModels(names)
       // If the currently configured model isn't in the list, switch to manual entry
@@ -83,11 +87,11 @@ export default function AISettings() {
     setTestResult(null)
     setError('')
     try {
-      const res = await settingsApi.testAiConnection(baseUrl)
+      const res = await settingsApi.testAiConnection(baseUrl, apiKey, provider)
       setTestResult(res)
       if (res.reachable) {
         // Refresh model list from the tested host
-        await loadModels(baseUrl, model)
+        await loadModels(baseUrl, model, provider)
       }
     } catch (err) {
       setTestResult({ reachable: false, error: err.message })
@@ -101,10 +105,12 @@ export default function AISettings() {
     setError('')
     setSuccessMsg('')
     try {
-      const res = await settingsApi.saveAiConfig({ baseUrl: baseUrl.trim(), model: model.trim(), provider })
+      const res = await settingsApi.saveAiConfig({ baseUrl: baseUrl.trim(), model: model.trim(), provider, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) })
       setBaseUrl(res.baseUrl)
       setModel(res.model)
       setProvider(res.provider || 'auto')
+      setApiKey('')
+      setApiKeyConfigured(Boolean(res.apiKeyConfigured))
       setSource({ baseUrl: 'settings', model: 'settings' })
       setSuccessMsg(t('ai_settings.saved'))
       setTimeout(() => setSuccessMsg(''), 3000)
@@ -115,8 +121,9 @@ export default function AISettings() {
     }
   }
 
-  const applyPreset = (url) => {
+  const applyPreset = (url, presetProvider) => {
     setBaseUrl(url)
+    if (presetProvider) setProvider(presetProvider)
     setTestResult(null)
   }
 
@@ -209,7 +216,7 @@ export default function AISettings() {
             {HOST_PRESETS.map((p) => (
               <button
                 key={p.url}
-                onClick={() => applyPreset(p.url)}
+                onClick={() => applyPreset(p.url, p.provider)}
                 className={`px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-200 cursor-pointer border ${
                   baseUrl === p.url
                     ? 'bg-[#0071e3] text-white border-[#0071e3]'
@@ -240,6 +247,28 @@ export default function AISettings() {
         </div>
       </Card>
 
+      {/* API key */}
+      <Card className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Server className="w-5 h-5 text-gray-400" />
+          <h2 className="text-[19px] font-semibold text-black dark:text-white">API-Key</h2>
+        </div>
+        <Input
+          label="OpenRouter API-Key"
+          type="password"
+          value={apiKey}
+          onChange={(e) => { setApiKey(e.target.value); setTestResult(null) }}
+          placeholder={apiKeyConfigured ? 'Gespeicherter Key vorhanden (leer lassen)' : 'sk-or-v1-...'}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="new-password"
+        />
+        <p className="text-[13px] text-gray-400 ml-2">
+          Der Key wird nur serverseitig gespeichert und nicht wieder angezeigt. Für Ollama kann dieses Feld leer bleiben.
+        </p>
+      </Card>
+
       {/* Model selection */}
       <Card className="space-y-6">
         <div className="flex items-center justify-between">
@@ -247,7 +276,7 @@ export default function AISettings() {
             <Bot className="w-5 h-5 text-gray-400" />
             <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.model_title')}</h2>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => loadModels(baseUrl, model)} disabled={modelsLoading}>
+          <Button variant="ghost" size="sm" onClick={() => loadModels(baseUrl, model, provider)} disabled={modelsLoading}>
             {modelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             {t('ai_settings.reload_models')}
           </Button>

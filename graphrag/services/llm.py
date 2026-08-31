@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import math
+import sqlite3
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +35,7 @@ class LLMService:
         api_key: str | None = None,
         enable_reasoning: bool = True,
         enable_call_logging: bool = False,
-        call_log_path: str | None = None,
+        backend_db_path: str | None = None,
         enable_parse_latency_aggregation: bool = False,
         parse_latency_window_size: int = 200,
         parse_latency_log_every: int = 20,
@@ -49,7 +50,7 @@ class LLMService:
         self.embedding_dimensions = embedding_dimensions
         self.enable_reasoning = enable_reasoning
         self.enable_call_logging = enable_call_logging
-        self.call_log_path = Path(call_log_path).expanduser() if call_log_path else Path(__file__).resolve().parents[1] / "data" / "llm-calls.jsonl"
+        self.backend_db_path = Path(backend_db_path).expanduser() if backend_db_path else None
         self.enable_parse_latency_aggregation = enable_parse_latency_aggregation
         self.parse_latency_window_size = max(1, parse_latency_window_size)
         self.parse_latency_log_every = max(1, parse_latency_log_every)
@@ -80,17 +81,86 @@ class LLMService:
         if output_tokens is not None:
             self._output_tokens_total += max(0, int(output_tokens))
 
+    @staticmethod
+    def _json_text(value: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False, default=str)
+
     def _append_call_log(self, entry: dict[str, Any]) -> None:
         if not self.enable_call_logging:
             return
 
+        if self.backend_db_path is None:
+            logger.warning("ai_call_log_write_failed reason=no_backend_db_path context=%s", entry.get("context"))
+            return
+
         try:
-            self.call_log_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.call_log_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(entry, ensure_ascii=False, default=str))
-                handle.write("\n")
+            with sqlite3.connect(self.backend_db_path) as connection:
+                connection.execute(
+                    """
+                    INSERT INTO ai_logs (
+                        user_id, feature, model, model_version, prompt_hash,
+                        prompt, response, parsed_result, skills, duration_ms,
+                        input_tokens, output_tokens, success, error_message
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        None,
+                        entry.get("context"),
+                        entry.get("model"),
+                        None,
+                        entry.get("prompt_hash"),
+                        self._json_text(entry.get("request_body")),
+                        self._json_text(entry.get("response_body")),
+                        self._json_text(entry.get("parsed_result")),
+                        self._skills_text(entry.get("skills") or self._extract_skills(entry.get("parsed_result"))),
+                        entry.get("duration_ms"),
+                        entry.get("input_tokens"),
+                        entry.get("output_tokens"),
+                        1 if entry.get("success") else 0,
+                        entry.get("error_message"),
+                    ),
+                )
+                connection.commit()
         except Exception as exc:
-            logger.warning("ai_call_log_write_failed path=%s error=%s", self.call_log_path, exc)
+            logger.warning("ai_call_log_write_failed path=%s error=%s", self.backend_db_path, exc)
+
+    @staticmethod
+    def _extract_skills(parsed_result: Any) -> list[str] | None:
+        if not isinstance(parsed_result, dict):
+            return None
+
+        skills_value = parsed_result.get("required_skills") or parsed_result.get("skills")
+        if not isinstance(skills_value, list):
+            return None
+
+        skills: list[str] = []
+        for item in skills_value:
+            if isinstance(item, str):
+                skill = item.strip()
+            elif isinstance(item, dict):
+                skill = str(item.get("name") or item.get("label") or "").strip()
+            else:
+                skill = ""
+
+            if skill:
+                skills.append(skill)
+
+        return skills or None
+
+    @staticmethod
+    def _skills_text(skills: Any) -> str | None:
+        if skills is None:
+            return None
+        if isinstance(skills, str):
+            return skills.strip() or None
+        if isinstance(skills, list):
+            joined = ", ".join(str(skill).strip() for skill in skills if str(skill).strip())
+            return joined or None
+        return str(skills).strip() or None
 
     @staticmethod
     def _utc_now_iso() -> str:
@@ -1231,6 +1301,128 @@ class LLMService:
         self._record_parse_latency("candidate", elapsed_ms)
         return result
 
+    @staticmethod
+    def _build_text_derived_job_profile(raw_text: str) -> dict[str, Any]:
+        normalized = re.sub(r"\r\n", "\n", str(raw_text or "")).replace("\u00a0", " ").strip()
+        lines = [line.strip(" •●○\t") for line in normalized.splitlines() if line.strip()]
+
+        if not lines:
+            return {
+                "title": "Unknown Job",
+                "company": None,
+                "recruiter_company": None,
+                "employer_company": None,
+                "location": None,
+                "employment_type": None,
+                "department": None,
+                "about_us": None,
+                "description": None,
+                "requirements": None,
+                "benefits": None,
+                "required_skills": [],
+                "required_languages": [],
+                "required_degrees": [],
+                "industries": [],
+            }
+
+        heading_patterns: dict[str, re.Pattern[str]] = {
+            "about_us": re.compile(r"^(über uns|about us|wir sind|unternehmen|wer wir sind|das unternehmen|unsere firma|company|who we are)\b", re.IGNORECASE),
+            "description": re.compile(r"^(stellenbeschreibung|aufgaben|tätigkeiten|deine aufgaben|ihre aufgaben|deine aufgabe|job description|responsibilities|your responsibilities|was du machst|what you.ll do|aufgabenbeschreibung|das erwartet dich)\b", re.IGNORECASE),
+            "requirements": re.compile(r"^(anforderungen|profil|qualifikationen|voraussetzungen|must[- ]haves|requirements|qualifications|your profile|dein profil|ihr profil|gesuchtes profil|skills|was du mitbringst|what you bring|das bringst du mit)\b", re.IGNORECASE),
+            "benefits": re.compile(r"^(was wir bieten|benefits|vorteile|wir bieten|wir bieten dir|das bieten wir|das bieten wir dir|unser angebot|perks|what we offer|our offer|deine vorteile)\b", re.IGNORECASE),
+        }
+
+        title = lines[0]
+        if len(title) > 40:
+            compact_title = re.split(r"\b(?:with|for|in|at|mit|für|im|am|an)\b", title, maxsplit=1, flags=re.IGNORECASE)[0].strip(" -,:;.")
+            if len(compact_title) >= 3:
+                title = compact_title
+
+        if any(pattern.search(title) for pattern in heading_patterns.values()):
+            title = next((line for line in lines[1:] if not any(pattern.search(line) for pattern in heading_patterns.values())), title)
+
+        buckets: dict[str, list[str]] = {"about_us": [], "description": [], "requirements": [], "benefits": []}
+        current_section = "description"
+
+        for line in lines[1:]:
+            matched_section = None
+            for section, pattern in heading_patterns.items():
+                if pattern.search(line):
+                    matched_section = section
+                    break
+
+            if matched_section:
+                current_section = matched_section
+                continue
+
+            buckets[current_section].append(line)
+
+        join_section = lambda section: "\n".join(buckets[section]).strip() or None
+
+        skill_source = "\n".join(
+            part
+            for part in [normalized, join_section("requirements"), join_section("description"), title]
+            if part
+        )
+
+        def _skill(name: str, *, category: str = "HardSkill") -> dict[str, Any]:
+            return {"name": name, "category": category, "priority": "Mandatory"}
+
+        skill_patterns: list[tuple[str, str, str]] = [
+            (r"\bpython\b", "Python", "HardSkill"),
+            (r"\bsql\b", "SQL", "HardSkill"),
+            (r"\bneo4j\b", "Neo4j", "HardSkill"),
+            (r"\bnode\s*\.?js\b", "Node.js", "HardSkill"),
+            (r"\bjavascript\b", "JavaScript", "HardSkill"),
+            (r"\btypescript\b", "TypeScript", "HardSkill"),
+            (r"\bjava\b", "Java", "HardSkill"),
+            (r"\bc#\b|\b\.net\b|\bdotnet\b", "C# / .NET", "HardSkill"),
+            (r"\bdocker\b", "Docker", "HardSkill"),
+            (r"\bkubernetes\b|\bk8s\b", "Kubernetes", "HardSkill"),
+            (r"\baws\b|\bamazon web services\b", "AWS", "HardSkill"),
+            (r"\bazure\b", "Azure", "HardSkill"),
+            (r"\bgcp\b|\bgoogle cloud\b", "GCP", "HardSkill"),
+            (r"\bterraform\b", "Terraform", "HardSkill"),
+            (r"\bkafka\b", "Kafka", "HardSkill"),
+            (r"\bspring boot\b", "Spring Boot", "HardSkill"),
+            (r"\bfastapi\b", "FastAPI", "HardSkill"),
+            (r"\bdjango\b", "Django", "HardSkill"),
+            (r"\bflask\b", "Flask", "HardSkill"),
+            (r"\breact\b", "React", "HardSkill"),
+            (r"\bangular\b", "Angular", "HardSkill"),
+            (r"\bvue\b", "Vue", "HardSkill"),
+            (r"\brest\b", "REST", "HardSkill"),
+            (r"\bgraphql\b", "GraphQL", "HardSkill"),
+            (r"\bcommunication\b", "Communication", "SoftSkill"),
+            (r"\bteamwork\b|\bteam player\b", "Teamwork", "SoftSkill"),
+            (r"\bproblem solving\b|\bproblem-solving\b", "Problem Solving", "SoftSkill"),
+            (r"\bstakeholder\b", "Stakeholder Management", "SoftSkill"),
+            (r"\bagile\b", "Agile", "SoftSkill"),
+        ]
+
+        required_skills: list[dict[str, Any]] = []
+        for pattern, skill_name, category in skill_patterns:
+            if re.search(pattern, skill_source, flags=re.IGNORECASE):
+                required_skills.append(_skill(skill_name, category=category))
+
+        return {
+            "title": title or "Unknown Job",
+            "company": None,
+            "recruiter_company": None,
+            "employer_company": None,
+            "location": None,
+            "employment_type": None,
+            "department": None,
+            "about_us": join_section("about_us"),
+            "description": join_section("description") or ("\n".join(lines[1:]).strip() or normalized or None),
+            "requirements": join_section("requirements"),
+            "benefits": join_section("benefits"),
+            "required_skills": required_skills,
+            "required_languages": [],
+            "required_degrees": [],
+            "industries": [],
+        }
+
     async def parse_job_description(self, raw_text: str) -> JobProfileExtraction:
         start = perf_counter()
         try:
@@ -1319,24 +1511,25 @@ class LLMService:
                     "parse_job_description: lightweight fallback also failed, using text-derived minimal profile: %s",
                     fallback_exc,
                 )
-                parsed = {
-                    "title": "Unknown Job",
-                    "company": None,
-                    "recruiter_company": None,
-                    "employer_company": None,
-                    "location": None,
-                    "employment_type": None,
-                    "department": None,
-                    "about_us": None,
-                    "description": None,
-                    "requirements": None,
-                    "benefits": None,
-                    "required_skills": [],
-                    "required_languages": [],
-                    "required_degrees": [],
-                    "industries": [],
-                }
+                parsed = self._build_text_derived_job_profile(raw_text)
         result = JobProfileExtraction.model_validate(parsed)
+
+        if not result.title or result.title.casefold() in {"unknown job", "job description", "stellenbeschreibung"}:
+            fallback_profile = self._build_text_derived_job_profile(raw_text)
+            merged = result.model_dump()
+            for key, fallback_value in fallback_profile.items():
+                current_value = merged.get(key)
+                if current_value in (None, "", [], {}):
+                    merged[key] = fallback_value
+            result = JobProfileExtraction.model_validate(merged)
+
+        if not result.required_skills:
+            fallback_profile = self._build_text_derived_job_profile(raw_text)
+            merged = result.model_dump()
+            if fallback_profile.get("required_skills"):
+                merged["required_skills"] = fallback_profile["required_skills"]
+            result = JobProfileExtraction.model_validate(merged)
+
         elapsed_ms = (perf_counter() - start) * 1000
         logger.warning(
             "parse_job_description completed in %.1f ms (input_chars=%d, required_skills=%d, required_languages=%d, required_degrees=%d, industries=%d)",

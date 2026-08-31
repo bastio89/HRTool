@@ -62,10 +62,11 @@ async def test_parse_job_description_falls_back_when_no_json_is_returned(app_mod
         "Senior Data Engineer with Python, SQL and Neo4j experience."
     )
 
-    assert profile.title == "Unknown Job"
-    assert profile.required_skills == []
+    assert profile.title == "Senior Data Engineer"
+    assert {skill.name for skill in profile.required_skills} >= {"Python", "SQL", "Neo4j"}
+    assert all(skill.priority == "Mandatory" for skill in profile.required_skills)
     assert profile.about_us is None
-    assert profile.description is None
+    assert profile.description == "Senior Data Engineer with Python, SQL and Neo4j experience."
     assert profile.requirements is None
     assert profile.benefits is None
 
@@ -587,3 +588,92 @@ async def test_match_successful_rerank_and_sorting(app_module, api_client, monke
     assert payload["matches"][0]["score"] == 94
     assert payload["matches"][1]["score"] == 82
     rerank_mock.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_external_match_run_uses_graph_rag(app_module, api_client, monkeypatch):
+    response = await api_client.post(
+        "/match/external/run",
+        json={
+            "job": {
+                "id": "job-1",
+                "title": "Data Engineer",
+                "description": "Build Python FastAPI data platforms",
+            },
+            "candidates": [
+                {"id": "cand-1", "name": "Alice", "skills": ["Python", "FastAPI"]},
+                {"id": "cand-2", "name": "Bob", "skills": ["SQL"]},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["candidateId"] for item in payload["results"]] == ["cand-1", "cand-2"]
+    assert payload["results"][0]["score"] > payload["results"][1]["score"]
+    assert payload["results"][0]["strengths"]
+
+
+@pytest.mark.anyio
+async def test_external_match_matrix_uses_graph_rag(app_module, api_client, monkeypatch):
+    response = await api_client.post(
+        "/match/external/matrix",
+        json={
+            "mode": "all_jobs_all_candidates",
+            "jobs": [
+                {"id": "job-1", "title": "Data Engineer", "description": "Build Python data platforms"},
+                {"id": "job-2", "title": "Backend Engineer", "description": "Build Java APIs"},
+            ],
+            "candidates": [
+                {"id": "cand-1", "name": "Alice", "skills": ["Python"]},
+                {"id": "cand-2", "name": "Bob", "skills": ["Java"]},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["type"] == "matrix"
+    assert payload["matrix"][0]["jobId"] in {"job-1", "job-2"}
+    assert payload["jobsRanked"][0]["results"]
+    assert [item["jobId"] for item in payload["jobsRanked"]] == ["job-1", "job-2"]
+    assert payload["candidatesRanked"][0]["results"]
+
+
+@pytest.mark.anyio
+async def test_external_match_matrix_accepts_numeric_ids(app_module, api_client, monkeypatch):
+    response = await api_client.post(
+        "/match/external/matrix",
+        json={
+            "mode": "all_jobs_all_candidates",
+            "jobs": [
+                {"id": 10, "title": "Data Engineer", "description": "Build Python data platforms"},
+                {"id": 11, "title": "Backend Engineer", "description": "Build Java APIs"},
+            ],
+            "candidates": [
+                {"id": 1, "name": "Alice", "skills": ["Python"]},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["matrix"][0]["jobId"] == "10"
+    assert payload["matrix"][0]["candidateId"] == "1"
+
+
+@pytest.mark.anyio
+async def test_external_match_run_accepts_numeric_candidate_fields(app_module, api_client, monkeypatch):
+    response = await api_client.post(
+        "/match/external/run",
+        json={
+            "job": {"id": 10, "title": "Data Engineer", "description": "Build Python data platforms"},
+            "candidates": [
+                {"id": 1, "name": "Alice", "experience": 8, "desired_salary": 90000, "availability": 17},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["results"][0]["candidateId"] == "1"

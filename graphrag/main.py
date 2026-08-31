@@ -20,6 +20,7 @@ from models import (
 	MatchCandidateResponse,
 	MatchResponse,
 )
+from matching_api import create_matching_router
 from services.db import Neo4jService
 from services.llm import LLMService
 from services.pdf import PDFService
@@ -40,6 +41,7 @@ llm_service = LLMService(
 	embedding_dimensions=settings.embedding_dimensions,
 	enable_reasoning=settings.ollama_enable_reasoning,
 	enable_call_logging=settings.enable_ai_call_logging,
+	backend_db_path=settings.resolved_backend_db_path,
 	enable_parse_latency_aggregation=settings.enable_parse_latency_aggregation,
 	parse_latency_window_size=settings.parse_latency_window_size,
 	parse_latency_log_every=settings.parse_latency_log_every,
@@ -62,6 +64,8 @@ app = FastAPI(
 	version="1.0.0",
 	lifespan=lifespan,
 )
+
+app.include_router(create_matching_router(llm_service))
 
 
 async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_candidate: bool) -> str:

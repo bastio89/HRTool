@@ -13,6 +13,13 @@ const HOST_PRESETS = [
   { label: 'Text Generation WebUI', url: 'http://localhost:5000' },
 ]
 
+const EMBEDDING_MODEL_PRESETS = [
+  'bge-m3',
+  'nomic-embed-text',
+  'openai/text-embedding-3-small',
+  'qwen3-embedding:4b',
+]
+
 const PROVIDER_OPTIONS = [
   { value: 'auto', label: 'Auto-Erkennung', desc: 'Erkennt Ollama oder OpenAI-kompatible API automatisch' },
   { value: 'ollama', label: 'Ollama', desc: 'Ollama-API (/api/generate)' },
@@ -24,16 +31,21 @@ export default function AISettings() {
   const [loading, setLoading] = useState(true)
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
+  const [embeddingModel, setEmbeddingModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
   const [provider, setProvider] = useState('auto')
   const [loggingEnabled, setLoggingEnabled] = useState(false)
-  const [source, setSource] = useState({ baseUrl: 'default', model: 'default' })
+  const [source, setSource] = useState({ baseUrl: 'default', model: 'default', embeddingModel: 'default' })
 
   const [models, setModels] = useState([])
+  const [embeddingModels, setEmbeddingModels] = useState([])
   const [modelsLoading, setModelsLoading] = useState(false)
+  const [embeddingModelsLoading, setEmbeddingModelsLoading] = useState(false)
   const [modelsError, setModelsError] = useState('')
+  const [embeddingModelsError, setEmbeddingModelsError] = useState('')
   const [manualModel, setManualModel] = useState(false)
+  const [manualEmbeddingModel, setManualEmbeddingModel] = useState(false)
 
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -48,12 +60,16 @@ export default function AISettings() {
       const cfg = await settingsApi.getAiConfig()
       setBaseUrl(cfg.baseUrl || '')
       setModel(cfg.model || '')
+      setEmbeddingModel(cfg.embeddingModel || '')
       setProvider(cfg.provider || 'auto')
       setApiKeyConfigured(Boolean(cfg.apiKeyConfigured))
       setLoggingEnabled(Boolean(cfg.loggingEnabled))
-      setSource(cfg.source || { baseUrl: 'default', model: 'default' })
+      setSource(cfg.source || { baseUrl: 'default', model: 'default', embeddingModel: 'default' })
       // Load available models for the current host
-      await loadModels(cfg.baseUrl, cfg.model, cfg.provider)
+      await Promise.all([
+        loadModels(cfg.baseUrl, cfg.model, cfg.provider),
+        loadEmbeddingModels(cfg.baseUrl, cfg.embeddingModel, cfg.provider),
+      ])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -61,15 +77,15 @@ export default function AISettings() {
     }
   }
 
+  const sortModelNames = (names) => [...names].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+
   const loadModels = async (url, currentModel, requestedProvider = provider) => {
     setModelsLoading(true)
     setModelsError('')
     try {
       const res = await settingsApi.getAiModels(url, apiKey, requestedProvider)
-      const names = (res.models || []).map((m) => m.name)
+      const names = sortModelNames((res.models || []).map((m) => m.name).filter(Boolean))
       setModels(names)
-      // Always show the provider's list when it contains models. If the saved
-      // model is no longer available, select the first current model.
       const active = currentModel ?? model
       if (names.length > 0) {
         setManualModel(false)
@@ -86,6 +102,32 @@ export default function AISettings() {
     }
   }
 
+  const loadEmbeddingModels = async (url, currentEmbeddingModel, requestedProvider = provider) => {
+    setEmbeddingModelsLoading(true)
+    setEmbeddingModelsError('')
+    try {
+      const res = await settingsApi.getAiEmbeddingModels(url, apiKey, requestedProvider)
+      const names = sortModelNames([
+        ...EMBEDDING_MODEL_PRESETS,
+        ...(res.models || []).map((m) => m.name).filter(Boolean),
+      ])
+      setEmbeddingModels(names)
+      const activeEmbedding = currentEmbeddingModel ?? embeddingModel
+      if (names.length > 0) {
+        setManualEmbeddingModel(false)
+        if (!activeEmbedding || !names.includes(activeEmbedding)) setEmbeddingModel(names[0])
+      } else {
+        setManualEmbeddingModel(true)
+      }
+    } catch (err) {
+      setEmbeddingModels([])
+      setManualEmbeddingModel(true)
+      setEmbeddingModelsError(err.message)
+    } finally {
+      setEmbeddingModelsLoading(false)
+    }
+  }
+
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
@@ -95,7 +137,10 @@ export default function AISettings() {
       setTestResult(res)
       if (res.reachable) {
         // Refresh model list from the tested host
-        await loadModels(baseUrl, model, provider)
+        await Promise.all([
+          loadModels(baseUrl, model, provider),
+          loadEmbeddingModels(baseUrl, embeddingModel, provider),
+        ])
       }
     } catch (err) {
       setTestResult({ reachable: false, error: err.message })
@@ -109,20 +154,25 @@ export default function AISettings() {
     setError('')
     setSuccessMsg('')
     try {
+      if (!embeddingModel.trim()) {
+        throw new Error(t('ai_settings.embedding_model_required'))
+      }
       const res = await settingsApi.saveAiConfig({
         baseUrl: baseUrl.trim(),
         model: model.trim(),
+        embeddingModel: embeddingModel.trim(),
         provider,
         loggingEnabled,
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       })
       setBaseUrl(res.baseUrl)
       setModel(res.model)
+      setEmbeddingModel(res.embeddingModel || embeddingModel)
       setProvider(res.provider || 'auto')
       setApiKey('')
       setApiKeyConfigured(Boolean(res.apiKeyConfigured))
       setLoggingEnabled(Boolean(res.loggingEnabled))
-      setSource({ baseUrl: 'settings', model: 'settings' })
+      setSource({ baseUrl: 'settings', model: 'settings', embeddingModel: 'settings' })
       setSuccessMsg(t('ai_settings.saved'))
       setTimeout(() => setSuccessMsg(''), 3000)
     } catch (err) {
@@ -137,12 +187,14 @@ export default function AISettings() {
     if (presetProvider) setProvider(presetProvider)
     setTestResult(null)
     loadModels(url, model, presetProvider || provider)
+    loadEmbeddingModels(url, embeddingModel, presetProvider || provider)
   }
 
   const selectProvider = (value) => {
     setProvider(value)
     setTestResult(null)
     loadModels(baseUrl, model, value)
+    loadEmbeddingModels(baseUrl, embeddingModel, value)
   }
 
   const sourceLabel = (src) => {
@@ -358,6 +410,77 @@ export default function AISettings() {
         </p>
       </Card>
 
+      {/* Embedding model */}
+      <Card className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Cpu className="w-5 h-5 text-gray-400" />
+            <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.embedding_model_title')}</h2>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => loadEmbeddingModels(baseUrl, embeddingModel, provider)} disabled={embeddingModelsLoading}>
+            {embeddingModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {t('ai_settings.reload_models')}
+          </Button>
+        </div>
+
+        {!manualEmbeddingModel && embeddingModels.length > 0 ? (
+          <div className="space-y-3">
+            <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
+              {t('ai_settings.embedding_model_label')}
+            </label>
+            <div className="relative">
+              <select
+                value={embeddingModel}
+                onChange={(e) => setEmbeddingModel(e.target.value)}
+                className="w-full appearance-none px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
+                  text-black dark:text-white text-[16px] focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c]
+                  focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 cursor-pointer pr-12"
+              >
+                {embeddingModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-5 h-5 text-gray-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+            <button
+              onClick={() => setManualEmbeddingModel(true)}
+              className="text-[13px] text-[#0071e3] hover:underline ml-2 cursor-pointer"
+            >
+              {t('ai_settings.enter_manually')}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <Input
+              label={t('ai_settings.embedding_model_label')}
+              value={embeddingModel}
+              onChange={(e) => setEmbeddingModel(e.target.value)}
+              placeholder="openai/text-embedding-3-small"
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+            />
+            {embeddingModels.length > 0 && (
+              <button
+                onClick={() => setManualEmbeddingModel(false)}
+                className="text-[13px] text-[#0071e3] hover:underline ml-2 cursor-pointer"
+              >
+                {t('ai_settings.choose_from_list')}
+              </button>
+            )}
+            {embeddingModelsError && (
+              <p className="flex items-center gap-2 text-[13px] text-[#ff9500] ml-2">
+                <AlertTriangle className="w-4 h-4" />
+                {t('ai_settings.models_unavailable')}
+              </p>
+            )}
+          </div>
+        )}
+        <p className="text-[13px] text-gray-400 ml-2">
+          {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.embeddingModel)}</span>
+        </p>
+      </Card>
+
       {/* LLM logging */}
       <Card className="space-y-4">
         <div className="flex items-center gap-3">
@@ -382,7 +505,7 @@ export default function AISettings() {
 
       {/* Save bar */}
       <div className="flex flex-wrap items-center gap-4">
-        <Button variant="dark" onClick={handleSave} disabled={saving || !baseUrl.trim() || !model.trim()}>
+        <Button variant="dark" onClick={handleSave} disabled={saving || !baseUrl.trim() || !model.trim() || !embeddingModel.trim()}>
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
           {t('ai_settings.save')}
         </Button>

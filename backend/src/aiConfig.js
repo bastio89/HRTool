@@ -33,12 +33,14 @@ function openAiApiBase(baseUrl) {
 function getAiConfig() {
   const dbBaseUrl = readSetting('ai_base_url');
   const dbModel = readSetting('ai_model');
+  const dbEmbeddingModel = readSetting('ai_embedding_model');
   const dbProvider = readSetting('ai_provider');
   const dbApiKey = readSetting('ai_api_key');
   const dbLoggingEnabled = readSetting('ai_log_llm_calls');
 
   const envBaseUrl = process.env.AI_BASE_URL?.trim() || process.env.OLLAMA_BASE_URL?.trim() || null;
   const envModel = process.env.AI_MODEL?.trim() || process.env.OLLAMA_MODEL?.trim() || null;
+  const envEmbeddingModel = process.env.AI_EMBEDDING_MODEL?.trim() || null;
   const envProvider = process.env.AI_PROVIDER?.trim() || null;
   const envApiKey = process.env.AI_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim() || null;
   const envLogging = process.env.AI_LOG_LLM_CALLS?.trim() || null;
@@ -50,6 +52,11 @@ function getAiConfig() {
     : DEFAULT_BASE_URL;
   const rawBaseUrl = dbBaseUrl || envBaseUrl || providerBaseUrl;
   const model = dbModel || envModel || DEFAULT_MODEL;
+  const embeddingModel = dbEmbeddingModel
+    || envEmbeddingModel
+    || (normalizedProvider === 'openai' || normalizedProvider === 'openrouter'
+      ? 'openai/text-embedding-3-small'
+      : 'qwen3-embedding:4b');
   const apiKey = dbApiKey || envApiKey || null;
   const loggingEnabledRaw = dbLoggingEnabled || envLogging || null;
   const loggingEnabled = ['1', 'true', 'yes', 'on'].includes(String(loggingEnabledRaw).trim().toLowerCase());
@@ -59,12 +66,14 @@ function getAiConfig() {
   return {
     baseUrl,
     model,
+    embeddingModel,
     provider,
     apiKey,
     loggingEnabled,
     source: {
       baseUrl: dbBaseUrl ? 'settings' : envBaseUrl ? 'env' : 'default',
       model: dbModel ? 'settings' : envModel ? 'env' : 'default',
+      embeddingModel: dbEmbeddingModel ? 'settings' : envEmbeddingModel ? 'env' : 'default',
       provider: dbProvider ? 'settings' : envProvider ? 'env' : 'default',
       apiKey: dbApiKey ? 'settings' : envApiKey ? 'env' : 'default',
     },
@@ -225,6 +234,54 @@ async function fetchAiModels(baseUrl, provider, timeoutMs = 5000, apiKey = null)
   }
 }
 
+function normalizeModelName(model) {
+  return String(model || '').trim().toLowerCase();
+}
+
+function isEmbeddingModelName(modelName) {
+  const normalized = normalizeModelName(modelName);
+  if (!normalized) return false;
+
+  const embeddingHints = [
+    'embed',
+    'embedding',
+    'text-embedding',
+    'all-minilm',
+    'bge-',
+    'e5-',
+    'gte-',
+    'nomic-',
+    'mxbai-embed',
+    'snowflake-arctic-embed',
+    'instructor-',
+    'jina-embeddings',
+    'voyage-embedding',
+    'multilingual-e5',
+    'text2vec',
+  ];
+
+  return embeddingHints.some((hint) => normalized.includes(hint));
+}
+
+function filterModelsByKind(models, kind = 'chat') {
+  const normalizedKind = String(kind || 'chat').trim().toLowerCase();
+  if (!Array.isArray(models)) return [];
+
+  const mapped = models
+    .map((model) => ({
+      ...model,
+      name: model?.name ? String(model.name).trim() : '',
+    }))
+    .filter((model) => model.name);
+
+  if (normalizedKind === 'embedding') {
+    const filtered = mapped.filter((model) => isEmbeddingModelName(model.name));
+    return filtered.length > 0 ? filtered : mapped;
+  }
+
+  return mapped;
+}
+
 /**
  * Strip reasoning/thinking blocks emitted by models like Qwen3, DeepSeek-R1, etc.
  * Also strips markdown code fences. Returns clean text ready for JSON.parse().
@@ -253,6 +310,7 @@ module.exports = {
   extractAiText,
   pingAiService,
   fetchAiModels,
+  filterModelsByKind,
   stripReasoningTags,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,

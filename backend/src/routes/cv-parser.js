@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { logAiCall } = require('../aiLogger');
 const { tmpDir, extractText } = require('../utils/documentText');
 
 const router = express.Router();
@@ -107,6 +108,7 @@ function extractWorkHistoryFromText(rawText) {
     const lowered = line.toLowerCase();
     return (
       lowered.includes('beruflicher werdegang')
+      || lowered.includes('berufliche tätigkeiten')
       || lowered.includes('berufserfahrung')
       || lowered.includes('praktische industrie')
       || lowered.includes('professional experience')
@@ -292,8 +294,25 @@ function persistCandidate(profile, req) {
   );
 
   const candidateId = result.lastInsertRowid;
-  const workHistory = normalizeWorkHistory(profile);
-  const educationHistory = normalizeHistoryEntries(profile.education_history, 'education');
+  const workHistory = normalizeWorkHistory(profile).filter((item) => Boolean(item.employer && item.position));
+  const educationHistory = normalizeHistoryEntries(profile.education_history, 'education')
+    .filter((item) => Boolean(item.institution));
+
+  const currentRole = profile.current_employer && profile.current_position
+    ? {
+      employer: profile.current_employer,
+      position: profile.current_position,
+      from_date: null,
+      to_date: null,
+      is_current: true,
+      description: profile.experience || null,
+      location: profile.location || null,
+    }
+    : null;
+
+  if (currentRole && !workHistory.some((item) => item.is_current && item.employer === currentRole.employer && item.position === currentRole.position)) {
+    workHistory.unshift(currentRole);
+  }
 
   const workInsert = db.prepare(`
     INSERT INTO candidate_work_history (candidate_id, employer, position, from_date, to_date, is_current, description, location)
@@ -352,13 +371,28 @@ async function ingestIntoGraphRag(rawText, persist) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
   try {
+    const requestPayload = { raw_text: rawText };
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/candidate?persist=${persist ? '1' : '0'}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_text: rawText }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
+    logAiCall({
+      userId: null,
+      feature: 'cv-parser',
+      model: 'graphrag',
+      modelVersion: null,
+      prompt: JSON.stringify(requestPayload),
+      response: JSON.stringify(payload),
+      parsedResult: payload?.profile || null,
+      durationMs: null,
+      inputTokens: null,
+      outputTokens: null,
+      success: response.ok,
+      errorMessage: response.ok ? null : (payload.detail || payload.error || 'Unbekannter Fehler'),
+    });
     if (!response.ok) {
       const detail = payload.detail || payload.error || 'Unbekannter Fehler';
       if (String(detail).toLowerCase().includes('parsing failed')) {
@@ -593,6 +627,8 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
             .filter(Boolean)
             .join('\n');
         }
+      } else {
+        console.warn('CV-Parser: kein Beruflicher Werdegang beim Parsen gefunden');
       }
     }
     let localCandidate = null;

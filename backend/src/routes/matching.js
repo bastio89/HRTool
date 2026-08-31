@@ -52,6 +52,25 @@ function getJobs(jobIds) {
   return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE status IS NULL OR status != 'Archiviert' ORDER BY created_at DESC`).all();
 }
 
+async function callGraphRagMatching(endpoint, payload) {
+  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
+  const response = await fetch(`${baseUrl.replace(/\/+$/, '')}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.detail || data.error || `GraphRAG HTTP ${response.status}`);
+    error.status = response.status;
+    error.details = data.detail || data.error || null;
+    throw error;
+  }
+
+  return data;
+}
+
 function buildJobDescription(job) {
   const parts = [];
   if (job.description) parts.push(job.description);
@@ -150,7 +169,9 @@ async function generateJson({ baseUrl, model, provider, prompt, timeoutMs = 1800
 
     const raw = await response.text();
     if (!response.ok) {
-      const error = new Error(`AI HTTP ${response.status}`);
+      const error = new Error(response.status === 429
+        ? 'Das KI-Modell wurde vom Provider rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
+        : `AI HTTP ${response.status}`);
       error.status = response.status;
       error.raw = raw;
       throw error;
@@ -275,26 +296,15 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
       return res.status(400).json({ error: 'Stellentitel, Beschreibung oder Anforderungen sind erforderlich' });
     }
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
-    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
-    try {
-      await assertAiReachable(OLLAMA_URL, aiProvider);
-    } catch {
-      return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte pruefen Sie die KI-Konfiguration.' });
-    }
-
-    const prompt = buildJobToCandidatesPrompt({
-      jobDescription,
-      jobTitle: normalizedJob.title,
+    const graphRagResult = await callGraphRagMatching('/match/external/run', {
+      job: normalizedJob,
       candidates: normalizedCandidates,
       weights,
+      options,
     });
-    const timeoutMs = Math.min(Math.max(Number(options.timeoutMs) || 180000, 30000), 300000);
-    const { parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider, prompt, timeoutMs });
-    const rows = normalizeJobResults({ parsed, job: normalizedJob, candidates: normalizedCandidates });
 
     const byInternalId = new Map(normalizedCandidates.map(candidate => [candidate.id, candidate]));
-    const results = rows.map(row => {
+    const results = (graphRagResult.results || []).map((row) => {
       const candidate = byInternalId.get(Number(row.candidateId));
       return {
         externalCandidateId: candidate?.externalId || String(row.candidateId),
@@ -307,15 +317,10 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
     });
 
     const durationMs = Date.now() - startTime;
-    logAiCall({
-      userId: null,
-      feature: 'external-matching',
-      model: OLLAMA_MODEL,
-      prompt: `External matching (${normalizedCandidates.length} candidates)` ,
-      response: JSON.stringify({ resultCount: results.length }),
-      parsedResult: { resultCount: results.length, topScore: results[0]?.score ?? null },
+    logAudit(req, 'external-matching', 'Matching', null, normalizedJob.title, {
+      candidateCount: normalizedCandidates.length,
+      topScore: results[0]?.score ?? null,
       durationMs,
-      success: true,
     });
 
     res.json({
@@ -325,27 +330,15 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
       },
       results,
       candidateCount: normalizedCandidates.length,
-      model: OLLAMA_MODEL,
+      model: graphRagResult.model || null,
       durationMs,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    const durationMs = Date.now() - startTime;
     console.error('Error running external matching:', error);
-    logAiCall({
-      userId: null,
-      feature: 'external-matching',
-      model: getAiConfig().model,
-      prompt: 'External matching failed',
-      response: error.raw || null,
-      parsedResult: null,
-      durationMs,
-      success: false,
-      errorMessage: error.name === 'AbortError' ? 'Timeout' : error.message,
-    });
-    res.status(error.name === 'AbortError' ? 504 : 500).json({
+    res.status(error.status || (error.name === 'AbortError' ? 504 : 500)).json({
       error: error.name === 'AbortError' ? 'KI-Timeout beim externen Matching' : 'Fehler beim externen Matching',
-      details: error.message,
+      details: error.details || error.message,
     });
   }
 });
@@ -384,102 +377,52 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
     }
 
-    const startTime = Date.now();
-
-    // Direct AI call (supports Ollama + OpenAI-compatible)
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
-    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
-
-    const prompt = buildJobToCandidatesPrompt({ jobDescription, jobTitle, candidates, weights });
-
-    // Check AI host availability (3s timeout)
-    try {
-      await assertAiReachable(OLLAMA_URL, aiProvider);
-    } catch {
-      return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte stellen Sie sicher, dass der KI-Server läuft.' });
-    }
-
-    const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
-      baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider,
-      prompt, format: 'json', options: { temperature: 0.2 },
+    const graphRagResult = await callGraphRagMatching('/match/external/run', {
+      job: {
+        id: jobId || null,
+        title: jobTitle || 'Unbenannte Stelle',
+        description: jobDescription,
+      },
+      candidates: candidates.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+        location: candidate.location,
+        experience: candidate.experience,
+        skills: candidate.skills,
+        education: candidate.education,
+        desired_salary: candidate.desired_salary,
+        availability: candidate.availability,
+        languages: candidate.languages,
+        certificates: candidate.certificates,
+        mobility: candidate.mobility,
+      })),
+      weights,
     });
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180000);
-
-    let response;
-    try {
-      response = await fetch(aiUrl, {
-        method: 'POST',
-        headers: aiHeaders,
-        signal: controller.signal,
-        body: JSON.stringify(aiBody),
-      });
-    } catch (fetchErr) {
-      clearTimeout(timeout);
-      const duration = Date.now() - startTime;
-      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: null, parsedResult: null, durationMs: duration, success: false, errorMessage: fetchErr.name === 'AbortError' ? 'Timeout >180s' : fetchErr.message });
-      if (fetchErr.name === 'AbortError') {
-        return res.status(504).json({ error: 'KI-Timeout – Matching dauerte zu lange (>180s). Versuche es mit weniger Bewerbern.' });
-      }
-      throw fetchErr;
-    }
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errText = await response.text();
-      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: errText, parsedResult: null, durationMs: Date.now() - startTime, success: false, errorMessage: `Ollama HTTP ${response.status}` });
-      return res.status(502).json({ error: `Ollama-Fehler: Status ${response.status}`, details: errText });
-    }
-
-    const raw = await response.text();
-    const matchingDuration = Date.now() - startTime;
-
-    let matchingResults;
-    try {
-      const data = JSON.parse(raw);
-      const { text } = extractAiText(data, aiProvider);
-      matchingResults = JSON.parse(stripReasoningTags(text));
-    } catch (parseErr) {
-      logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: matchingDuration, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
-      return res.status(502).json({ error: 'KI-Antwort konnte nicht verarbeitet werden', details: parseErr.message });
-    }
-
-    // De-Anonymisierung: echte Namen wieder einsetzen anhand der candidateId
-    const candidateMap = new Map(candidates.map(c => [c.id, c.name]));
-    if (matchingResults.results) {
-      matchingResults.results = matchingResults.results.map(r => ({
-        ...r,
-        candidateName: candidateMap.get(r.candidateId) || r.candidateName
-      }));
-    }
-
-    logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: matchingResults, durationMs: matchingDuration, success: true });
 
     // Save results (mit echten Namen)
     const saveResult = db.prepare(`
       INSERT INTO matching_results (job_description, job_title, results, job_id)
       VALUES (?, ?, ?, ?)
-    `).run(jobDescription, jobTitle || 'Unbenannte Stelle', JSON.stringify(matchingResults), jobId || null);
+    `).run(jobDescription, jobTitle || 'Unbenannte Stelle', JSON.stringify(graphRagResult), jobId || null);
 
     logAudit(req, 'ki-matching', 'Matching', saveResult.lastInsertRowid, jobTitle || 'Unbenannte Stelle', {
       candidateCount: candidates.length,
-      topScore: matchingResults.results?.[0]?.score,
-      durationMs: matchingDuration,
-      model: OLLAMA_MODEL,
+      topScore: graphRagResult.results?.[0]?.score,
     });
 
     res.json({
       id: saveResult.lastInsertRowid,
       jobTitle: jobTitle || 'Unbenannte Stelle',
-      results: matchingResults,
+      results: graphRagResult,
       candidateCount: candidates.length,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error running matching:', error);
     res.status(500).json({ 
-      error: 'Fehler beim Matching',
+      error: error.status === 429
+        ? 'Das KI-Modell ist aktuell rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
+        : error.status || error.details ? 'Fehler beim Matching' : 'Fehler beim Matching',
       details: error.message
     });
   }
@@ -493,7 +436,6 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
  *     tags: [Matching]
  */
 router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
-  const startTime = Date.now();
   const { mode = 'all_jobs_all_candidates', jobIds, candidateIds, weights } = req.body;
 
   try {
@@ -503,27 +445,32 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
     if (jobs.length === 0) return res.status(400).json({ error: 'Keine Stellen vorhanden' });
     if (candidates.length === 0) return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
 
-    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
-    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
-    try {
-      await assertAiReachable(OLLAMA_URL, aiProvider);
-    } catch {
-      return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte prüfen Sie die KI-Konfiguration unter Administration → KI-Modell.' });
-    }
+    const graphRagResult = await callGraphRagMatching('/match/external/matrix', {
+      mode,
+      jobs: jobs.map((job) => ({
+        id: job.id,
+        title: job.title,
+        description: job.description,
+        requirements: job.requirements,
+        location: job.location,
+        type: job.type,
+      })),
+      candidates: candidates.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+        location: candidate.location,
+        experience: candidate.experience,
+        skills: candidate.skills,
+        education: candidate.education,
+        desired_salary: candidate.desired_salary,
+        availability: candidate.availability,
+        languages: candidate.languages,
+        certificates: candidate.certificates,
+        mobility: candidate.mobility,
+      })),
+      weights,
+    });
 
-    const rows = [];
-    const rawResponses = [];
-
-    for (const job of jobs) {
-      const jobDescription = buildJobDescription(job);
-      const prompt = buildJobToCandidatesPrompt({ jobDescription, jobTitle: job.title, candidates, weights });
-      const { raw, parsed } = await generateJson({ baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: aiProvider, prompt });
-      rawResponses.push({ jobId: job.id, raw });
-      rows.push(...normalizeJobResults({ parsed, job, candidates }));
-    }
-
-    const matrixResult = buildMatrixResult({ jobs, candidates, rows, mode, model: OLLAMA_MODEL });
-    const durationMs = Date.now() - startTime;
     const resultTitle = mode === 'candidate_to_jobs'
       ? `Bewerber → alle Stellen (${candidates.length} × ${jobs.length})`
       : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber)`;
@@ -534,57 +481,34 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
     `).run(
       `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
       resultTitle,
-      JSON.stringify(matrixResult),
+      JSON.stringify(graphRagResult),
       null
     );
-
-    logAiCall({
-      userId: req.user?.id,
-      feature: 'matching-matrix',
-      model: OLLAMA_MODEL,
-      prompt: `Matrix matching (${jobs.length} jobs x ${candidates.length} candidates)`,
-      response: JSON.stringify(rawResponses),
-      parsedResult: matrixResult,
-      durationMs,
-      success: true,
-    });
 
     logAudit(req, 'ki-matching-matrix', 'Matching', saveResult.lastInsertRowid, resultTitle, {
       jobCount: jobs.length,
       candidateCount: candidates.length,
-      pairCount: rows.length,
-      durationMs,
-      model: OLLAMA_MODEL,
+      pairCount: graphRagResult.matrix?.length || 0,
     });
 
     res.json({
       id: saveResult.lastInsertRowid,
       jobTitle: resultTitle,
-      results: matrixResult,
+      results: graphRagResult,
       jobCount: jobs.length,
       candidateCount: candidates.length,
-      pairCount: rows.length,
+      pairCount: graphRagResult.matrix?.length || 0,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    const durationMs = Date.now() - startTime;
     console.error('Error running matrix matching:', error);
-    logAiCall({
-      userId: req.user?.id,
-      feature: 'matching-matrix',
-      model: getAiConfig().model,
-      prompt: `Matrix matching failed (${mode})`,
-      response: error.raw || null,
-      parsedResult: null,
-      durationMs,
-      success: false,
-      errorMessage: error.name === 'AbortError' ? 'Timeout >180s' : error.message,
-    });
-    res.status(error.name === 'AbortError' ? 504 : 500).json({
+    res.status(error.status || 500).json({
       error: error.name === 'AbortError'
         ? 'KI-Timeout – Matrix-Matching dauerte zu lange. Versuche weniger Stellen oder Bewerber.'
-        : 'Fehler beim Matrix-Matching',
-      details: error.message,
+        : error.status === 429
+          ? 'Das KI-Modell ist aktuell rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
+          : 'Fehler beim Matrix-Matching',
+      details: error.details || error.message,
     });
   }
 });

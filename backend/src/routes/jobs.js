@@ -109,6 +109,7 @@ function buildGraphRagJobText(job) {
     job.about_us ? `\nÜber uns:\n${job.about_us}` : '',
     job.description ? `\nBeschreibung:\n${job.description}` : '',
     job.requirements ? `\nAnforderungen:\n${job.requirements}` : '',
+    job.skills ? `\nSkills:\n${job.skills}` : '',
     job.benefits ? `\nBenefits:\n${job.benefits}` : '',
     job.location ? `\nStandort: ${job.location}` : '',
     job.type ? `\nAnstellungsart: ${job.type}` : '',
@@ -126,15 +127,35 @@ function buildGraphRagJobProfile(job) {
   };
 }
 
+function serializeJobSkills(skills) {
+  if (Array.isArray(skills)) {
+    return skills
+      .map((skill) => {
+        if (typeof skill === 'string') return skill.trim();
+        if (skill && typeof skill === 'object') return String(skill.name || skill.label || '').trim();
+        return '';
+      })
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  if (typeof skills === 'string') {
+    return skills.trim();
+  }
+
+  return '';
+}
+
 function persistLocalJob(job) {
   const result = db.prepare(`
-    INSERT INTO jobs (title, about_us, description, requirements, benefits, location, type, status, url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (title, about_us, description, requirements, skills, benefits, location, type, status, url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.title,
     job.about_us || null,
     job.description || null,
     job.requirements || null,
+    job.skills || null,
     job.benefits || null,
     job.location || null,
     job.type || 'Vollzeit',
@@ -274,10 +295,10 @@ router.get('/:id', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { title, description, requirements, location, type, status, url, about_us, benefits } = req.body;
+    const { title, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
-    const job = persistLocalJob({ title, about_us, description, requirements, benefits, location, type, status, url });
+    const job = persistLocalJob({ title, about_us, description, requirements, skills, benefits, location, type, status, url });
     logAudit(req, 'erstellt', 'Job', job.id, job.title);
 
     ingestIntoGraphRag(buildGraphRagJobText(job), true).catch((graphRagErr) => {
@@ -325,12 +346,14 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
 
     const graphRag = await ingestIntoGraphRag(trimmedText, persist);
     const profile = graphRag?.profile || {};
+    const extractedSkills = serializeJobSkills(profile.required_skills);
     const parsedJob = persist
       ? persistLocalJob({
         title: profile.title || path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname,
         about_us: profile.about_us || '',
         description: profile.description || '',
         requirements: profile.requirements || '',
+        skills: extractedSkills,
         benefits: profile.benefits || '',
         location: profile.location || null,
         type: profile.employment_type || 'Vollzeit',
@@ -338,6 +361,18 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
         url: null,
       })
       : null;
+
+    const importSteps = {
+      aiParsed: {
+        ok: Boolean(graphRag?.profile),
+      },
+      graphRagSaved: {
+        ok: Boolean(graphRag && !graphRag.error),
+      },
+      dbSaved: {
+        ok: Boolean(parsedJob),
+      },
+    };
 
     res.json({
       success: true,
@@ -349,7 +384,9 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       about_us: parsedJob?.about_us || profile.about_us || '',
       description: parsedJob?.description || profile.description || '',
       requirements: parsedJob?.requirements || profile.requirements || '',
+      skills: parsedJob?.skills || extractedSkills || '',
       benefits: parsedJob?.benefits || profile.benefits || '',
+      importSteps,
       graphRag,
     });
   } catch (err) {
@@ -399,12 +436,12 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
  */
 router.put('/:id', (req, res) => {
   try {
-    const { title, description, requirements, location, type, status, url, about_us, benefits } = req.body;
+    const { title, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
     db.prepare(`
-      UPDATE jobs SET title=?, about_us=?, description=?, requirements=?, benefits=?, location=?, type=?, status=?, url=?,
+      UPDATE jobs SET title=?, about_us=?, description=?, requirements=?, skills=?, benefits=?, location=?, type=?, status=?, url=?,
         updated_at=CURRENT_TIMESTAMP
       WHERE id=?
-    `).run(title, about_us || null, description || null, requirements || null, benefits || null,
+    `).run(title, about_us || null, description || null, requirements || null, skills || null, benefits || null,
       location || null, type || 'Vollzeit', status || 'Offen', url || null, req.params.id);
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     logAudit(req, 'aktualisiert', 'Job', job.id, job.title);

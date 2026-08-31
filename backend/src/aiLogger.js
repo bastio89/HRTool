@@ -4,8 +4,8 @@ const path = require('path');
 const db = require('./database');
 
 const insertStmt = db.prepare(`
-  INSERT INTO ai_logs (user_id, feature, model, model_version, prompt_hash, prompt, response, parsed_result, duration_ms, input_tokens, output_tokens, success, error_message)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO ai_logs (user_id, feature, model, model_version, prompt_hash, prompt, response, parsed_result, skills, duration_ms, input_tokens, output_tokens, success, error_message)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const logDir = path.join(__dirname, '..', 'data');
@@ -51,6 +51,22 @@ function logAiCall(opts) {
       ? (typeof opts.response === 'string' ? opts.response : JSON.stringify(opts.response))
       : null;
 
+    const skillsStr = (() => {
+      if (opts.skills == null) return null;
+      if (typeof opts.skills === 'string') return opts.skills.trim();
+      if (Array.isArray(opts.skills)) {
+        return opts.skills
+          .map((skill) => {
+            if (typeof skill === 'string') return skill.trim();
+            if (skill && typeof skill === 'object') return String(skill.name || skill.label || '').trim();
+            return '';
+          })
+          .filter(Boolean)
+          .join(', ');
+      }
+      return String(opts.skills).trim();
+    })() || null;
+
     insertStmt.run(
       opts.userId ?? null,
       opts.feature,
@@ -60,6 +76,7 @@ function logAiCall(opts) {
       opts.prompt ?? null,
       responseStr,
       parsedStr,
+      skillsStr,
       opts.durationMs ?? null,
       opts.inputTokens ?? null,
       opts.outputTokens ?? null,
@@ -78,6 +95,7 @@ function logAiCall(opts) {
       prompt: opts.prompt ?? null,
       response: responseStr,
       parsedResult: parsedStr,
+      skills: skillsStr,
       durationMs: opts.durationMs ?? null,
       inputTokens: opts.inputTokens ?? null,
       outputTokens: opts.outputTokens ?? null,

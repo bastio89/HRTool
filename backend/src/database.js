@@ -52,6 +52,7 @@ db.exec(`
     title TEXT NOT NULL,
     description TEXT,
     requirements TEXT,
+    skills TEXT,
     location TEXT,
     type TEXT DEFAULT 'Vollzeit',
     status TEXT DEFAULT 'Offen',
@@ -173,6 +174,7 @@ db.exec(`
     prompt TEXT,
     response TEXT,
     parsed_result TEXT,
+    skills TEXT,
     duration_ms INTEGER,
     input_tokens INTEGER,
     output_tokens INTEGER,
@@ -192,6 +194,7 @@ const migrations = [
   `ALTER TABLE matching_results ADD COLUMN reviewed_by TEXT`,
   `ALTER TABLE matching_results ADD COLUMN reviewed_at DATETIME`,
   `ALTER TABLE matching_results ADD COLUMN review_notes TEXT`,
+  `ALTER TABLE ai_logs ADD COLUMN skills TEXT`,
   // --- Erweiterung Bewerberprofil ---
   // Social-Media-Profile (#3)
   `ALTER TABLE candidates ADD COLUMN linkedin_url TEXT`,
@@ -232,6 +235,7 @@ const migrations = [
   // Stellenbeschreibung: strukturierte Sektionen
   `ALTER TABLE jobs ADD COLUMN about_us TEXT`,
   `ALTER TABLE jobs ADD COLUMN benefits TEXT`,
+  `ALTER TABLE jobs ADD COLUMN skills TEXT`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }

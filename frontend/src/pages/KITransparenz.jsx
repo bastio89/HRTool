@@ -100,6 +100,14 @@ function InfoContent({ show, color, items, legalText }) {
   )
 }
 
+function parseSqliteTimestamp(value) {
+  if (!value) return null
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(value)) {
+    return new Date(`${value.replace(' ', 'T')}Z`)
+  }
+  return new Date(value)
+}
+
 export default function KITransparenz() {
   const navigate = useNavigate()
   const { t, locale } = useI18n()
@@ -757,7 +765,7 @@ function LogsTab({ t }) {
                       {log.model && <span className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[10px] font-bold">{log.model}</span>}
                     </div>
                     <div className="flex items-center gap-4 text-[12px] text-gray-400">
-                      <span><Clock className="w-3 h-3 inline mr-1" />{new Date(log.created_at).toLocaleString('de-DE')}</span>
+                      <span><Clock className="w-3 h-3 inline mr-1" />{parseSqliteTimestamp(log.created_at)?.toLocaleString('de-DE')}</span>
                       {log.user_name && <span>{t('ki.by_user').replace('{name}', log.user_name)}</span>}
                       {log.duration_ms && <span>{(log.duration_ms / 1000).toFixed(1)}s</span>}
                       {log.input_tokens && <span>{log.input_tokens} in / {log.output_tokens} out</span>}
@@ -783,6 +791,12 @@ function LogsTab({ t }) {
                       <p className="text-[11px] font-bold text-gray-400 uppercase mb-1">{t('ki.prompt_hash')}</p>
                       <code className="text-[13px] font-mono text-black dark:text-white">{detail.prompt_hash || '—'}</code>
                     </div>
+                    {detail.skills && (
+                      <div className="p-4 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+                        <p className="text-[11px] font-bold text-gray-400 uppercase mb-1">Skills</p>
+                        <p className="text-[13px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{detail.skills}</p>
+                      </div>
+                    )}
                     {detail.prompt && (
                       <div className="p-4 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                         <p className="text-[11px] font-bold text-gray-400 uppercase mb-2">{t('ki.prompt_input')}</p>

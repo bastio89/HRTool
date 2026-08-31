@@ -44,6 +44,31 @@ function formatGraphRagStatus(graphRag, t) {
   return { label: t('batch_job_import.graph_rag_ok').replace('{message}', ''), tone: 'success' }
 }
 
+function buildImportSteps(item, t) {
+  const steps = item.job?.importSteps || item.importSteps || {}
+  const parsed = Boolean(steps.aiParsed?.ok)
+  const graphRagSaved = Boolean(steps.graphRagSaved?.ok)
+  const dbSaved = Boolean(steps.dbSaved?.ok)
+
+  return [
+    { key: 'aiParsed', label: 'KI geparsed', ok: parsed },
+    { key: 'graphRagSaved', label: 'GraphRAG gespeichert', ok: graphRagSaved },
+    { key: 'dbSaved', label: 'DB gespeichert', ok: dbSaved },
+  ]
+}
+
+function StepStatusChip({ label, ok }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium ${ok
+      ? 'bg-[#34c759]/10 text-[#2f9e44]'
+      : 'bg-gray-100 dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400'
+    }`}>
+      {ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+      <span>{label}</span>
+    </span>
+  )
+}
+
 export default function BatchJobImportDialog({ onClose, onImported }) {
   const { t } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
@@ -122,8 +147,10 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
         updateFile(item.id, {
           status: STATUS.DONE,
           job: {
-            id: parsed.graphRag?.id || parsed.id || null,
+            id: parsed.id || null,
+            graphRagId: parsed.graphRag?.id || null,
             title: parsed.title || title,
+            importSteps: parsed.importSteps || null,
             graphRag: parsed.graphRag || null,
           },
           elapsed,
@@ -236,6 +263,11 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
                   )}
                   {item.status === STATUS.DONE && (
                     <>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        {buildImportSteps(item, t).map((step) => (
+                          <StepStatusChip key={step.key} label={step.label} ok={step.ok} />
+                        ))}
+                      </div>
                       {(() => {
                         const graphRagStatus = formatGraphRagStatus(item.job?.graphRag, t)
                         return (
@@ -274,7 +306,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
                 )}
 
                 {/* Link to job when done */}
-                {item.status === STATUS.DONE && item.job && (
+                {item.status === STATUS.DONE && item.job?.id && (
                   <a
                     href={`/jobs/${item.job.id}/edit`}
                     onClick={(e) => { e.stopPropagation(); onClose() }}

@@ -24,6 +24,11 @@ describe('BatchJobImportDialog', () => {
       description: 'Node.js APIs',
       requirements: '5+ Jahre Erfahrung',
       benefits: 'Home Office',
+      importSteps: {
+        aiParsed: { ok: true },
+        graphRagSaved: { ok: true },
+        dbSaved: { ok: true },
+      },
       graphRag: { error: 'GraphRAG HTTP 503: service unavailable' },
     })
 
@@ -48,6 +53,51 @@ describe('BatchJobImportDialog', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/GraphRAG-Sync fehlgeschlagen: GraphRAG HTTP 503: service unavailable/i)).toBeInTheDocument()
+    })
+
+    expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, true)
+    expect(onImported).toHaveBeenCalledTimes(1)
+  })
+
+  test('shows individual import step statuses for successful imports', async () => {
+    jobsApi.parseDescriptionFile.mockResolvedValue({
+      filename: 'Senior Backend Engineer.pdf',
+      title: 'Senior Backend Engineer',
+      text: 'Senior Backend Engineer at ACME with Node.js APIs, 5+ years experience, Home Office.',
+      description: 'Node.js APIs',
+      requirements: '5+ Jahre Erfahrung',
+      benefits: 'Home Office',
+      importSteps: {
+        aiParsed: { ok: true },
+        graphRagSaved: { ok: true },
+        dbSaved: { ok: true },
+      },
+      graphRag: { message: 'Job ingested successfully' },
+    })
+
+    const onClose = vi.fn()
+    const onImported = vi.fn()
+    const { container } = render(
+      <I18nProvider>
+        <BatchJobImportDialog onClose={onClose} onImported={onImported} />
+      </I18nProvider>
+    )
+
+    const file = new File(['job text'], 'Senior Backend Engineer.pdf', { type: 'application/pdf' })
+    fireEvent.change(container.querySelector('input[type="file"]'), {
+      target: { files: [file] },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Senior Backend Engineer.pdf')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /1 Stellen importieren/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('KI geparsed')).toBeInTheDocument()
+      expect(screen.getByText('GraphRAG gespeichert')).toBeInTheDocument()
+      expect(screen.getByText('DB gespeichert')).toBeInTheDocument()
     })
 
     expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, true)

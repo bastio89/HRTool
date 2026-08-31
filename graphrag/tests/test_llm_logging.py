@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -14,21 +15,46 @@ from services.llm import LLMService
 
 
 @pytest.mark.asyncio
-async def test_generate_json_writes_llm_call_log(tmp_path) -> None:
-    log_path = tmp_path / "llm-calls.jsonl"
+async def test_generate_json_writes_llm_call_log_to_sqlite(tmp_path) -> None:
+    db_path = tmp_path / "hrtool.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE ai_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                feature TEXT NOT NULL,
+                model TEXT,
+                model_version TEXT,
+                prompt_hash TEXT,
+                prompt TEXT,
+                response TEXT,
+                parsed_result TEXT,
+                skills TEXT,
+                duration_ms INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                success INTEGER DEFAULT 1,
+                error_message TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        connection.commit()
+
     service = LLMService(
         base_url="http://fake-ai",
         chat_model="test-model",
         embedding_model="test-embedding",
         embedding_dimensions=8,
         enable_call_logging=True,
-        call_log_path=str(log_path),
+        backend_db_path=str(db_path),
     )
     service.client.post = AsyncMock(
         return_value=httpx.Response(
             200,
             request=httpx.Request("POST", "http://fake-ai/api/generate"),
-            json={"response": '{"name":"Anna Mueller"}'},
+            json={"response": '{"name":"Anna Mueller","required_skills":[{"name":"Python"},{"name":"SQL"}]}'},
         )
     )
 
@@ -37,19 +63,24 @@ async def test_generate_json_writes_llm_call_log(tmp_path) -> None:
             system_prompt="Extract a profile.",
             user_content="Anna Mueller\nSenior Data Engineer",
             call_context="test-context",
-            required_keys=("name",),
+            required_keys=("name", "required_skills"),
         )
     finally:
         await service.close()
 
     assert result["name"] == "Anna Mueller"
-    assert log_path.exists()
+    assert [skill["name"] for skill in result["required_skills"]] == ["Python", "SQL"]
 
-    lines = log_path.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 1
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT feature, model, prompt, response, parsed_result, skills, success FROM ai_logs LIMIT 1"
+        ).fetchone()
 
-    entry = json.loads(lines[0])
-    assert entry["context"] == "test-context"
-    assert entry["success"] is True
-    assert entry["parsed_result"]["name"] == "Anna Mueller"
-    assert entry["request_body"]["model"] == "test-model"
+    assert row is not None
+    assert row[0] == "test-context"
+    assert row[1] == "test-model"
+    assert json.loads(row[2])["model"] == "test-model"
+    assert json.loads(row[3])["response"] == '{"name":"Anna Mueller","required_skills":[{"name":"Python"},{"name":"SQL"}]}'
+    assert json.loads(row[4])["name"] == "Anna Mueller"
+    assert row[5] == "Python, SQL"
+    assert row[6] == 1

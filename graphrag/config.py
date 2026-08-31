@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     def resolved_backend_db_path(self) -> str:
         if self.backend_db_path:
             return self.backend_db_path
+        for candidate in (
+            Path(__file__).resolve().parents[1] / "backend" / "data" / "hrtool.db",
+            Path(__file__).resolve().parents[1] / "data" / "hrtool.db",
+        ):
+            if candidate.exists():
+                return str(candidate)
         return str(Path(__file__).resolve().parents[1] / "backend" / "data" / "hrtool.db")
 
     @property
@@ -101,7 +107,16 @@ class Settings(BaseSettings):
 
     @property
     def resolved_embedding_model(self) -> str:
-        return self.ai_embedding_model or self.ollama_embedding_model
+        backend_embedding_model = self._backend_setting("ai_embedding_model")
+        if self.ai_embedding_model:
+            return self.ai_embedding_model
+        if backend_embedding_model:
+            return backend_embedding_model
+
+        if self.resolved_provider == "openrouter":
+            return "openai/text-embedding-3-small"
+
+        return self.ollama_embedding_model
 
 
 settings = Settings()

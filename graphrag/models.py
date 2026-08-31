@@ -370,6 +370,80 @@ class JobIngestResponse(IngestResponse):
     profile: JobProfileExtraction
 
 
+class MatchingCandidateInput(BaseModel):
+    id: str | int
+    name: str | None = None
+    location: Any | None = None
+    experience: Any | None = None
+    skills: Any | None = None
+    education: Any | None = None
+    desired_salary: Any | None = None
+    availability: Any | None = None
+    languages: Any | None = None
+    certificates: Any | None = None
+    mobility: Any | None = None
+
+
+class MatchingJobInput(BaseModel):
+    id: str | int | None = None
+    title: str | None = None
+    description: str | None = None
+    requirements: str | None = None
+    location: str | None = None
+    type: str | None = None
+
+
+class MatchingRunRequest(BaseModel):
+    job: MatchingJobInput
+    candidates: list[MatchingCandidateInput] = Field(default_factory=list)
+    weights: dict[str, int] | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class MatchingMatrixRequest(BaseModel):
+    mode: str = "all_jobs_all_candidates"
+    jobs: list[MatchingJobInput] = Field(default_factory=list)
+    candidates: list[MatchingCandidateInput] = Field(default_factory=list)
+    weights: dict[str, int] | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class MatchingResultItem(BaseModel):
+    candidateId: str
+    candidateName: str | None = None
+    score: int = Field(..., ge=0, le=100)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class MatchingResultsPayload(BaseModel):
+    results: list[MatchingResultItem] = Field(default_factory=list)
+
+
+class MatchingMatrixRow(BaseModel):
+    jobId: str
+    jobTitle: str | None = None
+    candidateId: str
+    candidateName: str | None = None
+    score: int = Field(..., ge=0, le=100)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class MatchingMatrixPayload(BaseModel):
+    type: Literal["matrix"] = "matrix"
+    mode: str
+    model: str | None = None
+    matchedAt: str
+    jobs: list[dict[str, Any]] = Field(default_factory=list)
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    matrix: list[MatchingMatrixRow] = Field(default_factory=list)
+    jobsRanked: list[dict[str, Any]] = Field(default_factory=list)
+    candidatesRanked: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class Stage1Candidate(BaseModel):
     id: str
     mandatory_overlap: int = 0

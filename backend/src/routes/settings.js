@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, fetchAiModels, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, OPENROUTER_BASE_URL } = require('../aiConfig');
+const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, OPENROUTER_BASE_URL } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -46,11 +46,18 @@ router.get('/ai/config', (req, res) => {
     res.json({
       baseUrl: config.baseUrl,
       model: config.model,
+      embeddingModel: config.embeddingModel,
       provider: config.provider,
       apiKeyConfigured: Boolean(config.apiKey),
       loggingEnabled: Boolean(config.loggingEnabled),
       source: config.source,
-      defaults: { baseUrl: DEFAULT_BASE_URL, model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER, openRouterBaseUrl: OPENROUTER_BASE_URL },
+      defaults: {
+        baseUrl: DEFAULT_BASE_URL,
+        model: DEFAULT_MODEL,
+        embeddingModel: config.embeddingModel,
+        provider: DEFAULT_PROVIDER,
+        openRouterBaseUrl: OPENROUTER_BASE_URL,
+      },
     });
   } catch (error) {
     console.error('Error fetching AI config:', error);
@@ -81,7 +88,7 @@ router.put('/ai/config', (req, res) => {
       return res.status(403).json({ error: 'Nur Administratoren dürfen die KI-Konfiguration ändern' });
     }
 
-    const { baseUrl, model, provider, apiKey, loggingEnabled } = req.body;
+    const { baseUrl, model, embeddingModel, provider, apiKey, loggingEnabled } = req.body;
 
     if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
       return res.status(400).json({ error: 'Host / Base-URL ist erforderlich' });
@@ -105,6 +112,7 @@ router.put('/ai/config', (req, res) => {
     const upsert = db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`);
     upsert.run('ai_base_url', trimmedUrl);
     upsert.run('ai_model', model.trim());
+    if (typeof embeddingModel === 'string' && embeddingModel.trim()) upsert.run('ai_embedding_model', embeddingModel.trim());
     upsert.run('ai_provider', normalizedProvider);
     if (typeof apiKey === 'string' && apiKey.trim()) upsert.run('ai_api_key', apiKey.trim());
     if (typeof loggingEnabled === 'boolean') upsert.run('ai_log_llm_calls', loggingEnabled ? '1' : '0');
@@ -112,10 +120,24 @@ router.put('/ai/config', (req, res) => {
     // Invalidate cached provider detection for the old and new URLs
     invalidateProviderCache();
 
-    logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', { baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider, loggingEnabled: typeof loggingEnabled === 'boolean' ? loggingEnabled : undefined });
+    logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', {
+      baseUrl: trimmedUrl,
+      model: model.trim(),
+      embeddingModel: typeof embeddingModel === 'string' ? embeddingModel.trim() : undefined,
+      provider: normalizedProvider,
+      loggingEnabled: typeof loggingEnabled === 'boolean' ? loggingEnabled : undefined,
+    });
 
     const updatedConfig = getAiConfig();
-    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider, apiKeyConfigured: Boolean(updatedConfig.apiKey), loggingEnabled: Boolean(updatedConfig.loggingEnabled) });
+    res.json({
+      success: true,
+      baseUrl: trimmedUrl,
+      model: model.trim(),
+      embeddingModel: updatedConfig.embeddingModel,
+      provider: normalizedProvider,
+      apiKeyConfigured: Boolean(updatedConfig.apiKey),
+      loggingEnabled: Boolean(updatedConfig.loggingEnabled),
+    });
   } catch (error) {
     console.error('Error saving AI config:', error);
     res.status(500).json({ error: 'Fehler beim Speichern der KI-Konfiguration' });
@@ -157,7 +179,7 @@ router.get('/ai/models', async (req, res) => {
 
     let models = [];
     try {
-      models = await fetchAiModels(baseUrl, provider, 5000, requestApiKey);
+      models = filterModelsByKind(await fetchAiModels(baseUrl, provider, 5000, requestApiKey), 'chat');
     } catch (err) {
       return res.status(502).json({
         error: 'KI-Host nicht erreichbar',
@@ -208,7 +230,7 @@ router.post('/ai/test', async (req, res) => {
     let reachable = false;
     let errorMsg = null;
     try {
-      models = await fetchAiModels(baseUrl, provider === 'auto' ? 'ollama' : provider, 5000, requestApiKey);
+      models = filterModelsByKind(await fetchAiModels(baseUrl, provider === 'auto' ? 'ollama' : provider, 5000, requestApiKey), 'chat');
       reachable = true;
     } catch (err) {
       errorMsg = err.name === 'AbortError' ? 'Zeitüberschreitung (>5s)' : err.message;
@@ -218,6 +240,54 @@ router.post('/ai/test', async (req, res) => {
   } catch (error) {
     console.error('Error testing AI connection:', error);
     res.status(500).json({ error: 'Fehler beim Verbindungstest' });
+  }
+});
+
+/**
+ * @swagger
+ * /settings/ai/embedding-models:
+ *   get:
+ *     summary: Verfügbare Embedding-Modelle vom KI-Host laden
+ *     tags: [Settings]
+ *     responses:
+ *       200: { description: Liste verfügbarer Embedding-Modelle }
+ */
+router.get('/ai/embedding-models', async (req, res) => {
+  try {
+    const override = typeof req.query.baseUrl === 'string' && req.query.baseUrl.trim()
+      ? normalizeAiBaseUrl(req.query.baseUrl)
+      : null;
+    const cfg = getAiConfig();
+    const baseUrl = override || cfg.baseUrl;
+    const requestApiKey = req.get('X-OpenRouter-Key') || cfg.apiKey;
+    const requestedProvider = typeof req.query.provider === 'string' ? req.query.provider.trim() : '';
+    const configuredProvider = ['auto', 'ollama', 'openai'].includes(requestedProvider) ? requestedProvider : cfg.provider;
+
+    let provider;
+    try {
+      provider = await resolveAiProvider(baseUrl, configuredProvider);
+    } catch {
+      provider = 'ollama';
+    }
+
+    let models = [];
+    try {
+      models = filterModelsByKind(await fetchAiModels(baseUrl, provider, 5000, requestApiKey), 'embedding');
+    } catch (err) {
+      return res.status(502).json({
+        error: 'KI-Host nicht erreichbar',
+        reachable: false,
+        baseUrl,
+        provider,
+        details: err.name === 'AbortError' ? 'Zeitüberschreitung' : err.message,
+        models: [],
+      });
+    }
+
+    res.json({ reachable: true, baseUrl, provider, models });
+  } catch (error) {
+    console.error('Error listing embedding models:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Embedding-Modelle', models: [] });
   }
 });
 

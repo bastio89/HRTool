@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Loader2, Wifi, WifiOff, Server } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
+import { healthApi, settingsApi } from '../api'
 import Breadcrumb from './Breadcrumb'
 import NotificationBell from './NotificationBell'
 
@@ -24,6 +25,148 @@ const adminItems = [
   { to: '/admin/dsgvo', icon: ShieldAlert, labelKey: 'nav.dsgvo' },
   { to: '/admin/ki-transparenz', icon: Bot, labelKey: 'nav.ai_transparency' },
 ]
+
+function AiStatusPill() {
+  const { t } = useI18n()
+  const [isChecking, setIsChecking] = useState(true)
+  const [isOnline, setIsOnline] = useState(false)
+  const [aiUsage, setAiUsage] = useState({ calls: 0, total_tokens: 0 })
+
+  const formatCompactNumber = (value) => new Intl.NumberFormat('de-DE', { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkAiStatus = async () => {
+      if (!isMounted) return
+      setIsChecking(true)
+      try {
+        const [cfg, health] = await Promise.all([
+          settingsApi.getAiConfig(),
+          healthApi.check().catch(() => null),
+        ])
+        if (health?.aiUsage) {
+          setAiUsage({
+            calls: Number(health.aiUsage.calls) || 0,
+            total_tokens: Number(health.aiUsage.total_tokens) || 0,
+          })
+        }
+        const res = await settingsApi.testAiConnection(cfg.baseUrl, undefined, cfg.provider)
+        if (!isMounted) return
+        setIsOnline(Boolean(res.reachable))
+      } catch {
+        if (!isMounted) return
+        setIsOnline(false)
+      } finally {
+        if (!isMounted) return
+        setIsChecking(false)
+      }
+    }
+
+    checkAiStatus()
+    const intervalId = setInterval(checkAiStatus, 60000)
+
+    return () => {
+      isMounted = false
+      clearInterval(intervalId)
+    }
+  }, [])
+
+  const statusLabel = isChecking ? t('ai_status.checking') : isOnline ? t('ai_status.online') : t('ai_status.offline')
+  const statusHint = isChecking ? t('ai_status.tooltip_checking') : isOnline ? t('ai_status.tooltip_online') : t('ai_status.tooltip_offline')
+
+  return (
+    <div className="group relative" title={statusHint} aria-label={statusHint}>
+      <div className={`flex flex-col gap-0.5 px-3 py-2 rounded-full border text-[12px] font-semibold transition-all duration-300 ${
+        isChecking
+          ? 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 border-gray-200/80 dark:border-gray-700/80'
+          : isOnline
+            ? 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25'
+            : 'bg-[#ff3b30]/10 text-[#d92d20] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25'
+      }`}>
+        <div className="flex items-center gap-2">
+          {isChecking ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : isOnline ? (
+            <Wifi className="w-4 h-4" />
+          ) : (
+            <WifiOff className="w-4 h-4" />
+          )}
+          <span>{statusLabel}</span>
+        </div>
+        <span className="text-[10px] font-medium opacity-80 whitespace-nowrap">
+          {formatCompactNumber(aiUsage.calls)} Calls · {formatCompactNumber(aiUsage.total_tokens)} Tokens
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function GraphragStatusPill() {
+  const { t } = useI18n()
+  const [isChecking, setIsChecking] = useState(true)
+  const [isOnline, setIsOnline] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    const checkGraphragStatus = async () => {
+      if (!isMounted) return
+      setIsChecking(true)
+      try {
+        const res = await healthApi.check()
+        if (!isMounted) return
+        setIsOnline(Boolean(res?.services?.graphrag === 'ok'))
+      } catch {
+        if (!isMounted) return
+        setIsOnline(false)
+      } finally {
+        if (!isMounted) return
+        setIsChecking(false)
+      }
+    }
+
+    checkGraphragStatus()
+    const intervalId = setInterval(checkGraphragStatus, 60000)
+
+    return () => {
+      isMounted = false
+      clearInterval(intervalId)
+    }
+  }, [])
+
+  const statusLabel = isChecking
+    ? t('graphrag_status.checking')
+    : isOnline
+      ? t('graphrag_status.online')
+      : t('graphrag_status.offline')
+  const statusHint = isChecking
+    ? t('graphrag_status.tooltip_checking')
+    : isOnline
+      ? t('graphrag_status.tooltip_online')
+      : t('graphrag_status.tooltip_offline')
+
+  return (
+    <div className="group relative" title={statusHint} aria-label={statusHint}>
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[12px] font-semibold transition-all duration-300 ${
+        isChecking
+          ? 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 border-gray-200/80 dark:border-gray-700/80'
+          : isOnline
+            ? 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25'
+            : 'bg-[#ff3b30]/10 text-[#d92d20] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25'
+      }`}>
+        {isChecking ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : isOnline ? (
+          <Server className="w-4 h-4" />
+        ) : (
+          <WifiOff className="w-4 h-4" />
+        )}
+        <span className="hidden md:inline">{statusLabel}</span>
+      </div>
+    </div>
+  )
+}
 
 export default function Layout() {
   const { user, logout, isAdmin, isRevisor, isFachbereich } = useAuth()
@@ -222,7 +365,11 @@ export default function Layout() {
             <Menu className="w-6 h-6 text-black dark:text-white" />
           </button>
 
-          <div className="flex items-center gap-3 sm:gap-5">
+          <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 flex-wrap justify-end">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <AiStatusPill />
+              <GraphragStatusPill />
+            </div>
             <NotificationBell />
             <div className="text-right hidden sm:block">
               <p className="text-[14px] sm:text-[16px] font-semibold text-black dark:text-white tracking-tight">{user?.display_name || user?.username}</p>

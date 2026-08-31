@@ -54,7 +54,7 @@ describe('JobForm', () => {
     fireEvent.change(fileInput, { target: { files: [file] } })
 
     await waitFor(() => {
-      expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file)
+      expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false)
     })
 
     await waitFor(() => {

@@ -103,6 +103,71 @@ function splitJobTextSections(text) {
   return result;
 }
 
+function buildGraphRagJobText(job) {
+  const sections = [
+    `Jobtitel: ${job.title || ''}`,
+    job.about_us ? `\nÜber uns:\n${job.about_us}` : '',
+    job.description ? `\nBeschreibung:\n${job.description}` : '',
+    job.requirements ? `\nAnforderungen:\n${job.requirements}` : '',
+    job.benefits ? `\nBenefits:\n${job.benefits}` : '',
+    job.location ? `\nStandort: ${job.location}` : '',
+    job.type ? `\nAnstellungsart: ${job.type}` : '',
+    job.status ? `\nStatus: ${job.status}` : '',
+    job.url ? `\nURL: ${job.url}` : '',
+  ];
+  return sections.filter(Boolean).join('\n').trim();
+}
+
+function buildGraphRagJobProfile(job) {
+  return {
+    title: String(job.title || '').trim(),
+    location: job.location || null,
+    employment_type: job.type || null,
+  };
+}
+
+function persistLocalJob(job) {
+  const result = db.prepare(`
+    INSERT INTO jobs (title, about_us, description, requirements, benefits, location, type, status, url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    job.title,
+    job.about_us || null,
+    job.description || null,
+    job.requirements || null,
+    job.benefits || null,
+    job.location || null,
+    job.type || 'Vollzeit',
+    job.status || 'Offen',
+    job.url || null,
+  );
+
+  return db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
+}
+
+async function ingestIntoGraphRag(rawText, persist = true) {
+  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim();
+  if (!baseUrl) return null;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${persist ? '1' : '0'}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw_text: rawText }),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`GraphRAG HTTP ${response.status}: ${payload.detail || payload.error || 'Unbekannter Fehler'}`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * @swagger
  * /jobs:
@@ -212,16 +277,15 @@ router.post('/', (req, res) => {
     const { title, description, requirements, location, type, status, url, about_us, benefits } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
-    const result = db.prepare(`
-      INSERT INTO jobs (title, about_us, description, requirements, benefits, location, type, status, url)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      title, about_us || null, description || null, requirements || null, benefits || null,
-      location || null, type || 'Vollzeit', status || 'Offen', url || null
-    );
-    const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
+    const job = persistLocalJob({ title, about_us, description, requirements, benefits, location, type, status, url });
     logAudit(req, 'erstellt', 'Job', job.id, job.title);
-    res.status(201).json(job);
+
+    ingestIntoGraphRag(buildGraphRagJobText(job), true).catch((graphRagErr) => {
+      console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
+      return { error: graphRagErr.message };
+    }).then((graphRag) => {
+      res.status(201).json({ ...job, graphRag });
+    });
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Erstellen der Stelle' });
   }
@@ -249,9 +313,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
     return res.status(400).json({ error: 'Datei ist erforderlich' });
   }
 
-  const parseStartTime = Date.now();
-  const useThinking = req.query.thinking === '1';
-  console.log(`[parse-description] thinking=${useThinking}`);
+  const persist = String(req.query.persist || '').toLowerCase() === '1' || String(req.query.persist || '').toLowerCase() === 'true';
 
   try {
     const text = await extractText(req.file.path, req.file.mimetype);
@@ -261,108 +323,61 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       return res.status(400).json({ error: 'Aus der Datei konnte kein Text extrahiert werden' });
     }
 
-    // ── KI-Extraktion ──────────────────────────────────────────────────────────
-    let sections = null;
-    let aiModel = null;
-    let aiPromptTokens = null;
-    let aiEvalTokens = null;
-
-    try {
-      const { baseUrl, model, provider: cfgProvider, apiKey } = getAiConfig();
-      aiModel = model;
-
-      let aiProvider = 'ollama';
-      try { aiProvider = await resolveAiProvider(baseUrl, cfgProvider); } catch (_) {}
-
-      const textForAi = trimmedText.length > 6000 ? trimmedText.slice(0, 6000) + '\n...' : trimmedText;
-
-      const prompt = `Du bist ein HR-Experte und analysierst Stellenausschreibungen.
-Analysiere den folgenden Stellenanzeigen-Text und extrahiere die vier Hauptabschnitte.
-
-WICHTIG:
-- "title": Jobtitel der Stelle (kurz und prägnant, z.B. "Senior Software Engineer", "HR Manager")
-- "about_us": Unternehmensvorstellung / Wer wir sind (leer wenn nicht vorhanden)
-- "description": Aufgaben / Tätigkeiten – mit konkreten Details
-- "requirements": Anforderungen / Qualifikationen
-- "benefits": Was wir bieten / Benefits (leer wenn nicht vorhanden)
-
-Antworte direkt und prägnant. Überspringe langes Nachdenken (Reasoning) und halte die Denkphase so kurz wie möglich. Komm direkt zum Punkt.
-
-Antworte NUR mit diesem JSON (kein Markdown, keine Erklärung, kein <think>-Block):
-{"title":"...","about_us":"...","description":"...","requirements":"...","benefits":"..."}
-
-Stellenanzeige:
----
-${textForAi}
----
-
-/no_think`;
-
-      const { url: aiUrl, body: aiBody, headers: aiHeaders } = buildAiRequest({
-        baseUrl, model, provider: aiProvider, apiKey, prompt,
-        options: { think: useThinking, num_predict: 1024 },
-      });
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-      let aiResponse;
-      try {
-        aiResponse = await fetch(aiUrl, {
-          method: 'POST',
-          headers: aiHeaders,
-          body: JSON.stringify(aiBody),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      if (!aiResponse.ok) throw new Error(`AI HTTP ${aiResponse.status}`);
-
-      const aiData = await aiResponse.json();
-      const { text: rawText, promptTokens: pt, evalTokens: et } = extractAiText(aiData, aiProvider);
-      aiPromptTokens = pt;
-      aiEvalTokens = et;
-
-      const cleaned = stripReasoningTags(rawText);
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        sections = JSON.parse(jsonMatch[0]);
-      }
-    } catch (aiErr) {
-      console.warn('[parse-description] AI fehlgeschlagen, Fallback auf Regex:', aiErr.message);
-    }
-
-    // Fallback: Regex-basierte Zerlegung
-    if (!sections || !sections.description) {
-      sections = splitJobTextSections(trimmedText);
-    }
-
-    const durationMs = Date.now() - parseStartTime;
-    logAiCall({
-      userId: req.user?.id,
-      feature: 'job-parser',
-      model: aiModel,
-      durationMs,
-      inputTokens: aiPromptTokens,
-      outputTokens: aiEvalTokens,
-      success: !!sections,
-    });
+    const graphRag = await ingestIntoGraphRag(trimmedText, persist);
+    const profile = graphRag?.profile || {};
+    const parsedJob = persist
+      ? persistLocalJob({
+        title: profile.title || path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname,
+        about_us: profile.about_us || '',
+        description: profile.description || '',
+        requirements: profile.requirements || '',
+        benefits: profile.benefits || '',
+        location: profile.location || null,
+        type: profile.employment_type || 'Vollzeit',
+        status: 'Offen',
+        url: null,
+      })
+      : null;
 
     res.json({
       success: true,
       filename: req.file.originalname,
+      id: parsedJob?.id || graphRag?.id || null,
+      job: parsedJob,
       text: trimmedText,
-      title:        sections.title        || '',
-      about_us:     sections.about_us     || '',
-      description:  sections.description  || '',
-      requirements: sections.requirements || '',
-      benefits:     sections.benefits     || '',
+      title: parsedJob?.title || profile.title || '',
+      about_us: parsedJob?.about_us || profile.about_us || '',
+      description: parsedJob?.description || profile.description || '',
+      requirements: parsedJob?.requirements || profile.requirements || '',
+      benefits: parsedJob?.benefits || profile.benefits || '',
+      graphRag,
     });
   } catch (err) {
     console.error('Job description upload error:', err);
-    res.status(500).json({ error: 'Fehler beim Verarbeiten der Stellenbeschreibung' });
+    const message = String(err?.message || '');
+    if (message.includes('GraphRAG HTTP 502: Job parsing failed:')) {
+      return res.status(502).json({
+        error: 'GraphRAG-Parsing fehlgeschlagen',
+        detail: message.replace(/^GraphRAG HTTP 502: Job parsing failed:\s*/, ''),
+      });
+    }
+    if (message.includes('GraphRAG HTTP 502: Job embedding creation failed:')) {
+      return res.status(502).json({
+        error: 'GraphRAG-Embedding fehlgeschlagen',
+        detail: message.replace(/^GraphRAG HTTP 502: Job embedding creation failed:\s*/, ''),
+      });
+    }
+    if (message.includes('GraphRAG HTTP 503: Job persistence failed:')) {
+      return res.status(503).json({
+        error: 'GraphRAG-Speicherung fehlgeschlagen',
+        detail: message.replace(/^GraphRAG HTTP 503: Job persistence failed:\s*/, ''),
+      });
+    }
+
+    res.status(500).json({
+      error: 'Fehler beim Verarbeiten der Stellenbeschreibung',
+      detail: message || 'Unbekannter Fehler',
+    });
   } finally {
     try { fs.unlinkSync(req.file.path); } catch {}
   }
@@ -536,7 +551,7 @@ Die Keys MÜSSEN "description" und "requirements" heißen (englisch). Beide Wert
         parsedResult: null,
         durationMs: Date.now() - startTime,
         success: false,
-        errorMessage: `Ollama Status ${response.status}: ${errText}`,
+        errorMessage: `KI-Dienst Status ${response.status}: ${errText}`,
       });
       return res.status(502).json({ error: 'Ollama-Fehler: ' + (errText || 'Unbekannter Fehler') });
     }

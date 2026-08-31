@@ -36,13 +36,53 @@ class Neo4jService:
         source_hash: str | None = None,
         profile_hash: str | None = None,
     ) -> None:
+        latest_work = next((item for item in profile.work_history if item.employer or item.position), None)
+        latest_education = next((item for item in profile.education_history if item.institution or item.degree), None)
+        education_summary = profile.education
+        if not education_summary:
+            education_summary = latest_education.degree if latest_education and latest_education.degree else None
+        if not education_summary and profile.educations:
+            education_summary = ", ".join(
+                part for part in [profile.educations[0].level, profile.educations[0].field_of_study] if part
+            ) or None
+
+        experience_summary = profile.experience
+        if not experience_summary and profile.work_history:
+            experience_lines = []
+            for item in profile.work_history[:3]:
+                parts = [part for part in [item.position, item.employer, item.from_date, item.to_date] if part]
+                if parts:
+                    experience_lines.append(" - ".join([parts[0], ", ".join(parts[1:])]) if len(parts) > 1 else parts[0])
+            experience_summary = "\n".join(experience_lines) or None
+
         query = """
         MERGE (c:Candidate {id: $candidate_id})
         SET c.name = $name,
+            c.email = $email,
+            c.phone = $phone,
             c.location = $location,
             c.experience_years = $experience_years,
             c.yearsOfExperience = $experience_years,
+            c.experience = $experience,
+            c.education = $education,
             c.salaryExpectation = $salary_expectation,
+            c.desiredSalary = $desired_salary,
+            c.availability = $availability,
+            c.noticePeriod = $notice_period,
+            c.availableFrom = $available_from,
+            c.currentEmployer = $current_employer,
+            c.currentPosition = $current_position,
+            c.nationality = $nationality,
+            c.gender = $gender,
+            c.linkedinUrl = $linkedin_url,
+            c.xingUrl = $xing_url,
+            c.githubUrl = $github_url,
+            c.portfolioUrl = $portfolio_url,
+            c.certificates = $certificates,
+            c.driversLicense = $drivers_license,
+            c.mobility = $mobility,
+            c.tags = $tags,
+            c.notes = $notes,
             c.embedding = $embedding
         WITH c
         FOREACH (_ IN CASE WHEN $source_hash IS NULL THEN [] ELSE [1] END |
@@ -77,6 +117,31 @@ class Neo4jService:
             MERGE (i:Industry {name: toLower(industry.name)})
             MERGE (c)-[:HAS_INDUSTRY]->(i)
         WITH c
+        UNWIND $work_history AS work
+            MERGE (we:WorkExperience {
+                candidateId: $candidate_id,
+                employer: coalesce(work.employer, ''),
+                position: coalesce(work.position, ''),
+                fromDate: coalesce(work.from_date, ''),
+                toDate: coalesce(work.to_date, ''),
+                location: coalesce(work.location, '')
+            })
+            SET we.isCurrent = coalesce(work.is_current, false),
+                we.description = work.description
+            MERGE (c)-[:HAS_WORK_HISTORY]->(we)
+        WITH c
+        UNWIND $education_history AS edu_history
+            MERGE (eh:EducationHistory {
+                candidateId: $candidate_id,
+                institution: coalesce(edu_history.institution, ''),
+                degree: coalesce(edu_history.degree, ''),
+                fieldOfStudy: coalesce(edu_history.field_of_study, ''),
+                fromDate: coalesce(edu_history.from_date, ''),
+                toDate: coalesce(edu_history.to_date, '')
+            })
+            SET eh.description = edu_history.description
+            MERGE (c)-[:HAS_EDUCATION_HISTORY]->(eh)
+        WITH c
         UNWIND $preferred_roles AS role_name
             MERGE (r:Role {name: toLower(role_name)})
             MERGE (c)-[:PREFERS_ROLE]->(r)
@@ -92,9 +157,30 @@ class Neo4jService:
                 query,
                 candidate_id=candidate_id,
                 name=profile.name,
+                email=profile.email,
+                phone=profile.phone,
                 location=profile.location,
                 experience_years=profile.experience_years,
                 salary_expectation=profile.salary_expectation,
+                experience=experience_summary,
+                education=education_summary,
+                desired_salary=profile.desired_salary,
+                availability=profile.availability,
+                notice_period=profile.notice_period,
+                available_from=profile.availability,
+                current_employer=profile.current_employer or (latest_work.employer if latest_work else None),
+                current_position=profile.current_position or (latest_work.position if latest_work else None),
+                nationality=profile.nationality,
+                gender=profile.gender,
+                linkedin_url=profile.linkedin_url,
+                xing_url=profile.xing_url,
+                github_url=profile.github_url,
+                portfolio_url=profile.portfolio_url,
+                certificates=profile.certificates,
+                drivers_license=profile.drivers_license,
+                mobility=profile.mobility,
+                tags=profile.tags,
+                notes=profile.notes,
                 embedding=embedding,
                 skill_embeddings=skill_embeddings or {},
                 source_hash=source_hash,
@@ -103,6 +189,8 @@ class Neo4jService:
                 languages=[item.model_dump() for item in profile.languages],
                 educations=[item.model_dump() for item in profile.educations],
                 industries=[item.model_dump() for item in profile.industries],
+                work_history=[item.model_dump() for item in profile.work_history],
+                education_history=[item.model_dump() for item in profile.education_history],
                 preferred_roles=profile.preferred_roles,
             )
             await result.consume()
@@ -346,6 +434,8 @@ class Neo4jService:
         profile: JobProfileExtraction,
         embedding: list[float],
         skill_embeddings: dict[str, list[float]] | None = None,
+        source_hash: str | None = None,
+        profile_hash: str | None = None,
     ) -> None:
         recruiter_company = profile.recruiter_company or None
         employer_company = profile.employer_company or profile.company or None
@@ -359,6 +449,14 @@ class Neo4jService:
             j.location = $location,
             j.employmentType = $employment_type,
             j.embedding = $embedding
+        WITH j
+        FOREACH (_ IN CASE WHEN $source_hash IS NULL THEN [] ELSE [1] END |
+            SET j.sourceHash = $source_hash
+        )
+        WITH j
+        FOREACH (_ IN CASE WHEN $profile_hash IS NULL THEN [] ELSE [1] END |
+            SET j.profileHash = $profile_hash
+        )
         WITH j
         FOREACH (_ IN CASE WHEN $recruiter_company IS NULL THEN [] ELSE [1] END |
             MERGE (recruiter:Recruiter {name: toLower($recruiter_company)})
@@ -377,8 +475,11 @@ class Neo4jService:
             ON CREATE SET s.embedding = $skill_embeddings[toLower(req.name)]
             SET s.category = req.category
             MERGE (j)-[rs:REQUIRES_SKILL]->(s)
+            MERGE (j)-[ns:NEED_SKILL]->(s)
             SET rs.priority = req.priority,
-                rs.jobDescriptionEmbedding = $embedding
+                ns.priority = req.priority,
+                rs.jobDescriptionEmbedding = $embedding,
+                ns.jobDescriptionEmbedding = $embedding
         WITH j
         UNWIND $required_languages AS lang
             MERGE (l:Language {name: toLower(lang.name)})
@@ -409,12 +510,42 @@ class Neo4jService:
                 employment_type=profile.employment_type,
                 embedding=embedding,
                 skill_embeddings=skill_embeddings or {},
+                source_hash=source_hash,
+                profile_hash=profile_hash,
                 required_skills=[item.model_dump() for item in profile.required_skills],
                 required_languages=[item.model_dump() for item in profile.required_languages],
                 required_degrees=[item.model_dump() for item in profile.required_degrees],
                 industries=[item.model_dump() for item in profile.industries],
             )
             await result.consume()
+
+    async def find_job_by_source_hash(self, source_hash: str) -> dict[str, Any] | None:
+        query = """
+        MATCH (j:Job {sourceHash: $source_hash})
+        RETURN j.id AS id,
+               j.title AS title
+        LIMIT 1
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, source_hash=source_hash)
+            record = await result.single()
+            if not record:
+                return None
+            return {"id": record["id"], "title": record["title"]}
+
+    async def find_job_by_profile_hash(self, profile_hash: str) -> dict[str, Any] | None:
+        query = """
+        MATCH (j:Job {profileHash: $profile_hash})
+        RETURN j.id AS id,
+               j.title AS title
+        LIMIT 1
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, profile_hash=profile_hash)
+            record = await result.single()
+            if not record:
+                return None
+            return {"id": record["id"], "title": record["title"]}
 
     async def get_job_profile(self, job_id: str) -> dict[str, Any] | None:
         query = """

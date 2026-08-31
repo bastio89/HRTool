@@ -72,8 +72,10 @@ export default function CandidateForm() {
         const formData = {}
         for (const f of fields) formData[f] = data[f] ?? emptyCandidate[f]
         setForm(formData)
-        setWorkHistory(whRes.data || [])
-        setEducationList(eduRes.data || [])
+        const candidateWorkHistory = Array.isArray(data.work_history) ? data.work_history : []
+        const candidateEducationHistory = Array.isArray(data.education_history) ? data.education_history : []
+        setWorkHistory((whRes.data && whRes.data.length > 0 ? whRes.data : candidateWorkHistory).map(w => ({ ...emptyWorkEntry, ...w })))
+        setEducationList((eduRes.data && eduRes.data.length > 0 ? eduRes.data : candidateEducationHistory).map(e => ({ ...emptyEduEntry, ...e })))
         const cvMap = {}
         for (const cv of (cvRes.data || [])) cvMap[cv.field_id] = cv.value || ''
         setCustomValues(cvMap)
@@ -111,9 +113,13 @@ export default function CandidateForm() {
       // Structured work history from AI
       if (Array.isArray(c.work_history) && c.work_history.length > 0) {
         setWorkHistory(c.work_history.map(w => ({ ...emptyWorkEntry, ...w })))
+      } else if (Array.isArray(c.work_history) && c.work_history.length === 0 && Array.isArray(result.candidate?.work_history) && result.candidate.work_history.length > 0) {
+        setWorkHistory(result.candidate.work_history.map(w => ({ ...emptyWorkEntry, ...w })))
       }
       if (Array.isArray(c.education_history) && c.education_history.length > 0) {
         setEducationList(c.education_history.map(e => ({ ...emptyEduEntry, ...e })))
+      } else if (Array.isArray(c.education_history) && c.education_history.length === 0 && Array.isArray(result.candidate?.education_history) && result.candidate.education_history.length > 0) {
+        setEducationList(result.candidate.education_history.map(e => ({ ...emptyEduEntry, ...e })))
       }
       setParseSuccess(t('form.cv_success').replace('{file}', file.name))
       setAttachedFiles(prev => [...prev, file])

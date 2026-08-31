@@ -552,7 +552,13 @@ router.get('/:id', (req, res) => {
     if (!candidate) {
       return res.status(404).json({ error: 'Bewerber nicht gefunden' });
     }
-    res.json(candidate);
+    const workHistory = db.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(req.params.id);
+    const educationHistory = db.prepare('SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY from_date DESC').all(req.params.id);
+    res.json({
+      ...candidate,
+      work_history: workHistory,
+      education_history: educationHistory,
+    });
   } catch (error) {
     console.error('Error fetching candidate:', error);
     res.status(500).json({ error: 'Fehler beim Laden des Bewerbers' });

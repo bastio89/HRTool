@@ -11,6 +11,7 @@ RUN npm ci --omit=dev || npm install --omit=dev
 
 COPY server.js ./
 COPY src ./src
+COPY scripts ./scripts
 
 RUN mkdir -p data/uploads data/tmp
 

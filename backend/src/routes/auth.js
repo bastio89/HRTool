@@ -325,6 +325,58 @@ router.put('/users/:id/reset-password', (req, res) => {
 
 /**
  * @swagger
+ * /auth/admin/reset-default:
+ *   post:
+ *     summary: Standard-Admin zurücksetzen oder neu anlegen (nur Admin)
+ *     tags: [Auth]
+ *     security: [{ BearerAuth: [] }]
+ *     responses:
+ *       200: { description: Standard-Admin bereitgestellt }
+ */
+router.post('/admin/reset-default', (req, res) => {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Nur Admins dürfen den Standard-Admin zurücksetzen' });
+  }
+
+  try {
+    const username = 'admin';
+    const password = 'admin123';
+    const displayName = 'Sebastian Oczachowski';
+    const role = 'admin';
+
+    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    const hash = bcrypt.hashSync(password, 10);
+
+    if (existing) {
+      db.prepare('UPDATE users SET password_hash = ?, display_name = ?, role = ? WHERE username = ?').run(
+        hash,
+        displayName,
+        role,
+        username,
+      );
+    } else {
+      db.prepare('INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)').run(
+        username,
+        hash,
+        displayName,
+        role,
+      );
+    }
+
+    logAudit(req, 'admin-reset-default', 'User', existing?.id || null, username);
+    res.json({
+      message: 'Standard-Admin zurückgesetzt',
+      username,
+      password,
+    });
+  } catch (error) {
+    console.error('Reset default admin error:', error);
+    res.status(500).json({ error: 'Fehler beim Zurücksetzen des Standard-Admins' });
+  }
+});
+
+/**
+ * @swagger
  * /auth/admin/backup:
  *   get:
  *     summary: Datenbank-Backup herunterladen (Admin)

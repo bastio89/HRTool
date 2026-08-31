@@ -28,6 +28,22 @@ function filenameToTitle(filename) {
     .trim()
 }
 
+function formatGraphRagStatus(graphRag, t) {
+  if (!graphRag) {
+    return { label: t('batch_job_import.graph_rag_inactive'), tone: 'neutral' }
+  }
+
+  if (graphRag.error) {
+    return { label: t('batch_job_import.graph_rag_error').replace('{error}', graphRag.error), tone: 'error' }
+  }
+
+  if (graphRag.message) {
+    return { label: t('batch_job_import.graph_rag_ok').replace('{message}', graphRag.message), tone: 'success' }
+  }
+
+  return { label: t('batch_job_import.graph_rag_ok').replace('{message}', ''), tone: 'success' }
+}
+
 export default function BatchJobImportDialog({ onClose, onImported }) {
   const { t } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
@@ -98,24 +114,20 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
     for (const item of pending) {
       updateFile(item.id, { status: STATUS.PROCESSING, error: null, startedAt: Date.now(), elapsed: 0 })
       try {
-        // Step 1: parse file for sections
-        const parsed = await jobsApi.parseDescriptionFile(item.file, thinking)
+        const parsed = await jobsApi.parseDescriptionFile(item.file, thinking, true)
 
-        const title = parsed.title || filenameToTitle(parsed.filename || item.file.name)
-
-        // Step 2: create job
-        const created = await jobsApi.create({
-          title,
-          about_us:     parsed.about_us     || '',
-          description:  parsed.description  || parsed.text || '',
-          requirements: parsed.requirements || '',
-          benefits:     parsed.benefits     || '',
-          status: 'Offen',
-          type: 'Vollzeit',
-        })
+        const title = filenameToTitle(parsed.filename || item.file.name) || parsed.title || item.file.name
 
         const elapsed = item.startedAt ? Math.floor((Date.now() - item.startedAt) / 1000) : null
-        updateFile(item.id, { status: STATUS.DONE, job: { id: created.id, title: created.title || title }, elapsed })
+        updateFile(item.id, {
+          status: STATUS.DONE,
+          job: {
+            id: parsed.graphRag?.id || parsed.id || null,
+            title: parsed.title || title,
+            graphRag: parsed.graphRag || null,
+          },
+          elapsed,
+        })
       } catch (err) {
         const elapsed = item.startedAt ? Math.floor((Date.now() - item.startedAt) / 1000) : null
         updateFile(item.id, { status: STATUS.ERROR, error: err.message || t('batch_job_import.error_generic'), elapsed })
@@ -223,7 +235,23 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
                     </div>
                   )}
                   {item.status === STATUS.DONE && (
-                    <p className="text-[12px] text-[#34c759] mt-0.5">{t('batch_job_import.created')}{item.elapsed != null ? ` · ${item.elapsed}s` : ''}</p>
+                    <>
+                      {(() => {
+                        const graphRagStatus = formatGraphRagStatus(item.job?.graphRag, t)
+                        return (
+                          <p
+                            className={`text-[12px] mt-1 truncate ${graphRagStatus.tone === 'error'
+                              ? 'text-[#ff3b30]'
+                              : 'text-gray-500 dark:text-gray-400'
+                            }`}
+                            title={graphRagStatus.label}
+                          >
+                            {graphRagStatus.label}
+                          </p>
+                        )
+                      })()}
+                      <p className="text-[12px] text-[#34c759] mt-0.5">{t('batch_job_import.created')}{item.elapsed != null ? ` · ${item.elapsed}s` : ''}</p>
+                    </>
                   )}
                   {item.status === STATUS.ERROR && (
                     <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}{item.elapsed != null ? ` (${item.elapsed}s)` : ''}</p>

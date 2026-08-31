@@ -93,14 +93,18 @@ export default function CandidateDetail() {
         scorecardsApi.getResponses({ candidate_id: candidateId }).catch(() => ({ data: [] })),
       ])
       setCandidate(cRes?.id ? cRes : (cRes.candidate || cRes.data))
+        const candidateData = cRes?.id ? cRes : (cRes.candidate || cRes.data)
+        setCandidate(candidateData)
       setActivities(aRes.data || [])
       setFiles(fRes.data || [])
       setRatings(rRes.data || [])
       setRatingAverages(rRes.averages || {})
       setRatingOverall(rRes.overall)
       setPipelineHistory(hRes)
-      setWorkHistory(whRes.data || [])
-      setEducationList(eduRes.data || [])
+        const candidateWorkHistory = Array.isArray(candidateData?.work_history) ? candidateData.work_history : []
+        const candidateEducationHistory = Array.isArray(candidateData?.education_history) ? candidateData.education_history : []
+        setWorkHistory((whRes.data && whRes.data.length > 0 ? whRes.data : candidateWorkHistory))
+        setEducationList((eduRes.data && eduRes.data.length > 0 ? eduRes.data : candidateEducationHistory))
       setCustomValues((cvRes.data || []).filter(v => v.value))
       setScorecardResponses(scRes.data || [])
     } catch (err) { console.error(err) }

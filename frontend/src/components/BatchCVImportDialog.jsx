@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react'
-import { X, Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Users } from 'lucide-react'
-import { cvParserApi, candidatesApi, uploadsApi } from '../api'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { X, Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Users, Wifi, WifiOff } from 'lucide-react'
+import { cvParserApi, uploadsApi, healthApi } from '../api'
 import { Button } from './UI'
 import { useI18n } from '../I18nContext'
 
@@ -28,8 +28,43 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
   const [files, setFiles] = useState([]) // { file, id, status, progress, candidate, error }
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
+  const [aiHealth, setAiHealth] = useState({ isOnline: false, calls: 0, totalTokens: 0, isChecking: true })
   const fileInputRef = useRef(null)
   const abortRef = useRef(false)
+
+  const formatCompactNumber = useCallback((value) => {
+    return new Intl.NumberFormat('de-DE', { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadAiHealth = async () => {
+      if (!isMounted) return
+      setAiHealth((prev) => ({ ...prev, isChecking: true }))
+      try {
+        const health = await healthApi.check()
+        if (!isMounted) return
+        setAiHealth({
+          isOnline: Boolean(health?.aiUsage || health?.services?.graphrag === 'ok'),
+          calls: Number(health?.aiUsage?.calls) || 0,
+          totalTokens: Number(health?.aiUsage?.total_tokens) || 0,
+          isChecking: false,
+        })
+      } catch {
+        if (!isMounted) return
+        setAiHealth((prev) => ({ ...prev, isOnline: false, isChecking: false }))
+      }
+    }
+
+    loadAiHealth()
+    const intervalId = setInterval(loadAiHealth, 60000)
+
+    return () => {
+      isMounted = false
+      clearInterval(intervalId)
+    }
+  }, [])
 
   const addFiles = useCallback((newFiles) => {
     const valid = Array.from(newFiles).filter(f => ALLOWED_TYPES.includes(f.type))
@@ -86,60 +121,30 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
         // Step 1: Parse CV
         const result = await cvParserApi.parse(item.file, (evt) => {
           updateFile(item.id, { progress: Math.round(evt.progress * 0.8) }) // 0-80% for parsing
-        })
+        }, true)
 
         if (result.error) throw new Error(result.error)
 
-        const c = result.candidate || result
-
-        // Build candidate object from parsed data
-        const candidateData = {
-          name: c.name || item.file.name.replace(/\.[^/.]+$/, ''),
-          email: c.email || '',
-          phone: c.phone || '',
-          location: c.location || '',
-          experience: c.experience || '',
-          skills: c.skills || '',
-          education: c.education || '',
-          languages: c.languages || '',
-          certificates: c.certificates || '',
-          drivers_license: c.drivers_license || '',
-          desired_salary: c.desired_salary || '',
-          availability: c.availability || '',
-          mobility: c.mobility || '',
-          tags: c.tags || '',
-          notes: c.notes || '',
-          linkedin_url: c.linkedin_url || '',
-          xing_url: c.xing_url || '',
-          github_url: c.github_url || '',
-          portfolio_url: c.portfolio_url || '',
-          nationality: c.nationality || '',
-          current_employer: c.current_employer || '',
-          current_position: c.current_position || '',
-          notice_period: c.notice_period || '',
-          gender: c.gender || '',
-          salary_min: c.salary_min || '',
-          salary_max: c.salary_max || '',
-          salary_currency: c.salary_currency || 'EUR',
-          salary_interval: c.salary_interval || 'yearly',
-          status: 'Aktiv',
-          source: 'CV-Import',
+        const c = result.candidate || result.profile || result
+        if (!c || !c.id) {
+          throw new Error('Kandidat konnte nicht gespeichert werden')
         }
 
-        updateFile(item.id, { progress: 85 })
-
-        // Step 2: Create candidate
-        const created = await candidatesApi.create(candidateData)
         updateFile(item.id, { progress: 92 })
 
         // Step 3: Upload the original file
         try {
-          await uploadsApi.upload(created.id, item.file)
+          await uploadsApi.upload(c.id, item.file)
         } catch (_) {
           // non-critical, continue
         }
 
-        updateFile(item.id, { status: STATUS.DONE, progress: 100, candidate: { id: created.id, name: candidateData.name } })
+        updateFile(item.id, {
+          status: STATUS.DONE,
+          progress: 100,
+          candidate: { id: c.id, name: c.name || item.file.name.replace(/\.[^/.]+$/, '') },
+          storage: result.storage || { sqlite: Boolean(result.persisted), neo4j: Boolean(result.graphRag?.persisted) },
+        })
       } catch (err) {
         updateFile(item.id, { status: STATUS.ERROR, progress: 0, error: err.message || t('batch_import.error_generic') })
       }
@@ -256,7 +261,17 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
                     </div>
                   )}
                   {item.status === STATUS.DONE && (
-                    <p className="text-[12px] text-[#34c759] mt-0.5">{t('batch_import.created')}</p>
+                    <div className="mt-0.5 space-y-0.5">
+                      <p className="text-[12px] text-[#34c759]">{t('batch_import.created')}</p>
+                      <div className="flex flex-wrap gap-2 text-[11px]">
+                        <span className={`px-2 py-0.5 rounded-full ${item.storage?.sqlite ? 'bg-[#34c759]/10 text-[#1e7f38]' : 'bg-gray-200 text-gray-500'}`}>
+                          SQLite: {item.storage?.sqlite ? 'gespeichert' : 'nicht gespeichert'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full ${item.storage?.neo4j ? 'bg-[#0071e3]/10 text-[#0058b0]' : 'bg-gray-200 text-gray-500'}`}>
+                          Neo4j: {item.storage?.neo4j ? 'gespeichert' : 'nicht gespeichert'}
+                        </span>
+                      </div>
+                    </div>
                   )}
                   {item.status === STATUS.ERROR && (
                     <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}</p>
@@ -312,6 +327,27 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
               {counts.pending > 0 && <span className="text-gray-400">{t('batch_import.count_pending').replace('{n}', counts.pending)}</span>}
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-2 text-[13px] font-medium text-black dark:text-white">
+              {aiHealth.isChecking ? (
+                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              ) : aiHealth.isOnline ? (
+                <Wifi className="w-4 h-4 text-[#34c759]" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-[#ff3b30]" />
+              )}
+              <span>{aiHealth.isOnline ? 'KI online' : 'KI offline'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+              <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
+                {formatCompactNumber(aiHealth.calls)} Calls
+              </span>
+              <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
+                {formatCompactNumber(aiHealth.totalTokens)} Tokens
+              </span>
+            </div>
+          </div>
 
           <div className="flex items-center justify-between gap-4">
             <Button variant="secondary" size="md" onClick={onClose} disabled={running}>

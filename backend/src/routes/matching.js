@@ -442,7 +442,7 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       matchingResults = JSON.parse(stripReasoningTags(text));
     } catch (parseErr) {
       logAiCall({ userId: req.user?.id, feature: 'matching', model: OLLAMA_MODEL, prompt, response: raw, parsedResult: null, durationMs: matchingDuration, success: false, errorMessage: 'JSON-Parse: ' + parseErr.message });
-      return res.status(502).json({ error: 'Ollama-Antwort konnte nicht verarbeitet werden', details: parseErr.message });
+      return res.status(502).json({ error: 'KI-Antwort konnte nicht verarbeitet werden', details: parseErr.message });
     }
 
     // De-Anonymisierung: echte Namen wieder einsetzen anhand der candidateId

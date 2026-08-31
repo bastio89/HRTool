@@ -27,6 +27,7 @@ export default function AISettings() {
   const [apiKey, setApiKey] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
   const [provider, setProvider] = useState('auto')
+  const [loggingEnabled, setLoggingEnabled] = useState(false)
   const [source, setSource] = useState({ baseUrl: 'default', model: 'default' })
 
   const [models, setModels] = useState([])
@@ -49,6 +50,7 @@ export default function AISettings() {
       setModel(cfg.model || '')
       setProvider(cfg.provider || 'auto')
       setApiKeyConfigured(Boolean(cfg.apiKeyConfigured))
+      setLoggingEnabled(Boolean(cfg.loggingEnabled))
       setSource(cfg.source || { baseUrl: 'default', model: 'default' })
       // Load available models for the current host
       await loadModels(cfg.baseUrl, cfg.model, cfg.provider)
@@ -66,11 +68,13 @@ export default function AISettings() {
       const res = await settingsApi.getAiModels(url, apiKey, requestedProvider)
       const names = (res.models || []).map((m) => m.name)
       setModels(names)
-      // If the currently configured model isn't in the list, switch to manual entry
+      // Always show the provider's list when it contains models. If the saved
+      // model is no longer available, select the first current model.
       const active = currentModel ?? model
-      if (active && names.length > 0 && !names.includes(active)) {
-        setManualModel(true)
-      } else if (names.length === 0) {
+      if (names.length > 0) {
+        setManualModel(false)
+        if (!active || !names.includes(active)) setModel(names[0])
+      } else {
         setManualModel(true)
       }
     } catch (err) {
@@ -105,12 +109,19 @@ export default function AISettings() {
     setError('')
     setSuccessMsg('')
     try {
-      const res = await settingsApi.saveAiConfig({ baseUrl: baseUrl.trim(), model: model.trim(), provider, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) })
+      const res = await settingsApi.saveAiConfig({
+        baseUrl: baseUrl.trim(),
+        model: model.trim(),
+        provider,
+        loggingEnabled,
+        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+      })
       setBaseUrl(res.baseUrl)
       setModel(res.model)
       setProvider(res.provider || 'auto')
       setApiKey('')
       setApiKeyConfigured(Boolean(res.apiKeyConfigured))
+      setLoggingEnabled(Boolean(res.loggingEnabled))
       setSource({ baseUrl: 'settings', model: 'settings' })
       setSuccessMsg(t('ai_settings.saved'))
       setTimeout(() => setSuccessMsg(''), 3000)
@@ -125,6 +136,13 @@ export default function AISettings() {
     setBaseUrl(url)
     if (presetProvider) setProvider(presetProvider)
     setTestResult(null)
+    loadModels(url, model, presetProvider || provider)
+  }
+
+  const selectProvider = (value) => {
+    setProvider(value)
+    setTestResult(null)
+    loadModels(baseUrl, model, value)
   }
 
   const sourceLabel = (src) => {
@@ -173,7 +191,7 @@ export default function AISettings() {
           {PROVIDER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => setProvider(opt.value)}
+              onClick={() => selectProvider(opt.value)}
               className={`text-left px-4 py-3 rounded-2xl border transition-all duration-200 cursor-pointer ${
                 provider === opt.value
                   ? 'bg-[#0071e3]/10 border-[#0071e3]/40 text-[#0071e3]'
@@ -338,6 +356,28 @@ export default function AISettings() {
         <p className="text-[13px] text-gray-400 ml-2">
           {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.model)}</span>
         </p>
+      </Card>
+
+      {/* LLM logging */}
+      <Card className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Check className="w-5 h-5 text-gray-400" />
+          <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.logging_title')}</h2>
+        </div>
+        <label className="flex items-start gap-3 rounded-2xl border border-gray-200/80 dark:border-white/10 bg-[#f5f5f7] dark:bg-[#2c2c2e] px-4 py-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={loggingEnabled}
+            onChange={(e) => setLoggingEnabled(e.target.checked)}
+            className="mt-1 h-5 w-5 rounded border-gray-300 text-[#0071e3] focus:ring-[#0071e3]"
+          />
+          <div className="space-y-1">
+            <div className="text-[15px] font-medium text-black dark:text-white">{t('ai_settings.logging_label')}</div>
+            <p className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
+              {t('ai_settings.logging_desc')}
+            </p>
+          </div>
+        </label>
       </Card>
 
       {/* Save bar */}

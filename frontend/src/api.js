@@ -16,8 +16,8 @@ async function request(url, options = {}) {
   let response;
   try {
     response = await fetch(`${API_BASE}${url}`, {
-      headers: { 'Content-Type': 'application/json', ...authHeaders(), ...fetchOptions.headers },
       ...fetchOptions,
+      headers: { 'Content-Type': 'application/json', ...authHeaders(), ...fetchOptions.headers },
       ...(controller ? { signal: controller.signal } : {}),
     });
   } catch (err) {
@@ -134,10 +134,13 @@ export const jobsApi = {
   create: (data) => request('/jobs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/jobs/${id}`, { method: 'DELETE' }),
-  parseDescriptionFile: async (file, thinking = false) => {
+  parseDescriptionFile: async (file, thinking = false, persist = false) => {
     const formData = new FormData();
     formData.append('file', file);
-    const url = thinking ? `${API_BASE}/jobs/parse-description?thinking=1` : `${API_BASE}/jobs/parse-description`;
+    const params = new URLSearchParams();
+    if (thinking) params.set('thinking', '1');
+    if (persist) params.set('persist', '1');
+    const url = `${API_BASE}/jobs/parse-description${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: authHeaders(),
@@ -145,7 +148,7 @@ export const jobsApi = {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Upload fehlgeschlagen' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw new Error(error.detail || error.error || `HTTP ${response.status}`)
     }
     return response.json();
   },
@@ -247,15 +250,17 @@ export const uploadsApi = {
 
 // CV Parser API
 export const cvParserApi = {
-  parse: async (file, onProgress) => {
+  parse: async (file, onProgress, persist = false) => {
     const formData = new FormData();
     formData.append('file', file);
     const headers = authHeaders();
+    const params = new URLSearchParams();
+    if (persist) params.set('persist', '1');
     // Use SSE streaming if progress callback provided
     if (onProgress) {
       headers['Accept'] = 'text/event-stream';
     }
-    const response = await fetch(`${API_BASE}/cv-parser/parse`, {
+    const response = await fetch(`${API_BASE}/cv-parser/parse${params.toString() ? `?${params.toString()}` : ''}`, {
       method: 'POST',
       headers,
       body: formData,
@@ -280,7 +285,7 @@ export const cvParserApi = {
         }
       }
       const error = await response.json().catch(() => ({ error: 'CV-Analyse fehlgeschlagen' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw new Error(error.detail || error.details || error.error || `HTTP ${response.status}`);
     }
     // Stream mode: parse SSE events (only if server actually returns SSE)
     const contentType = response.headers.get('content-type') || '';

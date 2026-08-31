@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "reset:admin": "node scripts/reset-admin.js"
   },
   "keywords": [],
   "author": "",

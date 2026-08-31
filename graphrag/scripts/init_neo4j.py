@@ -20,6 +20,14 @@ CONSTRAINTS = [
     "CREATE CONSTRAINT language_name_unique IF NOT EXISTS FOR (l:Language) REQUIRE l.name IS UNIQUE",
     "CREATE CONSTRAINT industry_name_unique IF NOT EXISTS FOR (i:Industry) REQUIRE i.name IS UNIQUE",
     (
+        "CREATE CONSTRAINT work_experience_unique IF NOT EXISTS "
+        "FOR (w:WorkExperience) REQUIRE (w.candidateId, w.employer, w.position, w.fromDate, w.toDate, w.location) IS UNIQUE"
+    ),
+    (
+        "CREATE CONSTRAINT education_history_unique IF NOT EXISTS "
+        "FOR (e:EducationHistory) REQUIRE (e.candidateId, e.institution, e.degree, e.fieldOfStudy, e.fromDate, e.toDate) IS UNIQUE"
+    ),
+    (
         "CREATE CONSTRAINT education_unique IF NOT EXISTS "
         "FOR (e:Education) REQUIRE (e.level, e.fieldOfStudy) IS UNIQUE"
     ),

@@ -48,6 +48,7 @@ router.get('/ai/config', (req, res) => {
       model: config.model,
       provider: config.provider,
       apiKeyConfigured: Boolean(config.apiKey),
+      loggingEnabled: Boolean(config.loggingEnabled),
       source: config.source,
       defaults: { baseUrl: DEFAULT_BASE_URL, model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER, openRouterBaseUrl: OPENROUTER_BASE_URL },
     });
@@ -80,7 +81,7 @@ router.put('/ai/config', (req, res) => {
       return res.status(403).json({ error: 'Nur Administratoren dürfen die KI-Konfiguration ändern' });
     }
 
-    const { baseUrl, model, provider, apiKey } = req.body;
+    const { baseUrl, model, provider, apiKey, loggingEnabled } = req.body;
 
     if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
       return res.status(400).json({ error: 'Host / Base-URL ist erforderlich' });
@@ -106,13 +107,15 @@ router.put('/ai/config', (req, res) => {
     upsert.run('ai_model', model.trim());
     upsert.run('ai_provider', normalizedProvider);
     if (typeof apiKey === 'string' && apiKey.trim()) upsert.run('ai_api_key', apiKey.trim());
+    if (typeof loggingEnabled === 'boolean') upsert.run('ai_log_llm_calls', loggingEnabled ? '1' : '0');
 
     // Invalidate cached provider detection for the old and new URLs
     invalidateProviderCache();
 
-    logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', { baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider });
+    logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', { baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider, loggingEnabled: typeof loggingEnabled === 'boolean' ? loggingEnabled : undefined });
 
-    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider, apiKeyConfigured: Boolean(getAiConfig().apiKey) });
+    const updatedConfig = getAiConfig();
+    res.json({ success: true, baseUrl: trimmedUrl, model: model.trim(), provider: normalizedProvider, apiKeyConfigured: Boolean(updatedConfig.apiKey), loggingEnabled: Boolean(updatedConfig.loggingEnabled) });
   } catch (error) {
     console.error('Error saving AI config:', error);
     res.status(500).json({ error: 'Fehler beim Speichern der KI-Konfiguration' });

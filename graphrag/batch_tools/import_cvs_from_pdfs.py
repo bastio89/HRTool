@@ -11,7 +11,6 @@ import shutil
 import sys
 from pathlib import Path
 from uuid import uuid4
-from urllib import error, request
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -27,24 +26,24 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Read all CV or job PDFs, extract raw text locally, "
-            "ingest via project API, then move successful files to done/."
+            "parse structured profiles, ingest into Neo4j, then move successful files to done/."
         )
     )
     parser.add_argument(
         "--mode",
         choices=("cv", "job"),
         default="cv",
-        help="Import mode: cv -> direct Neo4j CV import, job -> /ingest/job via API (default: cv)",
+        help="Import mode: cv -> direct Neo4j CV import, job -> direct Neo4j job import (default: cv)",
     )
     parser.add_argument(
         "--api-base",
         default="http://localhost:8000",
-        help="Base API URL (default: http://localhost:8000)",
+        help="Legacy API base URL (unused in direct import modes, default: http://localhost:8000)",
     )
     parser.add_argument(
         "--input-dir",
-        default="cv_input",
-        help="Directory that contains .pdf files (default: cv_input)",
+        default=None,
+        help="Directory that contains .pdf files (default: cv_input for CV mode, job_input for job mode)",
     )
     parser.add_argument(
         "--done-dir",
@@ -55,7 +54,7 @@ def parse_args() -> argparse.Namespace:
         "--timeout-seconds",
         type=int,
         default=180,
-        help="HTTP timeout in seconds for API calls",
+        help="Legacy HTTP timeout in seconds (unused in direct import modes)",
     )
     parser.add_argument(
         "--dry-run",
@@ -69,32 +68,6 @@ def parse_args() -> argparse.Namespace:
         help="Number of job matches to print per imported CV (default: 10)",
     )
     return parser.parse_args()
-
-
-def post_json(
-    url: str,
-    payload: dict,
-    timeout_seconds: int,
-) -> dict:
-    body = json.dumps(payload).encode("utf-8")
-    headers = {"Content-Type": "application/json"}
-
-    req = request.Request(
-        url,
-        data=body,
-        headers=headers,
-        method="POST",
-    )
-
-    try:
-        with request.urlopen(req, timeout=timeout_seconds) as resp:
-            raw = resp.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
-    except error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {exc.code} for {url}: {detail}") from exc
-    except error.URLError as exc:
-        raise RuntimeError(f"Network error for {url}: {exc.reason}") from exc
 
 
 def ensure_unique_destination(done_dir: Path, file_name: str) -> Path:
@@ -176,6 +149,66 @@ def _normalized_profile_hash(profile) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
+def _normalized_job_text_hash(text: str) -> str:
+    normalized = " ".join(text.split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _normalized_job_profile_hash(profile) -> str:
+    def _clean_text(value: object | None) -> str:
+        return " ".join(str(value or "").split()).strip().lower()
+
+    payload = {
+        "title": _clean_text(getattr(profile, "title", None)),
+        "department": _clean_text(getattr(profile, "department", None)),
+        "company": _clean_text(getattr(profile, "company", None)),
+        "recruiter_company": _clean_text(getattr(profile, "recruiter_company", None)),
+        "employer_company": _clean_text(getattr(profile, "employer_company", None)),
+        "location": _clean_text(getattr(profile, "location", None)),
+        "employment_type": _clean_text(getattr(profile, "employment_type", None)),
+        "required_skills": sorted(
+            {
+                json.dumps(
+                    {
+                        "name": _clean_text(skill.name),
+                        "category": _clean_text(skill.category),
+                        "priority": _clean_text(skill.priority),
+                    },
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+                for skill in getattr(profile, "required_skills", [])
+            }
+        ),
+        "required_languages": sorted(
+            {
+                json.dumps(
+                    {"name": _clean_text(lang.name), "level": _clean_text(lang.level)},
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+                for lang in getattr(profile, "required_languages", [])
+            }
+        ),
+        "required_degrees": sorted(
+            {
+                json.dumps(
+                    {
+                        "level": _clean_text(degree.level),
+                        "field_of_study": _clean_text(degree.field_of_study),
+                    },
+                    sort_keys=True,
+                    ensure_ascii=True,
+                )
+                for degree in getattr(profile, "required_degrees", [])
+            }
+        ),
+        "industries": sorted({_clean_text(industry.name) for industry in getattr(profile, "industries", []) if _clean_text(industry.name)}),
+    }
+    normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def _format_job_matches(matches: list[dict[str, object]]) -> list[str]:
     lines: list[str] = []
     for index, match in enumerate(matches, start=1):
@@ -186,6 +219,12 @@ def _format_job_matches(matches: list[dict[str, object]]) -> list[str]:
         suffix = f" shared={shared_skills}" if shared_skills else ""
         lines.append(f"{index}. {title} [{job_id}] similarity={similarity:.3f}{suffix}")
     return lines
+
+
+def _resolve_input_dir(args: argparse.Namespace) -> Path:
+    if args.input_dir:
+        return Path(args.input_dir)
+    return Path("job_input" if args.mode == "job" else "cv_input")
 
 
 async def _build_skill_embeddings(
@@ -238,39 +277,104 @@ async def _store_candidate_and_fetch_job_matches(
     return [match.model_dump() for match in matches]
 
 
-def process_job_file(
+async def _store_job_and_fetch_candidate_matches(
+    *,
+    profile,
+    job_id: str,
+    source_hash: str,
+    profile_hash: str,
+    db_service: Neo4jService,
+    llm_service: LLMService,
+    match_limit: int,
+) -> list[dict[str, object]]:
+    embedding = await llm_service.create_embedding(profile.model_dump())
+    skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills], llm_service)
+
+    await db_service.upsert_job(
+        job_id=job_id,
+        profile=profile,
+        embedding=embedding,
+        skill_embeddings=skill_embeddings,
+        source_hash=source_hash,
+        profile_hash=profile_hash,
+    )
+
+    matches = await db_service.get_top_candidate_matches_for_job(job_id, limit=match_limit)
+    return [match.model_dump() for match in matches]
+
+
+async def process_job_file(
     pdf_path: Path,
-    api_base: str,
     done_dir: Path,
-    timeout_seconds: int,
     dry_run: bool,
-    mode: str,
     pdf_service: PDFService,
+    db_service: Neo4jService,
+    llm_service: LLMService,
+    match_limit: int,
 ) -> tuple[bool, str]:
     try:
         extracted_text = pdf_service.extract_text(pdf_path.read_bytes())
     except ValueError as exc:
         return False, f"PDF extraction failed: {exc}"
 
-    endpoint = "/ingest/candidate" if mode == "cv" else "/ingest/job"
-    entity_name = "candidate" if mode == "cv" else "job"
-
     if dry_run:
-        return True, f"dry-run ok: mode={mode} extracted_chars={len(extracted_text)}"
+        source_hash = _normalized_job_text_hash(extracted_text)
+        return True, f"dry-run ok: mode=job extracted_chars={len(extracted_text)} source_hash={source_hash[:12]}"
 
-    created = post_json(
-        f"{api_base.rstrip('/')}{endpoint}",
-        {"raw_text": extracted_text},
-        timeout_seconds,
-    )
-    if not created.get("id"):
-        return False, f"{endpoint} response has no id"
+    source_hash = _normalized_job_text_hash(extracted_text)
+    existing_job = await db_service.find_job_by_source_hash(source_hash)
+    duplicate_dir = done_dir / "duplicates"
+    if existing_job is not None:
+        duplicate_dir.mkdir(parents=True, exist_ok=True)
+        destination = ensure_unique_destination(duplicate_dir, pdf_path.name)
+        shutil.move(str(pdf_path), str(destination))
+        return (
+            True,
+            f"duplicate skipped: existing_job_id={existing_job['id']} moved_to={destination}",
+        )
+
+    try:
+        profile = await llm_service.parse_job_description(extracted_text)
+    except Exception as exc:
+        return False, f"job parsing failed: {exc}"
+
+    profile_hash = _normalized_job_profile_hash(profile)
+    existing_profile = await db_service.find_job_by_profile_hash(profile_hash)
+    duplicate_dir = done_dir / "duplicates"
+    if existing_profile is not None:
+        duplicate_dir.mkdir(parents=True, exist_ok=True)
+        destination = ensure_unique_destination(duplicate_dir, pdf_path.name)
+        shutil.move(str(pdf_path), str(destination))
+        return (
+            True,
+            f"duplicate skipped: existing_job_id={existing_profile['id']} moved_to={destination}",
+        )
+
+    job_id = str(uuid4())
+    try:
+        matches = await _store_job_and_fetch_candidate_matches(
+            profile=profile,
+            job_id=job_id,
+            source_hash=source_hash,
+            profile_hash=profile_hash,
+            db_service=db_service,
+            llm_service=llm_service,
+            match_limit=match_limit,
+        )
+    except Exception as exc:
+        return False, f"job persistence failed: {exc}"
 
     done_dir.mkdir(parents=True, exist_ok=True)
     destination = ensure_unique_destination(done_dir, pdf_path.name)
     shutil.move(str(pdf_path), str(destination))
 
-    return True, f"imported as {entity_name} id={created['id']}"
+    lines = [f"imported as job id={job_id}"]
+    if matches:
+        lines.append("top candidate matches:")
+        lines.extend(f"  {line}" for line in _format_job_matches(matches))
+    else:
+        lines.append("top candidate matches: none found")
+    return True, "\n".join(lines)
 
 
 async def process_cv_file(
@@ -367,7 +471,7 @@ async def run_cv_import(args: argparse.Namespace) -> int:
         parse_latency_log_every=settings.parse_latency_log_every,
     )
 
-    input_dir = Path(args.input_dir)
+    input_dir = _resolve_input_dir(args)
     done_dir = Path(args.done_dir) if args.done_dir else (input_dir / "done")
 
     try:
@@ -419,59 +523,81 @@ async def run_cv_import(args: argparse.Namespace) -> int:
         await llm_service.close()
 
 
+async def run_job_import(args: argparse.Namespace) -> int:
+    pdf_service = PDFService()
+    db_service = Neo4jService(
+        uri=settings.neo4j_uri,
+        user=settings.neo4j_user,
+        password=settings.neo4j_password,
+    )
+    llm_service = LLMService(
+        base_url=settings.ollama_base_url,
+        chat_model=settings.ollama_chat_model,
+        embedding_model=settings.ollama_embedding_model,
+        embedding_dimensions=settings.embedding_dimensions,
+        enable_reasoning=settings.ollama_enable_reasoning,
+        enable_parse_latency_aggregation=settings.enable_parse_latency_aggregation,
+        parse_latency_window_size=settings.parse_latency_window_size,
+        parse_latency_log_every=settings.parse_latency_log_every,
+    )
+
+    input_dir = _resolve_input_dir(args)
+    done_dir = Path(args.done_dir) if args.done_dir else (input_dir / "done")
+
+    try:
+        if not input_dir.exists():
+            print(f"Input directory does not exist: {input_dir}")
+            return 1
+
+        pdf_files = sorted(
+            p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"
+        )
+
+        if not pdf_files:
+            print(f"No PDF files found in {input_dir}")
+            return 0
+
+        ok_count = 0
+        fail_count = 0
+
+        for pdf in pdf_files:
+            print(f"Processing {pdf.name} ...")
+            try:
+                ok, message = await process_job_file(
+                    pdf_path=pdf,
+                    done_dir=done_dir,
+                    dry_run=args.dry_run,
+                    pdf_service=pdf_service,
+                    db_service=db_service,
+                    llm_service=llm_service,
+                    match_limit=args.match_limit,
+                )
+                if ok:
+                    ok_count += 1
+                    print(f"  OK: {message}")
+                else:
+                    fail_count += 1
+                    print(f"  FAIL: {message}")
+            except Exception as exc:
+                fail_count += 1
+                print(f"  FAIL: {exc}")
+
+        print(
+            f"Finished. success={ok_count} failed={fail_count} "
+            f"done_dir={done_dir}"
+        )
+
+        return 0 if fail_count == 0 else 2
+    finally:
+        await db_service.close()
+        await llm_service.close()
+
+
 def main() -> int:
     args = parse_args()
     if args.mode == "cv":
         return asyncio.run(run_cv_import(args))
-
-    pdf_service = PDFService()
-
-    input_dir = Path(args.input_dir)
-    done_dir = Path(args.done_dir) if args.done_dir else (input_dir / "done")
-
-    if not input_dir.exists():
-        print(f"Input directory does not exist: {input_dir}")
-        return 1
-
-    pdf_files = sorted(
-        p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"
-    )
-
-    if not pdf_files:
-        print(f"No PDF files found in {input_dir}")
-        return 0
-
-    ok_count = 0
-    fail_count = 0
-
-    for pdf in pdf_files:
-        print(f"Processing {pdf.name} ...")
-        try:
-            ok, message = process_job_file(
-                pdf_path=pdf,
-                api_base=args.api_base,
-                done_dir=done_dir,
-                timeout_seconds=args.timeout_seconds,
-                dry_run=args.dry_run,
-                mode=args.mode,
-                pdf_service=pdf_service,
-            )
-            if ok:
-                ok_count += 1
-                print(f"  OK: {message}")
-            else:
-                fail_count += 1
-                print(f"  FAIL: {message}")
-        except Exception as exc:
-            fail_count += 1
-            print(f"  FAIL: {exc}")
-
-    print(
-        f"Finished. success={ok_count} failed={fail_count} "
-        f"done_dir={done_dir}"
-    )
-
-    return 0 if fail_count == 0 else 2
+    return asyncio.run(run_job_import(args))
 
 
 if __name__ == "__main__":

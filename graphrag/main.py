@@ -10,16 +10,20 @@ from fastapi import FastAPI, HTTPException, Request, UploadFile
 from config import settings
 from models import (
 	CandidateIngestRequest,
+	CandidateIngestResponse,
+	CandidateProfileExtraction,
 	HealthResponse,
 	IngestResponse,
 	JobIngestRequest,
 	JobIngestResponse,
+	JobProfileExtraction,
 	MatchCandidateResponse,
 	MatchResponse,
 )
 from services.db import Neo4jService
 from services.llm import LLMService
 from services.pdf import PDFService
+from services.sqlite_store import SQLiteJobStore
 
 
 db_service = Neo4jService(
@@ -28,16 +32,20 @@ db_service = Neo4jService(
 	password=settings.neo4j_password,
 )
 llm_service = LLMService(
-	base_url=settings.ollama_base_url,
-	chat_model=settings.ollama_chat_model,
-	embedding_model=settings.ollama_embedding_model,
+	provider=settings.resolved_provider,
+	base_url=settings.resolved_ai_base_url,
+	api_key=settings.resolved_api_key,
+	chat_model=settings.resolved_chat_model,
+	embedding_model=settings.resolved_embedding_model,
 	embedding_dimensions=settings.embedding_dimensions,
 	enable_reasoning=settings.ollama_enable_reasoning,
+	enable_call_logging=settings.enable_ai_call_logging,
 	enable_parse_latency_aggregation=settings.enable_parse_latency_aggregation,
 	parse_latency_window_size=settings.parse_latency_window_size,
 	parse_latency_log_every=settings.parse_latency_log_every,
 )
 pdf_service = PDFService()
+job_store = SQLiteJobStore(settings.resolved_job_sqlite_path)
 logger = logging.getLogger(__name__)
 
 
@@ -80,19 +88,18 @@ async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_ca
 	raise HTTPException(status_code=400, detail="Provide either raw_text or a non-empty file.")
 
 
-async def _extract_ingest_text_from_request(request: Request, is_candidate: bool) -> str:
+async def _extract_candidate_payload_from_request(request: Request) -> tuple[str | None, CandidateProfileExtraction | None]:
 	content_type = request.headers.get("content-type", "").lower()
 
 	raw_text: str | None = None
+	profile: CandidateProfileExtraction | None = None
 	file: UploadFile | None = None
 
 	if "application/json" in content_type:
 		payload_data = await request.json()
-		if is_candidate:
-			payload = CandidateIngestRequest.model_validate(payload_data)
-		else:
-			payload = JobIngestRequest.model_validate(payload_data)
+		payload = CandidateIngestRequest.model_validate(payload_data)
 		raw_text = payload.raw_text
+		profile = payload.profile
 	elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
 		form = await request.form()
 		form_raw_text = form.get("raw_text")
@@ -108,14 +115,102 @@ async def _extract_ingest_text_from_request(request: Request, is_candidate: bool
 			detail="Unsupported content type. Use application/json or multipart/form-data.",
 		)
 
-	text = await _extract_raw_text(raw_text=raw_text, file=file, is_candidate=is_candidate)
+	if profile is not None:
+		return raw_text, profile
 
-	if is_candidate:
-		validated = CandidateIngestRequest.model_validate({"raw_text": text})
-	else:
-		validated = JobIngestRequest.model_validate({"raw_text": text})
+	text = await _extract_raw_text(raw_text=raw_text, file=file, is_candidate=True)
+	validated = CandidateIngestRequest.model_validate({"raw_text": text})
+	return validated.raw_text, None
 
-	return validated.raw_text
+
+async def _extract_ingest_text_from_request(request: Request, is_candidate: bool) -> str:
+	content_type = request.headers.get("content-type", "").lower()
+
+	raw_text: str | None = None
+	file: UploadFile | None = None
+
+	if "application/json" in content_type:
+		payload_data = await request.json()
+		if is_candidate:
+			payload = CandidateIngestRequest.model_validate(payload_data)
+			raw_text = payload.raw_text
+		else:
+			payload = JobIngestRequest.model_validate(payload_data)
+			raw_text = payload.raw_text
+	elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+		form = await request.form()
+		form_raw_text = form.get("raw_text")
+		form_file = form.get("file")
+
+		if isinstance(form_raw_text, str):
+			raw_text = form_raw_text
+		if form_file is not None and hasattr(form_file, "read"):
+			file = form_file
+	elif content_type:
+		raise HTTPException(
+			status_code=415,
+			detail="Unsupported content type. Use application/json or multipart/form-data.",
+		)
+
+	return await _extract_raw_text(raw_text=raw_text, file=file, is_candidate=is_candidate)
+
+
+async def _extract_job_payload_from_request(request: Request) -> tuple[str | None, JobProfileExtraction | None]:
+	content_type = request.headers.get("content-type", "").lower()
+
+	raw_text: str | None = None
+	profile: JobProfileExtraction | None = None
+	file: UploadFile | None = None
+
+	if "application/json" in content_type:
+		payload_data = await request.json()
+		payload = JobIngestRequest.model_validate(payload_data)
+		raw_text = payload.raw_text
+		profile = payload.profile
+	elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+		form = await request.form()
+		form_raw_text = form.get("raw_text")
+		form_file = form.get("file")
+
+		if isinstance(form_raw_text, str):
+			raw_text = form_raw_text
+		if form_file is not None and hasattr(form_file, "read"):
+			file = form_file
+	elif content_type:
+		raise HTTPException(
+			status_code=415,
+			detail="Unsupported content type. Use application/json or multipart/form-data.",
+		)
+
+	if profile is not None:
+		return raw_text, profile
+
+	if raw_text is None and file is None:
+		return None, None
+
+	text = await _extract_raw_text(raw_text=raw_text, file=file, is_candidate=False)
+	validated = JobIngestRequest.model_validate({"raw_text": text})
+	return validated.raw_text, None
+
+
+def _job_profile_to_payload(profile: JobProfileExtraction) -> dict:
+	return {
+		"title": profile.title,
+		"about_us": profile.about_us or "",
+		"description": profile.description or "",
+		"requirements": profile.requirements or "",
+		"benefits": profile.benefits or "",
+		"location": profile.location or "",
+		"employment_type": profile.employment_type or "",
+		"department": profile.department or "",
+		"company": profile.company or "",
+		"recruiter_company": profile.recruiter_company or "",
+		"employer_company": profile.employer_company or "",
+		"required_skills": [item.model_dump() for item in profile.required_skills],
+		"required_languages": [item.model_dump() for item in profile.required_languages],
+		"required_degrees": [item.model_dump() for item in profile.required_degrees],
+		"industries": [item.model_dump() for item in profile.industries],
+	}
 
 
 async def _build_skill_embeddings(skill_names: list[str]) -> dict[str, list[float]]:
@@ -139,21 +234,35 @@ async def _build_skill_embeddings(skill_names: list[str]) -> dict[str, list[floa
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-	return HealthResponse()
+	return HealthResponse(ai_usage=llm_service.get_usage_metrics())
 
 
-@app.post("/ingest/candidate", response_model=IngestResponse)
+@app.post("/ingest/candidate", response_model=CandidateIngestResponse)
 async def ingest_candidate(
 	request: Request,
-) -> IngestResponse:
-	text = await _extract_ingest_text_from_request(request=request, is_candidate=True)
+) -> CandidateIngestResponse:
+	text, provided_profile = await _extract_candidate_payload_from_request(request=request)
+	persist = request.query_params.get("persist", "1").strip().lower() not in {"0", "false", "no", "off"}
 	try:
-		profile = await llm_service.parse_candidate_cv(text)
+		if provided_profile is None:
+			if text is None:
+				raise HTTPException(status_code=400, detail="Provide either raw_text or profile.")
+			profile = await llm_service.parse_candidate_cv(text)
+		else:
+			profile = provided_profile
 	except Exception as exc:
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
 
 	candidate_id = str(uuid4())
+	if not persist:
+		return CandidateIngestResponse(
+			id=candidate_id,
+			message="Candidate parsed successfully",
+			profile=profile,
+			persisted=False,
+		)
+
 	try:
 		embedding = await llm_service.create_embedding(profile.model_dump())
 		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
@@ -172,27 +281,44 @@ async def ingest_candidate(
 		logger.exception("Candidate persistence failed")
 		raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
 
-	return IngestResponse(id=candidate_id, message="Candidate ingested successfully")
+	return CandidateIngestResponse(id=candidate_id, message="Candidate ingested successfully", profile=profile, persisted=True)
 
 
 @app.post("/ingest/job", response_model=JobIngestResponse)
 async def ingest_job(
 	request: Request,
 ) -> JobIngestResponse:
-	text = await _extract_ingest_text_from_request(request=request, is_candidate=False)
-	logger.warning("ingest_job: calling parse_job_description (chars=%d)", len(text))
+	text, provided_profile = await _extract_job_payload_from_request(request=request)
+	persist = request.query_params.get("persist", "1").strip().lower() not in {"0", "false", "no", "off"}
 	try:
-		profile = await llm_service.parse_job_description(text)
+		if provided_profile is None:
+			if text is None:
+				raise HTTPException(status_code=400, detail="Provide either raw_text or profile.")
+			logger.warning("ingest_job: calling parse_job_description once (chars=%d)", len(text))
+			profile = await llm_service.parse_job_description(text)
+		else:
+			profile = provided_profile
 	except Exception as exc:
 		logger.exception("Job parsing failed")
 		raise HTTPException(status_code=502, detail=f"Job parsing failed: {exc}") from exc
-	logger.warning(
-		"ingest_job: parse_job_description returned title=%r required_skills=%d",
-		profile.title,
-		len(profile.required_skills),
-	)
 
 	job_id = str(uuid4())
+	logger.warning(
+		"ingest_job: parse_job_description returned title=%r required_skills=%d persist=%s",
+		profile.title,
+		len(profile.required_skills),
+		persist,
+	)
+
+	if not persist:
+		return JobIngestResponse(
+			id=job_id,
+			message="Job parsed successfully",
+			profile=profile,
+			persisted=False,
+			sqlite_id=None,
+		)
+
 	try:
 		embedding = await llm_service.create_embedding(profile.model_dump())
 		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
@@ -200,18 +326,27 @@ async def ingest_job(
 		logger.exception("Job embedding creation failed")
 		raise HTTPException(status_code=502, detail=f"Job embedding creation failed: {exc}") from exc
 
+	sqlite_id: int | None = None
 	try:
-		await db_service.upsert_job(
-			job_id=job_id,
-			profile=profile,
-			embedding=embedding,
-			skill_embeddings=skill_embeddings,
-		)
+		if persist:
+			sqlite_id = await job_store.upsert_job(job_id=job_id, raw_text=text or "", profile=profile)
+			await db_service.upsert_job(
+				job_id=job_id,
+				profile=profile,
+				embedding=embedding,
+				skill_embeddings=skill_embeddings,
+			)
 	except Exception as exc:
 		logger.exception("Job persistence failed")
 		raise HTTPException(status_code=503, detail=f"Job persistence failed: {exc}") from exc
 
-	return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile)
+	return JobIngestResponse(
+		id=job_id,
+		message="Job ingested successfully" if persist else "Job parsed successfully",
+		profile=profile,
+		persisted=persist,
+		sqlite_id=sqlite_id,
+	)
 
 
 @app.post("/match/{job_id}", response_model=MatchResponse)

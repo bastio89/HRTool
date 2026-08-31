@@ -137,7 +137,7 @@ LIMIT 25;
 The helper script `batch_tools/import_cvs_from_pdfs.py` extracts text from each PDF locally and ingests CVs directly into Neo4j.
 
 - `--mode cv` imports CVs directly into Neo4j and prints the best job matches (default)
-- `--mode job` sends to `POST /ingest/job`
+- `--mode job` parses job profiles locally and stores job skills directly in Neo4j, then prints the best candidate matches
 - CV imports skip duplicates by hashing the extracted text.
 - After each CV import the script prints the 10 best matching jobs based on skill overlap in Neo4j.
 

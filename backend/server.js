@@ -23,6 +23,8 @@ const reportsRouter = require('./src/routes/reports');
 const candidateDetailsRouter = require('./src/routes/candidate-details');
 const matchingWeightsRouter = require('./src/routes/matching-weights');
 const complianceActionsRouter = require('./src/routes/compliance-actions');
+const addJobRouter = require('./src/routes/add-job');
+const db = require('./src/database');
 const authMiddleware = require('./src/middleware/auth');
 
 const app = express();
@@ -63,6 +65,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/candidate-details', candidateDetailsRouter);
 app.use('/api/matching-weights', matchingWeightsRouter);
 app.use('/api/compliance-actions', complianceActionsRouter);
+app.use('/api/add/job', addJobRouter);
 
 /**
  * @swagger
@@ -76,7 +79,10 @@ app.use('/api/compliance-actions', complianceActionsRouter);
  */
 app.get('/api/health', async (req, res) => {
   const n8nUrl = process.env.N8N_BASE_URL || 'http://localhost:5678';
+  const graphragUrl = process.env.GRAPHRAG_BASE_URL || 'http://localhost:8000';
   let n8nStatus = 'unreachable';
+  let graphragStatus = 'unreachable';
+  let graphragUsage = { calls: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0 };
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 3000);
@@ -86,15 +92,61 @@ app.get('/api/health', async (req, res) => {
   } catch (_) {
     n8nStatus = 'unreachable';
   }
+
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 3000);
+    const resp = await fetch(`${graphragUrl.replace(/\/+$/, '')}/health`, { signal: ctrl.signal });
+    clearTimeout(timeout);
+    const payload = await resp.json().catch(() => ({}));
+    graphragStatus = resp.ok ? 'ok' : `error (${resp.status})`;
+    if (payload?.ai_usage) {
+      graphragUsage = {
+        calls: Number(payload.ai_usage.calls) || 0,
+        input_tokens: Number(payload.ai_usage.input_tokens) || 0,
+        output_tokens: Number(payload.ai_usage.output_tokens) || 0,
+        total_tokens: Number(payload.ai_usage.total_tokens) || 0,
+      };
+    }
+  } catch (_) {
+    graphragStatus = 'unreachable';
+  }
+
+  const backendUsage = db.prepare(`
+    SELECT
+      COUNT(*) as calls,
+      COALESCE(SUM(COALESCE(input_tokens, 0)), 0) as input_tokens,
+      COALESCE(SUM(COALESCE(output_tokens, 0)), 0) as output_tokens
+    FROM ai_logs
+  `).get();
+  const backendAiUsage = {
+    calls: Number(backendUsage.calls) || 0,
+    input_tokens: Number(backendUsage.input_tokens) || 0,
+    output_tokens: Number(backendUsage.output_tokens) || 0,
+    total_tokens: (Number(backendUsage.input_tokens) || 0) + (Number(backendUsage.output_tokens) || 0),
+  };
+  const aiUsage = {
+    calls: backendAiUsage.calls + graphragUsage.calls,
+    input_tokens: backendAiUsage.input_tokens + graphragUsage.input_tokens,
+    output_tokens: backendAiUsage.output_tokens + graphragUsage.output_tokens,
+    total_tokens: backendAiUsage.total_tokens + graphragUsage.total_tokens,
+  };
+
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     n8nUrl,
     n8nStatus,
+    graphragUrl,
+    graphragStatus,
+    aiUsage,
+    backendAiUsage,
+    graphragUsage,
     services: {
       backend: 'ok',
       database: 'ok',
       n8n: n8nStatus,
+      graphrag: graphragStatus,
     }
   });
 });

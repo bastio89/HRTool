@@ -35,16 +35,24 @@ function getAiConfig() {
   const dbModel = readSetting('ai_model');
   const dbProvider = readSetting('ai_provider');
   const dbApiKey = readSetting('ai_api_key');
+  const dbLoggingEnabled = readSetting('ai_log_llm_calls');
 
-  const envBaseUrl = process.env.OLLAMA_BASE_URL?.trim() || null;
-  const envModel = process.env.OLLAMA_MODEL?.trim() || null;
+  const envBaseUrl = process.env.AI_BASE_URL?.trim() || process.env.OLLAMA_BASE_URL?.trim() || null;
+  const envModel = process.env.AI_MODEL?.trim() || process.env.OLLAMA_MODEL?.trim() || null;
   const envProvider = process.env.AI_PROVIDER?.trim() || null;
-  const envApiKey = process.env.OPENROUTER_API_KEY?.trim() || null;
+  const envApiKey = process.env.AI_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim() || null;
+  const envLogging = process.env.AI_LOG_LLM_CALLS?.trim() || null;
 
-  const rawBaseUrl = dbBaseUrl || envBaseUrl || DEFAULT_BASE_URL;
-  const model = dbModel || envModel || DEFAULT_MODEL;
   const provider = dbProvider || envProvider || DEFAULT_PROVIDER;
+  const normalizedProvider = provider.trim().toLowerCase();
+  const providerBaseUrl = normalizedProvider === 'openai' || normalizedProvider === 'openrouter'
+    ? OPENROUTER_BASE_URL
+    : DEFAULT_BASE_URL;
+  const rawBaseUrl = dbBaseUrl || envBaseUrl || providerBaseUrl;
+  const model = dbModel || envModel || DEFAULT_MODEL;
   const apiKey = dbApiKey || envApiKey || null;
+  const loggingEnabledRaw = dbLoggingEnabled || envLogging || null;
+  const loggingEnabled = ['1', 'true', 'yes', 'on'].includes(String(loggingEnabledRaw).trim().toLowerCase());
 
   const baseUrl = normalizeAiBaseUrl(rawBaseUrl);
 
@@ -53,6 +61,7 @@ function getAiConfig() {
     model,
     provider,
     apiKey,
+    loggingEnabled,
     source: {
       baseUrl: dbBaseUrl ? 'settings' : envBaseUrl ? 'env' : 'default',
       model: dbModel ? 'settings' : envModel ? 'env' : 'default',

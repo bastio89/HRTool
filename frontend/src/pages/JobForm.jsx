@@ -11,7 +11,7 @@ const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstuden
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
 
 const emptyJob = {
-  title: '', about_us: '', description: '', requirements: '', benefits: '',
+  title: '', about_us: '', description: '', requirements: '', skills: '', benefits: '',
   location: '', type: 'Vollzeit', status: 'Offen', url: ''
 }
 
@@ -48,6 +48,7 @@ export default function JobForm() {
           about_us: data.about_us || '',
           description: data.description || '',
           requirements: data.requirements || '',
+          skills: data.skills || '',
           benefits: data.benefits || '',
           location: data.location || '',
           type: data.type || 'Vollzeit',
@@ -119,6 +120,7 @@ export default function JobForm() {
         about_us: parsed.about_us || current.about_us,
         description: parsed.description || (!parsed.about_us && !parsed.requirements && !parsed.benefits ? (parsed.text || '') : '') || current.description,
         requirements: parsed.requirements || current.requirements,
+        skills: parsed.skills || current.skills,
         benefits: parsed.benefits || current.benefits,
       }))
       setUploadedFilename(importedFilename)
@@ -345,6 +347,13 @@ export default function JobForm() {
               value={form.requirements}
               onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))}
               rows={8}
+            />
+            <Textarea
+              label={t('form.skills')}
+              placeholder="JavaScript, React, Node.js, Python (kommagetrennt)"
+              value={form.skills}
+              onChange={e => setForm(f => ({ ...f, skills: e.target.value }))}
+              rows={5}
             />
             <Textarea
               label="Was wir bieten"

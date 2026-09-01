@@ -370,6 +370,7 @@ class CandidateIngestResponse(IngestResponse):
 
 class JobIngestResponse(IngestResponse):
     profile: JobProfileExtraction
+    persisted: bool = True
 
 
 class MatchingCandidateInput(BaseModel):

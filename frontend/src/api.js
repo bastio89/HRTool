@@ -147,12 +147,13 @@ export const jobsApi = {
     }
     return response.json();
   },
-  parseDescriptionFile: async (file, thinking = false, extractOnly = false) => {
+  parseDescriptionFile: async (file, thinking = false, extractOnly = false, persist = false) => {
     const formData = new FormData();
     formData.append('file', file);
     const params = new URLSearchParams();
     if (thinking) params.set('thinking', '1');
     if (extractOnly) params.set('extractOnly', '1');
+    if (persist) params.set('persist', '1');
     const url = `${API_BASE}/jobs/parse-description${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       method: 'POST',

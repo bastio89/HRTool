@@ -114,7 +114,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
     for (const item of pending) {
       updateFile(item.id, { status: STATUS.PROCESSING, error: null, startedAt: Date.now(), elapsed: 0 })
       try {
-        const created = await jobsApi.parseDescriptionFile(item.file, thinking)
+        const created = await jobsApi.parseDescriptionFile(item.file, thinking, false, true)
         const title = created.title || created.job?.title || filenameToTitle(item.file.name) || item.file.name
 
         const elapsed = item.startedAt ? Math.floor((Date.now() - item.startedAt) / 1000) : null

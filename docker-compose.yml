@@ -34,6 +34,7 @@ services:
       EXTERNAL_API_KEY: ${EXTERNAL_API_KEY:-}
       N8N_BASE_URL: ${N8N_BASE_URL:-http://host.docker.internal:5678}
       N8N_API_KEY: ${N8N_API_KEY:-}
+      GRAPHRAG_BASE_URL: ${GRAPHRAG_BASE_URL:-http://graphrag:8000}
       DATABASE_URL: ${DATABASE_URL:-postgresql://hrtool:hrtoolpass@postgres:5432/hrtool}
     volumes:
       - hrtool-data:/app/data

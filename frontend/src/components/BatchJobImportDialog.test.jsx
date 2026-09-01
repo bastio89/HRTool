@@ -54,7 +54,7 @@ describe('BatchJobImportDialog', () => {
       expect(screen.getByText(/GraphRAG-Sync fehlgeschlagen: GraphRAG HTTP 503: service unavailable/i)).toBeInTheDocument()
     })
 
-    expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false)
+    expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, false, true)
     expect(onImported).toHaveBeenCalledTimes(1)
   })
 })

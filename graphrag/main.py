@@ -385,6 +385,7 @@ async def ingest_candidate(
 @app.post("/ingest/job", response_model=JobIngestResponse)
 async def ingest_job(
 	request: Request,
+	persist: str = Query(default="true"),
 ) -> JobIngestResponse:
 	text, provided_profile = await _extract_job_payload_from_request(request=request)
 	try:
@@ -427,7 +428,26 @@ async def ingest_job(
 		len(profile.required_skills),
 	)
 
+	persist_value = str(persist or "").strip().lower()
+	persist_postgres = persist_value not in {"0", "false", "no", "none", "off", "neo4j", "graph", "neo4j_only", "graph_only"}
+	persist_neo4j = persist_value not in {"0", "false", "no", "none", "off", "postgres", "sql", "db"}
+	if persist_value in {"neo4j", "graph", "neo4j_only", "graph_only"}:
+		persist_postgres = False
+		persist_neo4j = True
+	elif persist_value in {"postgres", "sql", "db"}:
+		persist_postgres = True
+		persist_neo4j = False
+	elif persist_value in {"0", "false", "no", "none", "off"}:
+		persist_postgres = False
+		persist_neo4j = False
+	else:
+		persist_postgres = True
+		persist_neo4j = True
+
 	job_id = str(uuid4())
+	if not persist_postgres and not persist_neo4j:
+		return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=False)
+
 	try:
 		embedding = await llm_service.create_embedding(profile.model_dump())
 		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
@@ -435,24 +455,26 @@ async def ingest_job(
 		logger.exception("Job embedding creation failed")
 		raise HTTPException(status_code=502, detail=f"Job embedding creation failed: {exc}") from exc
 
-	try:
-		await postgres_store.upsert_job(job_id=job_id, raw_text=text or "", profile=profile)
-	except Exception as exc:
-		logger.exception("Job SQLite persistence failed")
-		raise HTTPException(status_code=503, detail=f"Job SQLite persistence failed: {exc}") from exc
+	if persist_postgres:
+		try:
+			await postgres_store.upsert_job(job_id=job_id, raw_text=text or "", profile=profile)
+		except Exception as exc:
+			logger.exception("Job SQLite persistence failed")
+			raise HTTPException(status_code=503, detail=f"Job SQLite persistence failed: {exc}") from exc
 
-	try:
-		await db_service.upsert_job(
-			job_id=job_id,
-			profile=profile,
-			embedding=embedding,
-			skill_embeddings=skill_embeddings,
-		)
-	except Exception as exc:
-		logger.exception("Job persistence failed")
-		raise HTTPException(status_code=503, detail=f"Job persistence failed: {exc}") from exc
+	if persist_neo4j:
+		try:
+			await db_service.upsert_job(
+				job_id=job_id,
+				profile=profile,
+				embedding=embedding,
+				skill_embeddings=skill_embeddings,
+			)
+		except Exception as exc:
+			logger.exception("Job persistence failed")
+			raise HTTPException(status_code=503, detail=f"Job persistence failed: {exc}") from exc
 
-	return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile)
+	return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=True)
 
 
 @app.post("/match/{job_id}", response_model=MatchResponse)

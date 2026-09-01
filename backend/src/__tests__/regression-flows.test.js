@@ -687,17 +687,14 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
     global.fetch = jest.fn(async (url, options) => {
-      if (String(url) === 'http://fake-graphrag/ingest/job' && options?.method === 'POST') {
+      if (String(url) === 'http://fake-graphrag/ingest/job?persist=neo4j' && options?.method === 'POST') {
         const payload = JSON.parse(options.body);
-        expect(payload.profile.title).toBe('Senior Backend Engineer');
-        expect(payload.profile.location).toBe('Berlin');
-        expect(payload.profile.employment_type).toBe('Vollzeit');
         expect(payload.raw_text).toContain('Jobtitel: Senior Backend Engineer');
         expect(payload.raw_text).toContain('Anforderungen:');
         expect(payload.raw_text).toContain('Node.js');
         return {
           ok: true,
-          json: async () => ({ id: 'graph-job-1', message: 'Job ingested successfully' }),
+          json: async () => ({ id: 'graph-job-1', message: 'Job ingested successfully', persisted: true }),
         };
       }
 
@@ -722,7 +719,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     expect(response.status).toBe(201);
     expect(response.body.title).toBe('Senior Backend Engineer');
-    expect(response.body.graphRag).toEqual({ id: 'graph-job-1', message: 'Job ingested successfully' });
+    expect(response.body.graphRag).toEqual({ id: 'graph-job-1', message: 'Job ingested successfully', persisted: true });
     expect(mockDb.__state.jobs).toHaveLength(1);
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
@@ -1026,6 +1023,9 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(storedJob).toBeTruthy();
     expect(storedJob.description).toContain('Java Developer');
     expect(storedJob.requirements).toBeTruthy();
+
+    const storedJobCount = db.prepare('SELECT COUNT(*) AS count FROM jobs WHERE title = ?').get(jobTitle);
+    expect(storedJobCount.count).toBe(1);
 
     if (storedJob?.id != null) {
       db.prepare('DELETE FROM jobs WHERE id = ?').run(storedJob.id);

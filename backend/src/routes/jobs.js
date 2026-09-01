@@ -167,13 +167,15 @@ function persistLocalJob(job) {
 }
 
 async function ingestIntoGraphRag(rawText, persist = true) {
-  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim();
+  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   if (!baseUrl) return null;
+
+  const persistValue = persist === true ? '1' : persist === false ? '0' : String(persist);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${persist ? '1' : '0'}`, {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${encodeURIComponent(persistValue)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ raw_text: rawText }),
@@ -301,7 +303,7 @@ router.post('/', (req, res) => {
     const job = persistLocalJob({ title, about_us, description, requirements, skills, benefits, location, type, status, url });
     logAudit(req, 'erstellt', 'Job', job.id, job.title);
 
-    ingestIntoGraphRag(buildGraphRagJobText(job), true).catch((graphRagErr) => {
+    ingestIntoGraphRag(buildGraphRagJobText(job), 'neo4j').catch((graphRagErr) => {
       console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
       return { error: graphRagErr.message };
     }).then((graphRag) => {
@@ -368,7 +370,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       });
     }
 
-    const graphRag = await ingestIntoGraphRag(trimmedText, persist);
+    const graphRag = await ingestIntoGraphRag(trimmedText, persist ? 'neo4j' : false);
     const profile = graphRag?.profile || {};
     const extractedSkills = serializeJobSkills(profile.required_skills);
     const filenameTitle = path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname;

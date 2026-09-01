@@ -797,7 +797,7 @@ class LLMService:
                 system_prompt=(
                     "Extrahiere ein strukturiertes Jobprofil aus einer Stellenbeschreibung. "
                     "Es geht nur um die inhaltliche Extraktion, nicht um Anonymisierung oder Umformulierung. "
-                    "Die Ausgabe wird direkt in die SQLite-Spalten jobs.title, jobs.company, jobs.recruiter_company, jobs.employer_company, jobs.location, jobs.type, jobs.about_us, jobs.description, jobs.requirements und jobs.benefits geschrieben. "
+                    "Die Ausgabe wird direkt in die PostgreSQL-Spalten jobs.title, jobs.company, jobs.recruiter_company, jobs.employer_company, jobs.location, jobs.type, jobs.about_us, jobs.description, jobs.requirements und jobs.benefits geschrieben. "
                     "Das Feld required_skills ist die primäre Quelle für die Neo4j-Beziehungen REQUIRES_SKILL und NEED_SKILL; jedes Element muss daher ein einzelnes, klar benanntes Skill-Objekt sein. "
                     "Lasse keine explizit genannten Skills weg, fasse unterschiedliche Skills nicht zu Sammelbegriffen zusammen und setze priority exakt auf Mandatory oder NiceToHave. "
                     "Gib ausschließlich JSON mit diesen Schlüsseln zurück: title (string), company (string|null), recruiter_company (string|null), employer_company (string|null), "
@@ -810,7 +810,7 @@ class LLMService:
                     "industries (array of objects with name)."
                 ),
                 user_content=raw_text,
-                num_predict=1200,
+                num_predict=3200,
                 required_keys=(
                     "title",
                 ),
@@ -841,7 +841,7 @@ class LLMService:
                         "For required_skills include priority exactly as Mandatory or NiceToHave."
                     ),
                     user_content=raw_text,
-                    num_predict=700,
+                    num_predict=1500,
                     required_keys=("title",),
                     call_context="job-parser",
                     preferred_keys=("title", "company", "location", "required_skills", "required_languages"),

@@ -356,9 +356,9 @@ router.get('/dsgvo/expired', (req, res) => {
 
     const expired = db.prepare(`
       SELECT id, name, email, location, status, created_at, updated_at,
-        ROUND(julianday('now') - julianday(COALESCE(updated_at, created_at))) as days_since_update
+        ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - COALESCE(updated_at, created_at))) / 86400) as days_since_update
       FROM candidates
-      WHERE datetime(COALESCE(updated_at, created_at), '+' || ? || ' months') < datetime('now')
+      WHERE COALESCE(updated_at, created_at) + (? * INTERVAL '1 month') < CURRENT_TIMESTAMP
       ORDER BY updated_at ASC, created_at ASC
     `).all(months);
 
@@ -393,7 +393,7 @@ router.delete('/dsgvo/delete-expired', (req, res) => {
 
     const expired = db.prepare(`
       SELECT id, name FROM candidates
-      WHERE datetime(COALESCE(updated_at, created_at), '+' || ? || ' months') < datetime('now')
+      WHERE COALESCE(updated_at, created_at) + (? * INTERVAL '1 month') < CURRENT_TIMESTAMP
     `).all(months);
 
     if (expired.length === 0) {

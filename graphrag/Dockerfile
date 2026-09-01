@@ -6,7 +6,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app/graphrag
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl \
+    && apt-get install -y --no-install-recommends \
+        antiword \
+        build-essential \
+        curl \
+        poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-deu \
+        tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./requirements.txt

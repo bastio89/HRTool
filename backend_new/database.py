@@ -9,7 +9,7 @@ from .config import settings
 
 
 def get_connection() -> psycopg.Connection:
-    return psycopg.connect(settings.DATABASE_URL)
+    return psycopg.connect(settings.DATABASE_URL, row_factory=dict_row)
 
 
 def init_db() -> None:
@@ -22,7 +22,7 @@ def init_db() -> None:
                     title TEXT NOT NULL,
                     company TEXT,
                     location TEXT,
-                    employment_type TEXT,
+                    type TEXT,
                     status TEXT DEFAULT 'open',
                     created_at TIMESTAMPTZ DEFAULT NOW(),
                     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -59,7 +59,7 @@ def insert_job(title: str, company: str | None = None, location: str | None = No
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO jobs (title, company, location, employment_type)
+                INSERT INTO jobs (title, company, location, type)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id
                 """,
@@ -67,7 +67,7 @@ def insert_job(title: str, company: str | None = None, location: str | None = No
             )
             row = cursor.fetchone()
             connection.commit()
-            return int(row[0])
+            return int(row["id"])
 
 
 def insert_candidate(name: str, email: str | None = None, phone: str | None = None, location: str | None = None) -> int:
@@ -83,4 +83,4 @@ def insert_candidate(name: str, email: str | None = None, phone: str | None = No
             )
             row = cursor.fetchone()
             connection.commit()
-            return int(row[0])
+            return int(row["id"])

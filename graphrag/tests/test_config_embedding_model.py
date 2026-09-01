@@ -26,7 +26,7 @@ def test_resolved_embedding_model_defaults_to_openai_when_provider_is_openrouter
 def test_resolved_embedding_model_uses_ollama_default_for_ollama_provider(monkeypatch):
     monkeypatch.delenv("AI_EMBEDDING_MODEL", raising=False)
     monkeypatch.delenv("BACKEND_DB_PATH", raising=False)
-    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    monkeypatch.setenv("AI_PROVIDER", "ollama")
     monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
     monkeypatch.setenv("NEO4J_USER", "neo4j")
     monkeypatch.setenv("NEO4J_PASSWORD", "test-password")

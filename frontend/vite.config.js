@@ -18,6 +18,13 @@ export default defineConfig({
         changeOrigin: true,
         timeout: 200000,
         proxyTimeout: 200000,
+      },
+      '/graphrag-api': {
+        target: 'http://localhost:8002',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/graphrag-api/, ''),
+        timeout: 200000,
+        proxyTimeout: 200000,
       }
     },
     warmup: {

@@ -1,5 +1,4 @@
-const Database = require('better-sqlite3');
-const db = new Database('./data/hrtool.db');
+const db = require('./src/database');
 
 // Simuliere: was der CV-Parser zurückgibt
 const cvParserResult = {
@@ -99,3 +98,4 @@ console.log('  work_history is array:', Array.isArray(parsed.work_history));
 console.log('  work_history[0].employer:', parsed.work_history?.[0]?.employer);
 console.log('  education_history is array:', Array.isArray(parsed.education_history));
 console.log('  education_history[0].institution:', parsed.education_history?.[0]?.institution);
+db.close();

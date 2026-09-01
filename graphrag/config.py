@@ -1,6 +1,4 @@
-import sqlite3
-from pathlib import Path
-
+import psycopg
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +9,7 @@ class Settings(BaseSettings):
     ai_provider: str | None = None
     ai_base_url: str | None = None
     openrouter_api_key: str | None = None
-    backend_db_path: str | None = None
+    database_url: str = "postgresql://hrtool:hrtoolpass@localhost:5432/hrtool"
     ai_chat_model: str | None = None
     ai_embedding_model: str | None = None
     ollama_base_url: str = "http://localhost:11434"
@@ -42,23 +40,12 @@ class Settings(BaseSettings):
         return (self.ai_base_url or self._backend_setting("ai_base_url") or default_base_url).rstrip("/")
 
     def _backend_setting(self, key: str) -> str | None:
-        backend_db_path = self.resolved_backend_db_path
-        if not backend_db_path:
-            return None
-        if self.backend_db_path is None and not Path(backend_db_path).exists():
-            return None
         try:
-            with sqlite3.connect(backend_db_path) as connection:
-                row = connection.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            with psycopg.connect(self.database_url) as connection:
+                row = connection.execute("SELECT value FROM settings WHERE key = %s", (key,)).fetchone()
             return row[0].strip() if row and isinstance(row[0], str) and row[0].strip() else None
-        except sqlite3.Error:
+        except psycopg.Error:
             return None
-
-    @property
-    def resolved_backend_db_path(self) -> str:
-        if self.backend_db_path:
-            return self.backend_db_path
-        return str(Path(__file__).resolve().parents[1] / "backend" / "data" / "hrtool.db")
 
     @property
     def resolved_provider(self) -> str:
@@ -75,7 +62,11 @@ class Settings(BaseSettings):
 
     @property
     def resolved_embedding_model(self) -> str:
-        return self.ai_embedding_model or self.ollama_embedding_model
+        if self.ai_embedding_model:
+            return self.ai_embedding_model
+        if self.resolved_provider == "openrouter":
+            return "openai/text-embedding-3-small"
+        return self.ollama_embedding_model
 
 
 settings = Settings()

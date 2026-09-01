@@ -1,5 +1,4 @@
-const Database = require('better-sqlite3');
-const db = new Database('./data/hrtool.db');
+const db = require('./src/database');
 
 function parseCandidate(candidate) {
   console.log('Input candidate:', candidate ? 'exists' : 'null');
@@ -34,3 +33,4 @@ console.log('After parse - work_history length:', parsed?.work_history?.length);
 if (parsed?.work_history?.[0]) {
   console.log('First entry employer:', parsed.work_history[0].employer);
 }
+db.close();

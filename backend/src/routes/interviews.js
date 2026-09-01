@@ -95,8 +95,8 @@ router.get('/upcoming', (req, res) => {
       FROM interviews i
       LEFT JOIN candidates c ON i.candidate_id = c.id
       LEFT JOIN jobs j ON i.job_id = j.id
-      WHERE i.interview_date >= date('now')
-        AND i.interview_date <= date('now', '+14 days')
+      WHERE i.interview_date::date >= CURRENT_DATE
+        AND i.interview_date::date <= CURRENT_DATE + INTERVAL '14 days'
         AND i.status != 'abgesagt'
         ${jobFilter}
       ORDER BY i.interview_date ASC, i.interview_time ASC

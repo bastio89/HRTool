@@ -17,7 +17,7 @@ def list_jobs() -> list[JobRead]:
             title=row["title"],
             company=row["company"],
             location=row["location"],
-            employment_type=row["employment_type"],
+            employment_type=row["type"],
             status=row["status"],
         )
         for row in rows
@@ -33,7 +33,7 @@ def create_job(payload: JobCreate) -> JobRead:
         employment_type=payload.employment_type,
     )
     with get_connection() as connection:
-        row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        row = connection.execute("SELECT * FROM jobs WHERE id = %s", (job_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=500, detail="Job could not be created")
     return JobRead(
@@ -41,6 +41,6 @@ def create_job(payload: JobCreate) -> JobRead:
         title=row["title"],
         company=row["company"],
         location=row["location"],
-        employment_type=row["employment_type"],
+        employment_type=row["type"],
         status=row["status"],
     )

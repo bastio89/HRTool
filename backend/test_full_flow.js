@@ -1,6 +1,4 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const db = new Database('./data/hrtool.db');
+const db = require('./src/database');
 
 // Kopiere die exakte parseCandidate-Funktion aus candidates.js
 function parseCandidate(candidate) {
@@ -37,3 +35,4 @@ console.log(JSON.stringify({
   work_history: result.work_history,
   education_history: result.education_history,
 }, null, 2));
+db.close();

@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
+    "deasync": "^0.1.31",
     "debug": "4.3.4",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
@@ -26,6 +26,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^8.0.2",
     "pdf-parse": "^1.1.1",
+    "pg": "^8.16.3",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^13.0.0"

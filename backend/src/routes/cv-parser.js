@@ -513,7 +513,9 @@ ${truncated}`;
  * @swagger
  * /cv-parser/parse:
  *   post:
- *     summary: CV parsen und optional zentral speichern
+ *     summary: CV parsen und optional zentral speichern (veraltet)
+ *     deprecated: true
+ *     description: Veralteter Endpunkt. Verwenden Sie stattdessen POST http://localhost:8002/cv-parser/parse im GraphRAG-Service.
  *     tags: [CV Parser]
  *     requestBody:
  *       content:
@@ -632,16 +634,16 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       }
     }
     let localCandidate = null;
-    let storedInSqlite = false;
+    let storedInPostgres = false;
     let storedInNeo4j = Boolean(graphRag.persisted);
     if (persist) {
-      sendProgress('sqlite_save', 'Speichere Kandidat in SQLite...', 85);
+      sendProgress('postgres_save', 'Speichere Kandidat in PostgreSQL...', 85);
       try {
         localCandidate = persistCandidate(profile, req);
-        storedInSqlite = Boolean(localCandidate);
+        storedInPostgres = Boolean(localCandidate);
       } catch (persistErr) {
         return sendError(503, {
-          error: 'SQLite-Speicherung fehlgeschlagen',
+          error: 'PostgreSQL-Speicherung fehlgeschlagen',
           details: persistErr.message,
         });
       }
@@ -658,7 +660,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       localCandidate,
       graphRag,
       storage: {
-        sqlite: storedInSqlite,
+        postgres: storedInPostgres,
         neo4j: storedInNeo4j,
       },
       textLength: combinedText.length,

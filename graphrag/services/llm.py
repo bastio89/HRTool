@@ -7,11 +7,11 @@ import json
 import logging
 import math
 import re
-import sqlite3
 from time import perf_counter
 from typing import Any
 
 import httpx
+from services.postgres_store import PostgresStore
 
 from models import (
     CandidateProfileExtraction,
@@ -37,7 +37,7 @@ class LLMService:
         parse_latency_window_size: int = 200,
         parse_latency_log_every: int = 20,
         enable_call_logging: bool = False,
-        backend_db_path: str | None = None,
+        database_url: str | None = None,
     ) -> None:
         self.provider = provider.strip().lower()
         if self.provider == "openai":
@@ -52,7 +52,7 @@ class LLMService:
         self.parse_latency_window_size = max(1, parse_latency_window_size)
         self.parse_latency_log_every = max(1, parse_latency_log_every)
         self.enable_call_logging = enable_call_logging
-        self.backend_db_path = backend_db_path
+        self.postgres_store = PostgresStore(database_url) if database_url else None
         self._latency_samples: dict[str, deque[float]] = defaultdict(
             lambda: deque(maxlen=self.parse_latency_window_size)
         )
@@ -97,7 +97,7 @@ class LLMService:
         success: bool,
         error_message: str | None,
     ) -> None:
-        if not self.enable_call_logging or not self.backend_db_path:
+        if not self.enable_call_logging or self.postgres_store is None:
             return
 
         prompt_payload = json.dumps(
@@ -113,35 +113,24 @@ class LLMService:
         skills_payload = self._extract_skill_names(parsed_result)
         prompt_hash = hashlib.sha256(prompt_payload.encode("utf-8")).hexdigest()[:16]
 
-        def _insert() -> None:
-            with sqlite3.connect(self.backend_db_path) as connection:
-                connection.execute(
-                    """
-                    INSERT INTO ai_logs (
-                        user_id, feature, model, model_version, prompt_hash, prompt, response, parsed_result,
-                        skills, duration_ms, input_tokens, output_tokens, success, error_message
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        None,
-                        feature,
-                        self.chat_model,
-                        None,
-                        prompt_hash,
-                        prompt_payload,
-                        response_payload,
-                        parsed_payload,
-                        skills_payload,
-                        int(duration_ms),
-                        input_tokens,
-                        output_tokens,
-                        1 if success else 0,
-                        error_message,
-                    ),
-                )
-                connection.commit()
-
-        await asyncio.to_thread(_insert)
+        await self.postgres_store.write_ai_log(
+            (
+                None,
+                feature,
+                self.chat_model,
+                None,
+                prompt_hash,
+                prompt_payload,
+                response_payload,
+                parsed_payload,
+                skills_payload,
+                int(duration_ms),
+                input_tokens,
+                output_tokens,
+                1 if success else 0,
+                error_message,
+            )
+        )
 
     async def _generate_json(
         self,

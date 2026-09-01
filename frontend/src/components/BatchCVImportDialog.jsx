@@ -143,7 +143,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
           status: STATUS.DONE,
           progress: 100,
           candidate: { id: c.id, name: c.name || item.file.name.replace(/\.[^/.]+$/, '') },
-          storage: result.storage || { sqlite: Boolean(result.persisted), neo4j: Boolean(result.graphRag?.persisted) },
+          storage: result.storage || { postgres: Boolean(result.persisted), neo4j: Boolean(result.graphRag?.persisted) },
         })
       } catch (err) {
         updateFile(item.id, { status: STATUS.ERROR, progress: 0, error: err.message || t('batch_import.error_generic') })
@@ -264,8 +264,8 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
                     <div className="mt-0.5 space-y-0.5">
                       <p className="text-[12px] text-[#34c759]">{t('batch_import.created')}</p>
                       <div className="flex flex-wrap gap-2 text-[11px]">
-                        <span className={`px-2 py-0.5 rounded-full ${item.storage?.sqlite ? 'bg-[#34c759]/10 text-[#1e7f38]' : 'bg-gray-200 text-gray-500'}`}>
-                          SQLite: {item.storage?.sqlite ? 'gespeichert' : 'nicht gespeichert'}
+                        <span className={`px-2 py-0.5 rounded-full ${item.storage?.postgres ? 'bg-[#34c759]/10 text-[#1e7f38]' : 'bg-gray-200 text-gray-500'}`}>
+                          PostgreSQL: {item.storage?.postgres ? 'gespeichert' : 'nicht gespeichert'}
                         </span>
                         <span className={`px-2 py-0.5 rounded-full ${item.storage?.neo4j ? 'bg-[#0071e3]/10 text-[#0058b0]' : 'bg-gray-200 text-gray-500'}`}>
                           Neo4j: {item.storage?.neo4j ? 'gespeichert' : 'nicht gespeichert'}

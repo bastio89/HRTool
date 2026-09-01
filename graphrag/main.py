@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sqlite3
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 
 from config import settings
 from models import (
@@ -23,8 +23,9 @@ from models import (
 )
 from services.db import Neo4jService
 from services.llm import LLMService
+from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
-from services.sqlite_store import SQLiteJobStore
+from services.postgres_store import PostgresStore
 
 
 db_service = Neo4jService(
@@ -44,15 +45,16 @@ llm_service = LLMService(
 	parse_latency_window_size=settings.parse_latency_window_size,
 	parse_latency_log_every=settings.parse_latency_log_every,
 	enable_call_logging=True,
-	backend_db_path=settings.resolved_backend_db_path,
+	database_url=settings.database_url,
 )
 pdf_service = PDFService()
-sqlite_job_store = SQLiteJobStore(settings.resolved_backend_db_path)
+postgres_store = PostgresStore(settings.database_url)
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+	await postgres_store.ensure_schema()
 	yield
 	await db_service.close()
 	await llm_service.close()
@@ -64,27 +66,6 @@ app = FastAPI(
 	version="1.0.0",
 	lifespan=lifespan,
 )
-
-
-def _read_ai_usage(db_path: str) -> AiUsageMetrics:
-	try:
-		with sqlite3.connect(db_path) as connection:
-			row = connection.execute(
-				"""
-				SELECT
-					COUNT(*) AS calls,
-					COALESCE(SUM(COALESCE(input_tokens, 0)), 0) AS input_tokens,
-					COALESCE(SUM(COALESCE(output_tokens, 0)), 0) AS output_tokens
-				FROM ai_logs
-				"""
-			).fetchone()
-		if not row:
-			return AiUsageMetrics()
-		input_tokens = int(row[1] or 0)
-		output_tokens = int(row[2] or 0)
-		return AiUsageMetrics(calls=int(row[0] or 0), input_tokens=input_tokens, output_tokens=output_tokens, total_tokens=input_tokens + output_tokens)
-	except sqlite3.Error:
-		return AiUsageMetrics()
 
 
 async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_candidate: bool) -> str:
@@ -240,7 +221,101 @@ async def _build_skill_embeddings(skill_names: list[str]) -> dict[str, list[floa
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-	return HealthResponse(ai_usage=_read_ai_usage(settings.resolved_backend_db_path))
+	return HealthResponse(ai_usage=await postgres_store.read_ai_usage())
+
+
+@app.post(
+	"/cv-parser/parse",
+	tags=["CV Parser"],
+	summary="CV parsen und optional in Neo4j speichern",
+	responses={
+		400: {"description": "Keine Datei oder ungültiges Format"},
+		422: {"description": "Kein lesbarer Text gefunden"},
+		502: {"description": "CV-Parsing fehlgeschlagen"},
+		503: {"description": "Neo4j-Speicherung fehlgeschlagen"},
+	},
+)
+async def parse_cv(
+	file: list[UploadFile] | None = File(default=None),
+	persist: bool = Query(default=False),
+) -> dict[str, Any]:
+	files = file or []
+	if not files:
+		raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
+	if len(files) > 10:
+		raise HTTPException(status_code=400, detail="Maximal 10 Dateien erlaubt")
+
+	filenames: list[str] = []
+	text_parts: list[str] = []
+	for uploaded_file in files:
+		filename = uploaded_file.filename or "unbenannt"
+		content_type = (uploaded_file.content_type or "application/octet-stream").lower()
+		if content_type not in ALLOWED_DOCUMENT_TYPES:
+			raise HTTPException(status_code=400, detail="Nur PDF, Word und Bilddateien erlaubt")
+
+		data = await uploaded_file.read(20 * 1024 * 1024 + 1)
+		if len(data) > 20 * 1024 * 1024:
+			raise HTTPException(status_code=400, detail="Datei zu groß (max. 20 MB)")
+		filenames.append(filename)
+		try:
+			text = extract_document_text(data, content_type)
+		except ValueError as exc:
+			logger.warning("Could not extract text from %s: %s", filename, exc)
+			continue
+		if len(text.strip()) > 5:
+			text_parts.append(f"=== Datei: {filename} ===\n{text.strip()}")
+
+	combined_text = "\n\n".join(text_parts)
+	if len(combined_text.strip()) < 20:
+		raise HTTPException(
+			status_code=422,
+			detail="Kein lesbarer Text in den Dateien gefunden. Möglicherweise ist OCR erforderlich.",
+		)
+
+	try:
+		profile = await llm_service.parse_candidate_cv(combined_text)
+	except Exception as exc:
+		logger.exception("Candidate parsing failed")
+		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
+
+	graph_candidate_id: str | None = None
+	postgres_candidate_id: int | None = None
+	if persist:
+		graph_candidate_id = str(uuid4())
+		try:
+			embedding = await llm_service.create_embedding(profile.model_dump())
+			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
+			await db_service.upsert_candidate(
+				candidate_id=graph_candidate_id,
+				profile=profile,
+				embedding=embedding,
+				skill_embeddings=skill_embeddings,
+			)
+			postgres_candidate_id = await postgres_store.insert_candidate(profile)
+		except Exception as exc:
+			logger.exception("Candidate persistence failed")
+			raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
+
+	profile_payload = profile.model_dump(mode="json")
+	candidate_payload = {**profile_payload, **({"id": postgres_candidate_id} if postgres_candidate_id else {})}
+	graph_rag = {
+		"id": graph_candidate_id,
+		"message": "Candidate ingested successfully" if persist else "Candidate parsed successfully",
+		"profile": profile_payload,
+		"persisted": persist,
+	}
+	return {
+		"success": True,
+		"filenames": filenames,
+		"filename": filenames[0],
+		"candidate": candidate_payload,
+		"profile": profile_payload,
+		"localCandidate": candidate_payload if postgres_candidate_id else None,
+		"graphRag": graph_rag,
+		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": graph_candidate_id is not None},
+		"textLength": len(combined_text),
+		"persisted": persist,
+	}
 
 
 @app.post("/ingest/candidate", response_model=IngestResponse)
@@ -336,7 +411,7 @@ async def ingest_job(
 		raise HTTPException(status_code=502, detail=f"Job embedding creation failed: {exc}") from exc
 
 	try:
-		await sqlite_job_store.upsert_job(job_id=job_id, raw_text=text or "", profile=profile)
+		await postgres_store.upsert_job(job_id=job_id, raw_text=text or "", profile=profile)
 	except Exception as exc:
 		logger.exception("Job SQLite persistence failed")
 		raise HTTPException(status_code=503, detail=f"Job SQLite persistence failed: {exc}") from exc

@@ -1,6 +1,5 @@
 // Simuliere genau was der API /candidates zurückgibt
-const Database = require('better-sqlite3');
-const db = new Database('./data/hrtool.db');
+const db = require('./src/database');
 
 function parseCandidate(candidate) {
   if (!candidate) return candidate;
@@ -49,3 +48,4 @@ console.log(JSON.stringify({
   page: 1,
   limit: 1,
 }).substring(0, 300) + '...');
+db.close();

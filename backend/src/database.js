@@ -1,19 +1,6 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const PostgresDatabase = require('./postgresDatabase');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'hrtool.db');
-
-// Ensure data directory exists
-const fs = require('fs');
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-const db = new Database(DB_PATH);
-
-// Enable WAL mode for better performance
-db.pragma('journal_mode = WAL');
+const db = new PostgresDatabase(process.env.DATABASE_URL);
 
 // Create tables
 db.exec(`
@@ -382,6 +369,11 @@ const indexes = [
   // Custom Fields
   `CREATE INDEX IF NOT EXISTS idx_custom_values_candidate ON candidate_custom_values(candidate_id)`,
   `CREATE INDEX IF NOT EXISTS idx_custom_values_field ON candidate_custom_values(field_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_pipeline_job_candidate_unique ON pipeline_entries(job_id, candidate_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_values_unique ON candidate_custom_values(candidate_id, field_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_job_access_unique ON user_job_access(user_id, job_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_risk_overrides_unique ON risk_overrides(risk_id)`,
 ];
 for (const sql of indexes) {
   try { db.exec(sql); } catch (_) { /* index already exists */ }
@@ -588,5 +580,7 @@ if (tplCount.count === 0) {
     insertTpl.run(tpl.name, tpl.subject, tpl.body, tpl.trigger_stage);
   }
 }
+
+db.ensureIdentityDefaults();
 
 module.exports = db;

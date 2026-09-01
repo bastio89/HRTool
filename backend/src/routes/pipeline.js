@@ -341,7 +341,7 @@ router.get('/active-jobs', (req, res) => {
       FROM pipeline_entries pe
       JOIN jobs j ON j.id = pe.job_id
       ${jobFilter}
-      GROUP BY pe.job_id, pe.stage
+      GROUP BY j.id, j.title, j.location, j.type, j.status, pe.job_id, pe.stage
       ORDER BY j.title, pe.stage
     `).all(...filterParams);
 

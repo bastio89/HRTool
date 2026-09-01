@@ -33,7 +33,7 @@ def create_candidate(payload: CandidateCreate) -> CandidateRead:
         location=payload.location,
     )
     with get_connection() as connection:
-        row = connection.execute("SELECT * FROM candidates WHERE id = ?", (candidate_id,)).fetchone()
+        row = connection.execute("SELECT * FROM candidates WHERE id = %s", (candidate_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=500, detail="Candidate could not be created")
     return CandidateRead(

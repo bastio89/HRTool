@@ -382,7 +382,7 @@ router.post('/admin/reset-default', (req, res) => {
  *     summary: Datenbank-Backup herunterladen (Admin)
  *     tags: [Auth]
  *     responses:
- *       200: { description: SQLite-Datenbankdatei als Download }
+ *       200: { description: PostgreSQL-Datenexport als JSON-Download }
  *       403: { description: Keine Berechtigung }
  */
 router.get('/admin/backup', (req, res) => {
@@ -391,17 +391,16 @@ router.get('/admin/backup', (req, res) => {
   }
 
   try {
-    const dbPath = path.join(__dirname, '..', '..', 'data', 'hrtool.db');
     const backupDir = path.join(__dirname, '..', '..', 'data', 'backups');
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const backupFilename = `hrtool-backup-${timestamp}.db`;
+    const backupFilename = `hrtool-backup-${timestamp}.json`;
     const backupPath = path.join(backupDir, backupFilename);
 
-    // Use SQLite backup API for safe copy (even while DB is in use)
+    // Export all PostgreSQL tables while the database remains online.
     db.backup(backupPath).then(() => {
       logAudit(req, 'backup-erstellt', 'System', null, backupFilename);
       res.download(backupPath, backupFilename, (err) => {

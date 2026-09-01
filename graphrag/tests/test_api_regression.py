@@ -256,12 +256,12 @@ async def test_ingest_job_accepts_file_upload(app_module, api_client, monkeypatc
     monkeypatch.setattr(app_module, "uuid4", lambda: "job-123")
     parse_mock = AsyncMock(return_value=fake_profile)
     embedding_mock = AsyncMock(return_value=[0.9, 0.8, 0.7])
-    sqlite_mock = AsyncMock(return_value=42)
+    postgres_mock = AsyncMock(return_value=42)
     upsert_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_job_description", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
-    monkeypatch.setattr(app_module.sqlite_job_store, "upsert_job", sqlite_mock)
+    monkeypatch.setattr(app_module.postgres_store, "upsert_job", postgres_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_job", upsert_mock)
 
     response = await api_client.post(
@@ -283,7 +283,7 @@ async def test_ingest_job_accepts_file_upload(app_module, api_client, monkeypatc
     skill_payloads = [call.args[0] for call in embedding_mock.await_args_list[1:]]
     assert {payload["name"] for payload in skill_payloads} == {"python", "sql", "fastapi"}
     assert all(payload["entity"] == "skill" for payload in skill_payloads)
-    sqlite_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once()
     upsert_mock.assert_awaited_once()
 
 
@@ -305,12 +305,12 @@ async def test_ingest_job_profile_overrides_parsed_title(app_module, api_client,
     monkeypatch.setattr(app_module, "uuid4", lambda: "job-profile-override-123")
     parse_mock = AsyncMock(return_value=parsed_profile)
     embedding_mock = AsyncMock(return_value=[0.9, 0.8, 0.7])
-    sqlite_mock = AsyncMock(return_value=43)
+    postgres_mock = AsyncMock(return_value=43)
     upsert_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_job_description", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
-    monkeypatch.setattr(app_module.sqlite_job_store, "upsert_job", sqlite_mock)
+    monkeypatch.setattr(app_module.postgres_store, "upsert_job", postgres_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_job", upsert_mock)
 
     response = await api_client.post(
@@ -328,12 +328,12 @@ async def test_ingest_job_profile_overrides_parsed_title(app_module, api_client,
     assert payload["profile"]["required_skills"]
     assert any(skill["name"] == "python" for skill in payload["profile"]["required_skills"])
     parse_mock.assert_awaited_once()
-    sqlite_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once()
     upsert_mock.assert_awaited_once()
 
 
 @pytest.mark.anyio
-async def test_add_job_accepts_plaintext_and_persists_to_sqlite_and_neo4j(app_module, api_client, monkeypatch):
+async def test_add_job_accepts_plaintext_and_persists_to_postgres_and_neo4j(app_module, api_client, monkeypatch):
     fake_profile = JobProfileExtraction(
         title="Principal Data Engineer",
         company="ACME AG",
@@ -348,12 +348,12 @@ async def test_add_job_accepts_plaintext_and_persists_to_sqlite_and_neo4j(app_mo
     monkeypatch.setattr(app_module, "uuid4", lambda: "job-add-123")
     parse_mock = AsyncMock(return_value=fake_profile)
     embedding_mock = AsyncMock(return_value=[0.9, 0.8, 0.7])
-    sqlite_mock = AsyncMock(return_value=99)
+    postgres_mock = AsyncMock(return_value=99)
     upsert_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_job_description", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
-    monkeypatch.setattr(app_module.sqlite_job_store, "upsert_job", sqlite_mock)
+    monkeypatch.setattr(app_module.postgres_store, "upsert_job", postgres_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_job", upsert_mock)
 
     response = await api_client.post(
@@ -367,7 +367,7 @@ async def test_add_job_accepts_plaintext_and_persists_to_sqlite_and_neo4j(app_mo
     assert payload["id"] == "job-add-123"
     assert payload["profile"]["title"] == "Principal Data Engineer"
     parse_mock.assert_awaited_once()
-    sqlite_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once()
     upsert_mock.assert_awaited_once()
 
 

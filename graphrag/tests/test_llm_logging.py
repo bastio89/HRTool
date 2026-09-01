@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -15,41 +14,17 @@ from services.llm import LLMService
 
 
 @pytest.mark.asyncio
-async def test_generate_json_writes_llm_call_log_to_sqlite(tmp_path) -> None:
-    db_path = tmp_path / "hrtool.db"
-    with sqlite3.connect(db_path) as connection:
-        connection.execute(
-            """
-            CREATE TABLE ai_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                feature TEXT NOT NULL,
-                model TEXT,
-                model_version TEXT,
-                prompt_hash TEXT,
-                prompt TEXT,
-                response TEXT,
-                parsed_result TEXT,
-                skills TEXT,
-                duration_ms INTEGER,
-                input_tokens INTEGER,
-                output_tokens INTEGER,
-                success INTEGER DEFAULT 1,
-                error_message TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        connection.commit()
-
+async def test_generate_json_writes_llm_call_log_to_postgres() -> None:
     service = LLMService(
         base_url="http://fake-ai",
         chat_model="test-model",
         embedding_model="test-embedding",
         embedding_dimensions=8,
         enable_call_logging=True,
-        backend_db_path=str(db_path),
+        database_url="postgresql://test:test@localhost/test",
     )
+    write_log_mock = AsyncMock()
+    service.postgres_store.write_ai_log = write_log_mock
     service.client.post = AsyncMock(
         return_value=httpx.Response(
             200,
@@ -71,16 +46,12 @@ async def test_generate_json_writes_llm_call_log_to_sqlite(tmp_path) -> None:
     assert result["name"] == "Anna Mueller"
     assert [skill["name"] for skill in result["required_skills"]] == ["Python", "SQL"]
 
-    with sqlite3.connect(db_path) as connection:
-        row = connection.execute(
-            "SELECT feature, model, prompt, response, parsed_result, skills, success FROM ai_logs LIMIT 1"
-        ).fetchone()
-
-    assert row is not None
-    assert row[0] == "test-context"
-    assert row[1] == "test-model"
-    assert json.loads(row[2])["model"] == "test-model"
-    assert json.loads(row[3])["response"] == '{"name":"Anna Mueller","required_skills":[{"name":"Python"},{"name":"SQL"}]}'
-    assert json.loads(row[4])["name"] == "Anna Mueller"
-    assert row[5] == "Python, SQL"
-    assert row[6] == 1
+    write_log_mock.assert_awaited_once()
+    row = write_log_mock.await_args.args[0]
+    assert row[1] == "test-context"
+    assert row[2] == "test-model"
+    assert json.loads(row[5])["model"] == "test-model"
+    assert json.loads(row[6])["response"] == '{"name":"Anna Mueller","required_skills":[{"name":"Python"},{"name":"SQL"}]}'
+    assert json.loads(row[7])["name"] == "Anna Mueller"
+    assert row[8] == "Python, SQL"
+    assert row[12] == 1

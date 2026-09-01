@@ -710,7 +710,7 @@ router.get('/bias-alerts', (req, res) => {
       FROM candidates c
       INNER JOIN pipeline_entries pe ON pe.candidate_id = c.id
       WHERE c.location IS NOT NULL AND c.location != ''
-      GROUP BY c.location HAVING c_total >= 3
+      GROUP BY c.location HAVING COUNT(*) >= 3
     `).all();
 
     if (locationAnalysis.length > 2) {
@@ -736,7 +736,7 @@ router.get('/bias-alerts', (req, res) => {
              AVG(CASE WHEN pe.stage IN ('Hired','Angebot','Interview') THEN 1.0 ELSE 0.0 END) * 100 as advancement_rate
       FROM candidates c
       INNER JOIN pipeline_entries pe ON pe.candidate_id = c.id
-      GROUP BY COALESCE(c.source, 'Unbekannt') HAVING c_total >= 3
+      GROUP BY COALESCE(c.source, 'Unbekannt') HAVING COUNT(*) >= 3
     `).all();
 
     if (sourceAnalysis.length > 2) {
@@ -944,7 +944,7 @@ router.get('/stats/bias-report', (req, res) => {
       LEFT JOIN pipeline_entries pe ON pe.candidate_id = c.id
       WHERE c.location IS NOT NULL AND c.location != ''
       GROUP BY c.location
-      HAVING total_in_matchings >= 2
+      HAVING COUNT(*) >= 2
       ORDER BY total_in_matchings DESC
       LIMIT 15
     `).all();
@@ -958,7 +958,7 @@ router.get('/stats/bias-report', (req, res) => {
       FROM candidates c
       LEFT JOIN pipeline_entries pe ON pe.candidate_id = c.id
       GROUP BY COALESCE(c.source, 'Unbekannt')
-      HAVING count >= 2
+      HAVING COUNT(*) >= 2
       ORDER BY count DESC
     `).all();
 

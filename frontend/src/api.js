@@ -1,4 +1,5 @@
 const API_BASE = '/api';
+const GRAPHRAG_API_BASE = '/graphrag-api';
 
 function authHeaders() {
   const token = localStorage.getItem('hrtool_token');
@@ -262,7 +263,7 @@ export const uploadsApi = {
 
 // CV Parser API
 export const cvParserApi = {
-  parse: async (file, onProgress) => {
+  parse: async (file, onProgress, persist = false) => {
     const formData = new FormData();
     formData.append('file', file);
     const headers = authHeaders();
@@ -270,7 +271,7 @@ export const cvParserApi = {
     if (onProgress) {
       headers['Accept'] = 'text/event-stream';
     }
-    const response = await fetch(`${API_BASE}/cv-parser/parse`, {
+    const response = await fetch(`${GRAPHRAG_API_BASE}/cv-parser/parse?persist=${persist}`, {
       method: 'POST',
       headers,
       body: formData,
@@ -295,7 +296,7 @@ export const cvParserApi = {
         }
       }
       const error = await response.json().catch(() => ({ error: 'CV-Analyse fehlgeschlagen' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw new Error(error.error || error.detail || `HTTP ${response.status}`);
     }
     // Stream mode: parse SSE events (only if server actually returns SSE)
     const contentType = response.headers.get('content-type') || '';

@@ -1,5 +1,4 @@
-const Database = require('better-sqlite3');
-const db = new Database('./data/hrtool.db');
+const db = require('./src/database');
 
 function parseCandidate(candidate) {
   if (!candidate) return candidate;
@@ -39,3 +38,4 @@ if (parsed.work_history.length > 0) {
   console.log('  Position:', parsed.work_history[0].position);
   console.log('  Employer:', parsed.work_history[0].employer);
 }
+db.close();

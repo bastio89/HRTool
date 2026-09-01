@@ -49,11 +49,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Endpoints
-- `POST /ingest/candidate` (JSON `{ "raw_text": "..." }` or multipart form with `raw_text` or `file`; `.pdf` CV uploads are supported)
-- `POST /add/job/` (plain text body for job descriptions; parses with the centrally configured AI settings, stores the job in SQLite, then syncs to Neo4j)
-- `POST /ingest/job` (same job ingestion behavior as `/add/job/`, kept as a compatibility alias)
-- `POST /match/{job_id}`
-- `GET /health`
+ `POST /cv-parser/parse?persist=false` (multipart field `file`, up to 10 PDF, DOC, DOCX, PNG, JPEG or WebP files; set `persist=true` to store the candidate in Neo4j)
 
 ## Graph schema (Neo4j)
 

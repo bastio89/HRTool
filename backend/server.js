@@ -34,6 +34,9 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'] }));
 app.use(express.json({ limit: '10mb' }));
 
+app.get('/docs', (req, res) => res.redirect('/api/docs'));
+app.get('/docs.json', (req, res) => res.redirect('/api/docs.json'));
+
 // Auth middleware (parses token, sets req.user)
 app.use(authMiddleware);
 

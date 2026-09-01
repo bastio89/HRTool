@@ -116,7 +116,7 @@ function GraphragStatusPill() {
       try {
         const res = await healthApi.check()
         if (!isMounted) return
-        setIsOnline(Boolean(res?.services?.graphrag === 'ok'))
+        setIsOnline(Boolean(res?.services?.graphrag && res.services.graphrag !== 'unreachable'))
       } catch {
         if (!isMounted) return
         setIsOnline(false)

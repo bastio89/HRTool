@@ -542,7 +542,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			candidatesRanked=candidates_ranked,
 		)
 
-	async def build_vector_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str) -> MatchingMatrixPayload:
+	async def build_vector_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str, model_name: str) -> MatchingMatrixPayload:
 		skill_embeddings = await build_skill_embedding_cache(jobs, candidates)
 		rows = []
 		for job in jobs:
@@ -576,7 +576,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return MatchingMatrixPayload(
 			type='matrix',
 			mode=mode,
-			model='graph-rag-neo4j-skill-vector-match',
+			model=model_name,
 			matchedAt=datetime.now(timezone.utc).isoformat(),
 			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
 			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
@@ -833,7 +833,15 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			raise HTTPException(status_code=400, detail='Mindestens eine Stelle ist erforderlich')
 		if not request.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
-		return await build_vector_matrix(request.jobs, request.candidates, request.mode)
+		return await build_vector_matrix(request.jobs, request.candidates, request.mode, 'graph-rag-vector-matrix')
+
+	@router.post('/match/external/matrix_neo4j', response_model=MatchingMatrixPayload)
+	async def external_matrix_neo4j(request: MatchingMatrixRequest) -> MatchingMatrixPayload:
+		if not request.jobs:
+			raise HTTPException(status_code=400, detail='Mindestens eine Stelle ist erforderlich')
+		if not request.candidates:
+			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
+		return await build_vector_matrix(request.jobs, request.candidates, request.mode, 'graph-rag-neo4j-skill-vector-match')
 
 	@router.post('/match/vectormatch_neo4j', response_model=VectorMatchNeo4jPayload)
 	async def vector_match_neo4j(request: VectorMatchRequest) -> VectorMatchNeo4jPayload:

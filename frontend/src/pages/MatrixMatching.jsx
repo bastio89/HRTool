@@ -15,6 +15,7 @@ export default function MatrixMatching() {
   const [loading, setLoading] = useState(true)
   const [matching, setMatching] = useState(false)
   const [error, setError] = useState('')
+  const [vectorEngine, setVectorEngine] = useState('python')
   const [weights, setWeights] = useState({
     skills: 0, experience: 0, education: 0, location: 0, languages: 0,
     salary: 0, availability: 0, certificates: 0, cultural_fit: 0, mobility: 0
@@ -50,6 +51,7 @@ export default function MatrixMatching() {
       const result = await matchingApi.runMatrix({
         mode: 'all_jobs_all_candidates',
         weights,
+        engine: vectorEngine,
       })
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
@@ -119,6 +121,34 @@ export default function MatrixMatching() {
             <p className="text-[16px] font-semibold text-black dark:text-white">
               {t('matching.matrix_summary').replace('{jobs}', jobs.length).replace('{candidates}', candidates.length)}
             </p>
+          </Card>
+
+          <Card className="p-8">
+            <p className="text-[16px] font-semibold text-black dark:text-white mb-4">{t('matching.vector_engine')}</p>
+            <div className="flex gap-3 p-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] w-fit">
+              <button
+                type="button"
+                onClick={() => setVectorEngine('python')}
+                className={`px-4 py-2 rounded-[16px] text-[14px] font-semibold transition-all cursor-pointer ${
+                  vectorEngine === 'python'
+                    ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                {t('matching.vector_python')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setVectorEngine('neo4j')}
+                className={`px-4 py-2 rounded-[16px] text-[14px] font-semibold transition-all cursor-pointer ${
+                  vectorEngine === 'neo4j'
+                    ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                {t('matching.vector_neo4j')}
+              </button>
+            </div>
           </Card>
 
           <Button

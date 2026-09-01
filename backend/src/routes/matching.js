@@ -533,7 +533,7 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
  *     tags: [Matching]
  */
 router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
-  const { mode = 'all_jobs_all_candidates', jobIds, candidateIds, weights } = req.body;
+  const { mode = 'all_jobs_all_candidates', jobIds, candidateIds, weights, engine = 'python' } = req.body;
 
   try {
     const jobs = getJobs(jobIds);
@@ -542,7 +542,11 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
     if (jobs.length === 0) return res.status(400).json({ error: 'Keine Stellen vorhanden' });
     if (candidates.length === 0) return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
 
-    const graphRagResult = await callGraphRagMatching('/match/external/matrix', {
+    if (!['python', 'neo4j'].includes(engine)) {
+      return res.status(400).json({ error: 'Ungültige Vector-Matching-Engine' });
+    }
+
+    const graphRagResult = await callGraphRagMatching(engine === 'neo4j' ? '/match/external/matrix_neo4j' : '/match/external/matrix', {
       mode,
       jobs: jobs.map((job) => ({
         id: job.id,
@@ -572,7 +576,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
 
     const resultTitle = mode === 'candidate_to_jobs'
       ? `Bewerber → alle Stellen (${candidates.length} × ${jobs.length})`
-      : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber)`;
+      : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber, ${engine === 'neo4j' ? 'Neo4j' : 'Python'})`;
 
     const saveResult = db.prepare(`
       INSERT INTO matching_results (job_description, job_title, results, job_id)
@@ -597,6 +601,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       jobCount: jobs.length,
       candidateCount: candidates.length,
       pairCount: graphRagResult.matrix?.length || 0,
+      engine,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

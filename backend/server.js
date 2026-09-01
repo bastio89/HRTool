@@ -111,7 +111,7 @@ app.get('/api/health', async (req, res) => {
       };
     }
   } catch (_) {
-    graphRagStatus = 'unreachable';
+    graphRagStatus = 'degraded';
   }
   try {
     const row = db.prepare(`

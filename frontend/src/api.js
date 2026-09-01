@@ -97,10 +97,10 @@ export const matchingApi = {
       body: JSON.stringify({ jobDescription, jobTitle, candidateIds, weights, jobId }),
       timeout: 200000,
     }),
-  runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null } = {}) =>
+  runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null, engine = 'python' } = {}) =>
     request('/matching/run-matrix', {
       method: 'POST',
-      body: JSON.stringify({ mode, jobIds, candidateIds, weights }),
+      body: JSON.stringify({ mode, jobIds, candidateIds, weights, engine }),
       timeout: 600000,
     }),
   vectorMatch: (payload = {}) =>
@@ -438,7 +438,19 @@ export const settingsApi = {
   getAiConfig: () => request('/settings/ai/config'),
   saveAiConfig: (data) => request('/settings/ai/config', { method: 'PUT', body: JSON.stringify(data) }),
   getAiModels: (baseUrl, apiKey, provider) => request(`/settings/ai/models?${new URLSearchParams({ ...(baseUrl ? { baseUrl } : {}), ...(provider ? { provider } : {}) })}`, { timeout: 8000, headers: apiKey ? { 'X-OpenRouter-Key': apiKey } : {} }),
+  getAiEmbeddingModels: (baseUrl, apiKey, provider) => request(`/settings/ai/embedding-models?${new URLSearchParams({ ...(baseUrl ? { baseUrl } : {}), ...(provider ? { provider } : {}) })}`, { timeout: 8000, headers: apiKey ? { 'X-OpenRouter-Key': apiKey } : {} }),
   testAiConnection: (baseUrl, apiKey, provider) => request('/settings/ai/test', { method: 'POST', body: JSON.stringify({ ...(baseUrl ? { baseUrl } : {}), ...(apiKey ? { apiKey } : {}), ...(provider ? { provider } : {}) }), timeout: 8000 }),
+  testEmbeddingModel: (baseUrl, apiKey, provider, embeddingModel, sampleText = 'Kubernetes') => request('/settings/ai/embedding-test', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...(baseUrl ? { baseUrl } : {}),
+      ...(apiKey ? { apiKey } : {}),
+      ...(provider ? { provider } : {}),
+      ...(embeddingModel ? { embeddingModel } : {}),
+      ...(sampleText ? { sampleText } : {}),
+    }),
+    timeout: 20000,
+  }),
 };
 
 // Ratings API

@@ -81,7 +81,11 @@ export default function MatchingResults() {
     ? 'Vector-Matching (Neo4j)'
     : matrixData?.type === 'vectormatch'
       ? 'Vector-Matching (Python)'
-      : 'Matrix-Matching'
+      : matrixData?.model === 'graph-rag-neo4j-skill-vector-match'
+        ? 'Matrix-Matching (Neo4j Vector)'
+        : matrixData?.model === 'graph-rag-vector-matrix'
+          ? 'Matrix-Matching (Python Vector)'
+          : 'Matrix-Matching'
 
   if (matrixData) {
     const matrixRows = matrixData.matrix || []

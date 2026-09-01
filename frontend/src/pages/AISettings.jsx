@@ -50,6 +50,8 @@ export default function AISettings() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
+  const [embeddingTesting, setEmbeddingTesting] = useState(false)
+  const [embeddingTestResult, setEmbeddingTestResult] = useState(null)
   const [successMsg, setSuccessMsg] = useState('')
   const [error, setError] = useState('')
 
@@ -163,6 +165,23 @@ export default function AISettings() {
     }
   }
 
+  const handleEmbeddingTest = async () => {
+    setEmbeddingTesting(true)
+    setEmbeddingTestResult(null)
+    setError('')
+    try {
+      const res = await settingsApi.testEmbeddingModel(baseUrl, apiKey, provider, embeddingModel, 'Kubernetes')
+      setEmbeddingTestResult(res)
+      if (res.reachable) {
+        await loadEmbeddingModels(baseUrl, embeddingModel, provider)
+      }
+    } catch (err) {
+      setEmbeddingTestResult({ reachable: false, error: err.message })
+    } finally {
+      setEmbeddingTesting(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setError('')
@@ -200,6 +219,7 @@ export default function AISettings() {
     setBaseUrl(url)
     if (presetProvider) setProvider(presetProvider)
     setTestResult(null)
+    setEmbeddingTestResult(null)
     loadModels(url, model, presetProvider || provider)
     loadEmbeddingModels(url, embeddingModel, presetProvider || provider)
   }
@@ -207,8 +227,24 @@ export default function AISettings() {
   const selectProvider = (value) => {
     setProvider(value)
     setTestResult(null)
+    setEmbeddingTestResult(null)
     loadModels(baseUrl, model, value)
     loadEmbeddingModels(baseUrl, embeddingModel, value)
+  }
+
+  const embeddingStatus = embeddingTesting
+    ? { tone: 'checking', label: 'Test läuft' }
+    : embeddingTestResult?.reachable
+      ? { tone: 'success', label: `OK${embeddingTestResult?.dims ? ` · ${embeddingTestResult.dims} Dim.` : ''}` }
+      : embeddingTestResult
+        ? { tone: 'error', label: embeddingTestResult.error || 'Fehler' }
+        : { tone: 'idle', label: 'Nicht getestet' }
+
+  const embeddingStatusClasses = {
+    checking: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-300 dark:border-gray-700',
+    success: 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25',
+    error: 'bg-[#ff3b30]/10 text-[#d92d20] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25',
+    idle: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-400 dark:border-gray-700',
   }
 
   const sourceLabel = (src) => {
@@ -445,7 +481,7 @@ export default function AISettings() {
             <div className="relative">
               <select
                 value={embeddingModel}
-                onChange={(e) => setEmbeddingModel(e.target.value)}
+                onChange={(e) => { setEmbeddingModel(e.target.value); setEmbeddingTestResult(null) }}
                 className="w-full appearance-none px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
                   text-black dark:text-white text-[16px] focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c]
                   focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 cursor-pointer pr-12"
@@ -468,7 +504,7 @@ export default function AISettings() {
             <Input
               label={t('ai_settings.embedding_model_label')}
               value={embeddingModel}
-              onChange={(e) => setEmbeddingModel(e.target.value)}
+              onChange={(e) => { setEmbeddingModel(e.target.value); setEmbeddingTestResult(null) }}
               placeholder="openai/text-embedding-3-small"
               spellCheck={false}
               autoCapitalize="off"
@@ -490,31 +526,19 @@ export default function AISettings() {
             )}
           </div>
         )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" size="sm" onClick={handleEmbeddingTest} disabled={embeddingTesting || !baseUrl.trim() || !embeddingModel.trim()}>
+            {embeddingTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Testen
+          </Button>
+          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[12px] font-semibold ${embeddingStatusClasses[embeddingStatus.tone]}`}>
+            <span className={`w-2.5 h-2.5 rounded-full ${embeddingStatus.tone === 'success' ? 'bg-[#34c759]' : embeddingStatus.tone === 'error' ? 'bg-[#ff3b30]' : embeddingStatus.tone === 'checking' ? 'bg-[#8e8e93] animate-pulse' : 'bg-[#8e8e93]'}`} />
+            {embeddingStatus.label}
+          </span>
+        </div>
         <p className="text-[13px] text-gray-400 ml-2">
           {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.embeddingModel)}</span>
         </p>
-      </Card>
-
-      {/* LLM logging */}
-      <Card className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Check className="w-5 h-5 text-gray-400" />
-          <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.logging_title')}</h2>
-        </div>
-        <label className="flex items-start gap-3 rounded-2xl border border-gray-200/80 dark:border-white/10 bg-[#f5f5f7] dark:bg-[#2c2c2e] px-4 py-4 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={loggingEnabled}
-            onChange={(e) => setLoggingEnabled(e.target.checked)}
-            className="mt-1 h-5 w-5 rounded border-gray-300 text-[#0071e3] focus:ring-[#0071e3]"
-          />
-          <div className="space-y-1">
-            <div className="text-[15px] font-medium text-black dark:text-white">{t('ai_settings.logging_label')}</div>
-            <p className="text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
-              {t('ai_settings.logging_desc')}
-            </p>
-          </div>
-        </label>
       </Card>
 
       {/* Save bar */}

@@ -65,7 +65,7 @@ class Settings(BaseSettings):
         if self.ai_embedding_model:
             return self.ai_embedding_model
         if self.resolved_provider == "openrouter":
-            return "openai/text-embedding-3-small"
+            return "qwen3-embedding:4b"
         return self.ollama_embedding_model
 
 

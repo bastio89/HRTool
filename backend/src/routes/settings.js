@@ -245,6 +245,101 @@ router.post('/ai/test', async (req, res) => {
 
 /**
  * @swagger
+ * /settings/ai/embedding-test:
+ *   post:
+ *     summary: Embedding-Modell mit einem konkreten Beispiel testen
+ *     tags: [Settings]
+ *     responses:
+ *       200: { description: Embedding-Teststatus }
+ */
+router.post('/ai/embedding-test', async (req, res) => {
+  try {
+    const override = typeof req.body?.baseUrl === 'string' && req.body.baseUrl.trim()
+      ? normalizeAiBaseUrl(req.body.baseUrl)
+      : null;
+    const cfg = getAiConfig();
+    const requestApiKey = typeof req.body?.apiKey === 'string' && req.body.apiKey.trim() ? req.body.apiKey.trim() : cfg.apiKey;
+    const baseUrl = override || cfg.baseUrl;
+    const configuredProvider = ['auto', 'ollama', 'openai'].includes(req.body?.provider) ? req.body.provider : cfg.provider;
+    const embeddingModel = typeof req.body?.embeddingModel === 'string' && req.body.embeddingModel.trim()
+      ? req.body.embeddingModel.trim()
+      : cfg.embeddingModel;
+    const sampleText = typeof req.body?.sampleText === 'string' && req.body.sampleText.trim()
+      ? req.body.sampleText.trim()
+      : 'Kubernetes';
+
+    let provider;
+    try {
+      provider = await resolveAiProvider(baseUrl, configuredProvider);
+    } catch {
+      provider = configuredProvider === 'ollama' ? 'ollama' : 'openai';
+    }
+
+    const started = Date.now();
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 15000);
+    try {
+      let response;
+      if (provider === 'openai') {
+        const headers = { 'Content-Type': 'application/json' };
+        if (requestApiKey) headers.Authorization = `Bearer ${requestApiKey}`;
+        if (baseUrl.includes('openrouter.ai')) {
+          headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'http://localhost:5173';
+          headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'HRTool';
+        }
+        const embeddingUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/embeddings` : `${baseUrl}/v1/embeddings`;
+        response = await fetch(embeddingUrl, {
+          method: 'POST',
+          headers,
+          signal: ctrl.signal,
+          body: JSON.stringify({ model: embeddingModel, input: sampleText }),
+        });
+      } else {
+        response = await fetch(`${baseUrl}/api/embeddings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
+          body: JSON.stringify({ model: embeddingModel, prompt: sampleText }),
+        });
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return res.status(response.status).json({
+          reachable: false,
+          provider,
+          baseUrl,
+          embeddingModel,
+          sampleText,
+          latencyMs: Date.now() - started,
+          error: payload?.error || payload?.message || `HTTP ${response.status}`,
+        });
+      }
+
+      const embedding = provider === 'openai'
+        ? payload?.data?.[0]?.embedding
+        : payload?.embedding;
+
+      res.json({
+        reachable: true,
+        provider,
+        baseUrl,
+        embeddingModel,
+        sampleText,
+        latencyMs: Date.now() - started,
+        dims: Array.isArray(embedding) ? embedding.length : 0,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    console.error('Error testing embedding model:', error);
+    res.status(500).json({ error: 'Fehler beim Embedding-Test' });
+  }
+});
+
+/**
+ * @swagger
  * /settings/ai/embedding-models:
  *   get:
  *     summary: Verfügbare Embedding-Modelle vom KI-Host laden

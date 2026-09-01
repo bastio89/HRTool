@@ -88,8 +88,14 @@ export default function AISettings() {
       setModels(names)
       const active = currentModel ?? model
       if (names.length > 0) {
-        setManualModel(false)
-        if (!active || !names.includes(active)) setModel(names[0])
+        if (active && names.includes(active)) {
+          setManualModel(false)
+          setModel(active)
+        } else {
+          // Keep a custom model value even if the host does not advertise it.
+          setManualModel(true)
+          if (active) setModel(active)
+        }
       } else {
         setManualModel(true)
       }
@@ -108,14 +114,22 @@ export default function AISettings() {
     try {
       const res = await settingsApi.getAiEmbeddingModels(url, apiKey, requestedProvider)
       const names = sortModelNames([
-        ...EMBEDDING_MODEL_PRESETS,
-        ...(res.models || []).map((m) => m.name).filter(Boolean),
+        ...new Set([
+          ...EMBEDDING_MODEL_PRESETS,
+          ...(res.models || []).map((m) => m.name).filter(Boolean),
+        ]),
       ])
       setEmbeddingModels(names)
       const activeEmbedding = currentEmbeddingModel ?? embeddingModel
       if (names.length > 0) {
-        setManualEmbeddingModel(false)
-        if (!activeEmbedding || !names.includes(activeEmbedding)) setEmbeddingModel(names[0])
+        if (activeEmbedding && names.includes(activeEmbedding)) {
+          setManualEmbeddingModel(false)
+          setEmbeddingModel(activeEmbedding)
+        } else {
+          // Keep a custom embedding model value even if the host does not advertise it.
+          setManualEmbeddingModel(true)
+          if (activeEmbedding) setEmbeddingModel(activeEmbedding)
+        }
       } else {
         setManualEmbeddingModel(true)
       }

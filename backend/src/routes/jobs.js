@@ -335,6 +335,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   }
 
   const persist = String(req.query.persist || '').toLowerCase() === '1' || String(req.query.persist || '').toLowerCase() === 'true';
+  const extractOnly = String(req.query.extractOnly || '').toLowerCase() === '1' || String(req.query.extractOnly || '').toLowerCase() === 'true';
 
   try {
     const text = await extractText(req.file.path, req.file.mimetype);
@@ -344,12 +345,39 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       return res.status(400).json({ error: 'Aus der Datei konnte kein Text extrahiert werden' });
     }
 
+    if (extractOnly) {
+      const sections = splitJobTextSections(trimmedText);
+      return res.json({
+        success: true,
+        filename: req.file.originalname,
+        id: null,
+        job: null,
+        text: trimmedText,
+        title: path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname,
+        about_us: sections.about_us,
+        description: sections.description,
+        requirements: sections.requirements,
+        skills: '',
+        benefits: sections.benefits,
+        importSteps: {
+          aiParsed: { ok: false },
+          graphRagSaved: { ok: false },
+          dbSaved: { ok: false },
+        },
+        graphRag: null,
+      });
+    }
+
     const graphRag = await ingestIntoGraphRag(trimmedText, persist);
     const profile = graphRag?.profile || {};
     const extractedSkills = serializeJobSkills(profile.required_skills);
+    const filenameTitle = path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname;
+    const resolvedTitle = profile.title && String(profile.title).trim() && String(profile.title).trim() !== 'Unknown Job'
+      ? String(profile.title).trim()
+      : filenameTitle;
     const parsedJob = persist
       ? persistLocalJob({
-        title: profile.title || path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname,
+        title: resolvedTitle,
         about_us: profile.about_us || '',
         description: profile.description || '',
         requirements: profile.requirements || '',
@@ -380,7 +408,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       id: parsedJob?.id || graphRag?.id || null,
       job: parsedJob,
       text: trimmedText,
-      title: parsedJob?.title || profile.title || '',
+      title: parsedJob?.title || resolvedTitle,
       about_us: parsedJob?.about_us || profile.about_us || '',
       description: parsedJob?.description || profile.description || '',
       requirements: parsedJob?.requirements || profile.requirements || '',

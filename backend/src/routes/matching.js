@@ -16,7 +16,7 @@ const MATCHING_CANDIDATE_FIELDS = `
 `;
 
 const MATCHING_JOB_FIELDS = `
-  id, title, description, requirements, location, type, status, url
+  id, title, description, requirements, skills, location, type, status, url
 `;
 
 const WEIGHT_LABELS = {
@@ -50,6 +50,36 @@ function getJobs(jobIds) {
     return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE id IN (${placeholders})`).all(...ids);
   }
   return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE status IS NULL OR status != 'Archiviert' ORDER BY created_at DESC`).all();
+}
+
+function splitSkillValues(value) {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => splitSkillValues(item))
+      .filter(Boolean);
+  }
+
+  if (value == null) {
+    return [];
+  }
+
+  if (typeof value === 'object') {
+    const name = value.name || value.label || value.title || value.skill || value.value;
+    return name ? [String(name).trim()] : [];
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[,;\n|]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [String(value).trim()].filter(Boolean);
+}
+
+function toRequiredSkills(value) {
+  return splitSkillValues(value).map((name) => ({ name, priority: 'Mandatory' }));
 }
 
 async function callGraphRagMatching(endpoint, payload) {
@@ -382,6 +412,7 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
         id: jobId || null,
         title: jobTitle || 'Unbenannte Stelle',
         description: jobDescription,
+        required_skills: toRequiredSkills(jobDescription),
       },
       candidates: candidates.map((candidate) => ({
         id: candidate.id,
@@ -395,6 +426,7 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
         languages: candidate.languages,
         certificates: candidate.certificates,
         mobility: candidate.mobility,
+        has_skill: splitSkillValues(candidate.skills),
       })),
       weights,
     });
@@ -452,6 +484,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
         title: job.title,
         description: job.description,
         requirements: job.requirements,
+        required_skills: toRequiredSkills(job.skills || job.requirements || job.description),
         location: job.location,
         type: job.type,
       })),
@@ -467,6 +500,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
         languages: candidate.languages,
         certificates: candidate.certificates,
         mobility: candidate.mobility,
+        has_skill: splitSkillValues(candidate.skills),
       })),
       weights,
     });

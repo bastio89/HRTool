@@ -376,6 +376,7 @@ class MatchingCandidateInput(BaseModel):
     location: Any | None = None
     experience: Any | None = None
     skills: Any | None = None
+    has_skill: Any | None = None
     education: Any | None = None
     desired_salary: Any | None = None
     availability: Any | None = None
@@ -389,6 +390,7 @@ class MatchingJobInput(BaseModel):
     title: str | None = None
     description: str | None = None
     requirements: str | None = None
+    required_skills: Any | None = None
     location: str | None = None
     type: str | None = None
 

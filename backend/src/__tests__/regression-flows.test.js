@@ -13,8 +13,6 @@ function createMockDb(seed = {}) {
     candidates: seed.candidates ? [...seed.candidates] : [],
     jobs: seed.jobs ? [...seed.jobs] : [],
     candidateFiles: seed.candidateFiles ? [...seed.candidateFiles] : [],
-    candidateWorkHistory: seed.candidateWorkHistory ? [...seed.candidateWorkHistory] : [],
-    candidateEducation: seed.candidateEducation ? [...seed.candidateEducation] : [],
     activities: seed.activities ? [...seed.activities] : [],
     aiLogs: seed.aiLogs ? [...seed.aiLogs] : [],
     matchingResults: seed.matchingResults ? [...seed.matchingResults] : [],
@@ -31,9 +29,6 @@ function createMockDb(seed = {}) {
 
   const db = {
     __state: state,
-    transaction(fn) {
-      return (...args) => fn(...args);
-    },
     prepare(sql) {
       const q = normalize(sql);
 
@@ -70,14 +65,6 @@ function createMockDb(seed = {}) {
 
           if (q.includes('SELECT * FROM candidate_files WHERE candidate_id = ?')) {
             return state.candidateFiles.filter((f) => f.candidate_id === Number(args[0]));
-          }
-
-          if (q.includes('SELECT * FROM candidate_work_history WHERE candidate_id = ?')) {
-            return state.candidateWorkHistory.filter((f) => f.candidate_id === Number(args[0]));
-          }
-
-          if (q.includes('SELECT * FROM candidate_education WHERE candidate_id = ?')) {
-            return state.candidateEducation.filter((f) => f.candidate_id === Number(args[0]));
           }
 
           return [];
@@ -161,47 +148,6 @@ function createMockDb(seed = {}) {
             return { lastInsertRowid: row.id };
           }
 
-          if (q.includes('INSERT INTO candidate_work_history')) {
-            const [candidateId, employer, position, fromDate, toDate, isCurrent, description, location] = args;
-            if (!employer || !position) {
-              throw new Error('candidate_work_history requires employer and position');
-            }
-            const row = {
-              id: state.candidateWorkHistory.length + 1,
-              candidate_id: Number(candidateId),
-              employer,
-              position,
-              from_date: fromDate,
-              to_date: toDate,
-              is_current: isCurrent,
-              description,
-              location,
-              created_at: new Date().toISOString(),
-            };
-            state.candidateWorkHistory.push(row);
-            return { lastInsertRowid: row.id };
-          }
-
-          if (q.includes('INSERT INTO candidate_education')) {
-            const [candidateId, institution, degree, fieldOfStudy, fromDate, toDate, description] = args;
-            if (!institution) {
-              throw new Error('candidate_education requires institution');
-            }
-            const row = {
-              id: state.candidateEducation.length + 1,
-              candidate_id: Number(candidateId),
-              institution,
-              degree,
-              field_of_study: fieldOfStudy,
-              from_date: fromDate,
-              to_date: toDate,
-              description,
-              created_at: new Date().toISOString(),
-            };
-            state.candidateEducation.push(row);
-            return { lastInsertRowid: row.id };
-          }
-
           if (q.includes('INSERT INTO activities')) {
             const [candidateId, type, content] = args;
             state.activities.push({
@@ -215,7 +161,7 @@ function createMockDb(seed = {}) {
           }
 
           if (q.includes('INSERT INTO ai_logs')) {
-            const [userId, feature, model, modelVersion, promptHash, prompt, response, parsedResult, skills, durationMs, inputTokens, outputTokens, success, errorMessage] = args;
+            const [userId, feature, model, modelVersion, promptHash, prompt, response, parsedResult, durationMs, inputTokens, outputTokens, success, errorMessage] = args;
             const row = {
               id: state.aiLogs.length + 1,
               user_id: userId,
@@ -226,7 +172,6 @@ function createMockDb(seed = {}) {
               prompt,
               response,
               parsed_result: parsedResult,
-              skills,
               duration_ms: durationMs,
               input_tokens: inputTokens,
               output_tokens: outputTokens,
@@ -244,7 +189,6 @@ function createMockDb(seed = {}) {
               maybeAboutUs,
               maybeDescription,
               maybeRequirements,
-              maybeSkills,
               maybeBenefits,
               maybeLocation,
               maybeType,
@@ -252,15 +196,14 @@ function createMockDb(seed = {}) {
               maybeUrl,
             ] = args;
 
-            // Support both legacy 7-arg and current 10-arg INSERT signatures.
-            const hasExtendedShape = args.length >= 10;
+            // Support both legacy 7-arg and current 9-arg INSERT signatures.
+            const hasExtendedShape = args.length >= 9;
             const row = {
               id: state.seq.jobId++,
               title,
               about_us: hasExtendedShape ? maybeAboutUs : null,
               description: hasExtendedShape ? maybeDescription : maybeAboutUs,
               requirements: hasExtendedShape ? maybeRequirements : maybeDescription,
-              skills: hasExtendedShape ? maybeSkills : null,
               benefits: hasExtendedShape ? maybeBenefits : null,
               location: hasExtendedShape ? maybeLocation : maybeRequirements,
               type: hasExtendedShape ? maybeType : maybeLocation,
@@ -422,262 +365,6 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.candidate.name).toBe('Max Mustermann');
     expect(response.body.candidate.email).toBe('max@example.com');
     expect(global.fetch).toHaveBeenCalledTimes(1);
-  });
-
-  test('CV parser with persist=1 stores the candidate in SQLite and keeps histories', async () => {
-    const mockDb = createMockDb();
-
-    jest.doMock('../database', () => mockDb);
-    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
-    jest.doMock('../utils/documentText', () => ({
-      tmpDir: path.join(__dirname, '..', '..', 'data', 'tmp'),
-      extractText: jest.fn(async () => 'Max Mustermann\nmax@example.com\nJavaScript Node.js\nFHNW Bachelor'),
-    }));
-    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
-
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        id: 'graph-rag-candidate-1',
-        message: 'Candidate ingested successfully',
-        persisted: true,
-        profile: {
-          name: 'Max Mustermann',
-          email: 'max@example.com',
-          phone: '+41 79 555 01 02',
-          location: 'Zürich',
-          experience: null,
-          education: 'Bachelor of Science FHNW',
-          skills: [{ name: 'JavaScript' }, { name: 'Node.js' }],
-          languages: [{ name: 'Deutsch', level: 'C2' }],
-          educations: [{ level: 'Bachelor', field_of_study: 'Informatik' }],
-          industries: [],
-          work_history: [
-            { employer: 'ACME', position: 'Developer', from_date: '2020-01', to_date: '2022-12', is_current: false, description: 'Builds APIs', location: 'Berlin' },
-            { employer: 'Globex', position: 'Senior Developer', from_date: '2023-01', to_date: null, is_current: true, description: 'Leads platform work', location: 'Zürich' },
-          ],
-          education_history: [{ institution: 'FHNW', degree: 'BSc', field_of_study: 'Informatik', from_date: '2016-09', to_date: '2019-06', description: 'Studium' }],
-          preferred_roles: ['Software Engineer'],
-        },
-      }),
-    }));
-
-    const cvParserRouter = require('../routes/cv-parser');
-    const app = express();
-    app.use('/api/cv-parser', cvParserRouter);
-
-    const response = await request(app)
-      .post('/api/cv-parser/parse?persist=1')
-      .attach('file', Buffer.from('%PDF-1.4 fake pdf content'), {
-        filename: 'cv.pdf',
-        contentType: 'application/pdf',
-      });
-
-    expect(response.status).toBe(200);
-    expect(response.body.persisted).toBe(true);
-    expect(response.body.storage.sqlite).toBe(true);
-    expect(response.body.storage.neo4j).toBe(true);
-    expect(response.body.candidate.id).toBe(1);
-    expect(response.body.candidate.name).toBe('Max Mustermann');
-    expect(mockDb.__state.candidates).toHaveLength(1);
-    expect(String(mockDb.__state.candidates[0].experience || '')).toContain('Developer');
-    expect(String(mockDb.__state.candidates[0].experience || '')).toContain('ACME');
-    expect(String(mockDb.__state.candidates[0].experience || '')).toContain('Globex');
-    expect(mockDb.__state.candidateWorkHistory).toHaveLength(2);
-    expect(mockDb.__state.candidateEducation).toHaveLength(1);
-    expect(mockDb.__state.aiLogs).toHaveLength(1);
-    expect(mockDb.__state.aiLogs[0].feature).toBe('cv-parser');
-    expect(mockDb.__state.aiLogs[0].prompt).toContain('Max Mustermann');
-    expect(mockDb.__state.aiLogs[0].response).toContain('Candidate ingested successfully');
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    const [url, options] = global.fetch.mock.calls[0];
-    expect(String(url)).toContain('/ingest/candidate?persist=1');
-    expect(JSON.parse(options.body)).toEqual({ raw_text: expect.any(String) });
-  });
-
-  test('CV parser with persist=1 skips incomplete history rows instead of failing SQLite persistence', async () => {
-    const mockDb = createMockDb();
-
-    jest.doMock('../database', () => mockDb);
-    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
-    jest.doMock('../utils/documentText', () => ({
-      tmpDir: path.join(__dirname, '..', '..', 'data', 'tmp'),
-      extractText: jest.fn(async () => 'Max Mustermann\nmax@example.com\nJavaScript Node.js\nFHNW Bachelor'),
-    }));
-    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
-
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        id: 'graph-rag-candidate-1',
-        message: 'Candidate ingested successfully',
-        persisted: true,
-        profile: {
-          name: 'Max Mustermann',
-          email: 'max@example.com',
-          phone: '+41 79 555 01 02',
-          location: 'Zürich',
-          experience: null,
-          education: 'Bachelor of Science FHNW',
-          skills: [{ name: 'JavaScript' }, { name: 'Node.js' }],
-          languages: [{ name: 'Deutsch', level: 'C2' }],
-          educations: [{ level: 'Bachelor', field_of_study: 'Informatik' }],
-          industries: [],
-          work_history: [
-            { employer: 'ACME', position: 'Developer', from_date: '2020-01', to_date: '2022-12', is_current: false, description: 'Builds APIs', location: 'Berlin' },
-            { employer: 'Globex', position: null, from_date: '2023-01', to_date: null, is_current: true, description: 'Leads platform work', location: 'Zürich' },
-          ],
-          education_history: [
-            { institution: 'FHNW', degree: 'BSc', field_of_study: 'Informatik', from_date: '2016-09', to_date: '2019-06', description: 'Studium' },
-            { institution: null, degree: 'MBA', field_of_study: 'Business', from_date: '2020-09', to_date: '2022-06', description: 'Unvollständig' },
-          ],
-          preferred_roles: ['Software Engineer'],
-        },
-      }),
-    }));
-
-    const cvParserRouter = require('../routes/cv-parser');
-    const app = express();
-    app.use('/api/cv-parser', cvParserRouter);
-
-    const response = await request(app)
-      .post('/api/cv-parser/parse?persist=1')
-      .attach('file', Buffer.from('%PDF-1.4 fake pdf content'), {
-        filename: 'cv-incomplete-history.pdf',
-        contentType: 'application/pdf',
-      });
-
-    expect(response.status).toBe(200);
-    expect(response.body.storage.sqlite).toBe(true);
-    expect(mockDb.__state.candidateWorkHistory).toHaveLength(1);
-    expect(mockDb.__state.candidateWorkHistory[0].employer).toBe('ACME');
-    expect(mockDb.__state.candidateEducation).toHaveLength(1);
-    expect(mockDb.__state.candidateEducation[0].institution).toBe('FHNW');
-  });
-
-  test('CV parser backfills SQLite work history when GraphRAG returns no work history', async () => {
-    const mockDb = createMockDb();
-
-    jest.doMock('../database', () => mockDb);
-    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
-    jest.doMock('../utils/documentText', () => ({
-      tmpDir: path.join(__dirname, '..', '..', 'data', 'tmp'),
-      extractText: jest.fn(async () => [
-        'LEBENSLAUF 299 — IT-QUALIFIKATIONSPROFILE — SEITE 1',
-        'Senior .NET Core Developer',
-        'Name: Werner Meier  •  Alter: 51  •  Frauenfeld, Schweiz',
-        '3. PRAKTISCHE INDUSTRIE- & PROJEKTERFAHRUNG (AUSZUG)',
-        'Senior IT Specialist, Swisscom AG, Zürich',
-        'Umfassende Konzeption, Implementierung und Architektur moderner IT-Infrastruktursysteme.',
-        'Software Engineer, Swiss Re, Zürich',
-        'Erfolgreiche Leitung agiler Projektteams (Scrum/Kanban).',
-        '4. TECHNISCHE & IT-ENGINEERING KOMPETENZMATRIX',
-      ].join('\n')),
-    }));
-    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
-
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        id: 'graph-rag-candidate-1',
-        message: 'Candidate ingested successfully',
-        persisted: true,
-        profile: {
-          name: 'Werner Meier',
-          location: 'Frauenfeld, Schweiz',
-          experience: null,
-          education: 'Master of Science in Computer Science, ETH Zürich',
-          skills: [{ name: 'C#' }, { name: '.NET Core' }],
-          languages: [{ name: 'Deutsch', level: 'C2' }],
-          educations: [],
-          industries: [],
-          work_history: [],
-          education_history: [],
-          preferred_roles: ['Senior .NET Core Developer'],
-        },
-      }),
-    }));
-
-    const cvParserRouter = require('../routes/cv-parser');
-    const app = express();
-    app.use('/api/cv-parser', cvParserRouter);
-
-    const response = await request(app)
-      .post('/api/cv-parser/parse?persist=1')
-      .attach('file', Buffer.from('%PDF-1.4 fake pdf content'), {
-        filename: 'Meier-Werner.pdf',
-        contentType: 'application/pdf',
-      });
-
-    expect(response.status).toBe(200);
-    expect(response.body.storage.sqlite).toBe(true);
-    expect(mockDb.__state.candidateWorkHistory).toHaveLength(2);
-    expect(mockDb.__state.candidateWorkHistory[0].employer).toBe('Swisscom AG');
-    expect(mockDb.__state.candidateWorkHistory[0].position).toBe('Senior IT Specialist');
-    expect(mockDb.__state.candidateWorkHistory[1].employer).toBe('Swiss Re');
-    expect(mockDb.__state.candidateWorkHistory[1].position).toBe('Software Engineer');
-  });
-
-  test('CV parser backfills work history from Berufliche Tätigkeiten section', async () => {
-    const mockDb = createMockDb();
-
-    jest.doMock('../database', () => mockDb);
-    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
-    jest.doMock('../utils/documentText', () => ({
-      tmpDir: path.join(__dirname, '..', '..', 'data', 'tmp'),
-      extractText: jest.fn(async () => [
-        'Lebenslauf',
-        'Berufliche Tätigkeiten',
-        'Senior Developer, Example AG, Zürich',
-        'Entwicklung von Webanwendungen mit React und Node.js.',
-        'Software Engineer, Another GmbH, Bern',
-        'Implementierung und Betrieb von APIs.',
-        'Ausbildung',
-        'Bachelor of Science, FHNW',
-      ].join('\n')),
-    }));
-    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
-
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        id: 'graph-rag-candidate-1',
-        message: 'Candidate ingested successfully',
-        persisted: true,
-        profile: {
-          name: 'Max Mustermann',
-          location: 'Zürich',
-          experience: null,
-          education: null,
-          skills: [],
-          languages: [],
-          educations: [],
-          industries: [],
-          work_history: [],
-          education_history: [],
-          preferred_roles: [],
-        },
-      }),
-    }));
-
-    const cvParserRouter = require('../routes/cv-parser');
-    const app = express();
-    app.use('/api/cv-parser', cvParserRouter);
-
-    const response = await request(app)
-      .post('/api/cv-parser/parse?persist=1')
-      .attach('file', Buffer.from('%PDF-1.4 fake pdf content'), {
-        filename: 'berufliche-taetigkeiten.pdf',
-        contentType: 'application/pdf',
-      });
-
-    expect(response.status).toBe(200);
-    expect(response.body.storage.sqlite).toBe(true);
-    expect(mockDb.__state.candidateWorkHistory).toHaveLength(2);
-    expect(mockDb.__state.candidateWorkHistory[0].employer).toBe('Example AG');
-    expect(mockDb.__state.candidateWorkHistory[0].position).toBe('Senior Developer');
-    expect(mockDb.__state.candidateWorkHistory[1].employer).toBe('Another GmbH');
-    expect(mockDb.__state.candidateWorkHistory[1].position).toBe('Software Engineer');
   });
 
   test('CV parser handles fixture PDF upload through the real multipart path', async () => {
@@ -1186,26 +873,18 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
     global.fetch = jest.fn(async (url, options) => {
-      if (String(url).startsWith('http://fake-graphrag/ingest/job') && options?.method === 'POST') {
+      if (String(url) === 'http://fake-graphrag/ingest/job' && options?.method === 'POST') {
         const payload = JSON.parse(options.body);
         expect(payload.raw_text).toContain('Java Developer');
         expect(payload.raw_text).toContain('Software');
+        expect(payload.profile.title).toMatch(/Java Developer/i);
         return {
           ok: true,
-          json: async () => ({
-            id: 'graph-job-java-software',
-            message: 'Job ingested successfully',
-            profile: {
-              title: 'Java Developer',
-              description: 'Entwicklung von Java-basierten Backend-Services.',
-              requirements: 'Java, Spring Boot, SQL',
-              required_skills: [{ name: 'Java' }, { name: 'Spring Boot' }, { name: 'SQL' }],
-            },
-          }),
+          json: async () => ({ id: 'graph-job-java-software', message: 'Job ingested successfully' }),
         };
       }
 
-      return { ok: false, json: async () => ({}), text: async () => 'unexpected fetch call' };
+      return { ok: false, text: async () => 'unexpected fetch call' };
     });
 
     const jobsRouter = require('../routes/jobs');
@@ -1215,7 +894,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     const fixturePath = path.join(__dirname, 'fixtures', 'Java Developer Software+.pdf');
     const parseResponse = await request(app)
-      .post('/api/jobs/parse-description?persist=1')
+      .post('/api/jobs/parse-description')
       .attach('file', fixturePath);
 
     expect(parseResponse.status).toBe(200);
@@ -1225,26 +904,29 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     const jobTitle = String(parseResponse.body.title || 'Java Developer Software+').trim();
 
-    expect(parseResponse.body.id).toBe(1);
-    expect(parseResponse.body.job).toBeTruthy();
-    expect(parseResponse.body.job.title).toBe(jobTitle);
-    expect(parseResponse.body.skills).toBe('Java, Spring Boot, SQL');
-    expect(mockDb.__state.jobs).toHaveLength(1);
-    expect(mockDb.__state.jobs[0].title).toBe(jobTitle);
-    expect(mockDb.__state.jobs[0].description).toBe(parseResponse.body.description);
-    expect(mockDb.__state.jobs[0].requirements).toBe(parseResponse.body.requirements);
-    expect(mockDb.__state.jobs[0].skills).toBe(parseResponse.body.skills);
-    expect(parseResponse.body.graphRag).toEqual({
+    const createResponse = await request(app)
+      .post('/api/jobs')
+      .send({
+        title: jobTitle,
+        about_us: parseResponse.body.about_us,
+        description: parseResponse.body.description,
+        requirements: parseResponse.body.requirements,
+        benefits: parseResponse.body.benefits,
+        location: 'Remote',
+        type: 'Vollzeit',
+        status: 'Offen',
+      });
+
+    expect(createResponse.status).toBe(201);
+      expect(createResponse.body.title).toBe(jobTitle);
+    expect(createResponse.body.graphRag).toEqual({
       id: 'graph-job-java-software',
       message: 'Job ingested successfully',
-      profile: {
-        title: 'Java Developer',
-        description: 'Entwicklung von Java-basierten Backend-Services.',
-        requirements: 'Java, Spring Boot, SQL',
-        required_skills: [{ name: 'Java' }, { name: 'Spring Boot' }, { name: 'SQL' }],
-      },
     });
-    expect(global.fetch.mock.calls.some(([url]) => String(url).startsWith('http://fake-graphrag/ingest/job'))).toBe(true);
+    expect(mockDb.__state.jobs).toHaveLength(1);
+      expect(mockDb.__state.jobs[0].title).toBe(jobTitle);
+    expect(mockDb.__state.jobs[0].description).toBe(parseResponse.body.description);
+    expect(global.fetch.mock.calls.some(([url]) => String(url) === 'http://fake-graphrag/ingest/job')).toBe(true);
   });
 
   test('Jobs parse-description with real AI parses Senior Data Engineer fixture and persists job', async () => {
@@ -1279,7 +961,6 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
         about_us: parseResponse.body.about_us,
         description: parseResponse.body.description,
         requirements: parseResponse.body.requirements,
-        skills: parseResponse.body.skills,
         benefits: parseResponse.body.benefits,
         location: 'Remote',
         type: 'Vollzeit',

@@ -83,3 +83,26 @@ async def test_parse_candidate_cv_recovers_education_history_dates_from_pdf_text
     assert profile.education_history[0].institution == "German University in Cairo"
     assert profile.education_history[0].from_date == "2010-01"
     assert profile.education_history[0].to_date == "2013-01"
+
+
+@pytest.mark.anyio
+async def test_parse_job_description_falls_back_when_ai_returns_non_json() -> None:
+    service = LLMService(
+        base_url="http://fake-ai",
+        chat_model="test-model",
+        embedding_model="test-embedding",
+        embedding_dimensions=8,
+    )
+
+    async def fake_generate_json(*args, **kwargs):
+        return "unexpected plain text response"
+
+    service._generate_json = fake_generate_json  # type: ignore[method-assign]
+
+    try:
+        profile = await service.parse_job_description("Senior Backend Engineer with Node.js and SQL")
+    finally:
+        await service.close()
+
+    assert profile.title == "Senior Backend Engineer"
+    assert profile.required_skills == []

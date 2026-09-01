@@ -10,7 +10,7 @@ Production-oriented FastAPI backend for M x N candidate-job matching with a 3-st
 ## Stack
 - FastAPI + Uvicorn
 - Neo4j official Python driver (async)
-- Ollama (local LLM runtime)
+- OpenRouter for hosted LLM access, with Ollama as optional local fallback
 - Pydantic v2 + pydantic-settings
 
 ## Project structure
@@ -29,7 +29,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Make sure Ollama is running locally and the configured models are available, e.g. `qwen3.6:35b` for chat and `qwen3-embedding:4b` for vectorization.
+For OpenRouter-based batch imports, set `AI_PROVIDER=openrouter`, provide `OPENROUTER_API_KEY`, and keep `AI_BASE_URL` at `https://openrouter.ai/api/v1` unless you override it.
+
+If you want to use local Ollama instead, make sure it is running locally and the configured models are available, e.g. `qwen3.6:35b` for chat and `qwen3-embedding:4b` for vectorization.
 
 ```bash
 ollama pull qwen3.6:35b
@@ -48,7 +50,8 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Endpoints
 - `POST /ingest/candidate` (JSON `{ "raw_text": "..." }` or multipart form with `raw_text` or `file`; `.pdf` CV uploads are supported)
-- `POST /ingest/job` (JSON `{ "raw_text": "..." }` or multipart form with `raw_text` or `file`)
+- `POST /add/job/` (plain text body for job descriptions; parses with the centrally configured AI settings, stores the job in SQLite, then syncs to Neo4j)
+- `POST /ingest/job` (same job ingestion behavior as `/add/job/`, kept as a compatibility alias)
 - `POST /match/{job_id}`
 - `GET /health`
 
@@ -135,6 +138,7 @@ LIMIT 25;
 
 ## Batch import CV PDFs
 The helper script `batch_tools/import_cvs_from_pdfs.py` extracts text from each PDF locally and ingests CVs directly into Neo4j.
+It uses the resolved AI provider from `config.py`, so with `AI_PROVIDER=openrouter` it will call OpenRouter instead of a local Ollama instance.
 
 - `--mode cv` imports CVs directly into Neo4j and prints the best job matches (default)
 - `--mode job` parses job profiles locally and stores job skills directly in Neo4j, then prints the best candidate matches
@@ -144,6 +148,16 @@ The helper script `batch_tools/import_cvs_from_pdfs.py` extracts text from each 
 ```bash
 /Users/pak/HRGraphRAG/.venv/bin/python batch_tools/import_cvs_from_pdfs.py \
 	--api-base http://localhost:8000 \
+	--mode cv \
+	--input-dir cv_input
+```
+
+OpenRouter example:
+
+```bash
+export AI_PROVIDER=openrouter
+export OPENROUTER_API_KEY=your_openrouter_api_key
+/Users/pak/HRGraphRAG/.venv/bin/python batch_tools/import_cvs_from_pdfs.py \
 	--mode cv \
 	--input-dir cv_input
 ```

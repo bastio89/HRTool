@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     neo4j_uri: str
     neo4j_user: str = "neo4j"
     neo4j_password: str
-    job_sqlite_path: str = "data/graphrag_jobs.db"
     ai_provider: str | None = None
     ai_base_url: str | None = None
     openrouter_api_key: str | None = None
@@ -19,7 +18,6 @@ class Settings(BaseSettings):
     ollama_chat_model: str = "qwen3.6:35b"
     ollama_embedding_model: str = "qwen3-embedding:4b"
     ollama_enable_reasoning: bool = True
-    ai_log_llm_calls: bool | None = None
     enable_parse_latency_aggregation: bool = False
     parse_latency_window_size: int = 200
     parse_latency_log_every: int = 20
@@ -56,35 +54,11 @@ class Settings(BaseSettings):
         except sqlite3.Error:
             return None
 
-    def _backend_setting_bool(self, key: str) -> bool | None:
-        value = self._backend_setting(key)
-        if value is None:
-            return None
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-        return None
-
     @property
     def resolved_backend_db_path(self) -> str:
         if self.backend_db_path:
             return self.backend_db_path
-        for candidate in (
-            Path(__file__).resolve().parents[1] / "backend" / "data" / "hrtool.db",
-            Path(__file__).resolve().parents[1] / "data" / "hrtool.db",
-        ):
-            if candidate.exists():
-                return str(candidate)
         return str(Path(__file__).resolve().parents[1] / "backend" / "data" / "hrtool.db")
-
-    @property
-    def resolved_job_sqlite_path(self) -> str:
-        job_db_path = Path(self.job_sqlite_path)
-        if job_db_path.is_absolute():
-            return str(job_db_path)
-        return str(Path(__file__).resolve().parents[1] / job_db_path)
 
     @property
     def resolved_provider(self) -> str:
@@ -96,27 +70,12 @@ class Settings(BaseSettings):
         return self.openrouter_api_key or self._backend_setting("ai_api_key")
 
     @property
-    def enable_ai_call_logging(self) -> bool:
-        if self.ai_log_llm_calls is not None:
-            return self.ai_log_llm_calls
-        return self._backend_setting_bool("ai_log_llm_calls") or False
-
-    @property
     def resolved_chat_model(self) -> str:
         return self.ai_chat_model or self._backend_setting("ai_model") or self.ollama_chat_model
 
     @property
     def resolved_embedding_model(self) -> str:
-        backend_embedding_model = self._backend_setting("ai_embedding_model")
-        if self.ai_embedding_model:
-            return self.ai_embedding_model
-        if backend_embedding_model:
-            return backend_embedding_model
-
-        if self.resolved_provider == "openrouter":
-            return "openai/text-embedding-3-small"
-
-        return self.ollama_embedding_model
+        return self.ai_embedding_model or self.ollama_embedding_model
 
 
 settings = Settings()

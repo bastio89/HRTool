@@ -124,9 +124,7 @@ class SQLiteJobStore:
         return "\n".join(part for part in parts if part).strip()
 
     def _upsert_job_sync(self, job_id: str, raw_text: str, profile: JobProfileExtraction) -> int:
-        description_text = profile.description.strip() if isinstance(profile.description, str) and profile.description.strip() else (
-            raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
-        )
+        description_text = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
         record: dict[str, Any] = {
             "graph_job_id": job_id,
             "title": profile.title,
@@ -134,9 +132,9 @@ class SQLiteJobStore:
             "recruiter_company": profile.recruiter_company,
             "employer_company": profile.employer_company,
             "description": description_text,
-            "requirements": profile.requirements.strip() if isinstance(profile.requirements, str) and profile.requirements.strip() else self._summarize_requirements(profile),
-            "about_us": profile.about_us.strip() if isinstance(profile.about_us, str) and profile.about_us.strip() else None,
-            "benefits": profile.benefits.strip() if isinstance(profile.benefits, str) and profile.benefits.strip() else None,
+            "requirements": self._summarize_requirements(profile),
+            "about_us": None,
+            "benefits": None,
             "location": profile.location,
             "type": profile.employment_type or "Vollzeit",
             "status": "Offen",

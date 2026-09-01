@@ -134,12 +134,24 @@ export const jobsApi = {
   create: (data) => request('/jobs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/jobs/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/jobs/${id}`, { method: 'DELETE' }),
-  parseDescriptionFile: async (file, thinking = false, persist = false) => {
+  addPlainTextJob: async (plainText) => {
+    const response = await fetch(`${API_BASE}/add/job/`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'text/plain' },
+      body: plainText,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Import fehlgeschlagen' }));
+      throw new Error(error.error || error.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+  },
+  parseDescriptionFile: async (file, thinking = false, extractOnly = false) => {
     const formData = new FormData();
     formData.append('file', file);
     const params = new URLSearchParams();
     if (thinking) params.set('thinking', '1');
-    if (persist) params.set('persist', '1');
+    if (extractOnly) params.set('extractOnly', '1');
     const url = `${API_BASE}/jobs/parse-description${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       method: 'POST',
@@ -148,7 +160,7 @@ export const jobsApi = {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Upload fehlgeschlagen' }));
-      throw new Error(error.detail || error.error || `HTTP ${response.status}`)
+      throw new Error(error.error || `HTTP ${response.status}`);
     }
     return response.json();
   },
@@ -250,17 +262,15 @@ export const uploadsApi = {
 
 // CV Parser API
 export const cvParserApi = {
-  parse: async (file, onProgress, persist = false) => {
+  parse: async (file, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     const headers = authHeaders();
-    const params = new URLSearchParams();
-    if (persist) params.set('persist', '1');
     // Use SSE streaming if progress callback provided
     if (onProgress) {
       headers['Accept'] = 'text/event-stream';
     }
-    const response = await fetch(`${API_BASE}/cv-parser/parse${params.toString() ? `?${params.toString()}` : ''}`, {
+    const response = await fetch(`${API_BASE}/cv-parser/parse`, {
       method: 'POST',
       headers,
       body: formData,
@@ -285,7 +295,7 @@ export const cvParserApi = {
         }
       }
       const error = await response.json().catch(() => ({ error: 'CV-Analyse fehlgeschlagen' }));
-      throw new Error(error.detail || error.details || error.error || `HTTP ${response.status}`);
+      throw new Error(error.error || `HTTP ${response.status}`);
     }
     // Stream mode: parse SSE events (only if server actually returns SSE)
     const contentType = response.headers.get('content-type') || '';
@@ -420,7 +430,6 @@ export const settingsApi = {
   getAiConfig: () => request('/settings/ai/config'),
   saveAiConfig: (data) => request('/settings/ai/config', { method: 'PUT', body: JSON.stringify(data) }),
   getAiModels: (baseUrl, apiKey, provider) => request(`/settings/ai/models?${new URLSearchParams({ ...(baseUrl ? { baseUrl } : {}), ...(provider ? { provider } : {}) })}`, { timeout: 8000, headers: apiKey ? { 'X-OpenRouter-Key': apiKey } : {} }),
-  getAiEmbeddingModels: (baseUrl, apiKey, provider) => request(`/settings/ai/embedding-models?${new URLSearchParams({ ...(baseUrl ? { baseUrl } : {}), ...(provider ? { provider } : {}) })}`, { timeout: 8000, headers: apiKey ? { 'X-OpenRouter-Key': apiKey } : {} }),
   testAiConnection: (baseUrl, apiKey, provider) => request('/settings/ai/test', { method: 'POST', body: JSON.stringify({ ...(baseUrl ? { baseUrl } : {}), ...(apiKey ? { apiKey } : {}), ...(provider ? { provider } : {}) }), timeout: 8000 }),
 };
 

@@ -42,6 +42,11 @@ function getCandidates(candidateIds) {
   return db.prepare(`SELECT ${MATCHING_CANDIDATE_FIELDS} FROM candidates`).all();
 }
 
+function getCandidateByName(candidateName) {
+  if (!candidateName) return null;
+  return db.prepare(`SELECT ${MATCHING_CANDIDATE_FIELDS} FROM candidates WHERE lower(name) = lower(?) LIMIT 1`).get(candidateName);
+}
+
 function getJobs(jobIds) {
   if (jobIds && jobIds.length > 0) {
     const ids = jobIds.map(Number).filter(Boolean);
@@ -50,6 +55,11 @@ function getJobs(jobIds) {
     return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE id IN (${placeholders})`).all(...ids);
   }
   return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE status IS NULL OR status != 'Archiviert' ORDER BY created_at DESC`).all();
+}
+
+function getJobByTitle(jobTitle) {
+  if (!jobTitle) return null;
+  return db.prepare(`SELECT ${MATCHING_JOB_FIELDS} FROM jobs WHERE lower(title) = lower(?) LIMIT 1`).get(jobTitle);
 }
 
 function splitSkillValues(value) {
@@ -250,6 +260,61 @@ function buildMatrixResult({ jobs, candidates, rows, mode, model }) {
     matrix: rows.sort((a, b) => b.score - a.score),
     jobsRanked,
     candidatesRanked,
+  };
+}
+
+async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle, candidateId, candidateName, candidateIds, engine = 'python' }) {
+  const endpoint = engine === 'neo4j' ? '/match/vectormatch_neo4j' : '/match/vectormatch';
+
+  if (direction === 'candidate_to_jobs') {
+    const candidateRecord = getCandidates(candidateId ? [candidateId] : candidateIds)?.[0]
+      || getCandidateByName(candidateName)
+      || {
+        id: candidateId || candidateIds?.[0] || null,
+        name: candidateName || `Bewerber ${candidateId || ''}`.trim(),
+      };
+    const jobs = getJobs();
+    if (jobs.length === 0) {
+      throw Object.assign(new Error('Keine Stellen vorhanden'), { status: 404 });
+    }
+
+    const graphRagResult = await callGraphRagMatching(endpoint, {
+      jobIds: jobs.map((job) => job.id),
+      jobTitles: jobs.map((job) => job.title).filter(Boolean),
+      cvIds: [candidateRecord.id],
+      candidateNames: [candidateRecord.name].filter(Boolean),
+    });
+
+    return {
+      direction,
+      candidate: candidateRecord,
+      jobs,
+      graphRagResult,
+    };
+  }
+
+  const jobRecord = getJobs([jobId])[0]
+    || getJobByTitle(jobTitle)
+    || {
+      id: jobId || null,
+      title: jobTitle || `Stelle ${jobId || ''}`.trim(),
+    };
+  const candidateRecords = getCandidates(candidateIds);
+  const storedJobId = jobRecord?.id ?? (Number.isFinite(Number(jobId)) ? Number(jobId) : null);
+  const matchedJob = jobRecord || { id: storedJobId, title: `Stelle ${jobId}` };
+
+  const graphRagResult = await callGraphRagMatching(endpoint, {
+    jobIds: [storedJobId ?? jobId],
+    jobTitles: [matchedJob.title || `Stelle ${jobId}`],
+    cvIds: candidateIds,
+    candidateNames: candidateRecords.map((candidate) => candidate.name).filter(Boolean),
+  });
+
+  return {
+    direction,
+    job: matchedJob,
+    candidates: candidateRecords,
+    graphRagResult,
   };
 }
 
@@ -542,6 +607,112 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
         : error.status === 429
           ? 'Das KI-Modell ist aktuell rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
           : 'Fehler beim Matrix-Matching',
+      details: error.details || error.message,
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /matching/vectormatch:
+ *   post:
+ *     summary: Vector-Matching gegen eine ausgewählte Stelle und Kandidaten
+ *     tags: [Matching]
+ */
+router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
+  try {
+    const { direction = 'job_to_candidates', jobId, jobTitle, candidateId, candidateName, candidateIds, engine = 'python' } = req.body;
+
+    if (!['job_to_candidates', 'candidate_to_jobs'].includes(direction)) {
+      return res.status(400).json({ error: 'Ungültige Vector-Matching-Richtung' });
+    }
+    if (!['python', 'neo4j'].includes(engine)) {
+      return res.status(400).json({ error: 'Ungültige Vector-Matching-Engine' });
+    }
+
+    if (direction === 'candidate_to_jobs') {
+      if (!candidateId && !candidateName && (!Array.isArray(candidateIds) || candidateIds.length === 0)) {
+        return res.status(400).json({ error: 'candidateId oder candidateName ist erforderlich' });
+      }
+
+      const { candidate, jobs, graphRagResult } = await runVectorMatch({ direction, candidateId, candidateName, candidateIds, engine });
+      const resultTitle = `Bewerber → alle Stellen: ${candidate?.name || 'Unbenannter Bewerber'}`;
+
+      const saveResult = db.prepare(`
+        INSERT INTO matching_results (job_description, job_title, results, job_id)
+        VALUES (?, ?, ?, ?)
+      `).run(
+        `Vector-Matching (${engine}) für ${candidate?.name || 'Unbenannter Bewerber'}`,
+        resultTitle,
+        JSON.stringify({ ...graphRagResult, direction }),
+        null,
+      );
+
+      logAudit(req, 'ki-matching-vector', 'Matching', saveResult.lastInsertRowid, resultTitle, {
+        engine,
+        direction,
+        candidateId: candidate?.id || null,
+        jobCount: jobs.length,
+        topScore: graphRagResult.matrix?.[0]?.score ?? null,
+      });
+
+      return res.json({
+        id: saveResult.lastInsertRowid,
+        jobTitle: resultTitle,
+        results: { ...graphRagResult, direction },
+        candidateCount: 1,
+        jobCount: jobs.length,
+        engine,
+        direction,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    if (!jobId && !jobTitle) {
+      return res.status(400).json({ error: 'jobId oder jobTitle ist erforderlich' });
+    }
+    if (!Array.isArray(candidateIds) || candidateIds.length === 0) {
+      return res.status(400).json({ error: 'Mindestens ein Bewerber ist erforderlich' });
+    }
+
+    const { job, graphRagResult } = await runVectorMatch({ direction, jobId, jobTitle, candidateIds, engine });
+    const resultTitle = `Stelle → Kandidaten: ${job.title || 'Unbenannte Stelle'}`;
+    const storedJobId = Number.isFinite(Number(job.id)) ? Number(job.id) : null;
+
+    const saveResult = db.prepare(`
+      INSERT INTO matching_results (job_description, job_title, results, job_id)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      `Vector-Matching (${engine}) für ${job.title || 'Unbenannte Stelle'}`,
+      resultTitle,
+      JSON.stringify({ ...graphRagResult, direction }),
+      storedJobId,
+    );
+
+    logAudit(req, 'ki-matching-vector', 'Matching', saveResult.lastInsertRowid, resultTitle, {
+      engine,
+      jobId: storedJobId,
+      candidateCount: candidateIds.length,
+      topScore: graphRagResult.matrix?.[0]?.score ?? null,
+    });
+
+    res.json({
+      id: saveResult.lastInsertRowid,
+      jobTitle: resultTitle,
+      results: { ...graphRagResult, direction },
+      candidateCount: candidateIds.length,
+      engine,
+      direction,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error running vector matching:', error);
+    res.status(error.status || 500).json({
+      error: error.name === 'AbortError'
+        ? 'KI-Timeout – Vector-Matching dauerte zu lange.'
+        : error.status === 429
+          ? 'Das KI-Modell ist aktuell rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
+          : 'Fehler beim Vector-Matching',
       details: error.details || error.message,
     });
   }

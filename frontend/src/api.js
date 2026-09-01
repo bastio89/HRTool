@@ -103,6 +103,12 @@ export const matchingApi = {
       body: JSON.stringify({ mode, jobIds, candidateIds, weights }),
       timeout: 600000,
     }),
+  vectorMatch: (payload = {}) =>
+    request('/matching/vectormatch', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeout: 600000,
+    }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),
   deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),

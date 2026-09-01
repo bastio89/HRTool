@@ -449,6 +449,59 @@ class MatchingMatrixPayload(BaseModel):
     candidatesRanked: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class VectorMatchRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_ids: list[str | int] = Field(default_factory=list, validation_alias=AliasChoices("job_ids", "jobIds"))
+    job_titles: list[str] = Field(default_factory=list, validation_alias=AliasChoices("job_titles", "jobTitles"))
+    cv_ids: list[str | int] = Field(default_factory=list, validation_alias=AliasChoices("cv_ids", "cvIds", "candidate_ids", "candidateIds"))
+    candidate_names: list[str] = Field(default_factory=list, validation_alias=AliasChoices("candidate_names", "candidateNames"))
+
+    @model_validator(mode="after")
+    def ensure_input(self) -> "VectorMatchRequest":
+        if not self.job_ids:
+            raise ValueError("job_ids ist erforderlich")
+        if not self.cv_ids:
+            raise ValueError("cv_ids ist erforderlich")
+        return self
+
+
+class VectorMatchRow(BaseModel):
+    jobId: str
+    jobTitle: str | None = None
+    candidateId: str
+    candidateName: str | None = None
+    score: int = Field(..., ge=0, le=100)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    summary: str = ""
+    matchedSkills: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class VectorMatchPayload(BaseModel):
+    type: Literal["vectormatch"] = "vectormatch"
+    mode: str = "job_cv_vector"
+    model: str | None = None
+    matchedAt: str
+    jobs: list[dict[str, Any]] = Field(default_factory=list)
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    matrix: list[VectorMatchRow] = Field(default_factory=list)
+    jobsRanked: list[dict[str, Any]] = Field(default_factory=list)
+    candidatesRanked: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class VectorMatchNeo4jPayload(BaseModel):
+    type: Literal["vectormatch_neo4j"] = "vectormatch_neo4j"
+    mode: str = "job_cv_vector_neo4j"
+    model: str | None = None
+    matchedAt: str
+    jobs: list[dict[str, Any]] = Field(default_factory=list)
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    matrix: list[VectorMatchRow] = Field(default_factory=list)
+    jobsRanked: list[dict[str, Any]] = Field(default_factory=list)
+    candidatesRanked: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class Stage1Candidate(BaseModel):
     id: str
     mandatory_overlap: int = 0

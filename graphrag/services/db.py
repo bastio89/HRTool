@@ -271,6 +271,73 @@ class Neo4jService:
                 "employment_type": record["employment_type"],
             }
 
+    async def get_jobs_for_vectormatch(self, job_ids: Iterable[str], job_titles: Iterable[str] | None = None) -> list[dict[str, Any]]:
+        ids = [str(job_id) for job_id in job_ids if str(job_id).strip()]
+        titles = [str(title).strip() for title in (job_titles or []) if str(title).strip()]
+        if not ids and not titles:
+            return []
+
+        query = """
+        MATCH (j:Job)
+        WHERE toString(j.id) IN $job_ids
+        OPTIONAL MATCH (j)-[:REQUIRES_SKILL]->(s:Skill)
+        RETURN j.id AS id,
+               j.title AS title,
+               j.location AS location,
+               j.employmentType AS employment_type,
+               collect(DISTINCT {name: toLower(s.name), priority: 'Mandatory', embedding: s.embedding}) AS required_skills
+        ORDER BY toLower(coalesce(j.title, '')), j.id
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, job_ids=ids)
+            rows = await result.data()
+            if rows or not titles:
+                return rows
+
+        fallback_rows: list[dict[str, Any]] = []
+        for title in titles:
+            job = await self.find_job_by_name(title)
+            if not job:
+                continue
+            async with self.driver.session() as session:
+                result = await session.run(query, job_ids=[str(job["id"])] )
+                fallback_rows.extend(await result.data())
+        return fallback_rows
+
+    async def get_candidates_for_vectormatch(self, candidate_ids: Iterable[str], candidate_names: Iterable[str] | None = None) -> list[dict[str, Any]]:
+        ids = [str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()]
+        names = [str(name).strip() for name in (candidate_names or []) if str(name).strip()]
+        if not ids and not names:
+            return []
+
+        query = """
+        MATCH (c:Candidate)
+        WHERE toString(c.id) IN $candidate_ids
+        OPTIONAL MATCH (c)-[:HAS_SKILL]->(s:Skill)
+        RETURN c.id AS id,
+               c.name AS name,
+               c.location AS location,
+               c.experience AS experience,
+               collect(DISTINCT {name: toLower(s.name), embedding: s.embedding}) AS has_skill,
+               collect(DISTINCT toLower(s.name)) AS skills
+        ORDER BY toLower(coalesce(c.name, '')), c.id
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, candidate_ids=ids)
+            rows = await result.data()
+            if rows or not names:
+                return rows
+
+        fallback_rows: list[dict[str, Any]] = []
+        for name in names:
+            candidate = await self.find_candidate_by_name(name)
+            if not candidate:
+                continue
+            async with self.driver.session() as session:
+                result = await session.run(query, candidate_ids=[str(candidate["id"])] )
+                fallback_rows.extend(await result.data())
+        return fallback_rows
+
     async def get_top_job_matches_for_candidate(
         self,
         candidate_id: str,
@@ -546,6 +613,70 @@ class Neo4jService:
             if not record:
                 return None
             return {"id": record["id"], "title": record["title"]}
+
+    async def get_vectormatch_neo4j_rows(
+        self,
+        job_ids: Iterable[str],
+        candidate_ids: Iterable[str],
+    ) -> list[dict[str, Any]]:
+        normalized_job_ids = [str(job_id) for job_id in job_ids if str(job_id).strip()]
+        normalized_candidate_ids = [str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()]
+        if not normalized_job_ids or not normalized_candidate_ids:
+            return []
+
+        query = """
+        UNWIND $job_ids AS job_id
+           MATCH (j:Job)
+           WHERE toString(j.id) = job_id
+        OPTIONAL MATCH (j)-[req:REQUIRES_SKILL]->(js:Skill)
+        WITH j,
+             [skill IN collect(DISTINCT {name: toLower(js.name), priority: coalesce(req.priority, 'Mandatory'), embedding: js.embedding})
+              WHERE skill.name IS NOT NULL AND skill.embedding IS NOT NULL] AS job_skills
+        UNWIND $candidate_ids AS candidate_id
+           MATCH (c:Candidate)
+           WHERE toString(c.id) = candidate_id
+        OPTIONAL MATCH (c)-[hs:HAS_SKILL]->(cs:Skill)
+        WITH j,
+             job_skills,
+             c,
+             [skill IN collect(DISTINCT {name: toLower(cs.name), embedding: cs.embedding})
+              WHERE skill.name IS NOT NULL AND skill.embedding IS NOT NULL] AS candidate_skills
+        CALL {
+            WITH job_skills, candidate_skills
+            UNWIND job_skills AS jobSkill
+            UNWIND candidate_skills AS candidateSkill
+            WITH jobSkill, candidateSkill,
+                 vector.similarity.cosine(jobSkill.embedding, candidateSkill.embedding) AS similarity
+            RETURN collect({
+                jobSkill: jobSkill.name,
+                candidateSkill: candidateSkill.name,
+                similarity: similarity,
+                priority: jobSkill.priority
+            }) AS matched_skills
+        }
+        WITH j,
+             c,
+             matched_skills,
+             reduce(weighted_sum = 0.0, pair IN matched_skills |
+                 weighted_sum + coalesce(pair.similarity, 0.0) * CASE WHEN toLower(coalesce(pair.priority, 'mandatory')) = 'mandatory' THEN 2.0 ELSE 1.0 END
+             ) AS weighted_sum,
+             reduce(total_weight = 0.0, pair IN matched_skills |
+                 total_weight + CASE WHEN toLower(coalesce(pair.priority, 'mandatory')) = 'mandatory' THEN 2.0 ELSE 1.0 END
+             ) AS total_weight
+        RETURN j.id AS jobId,
+               j.title AS jobTitle,
+               c.id AS candidateId,
+               c.name AS candidateName,
+               matched_skills AS matchedSkills,
+               CASE
+                   WHEN total_weight = 0 THEN 0
+                   ELSE round((weighted_sum / total_weight) * 100)
+               END AS score
+        ORDER BY score DESC, jobTitle ASC, candidateName ASC
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, job_ids=normalized_job_ids, candidate_ids=normalized_candidate_ids)
+            return await result.data()
 
     async def get_job_profile(self, job_id: str) -> dict[str, Any] | None:
         query = """

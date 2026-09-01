@@ -25,6 +25,12 @@ export default function MatchingResults() {
       .finally(() => setLoading(false))
   }, [id])
 
+  useEffect(() => {
+    setMatchingRow(null)
+    setMatchingError('')
+    setExpandedIdx(null)
+  }, [id])
+
   const handleReview = async () => {
     setReviewing(true)
     try {
@@ -38,12 +44,23 @@ export default function MatchingResults() {
     setMatchingRow(`${row.candidateId}-${row.jobId}`)
     setMatchingError('')
     try {
-      const result = await matchingApi.run(
-        row.jobDescription || row.jobTitle,
-        row.jobTitle,
-        [row.candidateId],
-        {}
-      )
+      const currentType = data?.results?.type
+      const currentDirection = data?.results?.direction
+      const sourceJobDescription = data?.job_description || data?.jobDescription || row.jobDescription || row.jobTitle || ''
+      const result = currentType === 'vectormatch_neo4j' || currentType === 'vectormatch'
+        ? await matchingApi.vectorMatch({
+            direction: currentDirection || 'job_to_candidates',
+            ...(currentDirection === 'candidate_to_jobs'
+              ? { candidateId: row.candidateId, candidateName: row.candidateName }
+              : { jobId: row.jobId, jobTitle: row.jobTitle, candidateIds: [row.candidateId] }),
+            engine: currentType === 'vectormatch_neo4j' ? 'neo4j' : 'python',
+          })
+        : await matchingApi.run(
+            sourceJobDescription,
+            row.jobTitle,
+            [row.candidateId],
+            {}
+          )
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
       setMatchingError(err.message)
@@ -59,7 +76,12 @@ export default function MatchingResults() {
     </div>
   )
 
-  const matrixData = data?.results?.type === 'matrix' ? data.results : null
+  const matrixData = data?.results && ['matrix', 'vectormatch', 'vectormatch_neo4j'].includes(data.results.type) ? data.results : null
+  const resultModeLabel = matrixData?.type === 'vectormatch_neo4j'
+    ? 'Vector-Matching (Neo4j)'
+    : matrixData?.type === 'vectormatch'
+      ? 'Vector-Matching (Python)'
+      : 'Matrix-Matching'
 
   if (matrixData) {
     const matrixRows = matrixData.matrix || []
@@ -100,7 +122,7 @@ export default function MatchingResults() {
               <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
             </button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Matrix-Matching</h1>
+              <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{resultModeLabel}</h1>
               <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
                 <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
                 {matrixData.matchedAt && (

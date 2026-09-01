@@ -15,10 +15,14 @@ from models import (
 	MatchingResultItem,
 	MatchingResultsPayload,
 	MatchingRunRequest,
+	VectorMatchPayload,
+	VectorMatchRequest,
+	VectorMatchRow,
+	VectorMatchNeo4jPayload,
 )
 
 
-def create_matching_router(llm_service=None) -> APIRouter:
+def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 	router = APIRouter()
 
 	field_profiles = [
@@ -172,6 +176,43 @@ def create_matching_router(llm_service=None) -> APIRouter:
 				continue
 			seen.add(key)
 			normalized.append({'name': name, 'priority': priority})
+		return normalized
+
+	def normalize_vector_skill_entries(value: Any, default_priority: str = 'Mandatory') -> list[dict[str, Any]]:
+		if value is None:
+			return []
+
+		items: list[Any]
+		if isinstance(value, dict):
+			items = [value]
+		elif isinstance(value, str):
+			items = [part.strip() for part in re.split(r'[,;\n|]+', value) if part.strip()]
+		elif isinstance(value, list):
+			items = value
+		else:
+			items = [value]
+
+		normalized: list[dict[str, Any]] = []
+		seen: set[str] = set()
+		for item in items:
+			if isinstance(item, dict):
+				name = normalize_text(item.get('name') or item.get('label') or item.get('title') or item.get('skill') or item.get('value'))
+				priority = normalize_text(item.get('priority') or item.get('importance') or default_priority) or default_priority
+				embedding = item.get('embedding')
+			else:
+				name = normalize_text(item)
+				priority = default_priority
+				embedding = None
+			if not name:
+				continue
+			key = name.lower()
+			if key in seen:
+				continue
+			seen.add(key)
+			entry: dict[str, Any] = {'name': name, 'priority': priority}
+			if embedding is not None:
+				entry['embedding'] = embedding
+			normalized.append(entry)
 		return normalized
 
 	def get_required_skills(job: MatchingJobInput) -> list[dict[str, Any]]:
@@ -348,6 +389,159 @@ def create_matching_router(llm_service=None) -> APIRouter:
 			'matchedSkills': matched_skills,
 		}
 
+	def score_vector_pair(job: MatchingJobInput, candidate: MatchingCandidateInput) -> dict[str, Any]:
+		job_skills = normalize_vector_skill_entries(getattr(job, 'required_skills', None))
+		candidate_skills = normalize_vector_skill_entries(getattr(candidate, 'has_skill', None), default_priority='Neutral')
+		job_title = job.title or 'Unbenannte Stelle'
+		candidate_name = candidate.name or f'Kandidat {candidate.id}'
+
+		if not job_skills or not candidate_skills:
+			return {
+				'jobId': str(job.id) if job.id is not None else '',
+				'jobTitle': job_title,
+				'candidateId': str(candidate.id),
+				'candidateName': candidate_name,
+				'score': 0,
+				'strengths': [],
+				'weaknesses': [skill['name'] for skill in job_skills[:3]] or ['Keine Skills vorhanden'],
+				'summary': f"{candidate_name} deckt 0/{max(1, len(job_skills))} erforderliche Skills für {job_title} ab.",
+				'matchedSkills': [],
+			}
+
+		matched_skills: list[dict[str, Any]] = []
+		missing_skills: list[str] = []
+		weighted_sum = 0.0
+		total_weight = 0.0
+
+		for job_skill in job_skills:
+			job_vector = job_skill.get('embedding')
+			if job_vector is None:
+				continue
+			best_similarity = 0.0
+			best_candidate_name = ''
+			for candidate_skill in candidate_skills:
+				candidate_vector = candidate_skill.get('embedding')
+				if candidate_vector is None:
+					continue
+				similarity = cosine_similarity(job_vector, candidate_vector)
+				if similarity > best_similarity:
+					best_similarity = similarity
+					best_candidate_name = candidate_skill['name']
+
+			weight = skill_weight(job_skill.get('priority'))
+			total_weight += weight
+			weighted_sum += weight * best_similarity
+			matched_skills.append({
+				'jobSkill': job_skill['name'],
+				'candidateSkill': best_candidate_name,
+				'similarity': round(best_similarity, 4),
+				'priority': job_skill.get('priority') or 'Mandatory',
+			})
+			if best_similarity < 0.65:
+				missing_skills.append(job_skill['name'])
+
+		score = round((weighted_sum / total_weight) * 100) if total_weight > 0 else 0
+		score = max(0, min(100, score))
+		matched_skills.sort(key=lambda item: item['similarity'], reverse=True)
+
+		strengths: list[str] = []
+		for match in matched_skills:
+			if match['similarity'] < 0.75:
+				continue
+			if match['candidateSkill']:
+				strengths.append(f"{summarize_skill_name(match['jobSkill'])} ↔ {summarize_skill_name(match['candidateSkill'])}")
+			else:
+				strengths.append(summarize_skill_name(match['jobSkill']))
+			if len(strengths) >= 3:
+				break
+		if score >= 80:
+			strengths.append('Sehr starker Skill-Fit')
+
+		weaknesses: list[str] = []
+		for skill_name in missing_skills:
+			if len(weaknesses) >= 3:
+				break
+			weaknesses.append(f"{skill_name} nur schwach oder gar nicht abgedeckt")
+		if score < 40:
+			weaknesses.append('Gesamtfit eher schwach')
+
+		required_count = max(1, len(job_skills))
+		covered_count = sum(1 for match in matched_skills if match['similarity'] >= 0.65)
+		summary = (
+			f"{candidate_name} deckt {covered_count}/{required_count} erforderliche Skills für "
+			f"{job_title} ab."
+		)
+
+		return {
+			'jobId': str(job.id) if job.id is not None else '',
+			'jobTitle': job_title,
+			'candidateId': str(candidate.id),
+			'candidateName': candidate_name,
+			'score': score,
+			'strengths': strengths[:4],
+			'weaknesses': weaknesses[:3],
+			'summary': summary,
+			'matchedSkills': matched_skills,
+		}
+
+	@router.post('/match/vectormatch', response_model=VectorMatchPayload)
+	async def vector_match(request: VectorMatchRequest) -> VectorMatchPayload:
+		if db_service is None:
+			raise HTTPException(status_code=503, detail='Neo4j service is not available')
+
+		jobs_raw = await db_service.get_jobs_for_vectormatch(request.job_ids, request.job_titles)
+		candidates_raw = await db_service.get_candidates_for_vectormatch(request.cv_ids, request.candidate_names)
+
+		if not jobs_raw:
+			raise HTTPException(status_code=404, detail='Keine Stellen für die angegebenen Job-IDs gefunden')
+		if not candidates_raw:
+			raise HTTPException(status_code=404, detail='Keine CVs für die angegebenen CV-IDs gefunden')
+
+		jobs = [MatchingJobInput.model_validate(job) for job in jobs_raw]
+		candidates = [MatchingCandidateInput.model_validate(candidate) for candidate in candidates_raw]
+
+		rows = []
+		for job in jobs:
+			for candidate in candidates:
+				rows.append(score_vector_pair(job, candidate))
+
+		rows.sort(key=lambda item: item['score'], reverse=True)
+		jobs_ranked = [
+			{
+				'jobId': str(job.id) if job.id is not None else '',
+				'jobTitle': job.title,
+				'results': sorted(
+					[pair for pair in rows if pair['jobId'] == (str(job.id) if job.id is not None else '')],
+					key=lambda item: item['score'],
+					reverse=True,
+				),
+			}
+			for job in jobs
+		]
+		candidates_ranked = [
+			{
+				'candidateId': str(candidate.id),
+				'candidateName': candidate.name,
+				'results': sorted(
+					[pair for pair in rows if pair['candidateId'] == str(candidate.id)],
+					key=lambda item: item['score'],
+					reverse=True,
+				),
+			}
+			for candidate in candidates
+		]
+
+		return VectorMatchPayload(
+			mode='vectormatch',
+			model='graph-rag-neo4j-skill-vector-match',
+			matchedAt=datetime.now(timezone.utc).isoformat(),
+			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
+			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
+			matrix=[VectorMatchRow(**row) for row in rows],
+			jobsRanked=jobs_ranked,
+			candidatesRanked=candidates_ranked,
+		)
+
 	async def build_vector_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str) -> MatchingMatrixPayload:
 		skill_embeddings = await build_skill_embedding_cache(jobs, candidates)
 		rows = []
@@ -382,7 +576,7 @@ def create_matching_router(llm_service=None) -> APIRouter:
 		return MatchingMatrixPayload(
 			type='matrix',
 			mode=mode,
-			model='graph-rag-skill-vector-matching',
+			model='graph-rag-neo4j-skill-vector-match',
 			matchedAt=datetime.now(timezone.utc).isoformat(),
 			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
 			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
@@ -391,38 +585,62 @@ def create_matching_router(llm_service=None) -> APIRouter:
 			candidatesRanked=candidates_ranked,
 		)
 
-	def build_single_result(job: MatchingJobInput, candidate: MatchingCandidateInput, skill_embeddings: dict[str, list[float]]) -> dict[str, Any]:
-		pair = score_skill_pair(job, candidate, skill_embeddings)
-		strengths = [
-			f"{summarize_skill_name(item['jobSkill'])} ↔ {summarize_skill_name(item['candidateSkill'])}"
-			for item in pair['matchedSkills']
-			if item['similarity'] >= 0.75 and item.get('candidateSkill')
-		][:3]
-		if pair['score'] >= 80:
+	def build_neo4j_vector_result(row: dict[str, Any]) -> dict[str, Any]:
+		matched_skills = [
+			{
+				'jobSkill': item.get('jobSkill'),
+				'candidateSkill': item.get('candidateSkill'),
+				'similarity': round(float(item.get('similarity') or 0.0), 4),
+				'priority': item.get('priority') or 'Mandatory',
+			}
+			for item in row.get('matchedSkills', [])
+			if item.get('jobSkill') and item.get('candidateSkill')
+		]
+		matched_skills.sort(key=lambda item: item['similarity'], reverse=True)
+
+		score = max(0, min(100, int(row.get('score') or 0)))
+		job_title = row.get('jobTitle') or 'Unbenannte Stelle'
+		candidate_name = row.get('candidateName') or f'Kandidat {row.get("candidateId")}'
+
+		strengths: list[str] = []
+		for match in matched_skills:
+			if match['similarity'] < 0.75:
+				continue
+			strengths.append(
+				f"{summarize_skill_name(match['jobSkill'])} ↔ {summarize_skill_name(match['candidateSkill'])}"
+			)
+			if len(strengths) >= 3:
+				break
+		if score >= 80:
 			strengths.append('Sehr starker Skill-Fit')
 
-		weaknesses = list(pair['weaknesses'])
-		if not weaknesses and pair['score'] < 60:
-			weaknesses.append('Skill-Fit nur teilweise')
+		weaknesses: list[str] = []
+		for match in matched_skills:
+			if match['similarity'] >= 0.65:
+				continue
+			weaknesses.append(f"{summarize_skill_name(match['jobSkill'])} nur schwach oder gar nicht abgedeckt")
+			if len(weaknesses) >= 3:
+				break
+		if score < 40:
+			weaknesses.append('Gesamtfit eher schwach')
 
-		summary = pair['summary']
-		if pair['matchedSkills']:
-			best_match = max(pair['matchedSkills'], key=lambda item: item['similarity'])
-			if best_match.get('candidateSkill'):
-				summary = (
-					f"{candidate.name or 'Kandidat'} matcht am besten auf {summarize_skill_name(best_match['candidateSkill'])} "
-					f"für {job.title or 'die Stelle'} ({pair['score']}%)."
-				)
+		covered_count = sum(1 for match in matched_skills if match['similarity'] >= 0.65)
+		required_count = max(1, len(matched_skills))
+		summary = (
+			f"{candidate_name} deckt {covered_count}/{required_count} erforderliche Skills für "
+			f"{job_title} ab."
+		)
 
 		return {
-			'jobId': pair['jobId'],
-			'jobTitle': pair['jobTitle'],
-			'candidateId': pair['candidateId'],
-			'candidateName': pair['candidateName'],
-			'score': pair['score'],
+			'jobId': str(row.get('jobId') or ''),
+			'jobTitle': job_title,
+			'candidateId': str(row.get('candidateId') or ''),
+			'candidateName': candidate_name,
+			'score': score,
 			'strengths': strengths[:4],
 			'weaknesses': weaknesses[:3],
 			'summary': summary,
+			'matchedSkills': matched_skills,
 		}
 
 	def _score_pair(job: MatchingJobInput, candidate: MatchingCandidateInput, weights: dict[str, int] | None = None) -> dict[str, Any]:
@@ -616,5 +834,49 @@ def create_matching_router(llm_service=None) -> APIRouter:
 		if not request.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
 		return await build_vector_matrix(request.jobs, request.candidates, request.mode)
+
+	@router.post('/match/vectormatch_neo4j', response_model=VectorMatchNeo4jPayload)
+	async def vector_match_neo4j(request: VectorMatchRequest) -> VectorMatchNeo4jPayload:
+		if db_service is None:
+			raise HTTPException(status_code=503, detail='Neo4j service is not available')
+
+		jobs_raw = await db_service.get_jobs_for_vectormatch(request.job_ids, request.job_titles)
+		candidates_raw = await db_service.get_candidates_for_vectormatch(request.cv_ids, request.candidate_names)
+		job_ids = [row['id'] for row in jobs_raw if row.get('id') is not None]
+		candidate_ids = [row['id'] for row in candidates_raw if row.get('id') is not None]
+		rows = await db_service.get_vectormatch_neo4j_rows(job_ids, candidate_ids)
+		if not rows:
+			raise HTTPException(status_code=404, detail='Keine Treffer für die angegebenen Job- oder CV-IDs gefunden')
+
+		normalized_rows = [build_neo4j_vector_result(row) for row in rows]
+		normalized_rows.sort(key=lambda item: item['score'], reverse=True)
+
+		jobs_ranked = []
+		for job_id in sorted({row['jobId'] for row in normalized_rows}):
+			job_rows = [row for row in normalized_rows if row['jobId'] == job_id]
+			jobs_ranked.append({
+				'jobId': job_id,
+				'jobTitle': job_rows[0]['jobTitle'] if job_rows else None,
+				'results': sorted(job_rows, key=lambda item: item['score'], reverse=True),
+			})
+
+		candidates_ranked = []
+		for candidate_id in sorted({row['candidateId'] for row in normalized_rows}):
+			candidate_rows = [row for row in normalized_rows if row['candidateId'] == candidate_id]
+			candidates_ranked.append({
+				'candidateId': candidate_id,
+				'candidateName': candidate_rows[0]['candidateName'] if candidate_rows else None,
+				'results': sorted(candidate_rows, key=lambda item: item['score'], reverse=True),
+			})
+
+		return VectorMatchNeo4jPayload(
+			model='graph-rag-neo4j-vector-matching',
+			matchedAt=datetime.now(timezone.utc).isoformat(),
+			jobs=[{'id': row['jobId'], 'title': row['jobTitle']} for row in normalized_rows],
+			candidates=[{'id': row['candidateId'], 'name': row['candidateName']} for row in normalized_rows],
+			matrix=[VectorMatchRow(**row) for row in normalized_rows],
+			jobsRanked=jobs_ranked,
+			candidatesRanked=candidates_ranked,
+		)
 
 	return router

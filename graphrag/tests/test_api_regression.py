@@ -9,6 +9,7 @@ from models import (
     CandidateSkillExtraction,
     JobProfileExtraction,
     JobSkillExtraction,
+    VectorMatchRequest,
     LLMRerankItem,
     LLMRerankResponse,
     Stage1Candidate,
@@ -285,6 +286,87 @@ async def test_ingest_job_accepts_file_upload(app_module, api_client, monkeypatc
     assert all(payload["entity"] == "skill" for payload in skill_payloads)
     postgres_mock.assert_awaited_once()
     upsert_mock.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_vectormatch_uses_neo4j_skill_embeddings(app_module, api_client, monkeypatch):
+    monkeypatch.setattr(
+        app_module.db_service,
+        "get_jobs_for_vectormatch",
+        AsyncMock(return_value=[
+            {
+                "id": "job-1",
+                "title": "Backend Engineer",
+                "location": "Berlin",
+                "required_skills": [
+                    {"name": "python", "priority": "Mandatory", "embedding": [1.0, 0.0]},
+                    {"name": "sql", "priority": "Mandatory", "embedding": [0.0, 1.0]},
+                ],
+            }
+        ]),
+    )
+    monkeypatch.setattr(
+        app_module.db_service,
+        "get_candidates_for_vectormatch",
+        AsyncMock(return_value=[
+            {
+                "id": "cv-1",
+                "name": "Max Mustermann",
+                "location": "Berlin",
+                "has_skill": [
+                    {"name": "python", "embedding": [1.0, 0.0]},
+                    {"name": "postgresql", "embedding": [0.0, 0.92]},
+                ],
+            }
+        ]),
+    )
+
+    response = await api_client.post(
+        "/match/vectormatch",
+        json={"jobIds": ["job-1"], "cvIds": ["cv-1"]},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["type"] == "vectormatch"
+    assert payload["matrix"][0]["jobId"] == "job-1"
+    assert payload["matrix"][0]["candidateId"] == "cv-1"
+    assert payload["matrix"][0]["score"] > 0
+    assert payload["matrix"][0]["matchedSkills"]
+
+
+@pytest.mark.anyio
+async def test_vectormatch_neo4j_uses_neo4j_cosine_similarity(app_module, api_client, monkeypatch):
+    monkeypatch.setattr(
+        app_module.db_service,
+        "get_vectormatch_neo4j_rows",
+        AsyncMock(return_value=[
+            {
+                "jobId": "job-neo4j-1",
+                "jobTitle": "Backend Engineer",
+                "candidateId": "cv-neo4j-1",
+                "candidateName": "Max Mustermann",
+                "score": 92,
+                "matchedSkills": [
+                    {"jobSkill": "python", "candidateSkill": "python", "similarity": 0.97, "priority": "Mandatory"},
+                    {"jobSkill": "sql", "candidateSkill": "postgresql", "similarity": 0.84, "priority": "Mandatory"},
+                ],
+            }
+        ]),
+    )
+
+    response = await api_client.post(
+        "/match/vectormatch_neo4j",
+        json={"jobIds": ["job-neo4j-1"], "cvIds": ["cv-neo4j-1"]},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["type"] == "vectormatch_neo4j"
+    assert payload["matrix"][0]["jobId"] == "job-neo4j-1"
+    assert payload["matrix"][0]["candidateId"] == "cv-neo4j-1"
+    assert payload["matrix"][0]["score"] == 92
+    assert payload["matrix"][0]["matchedSkills"][0]["similarity"] == 0.97
 
 
 @pytest.mark.anyio

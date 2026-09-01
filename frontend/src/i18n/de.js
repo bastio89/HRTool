@@ -371,6 +371,11 @@ export default {
   'matching.mode_matrix_title': 'Matrix N:N',
   'matching.mode_matrix_desc': 'Alle Stellen gegen alle Bewerber gleichzeitig bewerten – der Gesamtüberblick.',
   'matching.open_mode': 'Öffnen',
+  'matching.vector_engine': 'Vector-Matching-Engine',
+  'matching.vector_python': 'Python',
+  'matching.vector_neo4j': 'Neo4j',
+  'matching.vector_start': 'Vector-Matching starten',
+  'matching.select_job': 'Bitte zuerst eine Stelle auswählen.',
   // Kandidat → Stellen
   'matching.candidate_selection_single': 'Bewerber auswählen',
   'matching.candidate_single_hint': 'Wähle genau einen Bewerber, der gegen alle Stellen abgeglichen wird.',

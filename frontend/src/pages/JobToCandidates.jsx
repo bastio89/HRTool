@@ -27,6 +27,7 @@ export default function JobToCandidates() {
   const [jobSearch, setJobSearch] = useState('')
   const [pipelineCandidateIds, setPipelineCandidateIds] = useState([])
   const [pipelineLoading, setPipelineLoading] = useState(false)
+  const [vectorEngine, setVectorEngine] = useState('python')
   const [weights, setWeights] = useState({
     skills: 0, experience: 0, education: 0, location: 0, languages: 0,
     salary: 0, availability: 0, certificates: 0, cultural_fit: 0, mobility: 0
@@ -98,6 +99,32 @@ export default function JobToCandidates() {
   }
 
   const handleMatch = async () => {
+    if (jobMode === 'existing') {
+      if (!selectedJobId) {
+        setError(t('matching.select_job'))
+        return
+      }
+      if (selectedIds.length === 0) {
+        setError(t('matching.select_candidates'))
+        return
+      }
+      setError('')
+      setMatching(true)
+      try {
+        const result = await matchingApi.vectorMatch({
+          jobId: selectedJobId,
+          candidateIds: selectedIds,
+          engine: vectorEngine,
+        })
+        navigate(`/matching/results/${result.id}`)
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setMatching(false)
+      }
+      return
+    }
+
     if (!jobDescription.trim()) {
       setError(t('matching.enter_desc'))
       return
@@ -191,6 +218,36 @@ export default function JobToCandidates() {
               </div>
             )}
 
+            {jobMode === 'existing' && (
+              <div className="mb-8 p-4 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
+                <p className="text-[14px] font-semibold text-black dark:text-white mb-3">{t('matching.vector_engine')}</p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setVectorEngine('python')}
+                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition-all ${
+                      vectorEngine === 'python'
+                        ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                    }`}
+                  >
+                    {t('matching.vector_python')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVectorEngine('neo4j')}
+                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition-all ${
+                      vectorEngine === 'neo4j'
+                        ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                    }`}
+                  >
+                    {t('matching.vector_neo4j')}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <Input
               label={t('matching.job_title')}
               placeholder="z.B. Senior Frontend Developer (m/w/d)"
@@ -208,9 +265,11 @@ export default function JobToCandidates() {
               />
             </div>
 
-            <div className="mt-8">
-              <MatchingWeights weights={weights} onChange={setWeights} />
-            </div>
+            {jobMode === 'manual' && (
+              <div className="mt-8">
+                <MatchingWeights weights={weights} onChange={setWeights} />
+              </div>
+            )}
           </Card>
         </div>
 
@@ -245,13 +304,13 @@ export default function JobToCandidates() {
           <Button
             className="w-full py-5 text-[18px]"
             variant="dark"
-            disabled={matching || !jobDescription.trim() || selectedIds.length === 0}
+            disabled={matching || selectedIds.length === 0 || (jobMode === 'manual' && !jobDescription.trim()) || (jobMode === 'existing' && !selectedJobId)}
             onClick={handleMatch}
           >
             {matching ? (
               <><Loader2 className="w-6 h-6 animate-spin" /> {t('matching.running')}</>
             ) : (
-              <><Zap className="w-6 h-6" /> {t('matching.start')}</>
+              <><Zap className="w-6 h-6" /> {jobMode === 'existing' ? t('matching.vector_start') : t('matching.start')}</>
             )}
           </Button>
 

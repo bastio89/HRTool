@@ -23,12 +23,14 @@ from models import (
 	WorkHistoryExtraction,
 )
 from services.db import Neo4jService
+from matching_api import create_matching_router
 from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
 from services.work_history_recovery import recover_work_history_from_text
 
+from matching_api import create_matching_router
 
 db_service = Neo4jService(
 	uri=settings.neo4j_uri,
@@ -68,6 +70,8 @@ app = FastAPI(
 	version="1.0.0",
 	lifespan=lifespan,
 )
+
+app.include_router(create_matching_router(llm_service, db_service))
 
 
 async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_candidate: bool) -> str:

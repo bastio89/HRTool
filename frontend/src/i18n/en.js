@@ -371,6 +371,11 @@ export default {
   'matching.mode_matrix_title': 'Matrix N:N',
   'matching.mode_matrix_desc': 'Score all jobs against all candidates at once – the full overview.',
   'matching.open_mode': 'Open',
+  'matching.vector_engine': 'Vector matching engine',
+  'matching.vector_python': 'Python',
+  'matching.vector_neo4j': 'Neo4j',
+  'matching.vector_start': 'Start vector matching',
+  'matching.select_job': 'Please select a job first.',
   // Candidate → Jobs
   'matching.candidate_selection_single': 'Select candidate',
   'matching.candidate_single_hint': 'Pick exactly one candidate to match against all jobs.',

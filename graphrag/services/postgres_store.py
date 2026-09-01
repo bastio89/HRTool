@@ -70,6 +70,7 @@ class PostgresStore:
                     await cursor.execute(
                         f"SELECT setval('{table}_id_seq', COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false)"
                     )
+                await cursor.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS parsing_method TEXT")
 
     async def read_ai_usage(self) -> AiUsageMetrics:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -106,7 +107,7 @@ class PostgresStore:
                 values,
             )
 
-    async def insert_candidate(self, profile: CandidateProfileExtraction) -> int:
+    async def insert_candidate(self, profile: CandidateProfileExtraction, source: str | None = None) -> int:
         skills = ", ".join(item.name for item in profile.skills) or None
         languages = ", ".join(
             f"{item.name} ({item.level})" if item.level else item.name
@@ -123,12 +124,12 @@ class PostgresStore:
                     INSERT INTO candidates (
                         name, email, phone, location, experience, skills, education,
                         desired_salary, availability, languages, certificates,
-                        drivers_license, mobility, notes, status, tags, linkedin_url,
+                        drivers_license, mobility, notes, status, tags, source, linkedin_url,
                         xing_url, github_url, portfolio_url, notice_period, nationality,
-                        current_employer, current_position, gender
+                        current_employer, current_position, gender, parsing_method
                     ) VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, 'Aktiv', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, 'Aktiv', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     ) RETURNING id
                     """,
                     (
@@ -147,6 +148,7 @@ class PostgresStore:
                         profile.mobility,
                         profile.notes,
                         profile.tags,
+                        source,
                         profile.linkedin_url,
                         profile.xing_url,
                         profile.github_url,
@@ -156,6 +158,7 @@ class PostgresStore:
                         profile.current_employer,
                         profile.current_position,
                         profile.gender,
+                        profile.parsing_method,
                     ),
                 )
                 row = await cursor.fetchone()

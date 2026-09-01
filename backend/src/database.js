@@ -219,6 +219,8 @@ const migrations = [
   `ALTER TABLE matching_results ADD COLUMN job_id INTEGER`,
   // Anrede / Geschlecht
   `ALTER TABLE candidates ADD COLUMN gender TEXT`,
+  // CV-Parser: LLM- oder Text-Heuristik-Extraktion
+  `ALTER TABLE candidates ADD COLUMN parsing_method TEXT`,
   // Stellenbeschreibung: strukturierte Sektionen
   `ALTER TABLE jobs ADD COLUMN about_us TEXT`,
   `ALTER TABLE jobs ADD COLUMN benefits TEXT`,

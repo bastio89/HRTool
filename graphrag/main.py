@@ -20,12 +20,14 @@ from models import (
 	JobProfileExtraction,
 	MatchCandidateResponse,
 	MatchResponse,
+	WorkHistoryExtraction,
 )
 from services.db import Neo4jService
 from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
+from services.work_history_recovery import recover_work_history_from_text
 
 
 db_service = Neo4jService(
@@ -278,6 +280,28 @@ async def parse_cv(
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
 
+	if not profile.work_history:
+		recovered_work_history = recover_work_history_from_text(combined_text)
+		if recovered_work_history:
+			profile.work_history = [WorkHistoryExtraction(**entry) for entry in recovered_work_history]
+			first_entry = recovered_work_history[0]
+			if not profile.current_employer and first_entry.get("employer"):
+				profile.current_employer = first_entry["employer"]
+			if not profile.current_position and first_entry.get("position"):
+				profile.current_position = first_entry["position"]
+			if not profile.experience:
+				profile.experience = "\n".join(
+					filter(
+						None,
+						(
+							", ".join(filter(None, (entry.get("position"), entry.get("employer"))))
+							for entry in recovered_work_history[:3]
+						),
+					)
+				)
+		else:
+			logger.warning("CV-Parser: kein Beruflicher Werdegang beim Parsen gefunden")
+
 	graph_candidate_id: str | None = None
 	postgres_candidate_id: int | None = None
 	if persist:
@@ -291,7 +315,7 @@ async def parse_cv(
 				embedding=embedding,
 				skill_embeddings=skill_embeddings,
 			)
-			postgres_candidate_id = await postgres_store.insert_candidate(profile)
+			postgres_candidate_id = await postgres_store.insert_candidate(profile, source="CV-Import")
 		except Exception as exc:
 			logger.exception("Candidate persistence failed")
 			raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
@@ -315,6 +339,7 @@ async def parse_cv(
 		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": graph_candidate_id is not None},
 		"textLength": len(combined_text),
 		"persisted": persist,
+		"parsingMethod": profile.parsing_method,
 	}
 
 

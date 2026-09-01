@@ -22,6 +22,9 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
+_CURRENT_DATE_TOKENS = {"heute", "present", "today", "now", "aktuell", "current"}
+_DATE_RANGE_PATTERN = re.compile(r"(\d{4})\s*[\u2013\u2014-]\s*(heute|present|today|now|aktuell|current|\d{4})", re.IGNORECASE)
+
 
 class LLMService:
     def __init__(
@@ -224,7 +227,10 @@ class LLMService:
                 ],
                 "temperature": 0,
                 "max_tokens": num_predict,
-                "reasoning": {"exclude": True},
+                # "exclude" only hides reasoning from the response but still burns completion
+                # tokens on hidden thinking, which truncated JSON output for longer CVs.
+                # "enabled": False actually turns reasoning generation off.
+                "reasoning": {"enabled": False},
             }
         else:
             headers = {}
@@ -287,7 +293,15 @@ class LLMService:
                 thinking = message.get("reasoning") or choice.get("reasoning") or "\n".join(reasoning_parts)
                 response_text = None
 
-            response_text_for_log = response_text if isinstance(response_text, str) else (content if isinstance(content, str) else None)
+            response_text_for_log = (
+                response_text
+                if isinstance(response_text, str)
+                else content
+                if isinstance(content, str)
+                else thinking
+                if isinstance(thinking, str)
+                else None
+            )
 
             non_reasoning_objects: list[dict[str, Any]] = []
             for raw in (content, response_text):
@@ -332,6 +346,7 @@ class LLMService:
                 if isinstance(err, str) and err.strip():
                     raise ValueError(f"{self.provider} error: {err}")
                 raise ValueError(f"{self.provider} returned no JSON response content")
+            raise ValueError(f"{self.provider} returned no usable JSON response")
         except Exception as exc:
             await self._write_call_log(
                 feature=feature,
@@ -346,8 +361,6 @@ class LLMService:
                 error_message=str(exc),
             )
             raise
-
-        raise ValueError(f"{self.provider} returned no usable JSON response")
 
     def _normalize_embedding(self, embedding: list[float]) -> list[float]:
         if len(embedding) >= self.embedding_dimensions:
@@ -457,6 +470,15 @@ class LLMService:
             "skills",
             "contact",
             "kontakt",
+            "expérience",
+            "formation",
+            "compétences",
+            "langues",
+            "à propos",
+            "esperienza",
+            "formazione",
+            "competenze",
+            "profilo",
         }
         lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
         for line in lines[:20]:
@@ -535,26 +557,62 @@ class LLMService:
         lowered_text = raw_text.casefold()
         return [{"name": skill} for skill in known_skills if re.search(rf"(?<!\w){re.escape(skill.casefold())}(?!\w)", lowered_text)]
 
+    @staticmethod
+    def _find_date_range_near(raw_text: str, *needles: str | None) -> tuple[str | None, str | None, bool]:
+        """Find a 'YYYY-YYYY' or 'YYYY-heute' style date range on a line mentioning one of the needles."""
+        candidates = [needle.strip().lower() for needle in needles if isinstance(needle, str) and needle.strip()]
+        if not candidates:
+            return None, None, False
+
+        for line in raw_text.splitlines():
+            lowered_line = line.lower()
+            if not any(needle in lowered_line for needle in candidates):
+                continue
+            match = _DATE_RANGE_PATTERN.search(line)
+            if not match:
+                continue
+            start_year, end_token = match.group(1), match.group(2)
+            from_date = f"{start_year}-01"
+            if end_token.lower() in _CURRENT_DATE_TOKENS:
+                return from_date, None, True
+            return from_date, f"{end_token}-01", False
+        return None, None, False
+
     async def parse_candidate_cv(self, raw_text: str) -> CandidateProfileExtraction:
         start = perf_counter()
+        parsing_method = "llm"
         try:
             parsed = await self._generate_json(
                 system_prompt=(
-                    "Extract a candidate profile from CV/resume text. "
+                    "Extract a candidate profile from CV/resume text (any language, e.g. English, German, "
+                    "French, Italian). "
                     "The field name must be the candidate's full personal name from the CV header/title, "
-                    "not a role title, company name, or generic label. "
+                    "never a section heading (e.g. 'Expérience Professionnelle', 'Berufserfahrung'), role "
+                    "title, company name, or generic label. "
                     "Return JSON with keys: name (string), location (string|null), "
                     "experience_years (number|null), salary_expectation (number|null), "
+                    "current_employer (string|null), current_position (string|null), "
                     "skills (array of objects with name, category=HardSkill|SoftSkill|null, "
                     "level|null, experience_years|null), "
                     "languages (array of objects with name, level|null), "
                     "educations (array of objects with level, field_of_study), "
                     "industries (array of objects with name), "
-                    "preferred_roles (array of strings). "
+                    "preferred_roles (array of strings), "
+                    "work_history (array of objects with employer, position, from_date "
+                    "(YYYY-MM or null), to_date (YYYY-MM or null, empty if current), "
+                    "is_current (boolean), description|null, location|null). "
+                    "Create a SEPARATE work_history entry for EVERY employer/period mentioned "
+                    "in the CV, sorted with the most recent role first. "
+                    "education_history (array of objects with institution, degree, field_of_study, "
+                    "from_date (YYYY-MM or null), to_date (YYYY-MM or null), description|null). "
+                    "Create a SEPARATE education_history entry for EVERY degree/institution mentioned, "
+                    "sorted with the most recent first. "
+                    "Keep every description to at most 150 characters, a short summary of the role or "
+                    "studies, not a verbatim copy of bullet points. "
                     "Normalize names to concise terms and use null for unknown values."
                 ),
                 user_content=raw_text,
-                num_predict=1200,
+                num_predict=3200,
                 required_keys=("name",),
                 preferred_keys=(
                     "name",
@@ -566,6 +624,8 @@ class LLMService:
                     "educations",
                     "industries",
                     "preferred_roles",
+                    "work_history",
+                    "education_history",
                 ),
                 min_preferred_key_matches=0,
                 use_reasoning=False,
@@ -606,6 +666,7 @@ class LLMService:
                     "parse_candidate_cv: lightweight fallback also failed, using text-derived minimal profile: %s",
                     fallback_exc,
                 )
+                parsing_method = "text_heuristik"
                 parsed = {
                     "name": self._infer_candidate_name_from_text(raw_text) or "Unknown Candidate",
                     "location": None,
@@ -619,6 +680,7 @@ class LLMService:
                 }
 
         if not isinstance(parsed, dict):
+            parsing_method = "text_heuristik"
             parsed = {"name": self._infer_candidate_name_from_text(raw_text) or "Unknown Candidate"}
         elif not parsed.get("name"):
             parsed["name"] = self._infer_candidate_name_from_text(raw_text) or "Unknown Candidate"
@@ -627,6 +689,11 @@ class LLMService:
             parsed["skills"] = self._extract_candidate_skills_from_text(raw_text)
             if parsed["skills"]:
                 logger.warning("parse_candidate_cv: recovered skills from raw CV text count=%d", len(parsed["skills"]))
+        if not isinstance(parsed.get("work_history"), list):
+            parsed["work_history"] = []
+        if not isinstance(parsed.get("education_history"), list):
+            parsed["education_history"] = []
+        parsed["parsing_method"] = parsing_method
         result = CandidateProfileExtraction.model_validate(parsed)
         if self._is_unreliable_candidate_name(result.name):
             recovered_name: str | None = None
@@ -646,15 +713,41 @@ class LLMService:
                 )
                 result.name = recovered_name or result.name
 
+        for entry in result.work_history:
+            if entry.from_date is not None:
+                continue
+            from_date, to_date, is_current = self._find_date_range_near(raw_text, entry.position, entry.employer)
+            if from_date:
+                entry.from_date = from_date
+                if is_current:
+                    entry.is_current = True
+                elif to_date and entry.to_date is None:
+                    entry.to_date = to_date
+
+        for entry in result.education_history:
+            if entry.from_date is not None:
+                continue
+            from_date, to_date, _ = self._find_date_range_near(
+                raw_text, entry.degree, entry.institution, entry.field_of_study
+            )
+            if from_date:
+                entry.from_date = from_date
+                if to_date and entry.to_date is None:
+                    entry.to_date = to_date
+
         elapsed_ms = (perf_counter() - start) * 1000
         logger.warning(
-            "parse_candidate_cv completed in %.1f ms (input_chars=%d, skills=%d, languages=%d, educations=%d, industries=%d)",
+            "parse_candidate_cv completed in %.1f ms (input_chars=%d, skills=%d, languages=%d, educations=%d, "
+            "industries=%d, work_history=%d, education_history=%d, parsing_method=%s)",
             elapsed_ms,
             len(raw_text),
             len(result.skills),
             len(result.languages),
             len(result.educations),
             len(result.industries),
+            len(result.work_history),
+            len(result.education_history),
+            result.parsing_method,
         )
         self._record_parse_latency("candidate", elapsed_ms)
         return result

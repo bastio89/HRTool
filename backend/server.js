@@ -80,6 +80,10 @@ app.use('/api/add/job', addJobRouter);
  *     responses:
  *       200: { description: Status aller Services }
  */
+app.get('/api/health/live', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.get('/api/health', async (req, res) => {
   const n8nUrl = process.env.N8N_BASE_URL || 'http://localhost:5678';
   const graphRagUrl = process.env.GRAPHRAG_BASE_URL || 'http://graphrag:8000';

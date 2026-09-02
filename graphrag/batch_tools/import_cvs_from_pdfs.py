@@ -17,9 +17,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import settings
+from services.candidate_privacy import CandidatePrivacyService
 from services.db import Neo4jService
 from services.llm import LLMService
 from services.pdf import PDFService
+from services.postgres_store import PostgresStore
 
 
 def parse_args() -> argparse.Namespace:
@@ -253,6 +255,7 @@ async def _store_candidate_and_fetch_job_matches(
     *,
     profile,
     candidate_id: str,
+    raw_text: str,
     source_hash: str,
     profile_hash: str,
     db_service: Neo4jService,
@@ -384,6 +387,8 @@ async def process_cv_file(
     pdf_service: PDFService,
     db_service: Neo4jService,
     llm_service: LLMService,
+    postgres_store: PostgresStore,
+    candidate_privacy_service,
     match_limit: int,
 ) -> tuple[bool, str]:
     # Step 1: read and normalize the PDF text so duplicate detection is stable.
@@ -430,12 +435,21 @@ async def process_cv_file(
         matches = await _store_candidate_and_fetch_job_matches(
             profile=profile,
             candidate_id=candidate_id,
+            raw_text=extracted_text,
             source_hash=source_hash,
             profile_hash=profile_hash,
             db_service=db_service,
             llm_service=llm_service,
             match_limit=match_limit,
         )
+        await postgres_store.store_candidate_text(
+            candidate_id,
+            extracted_text,
+            candidate_name=profile.name,
+            source="CV-Batch-Import",
+            profile_json=profile.model_dump(mode="json"),
+        )
+        await candidate_privacy_service.anonymize_candidate(candidate_id)
     except Exception as exc:
         return False, f"candidate embedding creation failed: {exc}"
 
@@ -455,10 +469,13 @@ async def process_cv_file(
 
 async def run_cv_import(args: argparse.Namespace) -> int:
     pdf_service = PDFService()
+    postgres_store = PostgresStore(settings.database_url)
+    candidate_privacy_service = CandidatePrivacyService(postgres_store)
     db_service = Neo4jService(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
+        postgres_store=postgres_store,
     )
     llm_service = LLMService(
         base_url=settings.ollama_base_url,
@@ -500,6 +517,8 @@ async def run_cv_import(args: argparse.Namespace) -> int:
                     pdf_service=pdf_service,
                     db_service=db_service,
                     llm_service=llm_service,
+                    postgres_store=postgres_store,
+                    candidate_privacy_service=candidate_privacy_service,
                     match_limit=args.match_limit,
                 )
                 if ok:

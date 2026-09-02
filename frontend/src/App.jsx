@@ -15,6 +15,7 @@ import MatchingLayout from './components/MatchingLayout'
 import JobToCandidates from './pages/JobToCandidates'
 import CandidateToJobs from './pages/CandidateToJobs'
 import MatrixMatching from './pages/MatrixMatching'
+import SelectedMatchingResults from './pages/SelectedMatchingResults'
 import MatchingResults from './pages/MatchingResults'
 import History from './pages/History'
 import Jobs from './pages/Jobs'
@@ -73,6 +74,7 @@ function ProtectedRoutes() {
           <Route path="candidate" element={<CandidateToJobs />} />
           <Route path="matrix" element={<MatrixMatching />} />
         </Route>
+        <Route path="matching/results/selected" element={<SelectedMatchingResults />} />
         <Route path="matching/results/:id" element={<MatchingResults />} />
         <Route path="history" element={<History />} />
         <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />

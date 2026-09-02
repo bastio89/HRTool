@@ -13,16 +13,18 @@ from models import (
     Stage1Candidate,
     Stage2Candidate,
 )
+from services.postgres_store import PostgresStore
 
 
 class Neo4jService:
-    def __init__(self, uri: str, user: str, password: str) -> None:
+    def __init__(self, uri: str, user: str, password: str, postgres_store: PostgresStore | None = None) -> None:
         self.driver = AsyncGraphDatabase.driver(
             uri,
             auth=(user, password),
             notifications_min_severity="OFF",
             warn_notification_severity="OFF",
         )
+        self.postgres_store = postgres_store
 
     async def close(self) -> None:
         await self.driver.close()
@@ -35,6 +37,8 @@ class Neo4jService:
         skill_embeddings: dict[str, list[float]] | None = None,
         source_hash: str | None = None,
         profile_hash: str | None = None,
+        raw_text: str | None = None,
+        source: str | None = None,
     ) -> None:
         latest_work = next((item for item in profile.work_history if item.employer or item.position), None)
         latest_education = next((item for item in profile.education_history if item.institution or item.degree), None)
@@ -195,6 +199,7 @@ class Neo4jService:
             )
             await result.consume()
 
+
     async def find_candidate_by_source_hash(self, source_hash: str) -> dict[str, Any] | None:
         query = """
         MATCH (c:Candidate {sourceHash: $source_hash})
@@ -245,6 +250,69 @@ class Neo4jService:
                 "experience_years": record["experience_years"],
             }
 
+    async def list_candidates_for_backfill(self) -> list[dict[str, Any]]:
+        query = """
+        MATCH (c:Candidate)
+        CALL {
+            WITH c
+            OPTIONAL MATCH (c)-[:HAS_WORK_HISTORY]->(we:WorkExperience)
+            RETURN collect(DISTINCT CASE WHEN we IS NULL THEN NULL ELSE {
+                employer: we.employer,
+                position: we.position,
+                from_date: we.fromDate,
+                to_date: we.toDate,
+                is_current: coalesce(we.isCurrent, false),
+                description: we.description,
+                location: we.location
+            } END) AS work_history
+        }
+        CALL {
+            WITH c
+            OPTIONAL MATCH (c)-[:HAS_EDUCATION_HISTORY]->(eh:EducationHistory)
+            RETURN collect(DISTINCT CASE WHEN eh IS NULL THEN NULL ELSE {
+                institution: eh.institution,
+                degree: eh.degree,
+                field_of_study: eh.fieldOfStudy,
+                from_date: eh.fromDate,
+                to_date: eh.toDate,
+                description: eh.description
+            } END) AS education_history
+        }
+        RETURN c.id AS candidate_id,
+               c.name AS name,
+               c.email AS email,
+               c.phone AS phone,
+               c.location AS location,
+               c.experience AS experience,
+               c.education AS education,
+               c.desiredSalary AS desired_salary,
+               c.availability AS availability,
+               c.languages AS languages,
+               c.certificates AS certificates,
+               c.driversLicense AS drivers_license,
+               c.mobility AS mobility,
+               c.notes AS notes,
+               c.tags AS tags,
+               c.sourceHash AS source_hash,
+               c.source AS source,
+               c.linkedinUrl AS linkedin_url,
+               c.xingUrl AS xing_url,
+               c.githubUrl AS github_url,
+               c.portfolioUrl AS portfolio_url,
+               c.noticePeriod AS notice_period,
+               c.nationality AS nationality,
+               c.currentEmployer AS current_employer,
+               c.currentPosition AS current_position,
+               c.gender AS gender,
+               work_history,
+               education_history
+        ORDER BY toLower(coalesce(c.name, '')), c.id
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query)
+            rows = await result.data()
+        return rows
+
     async def find_job_by_name(self, job_name: str) -> dict[str, Any] | None:
         query = """
         MATCH (j:Job)
@@ -285,7 +353,7 @@ class Neo4jService:
                j.title AS title,
                j.location AS location,
                j.employmentType AS employment_type,
-               collect(DISTINCT {name: toLower(s.name), priority: 'Mandatory', embedding: s.embedding}) AS required_skills
+             collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), priority: 'Mandatory', embedding: s.embedding}) AS required_skills
         ORDER BY toLower(coalesce(j.title, '')), j.id
         """
         async with self.driver.session() as session:
@@ -318,7 +386,7 @@ class Neo4jService:
                c.name AS name,
                c.location AS location,
                c.experience AS experience,
-               collect(DISTINCT {name: toLower(s.name), embedding: s.embedding}) AS has_skill,
+             collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), embedding: s.embedding}) AS has_skill,
                collect(DISTINCT toLower(s.name)) AS skills
         ORDER BY toLower(coalesce(c.name, '')), c.id
         """
@@ -630,7 +698,7 @@ class Neo4jService:
            WHERE toString(j.id) = job_id
         OPTIONAL MATCH (j)-[req:REQUIRES_SKILL]->(js:Skill)
         WITH j,
-             [skill IN collect(DISTINCT {name: toLower(js.name), priority: coalesce(req.priority, 'Mandatory'), embedding: js.embedding})
+               [skill IN collect(DISTINCT {name: toLower(js.name), category: coalesce(js.category, 'HardSkill'), priority: coalesce(req.priority, 'Mandatory'), embedding: js.embedding})
               WHERE skill.name IS NOT NULL AND skill.embedding IS NOT NULL] AS job_skills
         UNWIND $candidate_ids AS candidate_id
            MATCH (c:Candidate)
@@ -639,7 +707,7 @@ class Neo4jService:
         WITH j,
              job_skills,
              c,
-             [skill IN collect(DISTINCT {name: toLower(cs.name), embedding: cs.embedding})
+               [skill IN collect(DISTINCT {name: toLower(cs.name), category: coalesce(cs.category, 'HardSkill'), embedding: cs.embedding})
               WHERE skill.name IS NOT NULL AND skill.embedding IS NOT NULL] AS candidate_skills
         CALL {
             WITH job_skills, candidate_skills
@@ -649,7 +717,9 @@ class Neo4jService:
                  vector.similarity.cosine(jobSkill.embedding, candidateSkill.embedding) AS similarity
             RETURN collect({
                 jobSkill: jobSkill.name,
+                jobSkillCategory: jobSkill.category,
                 candidateSkill: candidateSkill.name,
+                candidateSkillCategory: candidateSkill.category,
                 similarity: similarity,
                 priority: jobSkill.priority
             }) AS matched_skills

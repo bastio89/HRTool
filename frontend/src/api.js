@@ -91,10 +91,10 @@ export const candidatesApi = {
 
 // Matching API
 export const matchingApi = {
-  run: (jobDescription, jobTitle, candidateIds = [], weights = null, jobId = null) =>
+  run: (jobDescription, jobTitle, candidateIds = [], weights = null, jobId = null, candidateNames = []) =>
     request('/matching/run', {
       method: 'POST',
-      body: JSON.stringify({ jobDescription, jobTitle, candidateIds, weights, jobId }),
+      body: JSON.stringify({ jobDescription, jobTitle, candidateIds, candidateNames, weights, jobId }),
       timeout: 200000,
     }),
   runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null, engine = 'python' } = {}) =>
@@ -107,6 +107,12 @@ export const matchingApi = {
     request('/matching/vectormatch', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeout: 600000,
+    }),
+  runSelected: (pairs = [], weights = null) =>
+    request('/matching/run-selected', {
+      method: 'POST',
+      body: JSON.stringify({ pairs, weights }),
       timeout: 600000,
     }),
   getHistory: () => request('/matching/history'),

@@ -40,6 +40,7 @@ async def test_ingest_candidate_persists_languages_degrees_industries_and_salary
     candidate_id = "it-candidate-graph-bridges"
     skill_name = "python-integration-candidate"
     industry_name = "automotive-integration"
+    raw_text = "Data engineer profile with Python, German C1, and MSc Informatik in automotive context."
 
     fake_profile = CandidateProfileExtraction(
         name="Lina Beispiel",
@@ -67,15 +68,18 @@ async def test_ingest_candidate_persists_languages_degrees_industries_and_salary
     response = await api_client.post(
         "/ingest/candidate",
         json={
-            "raw_text": (
-                "Data engineer profile with Python, German C1, and MSc Informatik in automotive context."
-            )
+            "raw_text": raw_text,
         },
     )
 
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["id"] == candidate_id
+
+    stored_text = await app_module.postgres_store.get_candidate_text(candidate_id)
+    assert stored_text is not None
+    assert stored_text["original_text"] == raw_text
+    assert stored_text["candidate_name"] == "Lina Beispiel"
 
     try:
         query = """

@@ -368,6 +368,19 @@ class CandidateIngestResponse(IngestResponse):
     persisted: bool = True
 
 
+class CandidatePrivacyRequest(BaseModel):
+    candidate_id: str = Field(..., min_length=1)
+
+
+class CandidatePrivacyResponse(BaseModel):
+    candidate_id: str
+    mode: Literal["anon", "deanon"]
+    text: str
+    original_text: str
+    anonymized_text: str
+    mapping: dict[str, str] = Field(default_factory=dict)
+
+
 class JobIngestResponse(IngestResponse):
     profile: JobProfileExtraction
     persisted: bool = True
@@ -472,6 +485,9 @@ class VectorMatchRow(BaseModel):
     candidateId: str
     candidateName: str | None = None
     score: int = Field(..., ge=0, le=100)
+    vectorScore: float | None = Field(default=None, ge=0, le=1)
+    hardSkillScore: float | None = Field(default=None, ge=0, le=1)
+    softSkillScore: float | None = Field(default=None, ge=0, le=1)
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
     summary: str = ""

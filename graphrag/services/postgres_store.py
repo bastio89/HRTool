@@ -60,6 +60,17 @@ class PostgresStore:
                         parsed_profile_json TEXT,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    );
+                    CREATE TABLE IF NOT EXISTS candidate_texts (
+                        candidate_id TEXT PRIMARY KEY,
+                        candidate_name TEXT,
+                        source TEXT,
+                        original_text TEXT NOT NULL,
+                        anonymized_text TEXT,
+                        anonymization_map TEXT,
+                        profile_json TEXT,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )
@@ -106,6 +117,152 @@ class PostgresStore:
                 """,
                 values,
             )
+
+    async def store_candidate_text(
+        self,
+        candidate_id: str,
+        raw_text: str,
+        *,
+        candidate_name: str | None = None,
+        source: str | None = None,
+        profile_json: dict[str, Any] | None = None,
+    ) -> None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            await connection.execute(
+                """
+                INSERT INTO candidate_texts (
+                    candidate_id, candidate_name, source, original_text, anonymized_text,
+                    anonymization_map, profile_json
+                ) VALUES (%s, %s, %s, %s, NULL, NULL, %s)
+                ON CONFLICT (candidate_id) DO UPDATE SET
+                    candidate_name = EXCLUDED.candidate_name,
+                    source = COALESCE(EXCLUDED.source, candidate_texts.source),
+                    original_text = EXCLUDED.original_text,
+                    anonymized_text = NULL,
+                    anonymization_map = NULL,
+                    profile_json = EXCLUDED.profile_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    candidate_id,
+                    candidate_name,
+                    source,
+                    raw_text,
+                    json.dumps(profile_json, ensure_ascii=False) if profile_json is not None else None,
+                ),
+            )
+
+    async def get_candidate_text(self, candidate_id: str) -> dict[str, Any] | None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT candidate_id, candidate_name, source, original_text, anonymized_text,
+                           anonymization_map, profile_json
+                    FROM candidate_texts
+                    WHERE candidate_id = %s
+                    """,
+                    (candidate_id,),
+                )
+                row = await cursor.fetchone()
+        if row is None:
+            return None
+        mapping = row.get("anonymization_map")
+        profile_json = row.get("profile_json")
+        return {
+            **row,
+            "mapping": json.loads(mapping) if isinstance(mapping, str) and mapping.strip() else {},
+            "profile_json": json.loads(profile_json) if isinstance(profile_json, str) and profile_json.strip() else None,
+        }
+
+    async def store_candidate_anonymization(
+        self,
+        candidate_id: str,
+        anonymized_text: str,
+        mapping: dict[str, str],
+    ) -> None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            await connection.execute(
+                """
+                UPDATE candidate_texts
+                SET anonymized_text = %s,
+                    anonymization_map = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE candidate_id = %s
+                """,
+                (anonymized_text, json.dumps(mapping, ensure_ascii=False), candidate_id),
+            )
+
+    async def list_candidates_for_backfill(self) -> list[dict[str, Any]]:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT
+                        c.id::text AS candidate_id,
+                        c.name,
+                        c.email,
+                        c.phone,
+                        c.location,
+                        c.experience,
+                        c.skills,
+                        c.education,
+                        c.desired_salary,
+                        c.availability,
+                        c.languages,
+                        c.certificates,
+                        c.drivers_license,
+                        c.mobility,
+                        c.notes,
+                        c.tags,
+                        c.source,
+                        c.linkedin_url,
+                        c.xing_url,
+                        c.github_url,
+                        c.portfolio_url,
+                        c.notice_period,
+                        c.nationality,
+                        c.current_employer,
+                        c.current_position,
+                        c.gender,
+                        c.parsing_method,
+                        COALESCE((
+                            SELECT json_agg(
+                                json_build_object(
+                                    'employer', h.employer,
+                                    'position', h.position,
+                                    'from_date', h.from_date,
+                                    'to_date', h.to_date,
+                                    'is_current', h.is_current,
+                                    'description', h.description,
+                                    'location', h.location
+                                )
+                                ORDER BY h.id
+                            )
+                            FROM candidate_work_history h
+                            WHERE h.candidate_id = c.id
+                        ), '[]'::json) AS work_history,
+                        COALESCE((
+                            SELECT json_agg(
+                                json_build_object(
+                                    'institution', e.institution,
+                                    'degree', e.degree,
+                                    'field_of_study', e.field_of_study,
+                                    'from_date', e.from_date,
+                                    'to_date', e.to_date,
+                                    'description', e.description
+                                )
+                                ORDER BY e.id
+                            )
+                            FROM candidate_education e
+                            WHERE e.candidate_id = c.id
+                        ), '[]'::json) AS education_history
+                    FROM candidates c
+                    ORDER BY c.id
+                    """
+                )
+                rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
 
     async def insert_candidate(self, profile: CandidateProfileExtraction, source: str | None = None) -> int:
         skills = ", ".join(item.name for item in profile.skills) or None

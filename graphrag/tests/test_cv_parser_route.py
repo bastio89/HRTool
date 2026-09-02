@@ -61,8 +61,12 @@ async def test_cv_parser_parse_persists_to_neo4j(app_module, api_client, monkeyp
     monkeypatch.setattr(app_module.llm_service, "create_embedding", AsyncMock(return_value=[0.1, 0.2]))
     upsert_mock = AsyncMock()
     postgres_mock = AsyncMock(return_value=42)
+    store_text_mock = AsyncMock()
+    anonymize_mock = AsyncMock()
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
     monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
+    monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
+    monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
     response = await api_client.post(
         "/cv-parser/parse",
@@ -77,12 +81,16 @@ async def test_cv_parser_parse_persists_to_neo4j(app_module, api_client, monkeyp
     assert payload["candidate"]["id"] == 42
     assert payload["graphRag"]["id"] == "candidate-123"
     postgres_mock.assert_awaited_once_with(profile, source="CV-Import")
-    upsert_mock.assert_awaited_once_with(
-        candidate_id="candidate-123",
-        profile=profile,
-        embedding=[0.1, 0.2],
-        skill_embeddings={},
-    )
+    upsert_mock.assert_awaited_once()
+    assert upsert_mock.await_args.kwargs["candidate_id"] == "candidate-123"
+    assert upsert_mock.await_args.kwargs["profile"] == profile
+    assert upsert_mock.await_args.kwargs["embedding"] == [0.1, 0.2]
+    assert upsert_mock.await_args.kwargs["skill_embeddings"] == {}
+    store_text_mock.assert_awaited_once()
+    assert store_text_mock.await_args.args[0] == "42"
+    assert "Grace Hopper developed pioneering compiler technology." in store_text_mock.await_args.args[1]
+    assert anonymize_mock.await_count == 1
+    assert anonymize_mock.await_args_list[0].args == ("42",)
 
 
 @pytest.mark.anyio

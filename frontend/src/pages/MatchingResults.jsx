@@ -17,6 +17,9 @@ export default function MatchingResults() {
   const [reviewing, setReviewing] = useState(false)
   const [matchingRow, setMatchingRow] = useState(null)
   const [matchingError, setMatchingError] = useState('')
+  const [selectedPairKeys, setSelectedPairKeys] = useState([])
+  const [selectedBatchLoading, setSelectedBatchLoading] = useState(false)
+  const [selectedBatchError, setSelectedBatchError] = useState('')
 
   useEffect(() => {
     matchingApi.getResult(id)
@@ -29,6 +32,9 @@ export default function MatchingResults() {
     setMatchingRow(null)
     setMatchingError('')
     setExpandedIdx(null)
+    setSelectedPairKeys([])
+    setSelectedBatchLoading(false)
+    setSelectedBatchError('')
   }, [id])
 
   const handleReview = async () => {
@@ -91,7 +97,96 @@ export default function MatchingResults() {
     const matrixRows = matrixData.matrix || []
     const topRows = matrixRows.slice(0, 12)
     const bestScoreMatrix = topRows[0]?.score || 0
+    const isVectorMatching = matrixData.type === 'vectormatch' || matrixData.type === 'vectormatch_neo4j'
     const pairCount = matrixRows.length
+    const getPairKey = (row) => `${row.jobId}-${row.candidateId}`
+    const selectedPairs = matrixRows.filter((row) => selectedPairKeys.includes(getPairKey(row)))
+    const allPairsSelected = matrixRows.length > 0 && selectedPairKeys.length === matrixRows.length
+
+    const togglePairSelection = (row) => {
+      const key = getPairKey(row)
+      setSelectedPairKeys((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))
+    }
+
+    const toggleAllPairs = () => {
+      setSelectedPairKeys((prev) => (prev.length === matrixRows.length ? [] : matrixRows.map(getPairKey)))
+    }
+
+    const handleRunSelectedMatching = async () => {
+      if (selectedPairs.length === 0) return
+      try {
+        const batchPayload = selectedPairs.map((row) => ({
+          jobId: row.jobId,
+          jobTitle: row.jobTitle,
+          sourceJobId: data?.job_id || data?.jobId || null,
+          sourceJobTitle: data?.job_title || data?.jobTitle || row.jobTitle,
+          jobDescription: data?.job_description || data?.jobDescription || row.jobDescription || '',
+          candidateId: row.candidateId,
+          candidateName: row.candidateName,
+        }))
+        sessionStorage.setItem('hrtool:matching:selected-batch', JSON.stringify({
+          pairs: batchPayload,
+          engine: matrixData?.type === 'vectormatch_neo4j' ? 'neo4j' : 'python',
+          sourceResultId: id,
+          sourceLabel: resultModeLabel,
+        }))
+        navigate('/matching/results/selected', { state: { pairs: batchPayload } })
+      } catch (err) {
+        setSelectedBatchError(err.message)
+      }
+    }
+
+    const formatVectorScore = (value) => {
+      if (typeof value !== 'number' || Number.isNaN(value)) return '0.000'
+      return value.toFixed(3)
+    }
+
+    const resolveMatchedSkillCategory = (skill) => {
+      const explicitCategory = skill?.jobSkillCategory || skill?.candidateSkillCategory
+      return explicitCategory === 'HardSkill' || explicitCategory === 'SoftSkill' ? explicitCategory : 'Unkategorisiert'
+    }
+
+    const formatMatchedSkillLabel = (skill) => {
+      const jobSkill = skill?.jobSkill || 'Unbekannt'
+      const candidateSkill = skill?.candidateSkill || 'Unbekannt'
+      const category = resolveMatchedSkillCategory(skill)
+      return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity ?? 0)})`
+    }
+
+    const getCategoryMatches = (row, category) => (row?.matchedSkills || []).filter(
+      (skill) => resolveMatchedSkillCategory(skill) === category
+    )
+
+    const renderCategoryDebug = (row) => {
+      const hardMatches = getCategoryMatches(row, 'HardSkill')
+      const softMatches = getCategoryMatches(row, 'SoftSkill')
+      return (
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
+          <div className="rounded-[16px] bg-[#0071e3]/5 border border-[#0071e3]/10 p-3">
+            <div className="font-semibold text-[#0071e3] mb-2 flex items-center justify-between gap-3">
+              <span>HardSkill</span>
+              <span className="text-[11px] font-medium text-[#0071e3]/70">{hardMatches.length} Matches</span>
+            </div>
+            <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
+              {hardMatches.length > 0 ? hardMatches.map((skill, index) => (
+                <div key={`hard-${row.jobId}-${row.candidateId}-${index}`}>{formatMatchedSkillLabel(skill)}</div>
+              )) : <div>keine Treffer</div>}
+            </div>
+          </div>
+          <div className="rounded-[16px] bg-[#34c759]/5 border border-[#34c759]/10 p-3">
+            <div className="font-semibold text-[#34c759] mb-2 flex items-center justify-between gap-3">
+              <span>SoftSkill</span>
+              <span className="text-[11px] font-medium text-[#34c759]/70">{softMatches.length} Matches</span>
+            </div>
+            <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
+              {softMatches.length > 0 ? softMatches.map((skill, index) => (
+                <div key={`soft-${row.jobId}-${row.candidateId}-${index}`}>{formatMatchedSkillLabel(skill)}</div>
+              )) : <div>keine Treffer</div>}
+            </div>
+          </div>
+        </div>
+      )
+    }
 
     const exportMatrixCSV = () => {
       const escape = (v) => {
@@ -157,7 +252,20 @@ export default function MatchingResults() {
         </div>
 
         <Card className="p-8 sm:p-10 mb-12">
-          <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Beste Paarungen übergreifend</h2>
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">Beste Paarungen übergreifend</h2>
+              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-2">{selectedPairs.length} von {pairCount} Paarungen ausgewählt</p>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button size="md" variant="secondary" onClick={toggleAllPairs} disabled={matrixRows.length === 0}>
+                {allPairsSelected ? 'Auswahl löschen' : 'Alle auswählen'}
+              </Button>
+              <Button size="md" variant="dark" onClick={handleRunSelectedMatching} disabled={selectedBatchLoading || selectedPairs.length === 0}>
+                {selectedBatchLoading ? 'KI-Matching läuft...' : 'KI-Matching selektierte'}
+              </Button>
+            </div>
+          </div>
           {matchingError && (
             <div className="p-4 rounded-[14px] bg-[#ff3b30]/10 text-[#ff3b30] text-[14px] font-medium mb-4">
               {matchingError}
@@ -166,14 +274,28 @@ export default function MatchingResults() {
           <div className="space-y-4">
             {topRows.map((row, idx) => {
               const isLoading = matchingRow === `${row.candidateId}-${row.jobId}`
+              const isSelected = selectedPairKeys.includes(getPairKey(row))
               return (
-                <button
+                <div
                   key={`${row.jobId}-${row.candidateId}-${idx}`}
-                  onClick={() => handleMatchingRow(row)}
-                  disabled={isLoading || matchingRow !== null}
-                  className="w-full grid grid-cols-1 lg:grid-cols-[64px_1fr_1fr_96px] gap-4 items-center p-5 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                  className={`w-full grid grid-cols-1 lg:grid-cols-[56px_64px_1fr_1fr_180px] gap-4 items-center p-5 rounded-[20px] transition-colors text-left ${isSelected ? 'bg-[#0071e3]/5 dark:bg-[#0071e3]/10 ring-1 ring-[#0071e3]/20' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c]'}`}
                 >
-                  <div className="text-[18px] font-semibold text-gray-400">#{idx + 1}</div>
+                  <label className="flex items-center justify-center cursor-pointer" onClick={(event) => event.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => togglePairSelection(row)}
+                      className="h-5 w-5 rounded border-gray-300 text-[#0071e3] focus:ring-[#0071e3]"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleMatchingRow(row)}
+                    disabled={isLoading || matchingRow !== null}
+                    className="text-[18px] font-semibold text-gray-400 text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    #{idx + 1}
+                  </button>
                   <div>
                     <p className="text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p>
                     <p className="text-[13px] text-gray-500 mt-1">Bewerber</p>
@@ -186,13 +308,29 @@ export default function MatchingResults() {
                     {isLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin text-[#0071e3]" />
                     ) : (
-                      <>
-                        <div className="text-[26px] font-semibold text-[#0071e3]">{row.score}%</div>
-                        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      </>
+                      <div className="flex items-end gap-3">
+                        {isVectorMatching ? (
+                          <div className="flex flex-col items-end gap-1.5">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#0071e3]/10 text-[#0071e3]">
+                              HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
+                            </span>
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#34c759]/10 text-[#34c759]">
+                              SoftSkill {formatVectorScore(row.softSkillScore ?? 0)}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-[26px] font-semibold text-[#0071e3]">{row.score}%</div>
+                        )}
+                        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 mb-1" />
+                      </div>
                     )}
                   </div>
-                </button>
+                  {isVectorMatching && (
+                    <div className="col-span-full lg:col-start-2 lg:col-end-5">
+                      {renderCategoryDebug(row)}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -207,9 +345,23 @@ export default function MatchingResults() {
                   <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{job.jobTitle}</h3>
                   <div className="space-y-2">
                     {job.results.slice(0, 5).map((row, idx) => (
-                      <div key={`${job.jobId}-${row.candidateId}`} className="flex items-center justify-between gap-4 text-[14px]">
-                        <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.candidateName}</span>
-                        <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                      <div key={`${job.jobId}-${row.candidateId}`} className="text-[14px]">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.candidateName}</span>
+                          {isVectorMatching ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#0071e3]/10 text-[#0071e3]">
+                                HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
+                              </span>
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#34c759]/10 text-[#34c759]">
+                                SoftSkill {formatVectorScore(row.softSkillScore ?? 0)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                          )}
+                        </div>
+                        {isVectorMatching && renderCategoryDebug(row)}
                       </div>
                     ))}
                   </div>
@@ -226,9 +378,23 @@ export default function MatchingResults() {
                   <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{candidate.candidateName}</h3>
                   <div className="space-y-2">
                     {candidate.results.slice(0, 5).map((row, idx) => (
-                      <div key={`${candidate.candidateId}-${row.jobId}`} className="flex items-center justify-between gap-4 text-[14px]">
-                        <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.jobTitle}</span>
-                        <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                      <div key={`${candidate.candidateId}-${row.jobId}`} className="text-[14px]">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.jobTitle}</span>
+                          {isVectorMatching ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#0071e3]/10 text-[#0071e3]">
+                                HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
+                              </span>
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#34c759]/10 text-[#34c759]">
+                                SoftSkill {formatVectorScore(row.softSkillScore ?? 0)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                          )}
+                        </div>
+                        {isVectorMatching && renderCategoryDebug(row)}
                       </div>
                     ))}
                   </div>

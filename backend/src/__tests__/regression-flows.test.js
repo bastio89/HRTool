@@ -59,8 +59,17 @@ function createMockDb(seed = {}) {
             return state.candidates.filter((c) => ids.includes(c.id));
           }
 
+          if (q.includes('FROM jobs WHERE id IN')) {
+            const ids = args.map(Number);
+            return state.jobs.filter((j) => ids.includes(j.id));
+          }
+
           if (q.includes('FROM candidates')) {
             return [...state.candidates];
+          }
+
+          if (q.includes('FROM jobs')) {
+            return [...state.jobs];
           }
 
           if (q.includes('SELECT * FROM candidate_files WHERE candidate_id = ?')) {
@@ -1085,7 +1094,21 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     global.fetch = jest
       .fn()
-      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              candidateId: 1,
+              candidateName: 'Max Mustermann',
+              score: 87,
+              strengths: ['Starke Backend-Erfahrung'],
+              weaknesses: ['Wenig DevOps'],
+              summary: 'Sehr guter Fit fuer Backend-Rolle',
+            },
+          ],
+        }),
+      })
       .mockResolvedValueOnce({
         ok: true,
         text: async () => JSON.stringify({ ok: true }),
@@ -1109,10 +1132,296 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.results.results[0].candidateName).toBe('Max Mustermann');
     expect(response.body.results.results[0].score).toBe(87);
     expect(mockDb.__state.matchingResults).toHaveLength(1);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  test('Matching run returns 400 when job description is missing', async () => {
+  test('Matching run resolves job and candidate data from SQL when jobId and candidateId are provided', async () => {
+    const mockDb = createMockDb({
+      jobs: [
+        {
+          id: 2,
+          title: 'Backend Engineer',
+          description: 'Job description from SQL',
+          requirements: 'Node.js, APIs, Tests',
+          skills: 'Node.js, Express, SQL',
+          location: 'Berlin',
+          type: 'Vollzeit',
+        },
+      ],
+      candidates: [
+        {
+          id: 7,
+          name: 'Ada Lovelace',
+          email: 'ada@example.com',
+          location: 'Berlin',
+          experience: '7 Jahre Backend',
+          skills: 'Node.js, Express, SQL',
+          education: 'MSc Computer Science',
+          desired_salary: '90000',
+          availability: 'Sofort',
+          languages: 'Deutsch C1, Englisch C2',
+          certificates: 'AWS',
+          mobility: 'Remote',
+        },
+      ],
+    });
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      matchingRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+      sanitizeObject: (obj) => ({ sanitized: obj }),
+    }));
+    jest.doMock('../middleware/apiKey', () => (req, res, next) => next());
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model', provider: 'ollama' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
+      extractAiText: () => ({ text: '{"results":[]}' }),
+    }));
+
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            candidateId: 7,
+            candidateName: 'Ada Lovelace',
+            score: 95,
+            strengths: ['Sehr starker SQL-Fit'],
+            weaknesses: [],
+            summary: 'Sehr guter Match',
+          },
+        ],
+      }),
+    }));
+
+    const matchingRouter = require('../routes/matching');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/matching', matchingRouter);
+
+    const response = await request(app)
+      .post('/api/matching/run')
+      .send({
+        jobId: 2,
+        candidateId: 7,
+        weights: { skills: 5 },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.jobId).toBe(2);
+    expect(response.body.candidateCount).toBe(1);
+    expect(response.body.results.results).toHaveLength(1);
+    expect(response.body.results.results[0].candidateName).toBe('Ada Lovelace');
+    expect(mockDb.__state.matchingResults).toHaveLength(1);
+
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestBody.job.id).toBe(2);
+    expect(requestBody.job.title).toBe('Backend Engineer');
+    expect(requestBody.job.description).toContain('Job description from SQL');
+    expect(requestBody.job.required_skills.map((skill) => skill.name)).toEqual(['Node.js', 'Express', 'SQL']);
+    expect(requestBody.candidates).toHaveLength(1);
+    expect(requestBody.candidates[0].id).toBe(7);
+    expect(requestBody.candidates[0].has_skill).toEqual(['Node.js', 'Express', 'SQL']);
+  });
+
+  test('Matching run falls back to candidate names when selected rows do not contain numeric candidate IDs', async () => {
+    const mockDb = createMockDb({
+      jobs: [
+        {
+          id: 9,
+          title: 'Data Engineer',
+          description: 'SQL data platform role',
+          requirements: 'SQL, ETL, Airflow',
+          skills: 'SQL, ETL, Airflow',
+          location: 'Zug',
+          type: 'Vollzeit',
+        },
+      ],
+      candidates: [
+        {
+          id: 13,
+          name: 'Grace Hopper',
+          email: 'grace@example.com',
+          location: 'Zug',
+          experience: '10 Jahre Data Engineering',
+          skills: 'SQL, ETL, Airflow',
+          education: 'PhD Computer Science',
+          desired_salary: '110000',
+          availability: 'Sofort',
+          languages: 'Deutsch B2, Englisch C2',
+          certificates: 'Azure',
+          mobility: 'Remote',
+        },
+      ],
+    });
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      matchingRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+      sanitizeObject: (obj) => ({ sanitized: obj }),
+    }));
+    jest.doMock('../middleware/apiKey', () => (req, res, next) => next());
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model', provider: 'ollama' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
+      extractAiText: () => ({ text: '{"results":[]}' }),
+    }));
+
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            candidateId: 13,
+            candidateName: 'Grace Hopper',
+            score: 92,
+            strengths: ['Passender SQL-Stack'],
+            weaknesses: [],
+            summary: 'Sehr guter Match',
+          },
+        ],
+      }),
+    }));
+
+    const matchingRouter = require('../routes/matching');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/matching', matchingRouter);
+
+    const response = await request(app)
+      .post('/api/matching/run')
+      .send({
+        jobId: 9,
+        candidateNames: ['Grace Hopper'],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.candidateCount).toBe(1);
+    expect(response.body.results.results[0].candidateName).toBe('Grace Hopper');
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestBody.candidates[0].id).toBe(13);
+    expect(requestBody.candidates[0].name).toBe('Grace Hopper');
+  });
+
+  test('Selected matching batch prefers structured job skills over free-text requirements', async () => {
+    const mockDb = createMockDb({
+      jobs: [
+        {
+          id: 2,
+          title: 'Java Developer Sopra Steria',
+          description: 'Java Developer description',
+          requirements: 'Long free-text requirements',
+          skills: 'Java, Spring, REST, Angular',
+        },
+      ],
+      candidates: [
+        {
+          id: 99,
+          name: 'Thomas Zimmermann',
+          location: 'Bern',
+          experience: 'Senior Java Developer',
+          skills: 'Java, Spring, REST, Angular',
+          education: 'Informatik',
+          desired_salary: '120000',
+          availability: 'Sofort',
+          languages: 'Deutsch C1',
+          certificates: '',
+          mobility: 'Remote',
+        },
+      ],
+    });
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      matchingRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+      sanitizeObject: (obj) => ({ sanitized: obj }),
+    }));
+    jest.doMock('../middleware/apiKey', () => (req, res, next) => next());
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model', provider: 'ollama' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
+      extractAiText: () => ({
+        text: JSON.stringify({
+          results: [
+            {
+              candidateId: 99,
+              candidateName: 'Thomas Zimmermann',
+              score: 91,
+              strengths: ['Sehr guter Fit'],
+              weaknesses: [],
+              summary: 'Sehr guter Fit fuer Java',
+            },
+          ],
+        }),
+      }),
+    }));
+
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              candidateId: 99,
+              candidateName: 'Thomas Zimmermann',
+              score: 91,
+              strengths: ['Sehr guter Fit'],
+              weaknesses: [],
+              summary: 'Sehr guter Fit fuer Java',
+            },
+          ],
+        }),
+      });
+
+    const matchingRouter = require('../routes/matching');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/matching', matchingRouter);
+
+    const response = await request(app)
+      .post('/api/matching/run-selected')
+      .send({
+        pairs: [
+          {
+            jobId: 2,
+            jobTitle: 'Java Developer Sopra Steria',
+            jobDescription: 'Java Developer description',
+            candidateId: 99,
+            candidateName: 'Thomas Zimmermann',
+          },
+        ],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.results).toHaveLength(1);
+    expect(response.body.results[0].score).toBe(91);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    expect(requestBody.job.required_skills.map((skill) => skill.name)).toEqual(['Java', 'Spring', 'REST', 'Angular']);
+    expect(requestBody.candidates).toHaveLength(1);
+    expect(requestBody.candidates[0].has_skill).toEqual(['Java', 'Spring', 'REST', 'Angular']);
+  });
+
+  test('Matching run returns 400 when neither jobId nor job description is provided', async () => {
     const mockDb = createMockDb({
       candidates: [
         {
@@ -1163,7 +1472,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toMatch(/Stellenbeschreibung ist erforderlich/i);
+    expect(response.body.error).toMatch(/jobId oder Stellenbeschreibung ist erforderlich/i);
   });
 
   test('Matching run returns 503 when AI host is unreachable', async () => {

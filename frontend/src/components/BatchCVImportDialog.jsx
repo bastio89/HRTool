@@ -172,8 +172,8 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
   const allDone = files.length > 0 && files.every(f => f.status === STATUS.DONE || f.status === STATUS.SKIPPED)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-white dark:bg-[#1c1c1e] rounded-[28px] shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/40 backdrop-blur-sm">
+      <div className="my-6 w-full max-w-2xl bg-white dark:bg-[#1c1c1e] rounded-[28px] shadow-2xl flex flex-col max-h-[calc(100vh-3rem)] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-8 pt-8 pb-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">

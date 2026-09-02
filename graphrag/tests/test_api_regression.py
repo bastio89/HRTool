@@ -43,10 +43,14 @@ async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch
     parse_mock = AsyncMock(return_value=fake_profile)
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    anonymize_mock = AsyncMock()
+    store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
+    monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
     response = await api_client.post(
         "/ingest/candidate",
@@ -68,6 +72,8 @@ async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
     assert embedding_mock.await_args_list[1].args == ({"entity": "skill", "name": "python"},)
     upsert_mock.assert_awaited_once()
+    store_text_mock.assert_awaited_once()
+    anonymize_mock.assert_awaited_once_with("cand-123")
 
 
 @pytest.mark.anyio
@@ -95,10 +101,14 @@ async def test_ingest_candidate_uses_structured_profile_payload(app_module, api_
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    anonymize_mock = AsyncMock()
+    store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
+    monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
     response = await api_client.post(
         "/ingest/candidate",
@@ -116,6 +126,8 @@ async def test_ingest_candidate_uses_structured_profile_payload(app_module, api_
     assert embedding_mock.await_count == 2
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
     assert upsert_mock.await_count == 1
+    store_text_mock.assert_awaited_once()
+    anonymize_mock.assert_awaited_once_with("cand-structured-123")
 
 
 @pytest.mark.anyio
@@ -124,10 +136,14 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    anonymize_mock = AsyncMock()
+    store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
+    monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
     response = await api_client.post(
         "/ingest/candidate",
@@ -158,6 +174,8 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     assert [language["name"] for language in profile_payload["languages"]] == ["Deutsch (C2)", "Englisch (B2)"]
     assert profile_payload["preferred_roles"] == ["Data Engineer", "Backend Engineer"]
     upsert_mock.assert_awaited_once()
+    store_text_mock.assert_awaited_once()
+    anonymize_mock.assert_awaited_once_with("cand-string-123")
 
 
 @pytest.mark.anyio
@@ -166,10 +184,14 @@ async def test_ingest_candidate_forwards_work_history(app_module, api_client, mo
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    anonymize_mock = AsyncMock()
+    store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
+    monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
     response = await api_client.post(
         "/ingest/candidate",
@@ -199,6 +221,8 @@ async def test_ingest_candidate_forwards_work_history(app_module, api_client, mo
     assert profile_payload["work_history"][0]["employer"] == "ACME GmbH"
     assert profile_payload["work_history"][0]["position"] == "Senior Engineer"
     upsert_mock.assert_awaited_once()
+    store_text_mock.assert_awaited_once()
+    anonymize_mock.assert_awaited_once_with("cand-history-123")
 
 
 @pytest.mark.anyio
@@ -207,10 +231,14 @@ async def test_ingest_candidate_forwards_education_history(app_module, api_clien
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    anonymize_mock = AsyncMock()
+    store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
+    monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
     response = await api_client.post(
         "/ingest/candidate",
@@ -239,6 +267,8 @@ async def test_ingest_candidate_forwards_education_history(app_module, api_clien
     assert profile_payload["education_history"][0]["institution"] == "FHNW"
     assert profile_payload["education_history"][0]["degree"] == "Bachelor of Science"
     upsert_mock.assert_awaited_once()
+    store_text_mock.assert_awaited_once()
+    anonymize_mock.assert_awaited_once_with("cand-education-123")
 
 
 @pytest.mark.anyio
@@ -291,6 +321,11 @@ async def test_ingest_job_accepts_file_upload(app_module, api_client, monkeypatc
 @pytest.mark.anyio
 async def test_vectormatch_uses_neo4j_skill_embeddings(app_module, api_client, monkeypatch):
     monkeypatch.setattr(
+        app_module.llm_service,
+        "create_embedding",
+        AsyncMock(side_effect=lambda payload: [1.0, 0.0] if payload["name"] == "python" else [0.0, 1.0]),
+    )
+    monkeypatch.setattr(
         app_module.db_service,
         "get_jobs_for_vectormatch",
         AsyncMock(return_value=[
@@ -299,8 +334,8 @@ async def test_vectormatch_uses_neo4j_skill_embeddings(app_module, api_client, m
                 "title": "Backend Engineer",
                 "location": "Berlin",
                 "required_skills": [
-                    {"name": "python", "priority": "Mandatory", "embedding": [1.0, 0.0]},
-                    {"name": "sql", "priority": "Mandatory", "embedding": [0.0, 1.0]},
+                    {"name": "python", "category": "HardSkill", "priority": "Mandatory", "embedding": [1.0, 0.0]},
+                    {"name": "communication", "category": "SoftSkill", "priority": "NiceToHave", "embedding": [0.0, 1.0]},
                 ],
             }
         ]),
@@ -314,8 +349,8 @@ async def test_vectormatch_uses_neo4j_skill_embeddings(app_module, api_client, m
                 "name": "Max Mustermann",
                 "location": "Berlin",
                 "has_skill": [
-                    {"name": "python", "embedding": [1.0, 0.0]},
-                    {"name": "postgresql", "embedding": [0.0, 0.92]},
+                    {"name": "python", "category": "HardSkill", "embedding": [1.0, 0.0]},
+                    {"name": "communication", "category": "SoftSkill", "embedding": [0.0, 1.0]},
                 ],
             }
         ]),
@@ -332,11 +367,43 @@ async def test_vectormatch_uses_neo4j_skill_embeddings(app_module, api_client, m
     assert payload["matrix"][0]["jobId"] == "job-1"
     assert payload["matrix"][0]["candidateId"] == "cv-1"
     assert payload["matrix"][0]["score"] > 0
+    assert payload["matrix"][0]["hardSkillScore"] == 1.0
+    assert payload["matrix"][0]["softSkillScore"] == 1.0
     assert payload["matrix"][0]["matchedSkills"]
+    assert payload["matrix"][0]["matchedSkills"][0]["jobSkillCategory"] in {"HardSkill", "SoftSkill"}
+    assert payload["matrix"][0]["matchedSkills"][0]["candidateSkillCategory"] in {"HardSkill", "SoftSkill"}
 
 
 @pytest.mark.anyio
 async def test_vectormatch_neo4j_uses_neo4j_cosine_similarity(app_module, api_client, monkeypatch):
+    monkeypatch.setattr(
+        app_module.db_service,
+        "get_jobs_for_vectormatch",
+        AsyncMock(return_value=[
+            {
+                "id": "job-neo4j-1",
+                "title": "Backend Engineer",
+                "required_skills": [
+                    {"name": "python", "category": "HardSkill", "priority": "Mandatory", "embedding": [1.0, 0.0]},
+                    {"name": "communication", "category": "SoftSkill", "priority": "NiceToHave", "embedding": [0.0, 1.0]},
+                ],
+            }
+        ]),
+    )
+    monkeypatch.setattr(
+        app_module.db_service,
+        "get_candidates_for_vectormatch",
+        AsyncMock(return_value=[
+            {
+                "id": "cv-neo4j-1",
+                "name": "Max Mustermann",
+                "has_skill": [
+                    {"name": "python", "category": "HardSkill", "embedding": [1.0, 0.0]},
+                    {"name": "communication", "category": "SoftSkill", "embedding": [0.0, 1.0]},
+                ],
+            }
+        ]),
+    )
     monkeypatch.setattr(
         app_module.db_service,
         "get_vectormatch_neo4j_rows",
@@ -347,9 +414,12 @@ async def test_vectormatch_neo4j_uses_neo4j_cosine_similarity(app_module, api_cl
                 "candidateId": "cv-neo4j-1",
                 "candidateName": "Max Mustermann",
                 "score": 92,
+                "vectorScore": 0.92,
+                "hardSkillScore": 0.97,
+                "softSkillScore": 0.84,
                 "matchedSkills": [
-                    {"jobSkill": "python", "candidateSkill": "python", "similarity": 0.97, "priority": "Mandatory"},
-                    {"jobSkill": "sql", "candidateSkill": "postgresql", "similarity": 0.84, "priority": "Mandatory"},
+                    {"jobSkill": "python", "jobSkillCategory": "HardSkill", "candidateSkill": "python", "candidateSkillCategory": "HardSkill", "similarity": 0.97, "priority": "Mandatory"},
+                    {"jobSkill": "communication", "jobSkillCategory": "SoftSkill", "candidateSkill": "communication", "candidateSkillCategory": "SoftSkill", "similarity": 0.84, "priority": "NiceToHave"},
                 ],
             }
         ]),
@@ -366,6 +436,9 @@ async def test_vectormatch_neo4j_uses_neo4j_cosine_similarity(app_module, api_cl
     assert payload["matrix"][0]["jobId"] == "job-neo4j-1"
     assert payload["matrix"][0]["candidateId"] == "cv-neo4j-1"
     assert payload["matrix"][0]["score"] == 92
+    assert payload["matrix"][0]["vectorScore"] == 0.92
+    assert payload["matrix"][0]["hardSkillScore"] == 0.97
+    assert payload["matrix"][0]["softSkillScore"] == 0.84
     assert payload["matrix"][0]["matchedSkills"][0]["similarity"] == 0.97
 
 
@@ -472,10 +545,14 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     parse_mock = AsyncMock(return_value=fake_profile)
     embedding_mock = AsyncMock(return_value=[0.4, 0.5, 0.6])
     upsert_mock = AsyncMock()
+    anonymize_mock = AsyncMock()
+    store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
+    monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
     response = await api_client.post(
         "/ingest/candidate",
@@ -492,6 +569,8 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
     assert embedding_mock.await_args_list[1].args == ({"entity": "skill", "name": "python"},)
     upsert_mock.assert_awaited_once()
+    store_text_mock.assert_awaited_once()
+    anonymize_mock.assert_awaited_once_with("cand-pdf-123")
 
 
 @pytest.mark.anyio

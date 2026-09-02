@@ -57,6 +57,12 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			return ' '.join(part for part in parts if part)
 		return str(value).strip()
 
+	def normalize_skill_category(value: Any) -> str | None:
+		category = normalize_text(value)
+		if category in {'HardSkill', 'SoftSkill'}:
+			return category
+		return None
+
 	def extract_terms(value: Any) -> set[str]:
 		text = normalize_text(value).lower()
 		if not text:
@@ -178,7 +184,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			normalized.append({'name': name, 'priority': priority})
 		return normalized
 
-	def normalize_vector_skill_entries(value: Any, default_priority: str = 'Mandatory') -> list[dict[str, Any]]:
+	def normalize_vector_skill_entries(value: Any, default_priority: str = 'Mandatory', default_category: str = 'HardSkill') -> list[dict[str, Any]]:
 		if value is None:
 			return []
 
@@ -198,10 +204,12 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			if isinstance(item, dict):
 				name = normalize_text(item.get('name') or item.get('label') or item.get('title') or item.get('skill') or item.get('value'))
 				priority = normalize_text(item.get('priority') or item.get('importance') or default_priority) or default_priority
+				category = normalize_skill_category(item.get('category')) or default_category
 				embedding = item.get('embedding')
 			else:
 				name = normalize_text(item)
 				priority = default_priority
+				category = default_category
 				embedding = None
 			if not name:
 				continue
@@ -209,7 +217,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			if key in seen:
 				continue
 			seen.add(key)
-			entry: dict[str, Any] = {'name': name, 'priority': priority}
+			entry: dict[str, Any] = {'name': name, 'priority': priority, 'category': category}
 			if embedding is not None:
 				entry['embedding'] = embedding
 			normalized.append(entry)
@@ -223,13 +231,13 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return normalize_skill_entries(fallback_source)
 
 	def get_candidate_skills(candidate: MatchingCandidateInput) -> list[dict[str, Any]]:
-		has_skill = normalize_skill_entries(getattr(candidate, 'has_skill', None), default_priority='Neutral')
+		has_skill = normalize_vector_skill_entries(getattr(candidate, 'has_skill', None), default_priority='Neutral')
 		if has_skill:
 			return has_skill
 		fallback_source = candidate.skills
 		if fallback_source is None:
 			return []
-		return normalize_skill_entries(fallback_source, default_priority='Neutral')
+		return normalize_vector_skill_entries(fallback_source, default_priority='Neutral')
 
 	async def build_skill_embedding_cache(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput]) -> dict[str, list[float]]:
 		if llm_service is None or not hasattr(llm_service, 'create_embedding'):
@@ -323,6 +331,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 				continue
 			best_similarity = 0.0
 			best_candidate_name = ''
+			best_candidate_category = None
 			for candidate_skill in candidate_skills:
 				candidate_name = candidate_skill['name'].strip().lower()
 				candidate_vector = candidate_vectors.get(candidate_name)
@@ -332,13 +341,16 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 				if similarity > best_similarity:
 					best_similarity = similarity
 					best_candidate_name = candidate_skill['name']
+					best_candidate_category = candidate_skill.get('category')
 
 			weight = skill_weight(job_skill.get('priority'))
 			total_weight += weight
 			weighted_sum += weight * best_similarity
 			matched_skills.append({
 				'jobSkill': job_skill['name'],
+				'jobSkillCategory': job_skill.get('category'),
 				'candidateSkill': best_candidate_name,
+				'candidateSkillCategory': best_candidate_category,
 				'similarity': round(best_similarity, 4),
 				'priority': job_skill.get('priority') or 'Mandatory',
 			})
@@ -389,9 +401,12 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			'matchedSkills': matched_skills,
 		}
 
-	def score_vector_pair(job: MatchingJobInput, candidate: MatchingCandidateInput) -> dict[str, Any]:
-		job_skills = normalize_vector_skill_entries(getattr(job, 'required_skills', None))
-		candidate_skills = normalize_vector_skill_entries(getattr(candidate, 'has_skill', None), default_priority='Neutral')
+	def filter_skills_by_category(skills: list[dict[str, Any]], category: str | None) -> list[dict[str, Any]]:
+		if category is None:
+			return skills
+		return [skill for skill in skills if skill.get('category') == category]
+
+	def score_vector_pair_for_skills(job: MatchingJobInput, candidate: MatchingCandidateInput, job_skills: list[dict[str, Any]], candidate_skills: list[dict[str, Any]], skill_embeddings: dict[str, list[float]]) -> dict[str, Any]:
 		job_title = job.title or 'Unbenannte Stelle'
 		candidate_name = candidate.name or f'Kandidat {candidate.id}'
 
@@ -419,6 +434,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 				continue
 			best_similarity = 0.0
 			best_candidate_name = ''
+			best_candidate_category = None
 			for candidate_skill in candidate_skills:
 				candidate_vector = candidate_skill.get('embedding')
 				if candidate_vector is None:
@@ -427,13 +443,16 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 				if similarity > best_similarity:
 					best_similarity = similarity
 					best_candidate_name = candidate_skill['name']
+					best_candidate_category = candidate_skill.get('category')
 
 			weight = skill_weight(job_skill.get('priority'))
 			total_weight += weight
 			weighted_sum += weight * best_similarity
 			matched_skills.append({
 				'jobSkill': job_skill['name'],
+				'jobSkillCategory': job_skill.get('category'),
 				'candidateSkill': best_candidate_name,
+				'candidateSkillCategory': best_candidate_category,
 				'similarity': round(best_similarity, 4),
 				'priority': job_skill.get('priority') or 'Mandatory',
 			})
@@ -484,6 +503,31 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			'matchedSkills': matched_skills,
 		}
 
+	def score_vector_pair(job: MatchingJobInput, candidate: MatchingCandidateInput, skill_embeddings: dict[str, list[float]]) -> dict[str, Any]:
+		job_skills = normalize_vector_skill_entries(getattr(job, 'required_skills', None))
+		candidate_skills = normalize_vector_skill_entries(getattr(candidate, 'has_skill', None), default_priority='Neutral')
+		overall = score_vector_pair_for_skills(job, candidate, job_skills, candidate_skills, skill_embeddings)
+		hard = score_vector_pair_for_skills(
+			job,
+			candidate,
+			filter_skills_by_category(job_skills, 'HardSkill'),
+			filter_skills_by_category(candidate_skills, 'HardSkill'),
+			skill_embeddings,
+		)
+		soft = score_vector_pair_for_skills(
+			job,
+			candidate,
+			filter_skills_by_category(job_skills, 'SoftSkill'),
+			filter_skills_by_category(candidate_skills, 'SoftSkill'),
+			skill_embeddings,
+		)
+		return {
+			**overall,
+			'vectorScore': overall['score'] / 100 if overall['score'] else 0.0,
+			'hardSkillScore': hard['score'] / 100 if hard['score'] else 0.0,
+			'softSkillScore': soft['score'] / 100 if soft['score'] else 0.0,
+		}
+
 	@router.post('/match/vectormatch', response_model=VectorMatchPayload)
 	async def vector_match(request: VectorMatchRequest) -> VectorMatchPayload:
 		if db_service is None:
@@ -499,11 +543,12 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 
 		jobs = [MatchingJobInput.model_validate(job) for job in jobs_raw]
 		candidates = [MatchingCandidateInput.model_validate(candidate) for candidate in candidates_raw]
+		skill_embeddings = await build_skill_embedding_cache(jobs, candidates)
 
 		rows = []
 		for job in jobs:
 			for candidate in candidates:
-				rows.append(score_vector_pair(job, candidate))
+				rows.append(score_vector_pair(job, candidate, skill_embeddings))
 
 		rows.sort(key=lambda item: item['score'], reverse=True)
 		jobs_ranked = [
@@ -589,7 +634,9 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		matched_skills = [
 			{
 				'jobSkill': item.get('jobSkill'),
+				'jobSkillCategory': normalize_skill_category(item.get('jobSkillCategory')),
 				'candidateSkill': item.get('candidateSkill'),
+				'candidateSkillCategory': normalize_skill_category(item.get('candidateSkillCategory')),
 				'similarity': round(float(item.get('similarity') or 0.0), 4),
 				'priority': item.get('priority') or 'Mandatory',
 			}
@@ -598,7 +645,34 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		]
 		matched_skills.sort(key=lambda item: item['similarity'], reverse=True)
 
+		def category_score(category: str) -> float:
+			category_matches = [
+				match
+				for match in matched_skills
+				if match.get('jobSkillCategory') == category or match.get('candidateSkillCategory') == category
+			]
+			if not category_matches:
+				return 0.0
+			best_matches: dict[str, dict[str, Any]] = {}
+			for match in category_matches:
+				key = match['jobSkill'].strip().lower()
+				current = best_matches.get(key)
+				if current is None or match['similarity'] > current['similarity']:
+					best_matches[key] = match
+			weighted_sum = 0.0
+			total_weight = 0.0
+			for match in best_matches.values():
+				weight = skill_weight(match.get('priority'))
+				total_weight += weight
+				weighted_sum += weight * match['similarity']
+			if total_weight <= 0:
+				return 0.0
+			return max(0.0, min(1.0, weighted_sum / total_weight))
+
 		score = max(0, min(100, int(row.get('score') or 0)))
+		vector_score = score / 100 if score else 0.0
+		hard_skill_score = category_score('HardSkill')
+		soft_skill_score = category_score('SoftSkill')
 		job_title = row.get('jobTitle') or 'Unbenannte Stelle'
 		candidate_name = row.get('candidateName') or f'Kandidat {row.get("candidateId")}'
 
@@ -637,6 +711,9 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			'candidateId': str(row.get('candidateId') or ''),
 			'candidateName': candidate_name,
 			'score': score,
+			'vectorScore': vector_score,
+			'hardSkillScore': hard_skill_score,
+			'softSkillScore': soft_skill_score,
 			'strengths': strengths[:4],
 			'weaknesses': weaknesses[:3],
 			'summary': summary,
@@ -739,6 +816,9 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			'candidateId': pair['candidateId'],
 			'candidateName': pair['candidateName'],
 			'score': pair['score'],
+			'vectorScore': pair['score'] / 100 if pair['score'] else 0.0,
+			'hardSkillScore': pair['hardSkillScore'],
+			'softSkillScore': pair['softSkillScore'],
 			'strengths': strengths,
 			'weaknesses': weaknesses,
 			'summary': summary,
@@ -820,7 +900,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 				summary=pair['summary'],
 			)
 			for pair in (
-				build_single_result(request.job, candidate, skill_embeddings)
+				score_vector_pair(request.job, candidate, skill_embeddings)
 				for candidate in request.candidates
 			)
 		]

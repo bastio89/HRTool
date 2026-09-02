@@ -11,6 +11,8 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from config import settings
 from models import (
 	CandidateIngestRequest,
+	CandidatePrivacyRequest,
+	CandidatePrivacyResponse,
 	CandidateProfileExtraction,
 	AiUsageMetrics,
 	HealthResponse,
@@ -22,21 +24,15 @@ from models import (
 	MatchResponse,
 	WorkHistoryExtraction,
 )
+from services.candidate_privacy import CandidatePrivacyService
 from services.db import Neo4jService
 from matching_api import create_matching_router
 from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
+from services.candidate_text_renderer import render_candidate_fulltext
 from services.work_history_recovery import recover_work_history_from_text
-
-from matching_api import create_matching_router
-
-db_service = Neo4jService(
-	uri=settings.neo4j_uri,
-	user=settings.neo4j_user,
-	password=settings.neo4j_password,
-)
 llm_service = LLMService(
 	provider=settings.resolved_provider,
 	base_url=settings.resolved_ai_base_url,
@@ -53,6 +49,13 @@ llm_service = LLMService(
 )
 pdf_service = PDFService()
 postgres_store = PostgresStore(settings.database_url)
+candidate_privacy_service = CandidatePrivacyService(postgres_store)
+db_service = Neo4jService(
+	uri=settings.neo4j_uri,
+	user=settings.neo4j_user,
+	password=settings.neo4j_password,
+	postgres_store=postgres_store,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -230,6 +233,26 @@ async def health() -> HealthResponse:
 	return HealthResponse(ai_usage=await postgres_store.read_ai_usage())
 
 
+@app.post("/candidates/anon", response_model=CandidatePrivacyResponse)
+async def anonymize_candidate(request: CandidatePrivacyRequest) -> CandidatePrivacyResponse:
+	try:
+		return CandidatePrivacyResponse.model_validate(
+			await candidate_privacy_service.anonymize_candidate(request.candidate_id)
+		)
+	except LookupError as exc:
+		raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/candidates/deanon", response_model=CandidatePrivacyResponse)
+async def deanonymize_candidate(request: CandidatePrivacyRequest) -> CandidatePrivacyResponse:
+	try:
+		return CandidatePrivacyResponse.model_validate(
+			await candidate_privacy_service.deanonymize_candidate(request.candidate_id)
+		)
+	except LookupError as exc:
+		raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post(
 	"/cv-parser/parse",
 	tags=["CV Parser"],
@@ -320,6 +343,19 @@ async def parse_cv(
 				skill_embeddings=skill_embeddings,
 			)
 			postgres_candidate_id = await postgres_store.insert_candidate(profile, source="CV-Import")
+			candidate_text = combined_text or render_candidate_fulltext(
+				profile.model_dump(mode="json"),
+				work_history=[item.model_dump(mode="json") for item in profile.work_history],
+				education_history=[item.model_dump(mode="json") for item in profile.education_history],
+			)
+			await postgres_store.store_candidate_text(
+				str(postgres_candidate_id),
+				candidate_text,
+				candidate_name=profile.name,
+				source="CV-Import",
+				profile_json=profile.model_dump(mode="json"),
+			)
+			await candidate_privacy_service.anonymize_candidate(str(postgres_candidate_id))
 		except Exception as exc:
 			logger.exception("Candidate persistence failed")
 			raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
@@ -378,6 +414,19 @@ async def ingest_candidate(
 			embedding=embedding,
 			skill_embeddings=skill_embeddings,
 		)
+		candidate_text = text or render_candidate_fulltext(
+			profile.model_dump(mode="json"),
+			work_history=[item.model_dump(mode="json") for item in profile.work_history],
+			education_history=[item.model_dump(mode="json") for item in profile.education_history],
+		)
+		await postgres_store.store_candidate_text(
+			candidate_id,
+			candidate_text,
+			candidate_name=profile.name,
+			source="Candidate-Ingest",
+			profile_json=profile.model_dump(mode="json"),
+		)
+		await candidate_privacy_service.anonymize_candidate(candidate_id)
 	except Exception as exc:
 		logger.exception("Candidate persistence failed")
 		raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc

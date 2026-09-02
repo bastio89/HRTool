@@ -45,10 +45,10 @@ services:
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3001/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 12
+      start_period: 10s
 
   backend_new:
     build:
@@ -94,9 +94,6 @@ services:
       context: ./frontend
     container_name: hrtool-frontend
     restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-5173}:80"
 

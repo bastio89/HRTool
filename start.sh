@@ -30,9 +30,22 @@ fi
 docker compose config --quiet
 docker compose up -d --build
 
-frontend_url="$(docker compose port frontend 80 | sed 's/^[^:]*:/http:\/\/localhost:/')"
-backend_url="$(docker compose port backend 3001 | sed 's/^[^:]*:/http:\/\/localhost:/')"
-graphrag_url="$(docker compose port graphrag 8000 | sed 's/^[^:]*:/http:\/\/localhost:/')"
+published_url() {
+  local service="$1"
+  local container_port="$2"
+  local fallback_port="$3"
+  local published
+  published="$(docker compose port "$service" "$container_port" 2>/dev/null || true)"
+  if [ -n "$published" ]; then
+    printf '%s\n' "$published" | sed 's/^[^:]*:/http:\/\/localhost:/'
+  else
+    printf 'http://localhost:%s\n' "$fallback_port"
+  fi
+}
+
+frontend_url="$(published_url frontend 80 "${FRONTEND_PORT:-5173}")"
+backend_url="$(published_url backend 3001 "${BACKEND_PORT:-3001}")"
+graphrag_url="$(published_url graphrag 8000 "${GRAPHRAG_PORT:-8002}")"
 
 echo
 echo "HRTool läuft:"

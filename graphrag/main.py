@@ -233,6 +233,11 @@ async def health() -> HealthResponse:
 	return HealthResponse(ai_usage=await postgres_store.read_ai_usage())
 
 
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+	return {"status": "ok"}
+
+
 @app.post("/candidates/anon", response_model=CandidatePrivacyResponse)
 async def anonymize_candidate(request: CandidatePrivacyRequest) -> CandidatePrivacyResponse:
 	try:

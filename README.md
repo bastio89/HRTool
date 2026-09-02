@@ -212,18 +212,28 @@ ollama pull llama3.2
 
 ### Schnellstart mit Docker Compose
 
-HRTool kann komplett über Docker Compose gestartet werden. Backend, Frontend, Graphrag, SQLite-Daten, Uploads und jetzt auch Neo4j werden automatisch eingerichtet; Ollama läuft standardmäßig auf dem Host und wird aus den Containern über `host.docker.internal` erreicht.
+Der empfohlene Start auf einer neuen Maschine läuft vollständig über Docker Compose. Der Start prüft Docker und Compose, legt bei Bedarf eine `.env` an, validiert die Konfiguration, baut alle Images und wartet über Healthchecks auf PostgreSQL, Neo4j, GraphRAG und das Backend. Daten bleiben in Docker-Volumes erhalten.
 
 ```bash
 cp .env.docker.example .env
-# JWT_SECRET und optional EXTERNAL_API_KEY in .env anpassen
-# NEO4J_PASSWORD setzen, wenn Sie den Graphrag-Server gegen den Neo4j-Container nutzen möchten
-docker compose up --build
+# Alle Platzhalter für Secrets in .env ersetzen
+./start.sh
 ```
 
-Wenn Sie den FastAPI-Server aus dem Verzeichnis `graphrag` direkt im Host starten, bleibt `NEO4J_URI=bolt://localhost:7687` korrekt. Läuft der Graphrag-Server ebenfalls in Docker Compose, muss die URI auf `bolt://neo4j:7687` zeigen.
+Alternativ kann Compose direkt gestartet werden:
 
-Der Graphrag-Container ist danach unter `http://localhost:8000` erreichbar.
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+Für einen Neustart ohne Neubau genügt `docker compose up -d`. Zum Stoppen werden die Container angehalten, die persistenten Volumes bleiben erhalten:
+
+```bash
+docker compose down
+```
+
+Im Compose-Netzwerk verwendet GraphRAG `bolt://neo4j:7687`; die mitgelieferte `.env.docker.example` ist dafür bereits vorbereitet. Ollama läuft standardmäßig auf dem Host und wird aus den Containern über `host.docker.internal` erreicht. Auf Linux muss Docker den Hostnamen unterstützen; alternativ setzen Sie `OLLAMA_BASE_URL` auf einen von den Containern erreichbaren Ollama-Host.
 
 Danach ist HRTool erreichbar unter:
 
@@ -232,8 +242,9 @@ Danach ist HRTool erreichbar unter:
 | **Frontend** | `http://localhost:5173` |
 | **Backend API** | `http://localhost:3001/api` |
 | **Swagger UI** | `http://localhost:3001/api/docs` |
+| **GraphRAG API** | `http://localhost:8002` |
 
-Persistente Daten liegen im Docker-Volume `hrtool-data`. Für lokale KI muss Ollama auf dem Host laufen:
+Persistente Daten liegen in den Docker-Volumes `hrtool-data`, `postgres-data`, `neo4j-data`, `neo4j-logs` und `pgadmin-data`. Für lokale KI muss Ollama auf dem Host laufen:
 
 ```bash
 ollama serve

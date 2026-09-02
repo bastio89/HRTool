@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-hrtool}
       POSTGRES_USER: ${POSTGRES_USER:-hrtool}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hrtoolpass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -16,6 +16,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
   backend:
     build:
@@ -24,6 +25,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      graphrag:
         condition: service_healthy
     environment:
       NODE_ENV: production
@@ -35,7 +38,7 @@ services:
       N8N_BASE_URL: ${N8N_BASE_URL:-http://host.docker.internal:5678}
       N8N_API_KEY: ${N8N_API_KEY:-}
       GRAPHRAG_BASE_URL: ${GRAPHRAG_BASE_URL:-http://graphrag:8000}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://hrtool:hrtoolpass@postgres:5432/hrtool}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
     volumes:
       - hrtool-data:/app/data
     ports:
@@ -61,8 +64,8 @@ services:
     environment:
       BACKEND_NEW_HOST: 0.0.0.0
       BACKEND_NEW_PORT: 8001
-      DATABASE_URL: ${DATABASE_URL:-postgresql://hrtool:hrtoolpass@postgres:5432/hrtool}
-      BACKEND_NEW_JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      BACKEND_NEW_JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       BACKEND_NEW_CORS_ORIGINS: ${BACKEND_NEW_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "${BACKEND_NEW_PORT:-8001}:8001"
@@ -79,7 +82,7 @@ services:
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?PGADMIN_DEFAULT_PASSWORD must be set in .env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,7 +100,7 @@ services:
       backend:
         condition: service_healthy
       graphrag:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-5173}:80"
 
@@ -116,6 +119,12 @@ services:
     volumes:
       - neo4j-data:/data
       - neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:?NEO4J_PASSWORD must be set in .env} 'RETURN 1' >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
 
   graphrag:
     build:
@@ -123,7 +132,10 @@ services:
     container_name: hrtool-graphrag
     restart: unless-stopped
     depends_on:
-      - neo4j
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://hrtool:hrtoolpass@postgres:5432/hrtool}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
@@ -136,6 +148,12 @@ services:
       - "${GRAPHRAG_PORT:-8002}:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()\""]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
 
 volumes:
   hrtool-data:

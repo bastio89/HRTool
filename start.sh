@@ -1,81 +1,56 @@
-#!/bin/bash
-# HR Matching Tool - Start Script
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-echo "🚀 HR Matching Tool wird gestartet..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Graceful shutdown of existing processes (SIGTERM first, then SIGKILL)
-echo "🧹 Alte Prozesse beenden (Ports 3001, 5173)..."
-for PORT in 3001 5173; do
-  PIDS=$(lsof -ti:$PORT 2>/dev/null)
-  if [ -n "$PIDS" ]; then
-    echo "$PIDS" | xargs kill -15 2>/dev/null
-    sleep 1
-    echo "$PIDS" | xargs kill -9 2>/dev/null
-  fi
-done
-pkill -15 -f "HRTool/backend/server.js" 2>/dev/null
-pkill -15 -f "HRTool/frontend.*vite" 2>/dev/null
-sleep 1
-
-# Clean up orphaned Vite dep-optimization temp folders (created by kill -9 in previous runs)
-find "$SCRIPT_DIR/frontend/node_modules/.vite" -maxdepth 1 -name "deps_temp_*" -exec rm -rf {} + 2>/dev/null
-
-# Start Backend
-echo "📦 Backend starten..."
-cd "$SCRIPT_DIR/backend"
-node server.js &
-BACKEND_PID=$!
-echo "   Backend PID: $BACKEND_PID"
-
-# Wait for backend (up to 60s)
-for i in $(seq 1 60); do
-  if lsof -i:3001 | grep -q LISTEN; then
-    echo "✅ Backend bereit (${i}s)"
-    break
-  fi
-  sleep 1
-done
-
-if ! lsof -i:3001 | grep -q LISTEN; then
-  echo "⚠️  Backend hat Port 3001 nicht geöffnet – prüfe Logs."
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Fehler: Docker ist nicht installiert oder nicht im PATH." >&2
+  exit 1
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  echo "Fehler: Docker Compose v2 ist nicht verfügbar." >&2
+  exit 1
 fi
 
-# Start Frontend
-echo "🎨 Frontend starten..."
-cd "$SCRIPT_DIR/frontend"
-./node_modules/.bin/vite < /dev/null > /tmp/hrtool-vite.log 2>&1 &
-FRONTEND_PID=$!
-echo "   Frontend PID: $FRONTEND_PID"
-
-# Wait until Vite is ready (up to 120s — should now start in <30s after Tailwind fix)
-echo "   Warte auf Vite..."
-for i in $(seq 1 120); do
-  if lsof -i:5173 | grep -q LISTEN; then
-    echo "✅ Vite bereit (${i}s)"
-    break
+if [ ! -f .env ]; then
+  if [ ! -f .env.docker.example ]; then
+    echo "Fehler: .env.docker.example fehlt." >&2
+    exit 1
   fi
-  if [ $((i % 15)) -eq 0 ]; then
-    echo "   ... noch am Starten (${i}s)"
-  fi
-  sleep 1
-done
-
-echo ""
-if lsof -i:5173 | grep -q LISTEN; then
-  echo "✅ HR Matching Tool ist bereit!"
-else
-  echo "⚠️  Vite hat Port 5173 nicht geöffnet. Log: /tmp/hrtool-vite.log"
-  tail -10 /tmp/hrtool-vite.log
+  cp .env.docker.example .env
+  echo "Eine .env wurde aus .env.docker.example angelegt. Bitte Secrets prüfen."
 fi
-echo "   Frontend: http://localhost:5173"
-echo "   Backend:  http://localhost:3001"
-echo "   n8n:      http://localhost:5678"
-echo ""
-echo "   Drücke Ctrl+C zum Beenden"
 
-# Cleanup on exit
-trap "echo '🛑 Stoppe...'; kill -15 $BACKEND_PID $FRONTEND_PID 2>/dev/null; sleep 1; kill -9 $BACKEND_PID $FRONTEND_PID 2>/dev/null; echo '👋 Beendet.'" EXIT
+if grep -Eq 'bitte-durch|your_.*_password|change-me' .env; then
+  echo "Fehler: Bitte zuerst die Platzhalter in .env durch sichere Werte ersetzen." >&2
+  exit 1
+fi
 
-wait
+missing_vars=()
+for variable in JWT_SECRET POSTGRES_PASSWORD DATABASE_URL NEO4J_PASSWORD PGADMIN_DEFAULT_PASSWORD; do
+  if ! grep -Eq "^[[:space:]]*${variable}=[^[:space:]]+" .env; then
+    missing_vars+=("$variable")
+  fi
+done
+if [ "${#missing_vars[@]}" -gt 0 ]; then
+  echo "Fehler: Folgende Pflichtvariablen fehlen in .env: ${missing_vars[*]}" >&2
+  echo "Erzeuge .env erneut aus .env.docker.example oder ergänze die Werte manuell." >&2
+  exit 1
+fi
+
+docker compose config --quiet
+docker compose up -d --build
+
+frontend_url="$(docker compose port frontend 80 | sed 's/^[^:]*:/http:\/\/localhost:/')"
+backend_url="$(docker compose port backend 3001 | sed 's/^[^:]*:/http:\/\/localhost:/')"
+graphrag_url="$(docker compose port graphrag 8000 | sed 's/^[^:]*:/http:\/\/localhost:/')"
+
+echo
+echo "HRTool läuft:"
+echo "  Frontend:    ${frontend_url}/"
+echo "  Backend API: ${backend_url}/api"
+echo "  Swagger:     ${backend_url}/api/docs"
+echo "  GraphRAG:    ${graphrag_url}/"
+echo
+docker compose ps

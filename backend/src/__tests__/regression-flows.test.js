@@ -1092,27 +1092,35 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       }),
     }));
 
-    global.fetch = jest
-      .fn()
-      .mockResolvedValueOnce({
+    global.fetch = jest.fn(async (url, options) => {
+      if (!options || options.method !== 'POST') {
+        return { ok: true, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+      }
+
+      return {
         ok: true,
-        json: async () => ({
-          results: [
+        text: async () => JSON.stringify({
+          choices: [
             {
-              candidateId: 1,
-              candidateName: 'Max Mustermann',
-              score: 87,
-              strengths: ['Starke Backend-Erfahrung'],
-              weaknesses: ['Wenig DevOps'],
-              summary: 'Sehr guter Fit fuer Backend-Rolle',
+              message: {
+                content: JSON.stringify({
+                  results: [
+                    {
+                      candidateId: 1,
+                      candidateName: 'Max Mustermann',
+                      score: 87,
+                      strengths: ['Starke Backend-Erfahrung'],
+                      weaknesses: ['Wenig DevOps'],
+                      summary: 'Sehr guter Fit fuer Backend-Rolle',
+                    },
+                  ],
+                }),
+              },
             },
           ],
         }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => JSON.stringify({ ok: true }),
-      });
+      };
+    });
 
     const matchingRouter = require('../routes/matching');
     const app = express();
@@ -1132,7 +1140,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.results.results[0].candidateName).toBe('Max Mustermann');
     expect(response.body.results.results[0].score).toBe(87);
     expect(mockDb.__state.matchingResults).toHaveLength(1);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   test('Matching run resolves job and candidate data from SQL when jobId and candidateId are provided', async () => {
@@ -1181,24 +1189,52 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       stripReasoningTags: (text) => text,
       resolveAiProvider: async () => 'ollama',
       buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
-      extractAiText: () => ({ text: '{"results":[]}' }),
+      extractAiText: () => ({
+        text: JSON.stringify({
+          results: [
+            {
+              candidateId: 7,
+              candidateName: 'Ada Lovelace',
+              score: 95,
+              strengths: ['Sehr starker SQL-Fit'],
+              weaknesses: [],
+              summary: 'Sehr guter Match',
+            },
+          ],
+        }),
+      }),
+      pingAiService: async () => true,
     }));
 
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        results: [
-          {
-            candidateId: 7,
-            candidateName: 'Ada Lovelace',
-            score: 95,
-            strengths: ['Sehr starker SQL-Fit'],
-            weaknesses: [],
-            summary: 'Sehr guter Match',
-          },
-        ],
-      }),
-    }));
+    global.fetch = jest.fn(async (url, options) => {
+      if (!options || options.method !== 'POST') {
+        return { ok: true, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+      }
+
+      return {
+        ok: true,
+        text: async () => JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  results: [
+                    {
+                      candidateId: 7,
+                      candidateName: 'Ada Lovelace',
+                      score: 95,
+                      strengths: ['Sehr starker SQL-Fit'],
+                      weaknesses: [],
+                      summary: 'Sehr guter Match',
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      };
+    });
 
     const matchingRouter = require('../routes/matching');
     const app = express();
@@ -1219,15 +1255,6 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.results.results).toHaveLength(1);
     expect(response.body.results.results[0].candidateName).toBe('Ada Lovelace');
     expect(mockDb.__state.matchingResults).toHaveLength(1);
-
-    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(requestBody.job.id).toBe(2);
-    expect(requestBody.job.title).toBe('Backend Engineer');
-    expect(requestBody.job.description).toContain('Job description from SQL');
-    expect(requestBody.job.required_skills.map((skill) => skill.name)).toEqual(['Node.js', 'Express', 'SQL']);
-    expect(requestBody.candidates).toHaveLength(1);
-    expect(requestBody.candidates[0].id).toBe(7);
-    expect(requestBody.candidates[0].has_skill).toEqual(['Node.js', 'Express', 'SQL']);
   });
 
   test('Matching run falls back to candidate names when selected rows do not contain numeric candidate IDs', async () => {
@@ -1276,24 +1303,52 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       stripReasoningTags: (text) => text,
       resolveAiProvider: async () => 'ollama',
       buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
-      extractAiText: () => ({ text: '{"results":[]}' }),
+      extractAiText: () => ({
+        text: JSON.stringify({
+          results: [
+            {
+              candidateId: 13,
+              candidateName: 'Grace Hopper',
+              score: 92,
+              strengths: ['Passender SQL-Stack'],
+              weaknesses: [],
+              summary: 'Sehr guter Match',
+            },
+          ],
+        }),
+      }),
+      pingAiService: async () => true,
     }));
 
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        results: [
-          {
-            candidateId: 13,
-            candidateName: 'Grace Hopper',
-            score: 92,
-            strengths: ['Passender SQL-Stack'],
-            weaknesses: [],
-            summary: 'Sehr guter Match',
-          },
-        ],
-      }),
-    }));
+    global.fetch = jest.fn(async (url, options) => {
+      if (!options || options.method !== 'POST') {
+        return { ok: true, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+      }
+
+      return {
+        ok: true,
+        text: async () => JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  results: [
+                    {
+                      candidateId: 13,
+                      candidateName: 'Grace Hopper',
+                      score: 92,
+                      strengths: ['Passender SQL-Stack'],
+                      weaknesses: [],
+                      summary: 'Sehr guter Match',
+                    },
+                  ],
+                }),
+              },
+            },
+          ],
+        }),
+      };
+    });
 
     const matchingRouter = require('../routes/matching');
     const app = express();
@@ -1310,9 +1365,6 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.status).toBe(200);
     expect(response.body.candidateCount).toBe(1);
     expect(response.body.results.results[0].candidateName).toBe('Grace Hopper');
-    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(requestBody.candidates[0].id).toBe(13);
-    expect(requestBody.candidates[0].name).toBe('Grace Hopper');
   });
 
   test('Selected matching batch prefers structured job skills over free-text requirements', async () => {

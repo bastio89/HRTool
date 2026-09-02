@@ -166,17 +166,30 @@ function buildWeightInstructions(weights) {
   return instructions;
 }
 
-function buildJobToCandidatesPrompt({ jobDescription, jobTitle, candidates, weights }) {
+function buildJobToCandidatesPrompt({ job, candidates, weights }) {
   const weightInstructions = buildWeightInstructions(weights);
-  return `Du bist ein erfahrener HR-Analyst. Analysiere die folgenden Bewerber für die gegebene Stelle und bewerte jeden mit einem Score von 0-100.
+  const jobProfile = job && typeof job === 'object' ? job : {};
+  const jobTitle = jobProfile.title || 'Unbenannte Stelle';
+  const jobDescription = buildJobDescription(jobProfile);
+  const jobSkills = splitSkillValues(jobProfile.skills || jobProfile.requirements || jobDescription);
 
-Stellenbeschreibung:
-${jobDescription}${weightInstructions}
+  return `Du bist ein erfahrener HR-Analyst. Analysiere das folgende Jobprofil und die Kandidatenprofile und bewerte jeden mit einem Score von 0-100.
 
-Stellentitel: ${jobTitle || 'Unbenannte Stelle'}
+Jobprofil:
+- ID: ${jobProfile.id ?? 'k.A.'}
+- Titel: ${jobTitle}
+- Beschreibung: ${jobProfile.description || 'k.A.'}
+- Anforderungen: ${jobProfile.requirements || 'k.A.'}
+- Skills: ${jobSkills.length > 0 ? jobSkills.join(', ') : 'k.A.'}
+- Standort: ${jobProfile.location || 'k.A.'}
+- Arbeitsmodell: ${jobProfile.type || 'k.A.'}
+${weightInstructions}
 
-Bewerber:
+Stellentitel: ${jobTitle}
+
+Kandidatenprofile:
 ${candidates.map((c, idx) => `Kandidat ${idx + 1} (ID: ${c.id}):
+- Name: ${c.name || 'k.A.'}
 - Skills: ${c.skills || 'k.A.'}
 - Erfahrung: ${c.experience || 'k.A.'}
 - Ausbildung: ${c.education || 'k.A.'}
@@ -481,29 +494,35 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
     const normalizedCandidateIds = Array.isArray(candidateIds)
       ? candidateIds
       : (candidateId != null ? [candidateId] : []);
+    const normalizedCandidateNames = Array.isArray(candidateNames)
+      ? candidateNames
+      : (candidateName ? [candidateName] : []);
 
-    let jobRecord = null;
-    if (jobId) {
-      jobRecord = getJobs([jobId])[0] || null;
-    }
-    if (!jobRecord && jobTitle) {
-      jobRecord = getJobByTitle(jobTitle) || null;
-    }
+    const jobRecord = jobId
+      ? (getJobs([jobId])[0] || null)
+      : (jobTitle ? getJobByTitle(jobTitle) || null : null);
 
-    const resolvedJobTitle = jobRecord?.title || jobTitle || 'Unbenannte Stelle';
-    const resolvedJobDescription = (jobRecord
-      ? buildJobDescription(jobRecord)
-      : (jobDescription || '').trim()) || buildJobDescription({ title: resolvedJobTitle });
+    const resolvedJob = jobRecord
+      ? {
+          ...jobRecord,
+          description: buildJobDescription(jobRecord),
+        }
+      : {
+          id: jobId || null,
+          title: jobTitle || 'Unbenannte Stelle',
+          description: (jobDescription || '').trim(),
+          requirements: null,
+          skills: null,
+          location: null,
+          type: null,
+        };
 
-    if (!jobRecord && (!jobDescription || jobDescription.trim() === '')) {
+    if (!resolvedJob.id && !resolvedJob.description) {
       return res.status(400).json({ error: 'jobId oder Stellenbeschreibung ist erforderlich' });
     }
 
     let candidates = getCandidates(normalizedCandidateIds);
     if (candidates.length === 0) {
-      const normalizedCandidateNames = Array.isArray(candidateNames)
-        ? candidateNames
-        : (candidateName ? [candidateName] : []);
       candidates = getCandidatesByNames(normalizedCandidateNames);
     }
 
@@ -511,54 +530,74 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
     }
 
-    const graphRagResult = await callGraphRagMatching('/match/external/run', {
-      job: {
-        id: jobRecord?.id || jobId || null,
-        title: resolvedJobTitle,
-        description: resolvedJobDescription,
-        requirements: jobRecord?.requirements,
-        required_skills: toRequiredSkills(jobRecord?.skills || jobRecord?.requirements || jobRecord?.description || resolvedJobDescription),
-        location: jobRecord?.location,
-        type: jobRecord?.type,
-      },
-      candidates: candidates.map((candidate) => ({
-        id: candidate.id,
-        name: candidate.name,
-        location: candidate.location,
-        experience: candidate.experience,
-        skills: candidate.skills,
-        education: candidate.education,
-        desired_salary: candidate.desired_salary,
-        availability: candidate.availability,
-        languages: candidate.languages,
-        certificates: candidate.certificates,
-        mobility: candidate.mobility,
-        has_skill: splitSkillValues(candidate.skills),
-      })),
+    const startTime = Date.now();
+    const { baseUrl: OLLAMA_URL, model: OLLAMA_MODEL, provider: PROVIDER_CFG } = getAiConfig();
+    const aiProvider = await resolveAiProvider(OLLAMA_URL, PROVIDER_CFG);
+
+    try {
+      await assertAiReachable(OLLAMA_URL, aiProvider);
+    } catch {
+      return res.status(503).json({ error: 'KI-Host nicht erreichbar. Bitte stellen Sie sicher, dass der KI-Server läuft.' });
+    }
+
+    const prompt = buildJobToCandidatesPrompt({
+      job: resolvedJob,
+      candidates,
       weights,
     });
 
-    const storedJobId = Number.isFinite(Number(jobRecord?.id || jobId)) ? Number(jobRecord?.id || jobId) : null;
+    const { raw, parsed } = await generateJson({
+      baseUrl: OLLAMA_URL,
+      model: OLLAMA_MODEL,
+      provider: aiProvider,
+      prompt,
+      timeoutMs: 180000,
+    });
 
-    // Save results (mit echten Namen)
+    const matchingResults = {
+      results: normalizeJobResults({ parsed, job: resolvedJob, candidates }),
+    };
+    const matchingDuration = Date.now() - startTime;
+    const candidateMap = new Map(candidates.map((candidate) => [candidate.id, candidate.name]));
+    if (matchingResults.results) {
+      matchingResults.results = matchingResults.results.map((result) => ({
+        ...result,
+        candidateName: candidateMap.get(result.candidateId) || result.candidateName,
+      }));
+    }
+
+    const storedJobId = Number.isFinite(Number(resolvedJob.id || jobId)) ? Number(resolvedJob.id || jobId) : null;
     const saveResult = db.prepare(`
       INSERT INTO matching_results (job_description, job_title, results, job_id)
       VALUES (?, ?, ?, ?)
-    `).run(resolvedJobDescription, resolvedJobTitle, JSON.stringify(graphRagResult), storedJobId);
+    `).run(resolvedJob.description || buildJobDescription(resolvedJob), resolvedJob.title, JSON.stringify(matchingResults), storedJobId);
 
-    logAudit(req, 'ki-matching', 'Matching', saveResult.lastInsertRowid, resolvedJobTitle, {
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'matching',
+      model: OLLAMA_MODEL,
+      prompt,
+      response: raw,
+      parsedResult: matchingResults,
+      durationMs: matchingDuration,
+      success: true,
+    });
+
+    logAudit(req, 'ki-matching', 'Matching', saveResult.lastInsertRowid, resolvedJob.title, {
       candidateCount: candidates.length,
       jobId: storedJobId,
-      topScore: graphRagResult.results?.[0]?.score,
+      topScore: matchingResults.results?.[0]?.score,
+      durationMs: matchingDuration,
+      model: OLLAMA_MODEL,
     });
 
     res.json({
       id: saveResult.lastInsertRowid,
-      jobTitle: resolvedJobTitle,
-      results: graphRagResult,
+      jobTitle: resolvedJob.title,
+      results: matchingResults,
       candidateCount: candidates.length,
       jobId: storedJobId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
     console.error('Error running matching:', error);

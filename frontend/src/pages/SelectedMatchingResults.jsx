@@ -227,7 +227,7 @@ export default function SelectedMatchingResults() {
                   {result.strengths?.length > 0 && (
                     <div className="rounded-[14px] bg-[#34c759]/5 border border-[#34c759]/10 p-4">
                       <p className="font-semibold text-[#34c759] mb-2">Stärken</p>
-                      <ul className="space-y-1.5 text-gray-600 dark:text-gray-300">
+                      <ul className="list-disc space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
                         {result.strengths.map((item, itemIndex) => (
                           <li key={`${result.id || index}-strength-${itemIndex}`}>{item}</li>
                         ))}
@@ -237,7 +237,7 @@ export default function SelectedMatchingResults() {
                   {result.weaknesses?.length > 0 && (
                     <div className="rounded-[14px] bg-[#ff3b30]/5 border border-[#ff3b30]/10 p-4">
                       <p className="font-semibold text-[#ff3b30] mb-2">Schwächen</p>
-                      <ul className="space-y-1.5 text-gray-600 dark:text-gray-300">
+                      <ul className="list-disc space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
                         {result.weaknesses.map((item, itemIndex) => (
                           <li key={`${result.id || index}-weakness-${itemIndex}`}>{item}</li>
                         ))}

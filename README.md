@@ -212,7 +212,7 @@ ollama pull llama3.2
 
 ### Schnellstart mit Docker Compose
 
-Der empfohlene Start auf einer neuen Maschine läuft vollständig über Docker Compose. Der Start prüft Docker und Compose, legt bei Bedarf eine `.env` an, validiert die Konfiguration, baut alle Images und wartet über Healthchecks auf PostgreSQL, Neo4j, GraphRAG und das Backend. Daten bleiben in Docker-Volumes erhalten.
+Der empfohlene Start auf einer neuen Maschine läuft vollständig über Docker Compose. Der Start prüft Docker und Compose, legt bei Bedarf eine `.env` an, prüft die Secret-Platzhalter, validiert die Konfiguration, baut alle Images und wartet über Healthchecks auf PostgreSQL, Neo4j, GraphRAG und das Backend. Daten bleiben in Docker-Volumes erhalten. Ältere `.env`-Dateien ohne die zusätzlichen PostgreSQL- und pgAdmin-Variablen bleiben kompatibel und verwenden dafür die dokumentierten Compose-Defaults.
 
 ```bash
 cp .env.docker.example .env

@@ -27,18 +27,6 @@ if grep -Eq 'bitte-durch|your_.*_password|change-me' .env; then
   exit 1
 fi
 
-missing_vars=()
-for variable in JWT_SECRET POSTGRES_PASSWORD DATABASE_URL NEO4J_PASSWORD PGADMIN_DEFAULT_PASSWORD; do
-  if ! grep -Eq "^[[:space:]]*${variable}=[^[:space:]]+" .env; then
-    missing_vars+=("$variable")
-  fi
-done
-if [ "${#missing_vars[@]}" -gt 0 ]; then
-  echo "Fehler: Folgende Pflichtvariablen fehlen in .env: ${missing_vars[*]}" >&2
-  echo "Erzeuge .env erneut aus .env.docker.example oder ergänze die Werte manuell." >&2
-  exit 1
-fi
-
 docker compose config --quiet
 docker compose up -d --build
 

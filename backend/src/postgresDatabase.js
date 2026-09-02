@@ -198,10 +198,11 @@ class PostgresDatabase {
 
   ensureIdentityDefaults() {
     const rows = this.query(
-      "SELECT table_name FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'id' AND data_type IN ('bigint', 'integer')"
+      "SELECT table_name, is_identity FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'id' AND data_type IN ('bigint', 'integer')"
     ).rows;
-    for (const { table_name: tableName } of rows) {
+    for (const { table_name: tableName, is_identity: isIdentity } of rows) {
       if (!/^[a-z_][a-z0-9_]*$/i.test(tableName)) continue;
+      if (isIdentity === 'YES') continue;
       const sequenceName = `${tableName}_id_seq`;
       this.query(`CREATE SEQUENCE IF NOT EXISTS ${sequenceName}`);
       this.query(`ALTER TABLE ${tableName} ALTER COLUMN id SET DEFAULT nextval('${sequenceName}')`);

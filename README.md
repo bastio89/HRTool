@@ -239,10 +239,24 @@ Danach ist HRTool erreichbar unter:
 
 | Service | URL |
 |---------|-----|
+| **HRTool (Caddy)** | `https://localhost` |
 | **Frontend** | `http://localhost:5173` |
 | **Backend API** | `http://localhost:3001/api` |
 | **Swagger UI** | `http://localhost:3001/api/docs` |
 | **GraphRAG API** | `http://localhost:8002` |
+
+### HTTPS mit Caddy
+
+Caddy ist im Docker-Compose-Stack enthalten und übernimmt TLS sowie das Reverse-Proxying zum Frontend. Das Frontend leitet `/api` und `/graphrag-api` intern an die jeweiligen Dienste weiter.
+
+Für eine öffentliche Installation:
+
+1. Lassen Sie einen DNS-A- bzw. AAAA-Record für Ihre Domain auf den Docker-Host zeigen.
+2. Setzen Sie in `.env` `APP_DOMAIN=hrtool.example.com` und `ACME_EMAIL=admin@example.com`.
+3. Geben Sie die Ports `80` und `443` am Host bzw. in der Firewall frei.
+4. Starten Sie den Stack mit `./start.sh` neu.
+
+Caddy beantragt und erneuert das öffentliche Let's-Encrypt-Zertifikat automatisch. Die Zertifikatsdaten liegen im persistenten Docker-Volume `caddy-data`. Für `APP_DOMAIN=localhost` verwendet Caddy ein lokales Zertifikat, das Browser zunächst als nicht öffentlich vertrauenswürdig melden können.
 
 Persistente Daten liegen in den Docker-Volumes `hrtool-data`, `postgres-data`, `neo4j-data`, `neo4j-logs` und `pgadmin-data`. Für lokale KI muss Ollama auf dem Host laufen:
 

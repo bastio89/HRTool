@@ -75,6 +75,19 @@ class PostgresStore:
                     """
                 )
                 for table in ("ai_logs", "jobs"):
+                    await cursor.execute(
+                        """
+                        SELECT is_identity
+                        FROM information_schema.columns
+                        WHERE table_schema = current_schema()
+                          AND table_name = %s
+                          AND column_name = 'id'
+                        """,
+                        (table,),
+                    )
+                    identity_row = await cursor.fetchone()
+                    if identity_row and identity_row[0] == "YES":
+                        continue
                     await cursor.execute(f"CREATE SEQUENCE IF NOT EXISTS {table}_id_seq")
                     await cursor.execute(f"ALTER TABLE {table} ALTER COLUMN id SET DEFAULT nextval('{table}_id_seq')")
                     await cursor.execute(f"ALTER SEQUENCE {table}_id_seq OWNED BY {table}.id")

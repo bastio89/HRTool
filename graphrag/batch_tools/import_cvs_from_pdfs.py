@@ -478,14 +478,17 @@ async def run_cv_import(args: argparse.Namespace) -> int:
         postgres_store=postgres_store,
     )
     llm_service = LLMService(
-        base_url=settings.ollama_base_url,
-        chat_model=settings.ollama_chat_model,
-        embedding_model=settings.ollama_embedding_model,
+        provider=settings.resolved_provider,
+        base_url=settings.resolved_ai_base_url,
+        api_key=settings.resolved_api_key,
+        chat_model=settings.resolved_chat_model,
+        embedding_model=settings.resolved_embedding_model,
         embedding_dimensions=settings.embedding_dimensions,
         enable_reasoning=settings.ollama_enable_reasoning,
         enable_parse_latency_aggregation=settings.enable_parse_latency_aggregation,
         parse_latency_window_size=settings.parse_latency_window_size,
         parse_latency_log_every=settings.parse_latency_log_every,
+        database_url=settings.database_url,
     )
 
     input_dir = _resolve_input_dir(args)
@@ -550,14 +553,17 @@ async def run_job_import(args: argparse.Namespace) -> int:
         password=settings.neo4j_password,
     )
     llm_service = LLMService(
-        base_url=settings.ollama_base_url,
-        chat_model=settings.ollama_chat_model,
-        embedding_model=settings.ollama_embedding_model,
+        provider=settings.resolved_provider,
+        base_url=settings.resolved_ai_base_url,
+        api_key=settings.resolved_api_key,
+        chat_model=settings.resolved_chat_model,
+        embedding_model=settings.resolved_embedding_model,
         embedding_dimensions=settings.embedding_dimensions,
         enable_reasoning=settings.ollama_enable_reasoning,
         enable_parse_latency_aggregation=settings.enable_parse_latency_aggregation,
         parse_latency_window_size=settings.parse_latency_window_size,
         parse_latency_log_every=settings.parse_latency_log_every,
+        database_url=settings.database_url,
     )
 
     input_dir = _resolve_input_dir(args)

@@ -2,9 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Sparkles, Loader2, Upload, FileText } from 'lucide-react'
 import { jobsApi } from '../api'
-import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
+import { Card, Button, Input, Textarea, LoadingSpinner, PageContainer } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
+import FormActionBar from '../components/FormActionBar'
+import useUnsavedChanges from '../hooks/useUnsavedChanges'
 import { useI18n } from '../I18nContext'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
@@ -25,9 +28,13 @@ export default function JobForm() {
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const confirm = useConfirm()
   const { t } = useI18n()
   const isEdit = Boolean(id)
   const [form, setForm] = useState(emptyJob)
+  // Baseline for the unsaved-changes guard: replaced once the record loads.
+  const [pristine, setPristine] = useState(emptyJob)
+  const [justSaved, setJustSaved] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -43,18 +50,22 @@ export default function JobForm() {
   useEffect(() => {
     if (isEdit) {
       jobsApi.getById(id)
-        .then(data => setForm({
-          title: data.title || '',
-          about_us: data.about_us || '',
-          description: data.description || '',
-          requirements: data.requirements || '',
-          skills: data.skills || '',
-          benefits: data.benefits || '',
-          location: data.location || '',
-          type: data.type || 'Vollzeit',
-          status: data.status || 'Offen',
-          url: data.url || '',
-        }))
+        .then(data => {
+          const loaded = {
+            title: data.title || '',
+            about_us: data.about_us || '',
+            description: data.description || '',
+            requirements: data.requirements || '',
+            skills: data.skills || '',
+            benefits: data.benefits || '',
+            location: data.location || '',
+            type: data.type || 'Vollzeit',
+            status: data.status || 'Offen',
+            url: data.url || '',
+          }
+          setForm(loaded)
+          setPristine(loaded)
+        })
         .catch(err => setError(err.message))
         .finally(() => setLoading(false))
     }
@@ -71,6 +82,7 @@ export default function JobForm() {
         await jobsApi.create(form)
       }
       toast.success(isEdit ? t('jobs.updated') : t('jobs.created'))
+      setJustSaved(true)
       navigate('/jobs')
     } catch (err) {
       setError(err.message)
@@ -145,14 +157,26 @@ export default function JobForm() {
     if (file) handleDescriptionUpload(file)
   }
 
+  const isDirty = !justSaved && JSON.stringify(form) !== JSON.stringify(pristine)
+  const confirmLeave = useUnsavedChanges(isDirty, confirm, {
+    title: t('form.unsaved_title'),
+    message: t('form.unsaved_message'),
+    discardLabel: t('form.unsaved_discard'),
+    stayLabel: t('form.unsaved_stay'),
+  })
+
+  const leaveTo = async (path) => {
+    if (await confirmLeave()) navigate(path)
+  }
+
   if (loading) return <LoadingSpinner text={t('jobs.job_loading')} />
 
   return (
-    <div className="fade-in max-w-[1000px] mx-auto">
+    <PageContainer width="narrow">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <button
-          onClick={() => navigate('/jobs')}
+          onClick={() => leaveTo('/jobs')}
           className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0"
         >
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
@@ -365,16 +389,22 @@ export default function JobForm() {
           </div>
         </Card>
 
-        <div className="flex items-center justify-end gap-5 pt-6 pb-12">
-          <Button variant="secondary" size="lg" type="button" onClick={() => navigate('/jobs')}>
+        <FormActionBar>
+          {isDirty && (
+            <span className="mr-auto text-[14px] font-medium text-[#ff9f0a] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#ff9f0a]" aria-hidden="true" />
+              {t('form.unsaved_title')}
+            </span>
+          )}
+          <Button variant="secondary" size="lg" type="button" onClick={() => leaveTo('/jobs')}>
             {t('form.cancel')}
           </Button>
           <Button variant="dark" type="submit" size="lg" disabled={saving || !form.title.trim()}>
             <Save className="w-5 h-5" />
             {saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}
           </Button>
-        </div>
+        </FormActionBar>
       </form>
-    </div>
+    </PageContainer>
   )
 }

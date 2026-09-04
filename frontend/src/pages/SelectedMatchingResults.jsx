@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, BarChart3, CheckCircle, Download, FileText, Target, User, UserCheck, XCircle } from 'lucide-react'
 import { matchingApi } from '../api'
-import { Card, Button, ScoreBadge, ScoreRing, LoadingSpinner } from '../components/UI'
+import { Card, Button, ScoreBadge, ScoreRing, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
 
 const STORAGE_KEY = 'hrtool:matching:selected-batch'
@@ -135,7 +135,7 @@ export default function SelectedMatchingResults() {
 
   if (!payload) {
     return (
-      <div className="fade-in max-w-[1100px] mx-auto">
+      <PageContainer width="content">
         <Card className="p-10 text-center">
           {error ? (
             <>
@@ -159,12 +159,12 @@ export default function SelectedMatchingResults() {
             </>
           )}
         </Card>
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <PageContainer width="content">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
           <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -264,6 +264,6 @@ export default function SelectedMatchingResults() {
           </div>
         )}
       </Card>
-    </div>
+    </PageContainer>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, BarChart3, Download, TrendingUp, Users, Briefcase, Clock, Target, Activity, UserCheck } from 'lucide-react'
-import { Card, LoadingSpinner } from '../components/UI'
+import { Card, LoadingSpinner, PageContainer } from '../components/UI'
 import { reportsApi, jobsApi } from '../api'
 import { useI18n } from '../I18nContext'
 
@@ -20,7 +20,7 @@ export default function Reports() {
   const [tab, setTab] = useState('overview')
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <PageContainer width="content">
       <div className="flex items-center gap-4 sm:gap-8 mb-8">
         <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
@@ -51,7 +51,7 @@ export default function Reports() {
       {tab === 'sources' && <SourcesTab t={t} />}
       {tab === 'timeline' && <TimelineTab t={t} />}
       {tab === 'team' && <TeamTab t={t} />}
-    </div>
+    </PageContainer>
   )
 }
 

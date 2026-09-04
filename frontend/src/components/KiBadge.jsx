@@ -19,7 +19,7 @@ export function KiBadge({ label, tooltip, className = '' }) {
       <Bot className="w-3.5 h-3.5" />
       {displayLabel}
       {tooltip && showTip && (
-        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl bg-black/90 dark:bg-white/90 text-[11px] font-medium text-white dark:text-black leading-relaxed shadow-xl z-50 pointer-events-none">
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl bg-black/90 dark:bg-white/90 text-[11px] font-medium text-white dark:text-black leading-relaxed shadow-xl layer-popover pointer-events-none">
           {tooltip}
         </span>
       )}

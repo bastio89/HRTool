@@ -33,14 +33,14 @@ describe('BatchJobImportDialog', () => {
 
     const onClose = vi.fn()
     const onImported = vi.fn()
-    const { container } = render(
+    render(
       <I18nProvider>
         <BatchJobImportDialog onClose={onClose} onImported={onImported} />
       </I18nProvider>
     )
 
     const file = new File(['job text'], 'Senior Backend Engineer.pdf', { type: 'application/pdf' })
-    fireEvent.change(container.querySelector('input[type="file"]'), {
+    fireEvent.change(document.querySelector('input[type="file"]'), {
       target: { files: [file] },
     })
 

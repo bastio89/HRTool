@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Bell, Check, CheckCheck, MessageSquare, AtSign, X } from 'lucide-react'
 import { collaborationApi } from '../api'
 import { useI18n } from '../I18nContext'
+import { EmptyState } from './UI'
 
 export default function NotificationBell() {
   const { t } = useI18n()
@@ -91,7 +92,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[380px] max-h-[480px] bg-white dark:bg-[#2c2c2e] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-[380px] max-h-[480px] bg-white dark:bg-[#2c2c2e] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 layer-popover overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
             <h3 className="text-[15px] font-bold text-black dark:text-white">{t('collab.notifications')}</h3>
             <div className="flex items-center gap-2">
@@ -112,7 +113,7 @@ export default function NotificationBell() {
                 <div className="w-6 h-6 border-2 border-gray-300 border-t-[#5e5ce6] rounded-full animate-spin" />
               </div>
             ) : notifications.length === 0 ? (
-              <p className="text-center text-[13px] text-gray-400 py-8">{t('collab.no_notifications')}</p>
+              <EmptyState icon={Bell} title={t('collab.no_notifications')} size="sm" />
             ) : (
               notifications.map(n => (
                 <div key={n.id} onClick={() => handleNotificationClick(n)}

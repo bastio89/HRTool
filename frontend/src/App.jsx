@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './AuthContext'
 import { ThemeProvider } from './ThemeContext'
 import { I18nProvider } from './I18nContext'
 import { ToastProvider } from './components/Toast'
+import { ConfirmProvider } from './components/ConfirmDialog'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -96,12 +97,14 @@ export default function App() {
     <ThemeProvider>
     <AuthProvider>
       <ToastProvider>
+      <ConfirmProvider>
       <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<LoginGuard />} />
           <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </ErrorBoundary>
+      </ConfirmProvider>
       </ToastProvider>
     </AuthProvider>
     </ThemeProvider>

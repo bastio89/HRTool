@@ -1112,6 +1112,17 @@ export default {
   'common.no': 'Nein',
   'common.search': 'Suchen',
   'common.close': 'Schließen',
+  'audit.date_from': 'Von',
+  'audit.date_to': 'Bis',
+  'common.confirm_title': 'Sind Sie sicher?',
+  'candidates.delete_confirm_named': 'Kandidat/in „{name}" wirklich löschen? Das lässt sich nicht rückgängig machen.',
+  'jobs.archived_success': 'Stelle archiviert',
+  'users.delete_user_title': 'Benutzer löschen',
+  'email.delete_template_title': 'Vorlage löschen',
+  'form.unsaved_title': 'Ungespeicherte Änderungen',
+  'form.unsaved_message': 'Sie haben Änderungen vorgenommen, die noch nicht gespeichert sind. Seite wirklich verlassen?',
+  'form.unsaved_discard': 'Verwerfen',
+  'form.unsaved_stay': 'Weiter bearbeiten',
   'common.language': 'Sprache',
 
   // Email

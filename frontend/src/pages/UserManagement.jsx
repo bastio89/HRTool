@@ -5,14 +5,19 @@ import { authApi, jobsApi } from '../api'
 import { UserPlus, Trash2, Shield, User, AlertCircle, CheckCircle, Key, Lock, Database, Download, Eye, Briefcase } from 'lucide-react'
 import PasswordStrength, { isPasswordValid } from '../components/PasswordStrength'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
+import useRevealOnOpen from '../hooks/useRevealOnOpen'
+import { PageContainer } from '../components/UI'
 
 export default function UserManagement() {
   const { user: currentUser, isAdmin } = useAuth()
   const { t } = useI18n()
   const toast = useToast()
+  const confirm = useConfirm()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const createFormRef = useRevealOnOpen(showForm)
   const [form, setForm] = useState({ username: '', password: '', display_name: '', role: 'recruiter' })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -20,6 +25,7 @@ export default function UserManagement() {
   const [resetUserId, setResetUserId] = useState(null)
   const [resetPassword, setResetPassword] = useState('')
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const passwordFormRef = useRevealOnOpen(showChangePassword)
   const [changeForm, setChangeForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [backupLoading, setBackupLoading] = useState(false)
   const [jobs, setJobs] = useState([])
@@ -99,7 +105,13 @@ export default function UserManagement() {
   }
 
   const handleDelete = async (id, username) => {
-    if (!confirm(t('users.delete_confirm').replace('{name}', username))) return
+    const ok = await confirm({
+      title: t('users.delete_user_title', 'Benutzer löschen'),
+      message: t('users.delete_confirm').replace('{name}', username),
+      confirmLabel: t('common.delete'),
+      tone: 'danger',
+    })
+    if (!ok) return
     setError('')
     setSuccess('')
     try {
@@ -171,7 +183,7 @@ export default function UserManagement() {
   }
 
   return (
-    <div>
+    <PageContainer width="content">
       <div className="flex items-center justify-between mb-10">
         <div>
           <h1 className="text-[34px] font-bold tracking-tight text-black dark:text-white">{t('users.heading')}</h1>
@@ -219,7 +231,7 @@ export default function UserManagement() {
 
       {/* Create form */}
       {showForm && (
-        <div className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 mb-8 border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60">
+        <div ref={createFormRef} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 mb-8 border border-gray-200/60 dark:border-gray-700/60">
           <h2 className="text-[20px] font-semibold text-black dark:text-white mb-6">{t('users.create_user')}</h2>
           <form onSubmit={handleCreate} className="grid grid-cols-2 gap-5">
             <div>
@@ -228,7 +240,7 @@ export default function UserManagement() {
                 type="text"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder={t('users.username_placeholder')}
                 required
               />
@@ -239,7 +251,7 @@ export default function UserManagement() {
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder={t('users.password_hint')}
                 required
                 minLength={8}
@@ -252,7 +264,7 @@ export default function UserManagement() {
                 type="text"
                 value={form.display_name}
                 onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder={t('users.display_name_placeholder')}
                 required
               />
@@ -262,7 +274,7 @@ export default function UserManagement() {
               <select
                 value={form.role}
                 onChange={(e) => { setForm({ ...form, role: e.target.value }); setSelectedJobIds([]) }}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all appearance-none"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all appearance-none"
               >
                 <option value="recruiter">Recruiter</option>
                 <option value="admin">Admin</option>
@@ -319,7 +331,7 @@ export default function UserManagement() {
 
       {/* Change own password form */}
       {showChangePassword && (
-        <div className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 mb-8 border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60">
+        <div ref={passwordFormRef} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 mb-8 border border-gray-200/60 dark:border-gray-700/60">
           <h2 className="text-[20px] font-semibold text-black dark:text-white mb-6 flex items-center gap-3">
             <Lock className="w-5 h-5 text-[#0071e3]" />
             {t('users.change_password')}
@@ -331,7 +343,7 @@ export default function UserManagement() {
                 type="password"
                 value={changeForm.currentPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, currentPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 required
               />
             </div>
@@ -341,7 +353,7 @@ export default function UserManagement() {
                 type="password"
                 value={changeForm.newPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, newPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 placeholder={t('users.min_password')}
                 required
                 minLength={8}
@@ -354,7 +366,7 @@ export default function UserManagement() {
                 type="password"
                 value={changeForm.confirmPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, confirmPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
                 required
                 minLength={8}
               />
@@ -393,7 +405,7 @@ export default function UserManagement() {
                 type="password"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition-all"
                 placeholder={t('users.password_hint')}
                 required
                 minLength={8}
@@ -426,7 +438,7 @@ export default function UserManagement() {
           <div className="w-8 h-8 border-[3px] border-gray-200 dark:border-gray-700 border-t-[#0071e3] rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] border border-gray-200/6 dark:border-gray-700/60 dark:border-gray-700/60 shadow-[0_2px_10px_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] border border-gray-200/60 dark:border-gray-700/60 shadow-[0_2px_10px_rgba(0,0,0,0.04)] overflow-hidden">
           {users.map((u, i) => (
             <div key={u.id} className={`flex items-center justify-between px-8 py-5 ${i > 0 ? 'border-t border-gray-100 dark:border-gray-700' : ''}`}>
               <div className="flex items-center gap-5">
@@ -482,6 +494,6 @@ export default function UserManagement() {
           ))}
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }

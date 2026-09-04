@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText } from 'lucide-react'
 import { candidatesApi, matchingApi, pipelineApi, settingsApi, interviewsApi } from '../api'
-import { Card, ScoreRing, LoadingSpinner } from '../components/UI'
+import { Card, ScoreRing, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
 import { useAuth } from '../AuthContext'
@@ -59,7 +59,7 @@ export default function Dashboard() {
   if (loading) return <LoadingSpinner text={t('dashboard.loading')} />
 
   return (
-    <div className="fade-in space-y-8 sm:space-y-14">
+    <PageContainer width="content" className="space-y-8 sm:space-y-14">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.title')}</h1>
@@ -102,8 +102,9 @@ export default function Dashboard() {
                 }, 100)
               })
             }}
-            className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer"
+            className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0071e3]/25"
             title={t('dashboard.pdf_export')}
+            aria-label={t('dashboard.pdf_export')}
           >
             <FileText className="w-5 h-5 text-gray-500" />
           </button>
@@ -137,7 +138,7 @@ export default function Dashboard() {
           <LocationsContent stats={stats} t={t} />
         </Card>
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -289,7 +290,7 @@ function LocationsContent({ stats, t }) {
           ))}
         </div>
       ) : (
-        <p className="text-[18px] text-gray-500 dark:text-gray-400 text-center py-12">{t('dashboard.no_data')}</p>
+        <EmptyState icon={BarChart2} title={t('dashboard.no_data')} size="sm" />
       )}
     </>
   )
@@ -632,7 +633,7 @@ function CalendarWidget({ interviews, t }) {
       </div>
 
       {interviews.length === 0 ? (
-        <p className="text-[15px] text-gray-500 dark:text-gray-400 text-center py-8">{t('dashboard.no_interviews')}</p>
+        <EmptyState icon={Calendar} title={t('dashboard.no_interviews')} size="sm" />
       ) : (
         <div className="space-y-3">
           {interviews.slice(0, 6).map(iv => {

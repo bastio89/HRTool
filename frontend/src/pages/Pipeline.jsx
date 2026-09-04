@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { useI18n } from '../I18nContext'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
@@ -7,7 +6,9 @@ import {
 } from 'lucide-react'
 import { jobsApi, pipelineApi, candidatesApi, matchingApi, interviewsApi, ratingsApi } from '../api'
 import InterviewScheduler from '../components/InterviewScheduler'
-import { Button, LoadingSpinner } from '../components/UI'
+import { Button, IconButton, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
+import { useToast } from '../components/Toast'
+import Modal from '../components/Modal'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
 
@@ -21,6 +22,7 @@ const stageStyle = {
 }
 
 export default function Pipeline() {
+  const toast = useToast()
   const { jobId } = useParams()
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -123,7 +125,7 @@ export default function Pipeline() {
       await pipelineApi.updateStage(entry.id, targetStage, noteText || undefined)
     } catch (err) {
       loadBoard()
-      alert(t('pipeline.update_error') + ': ' + err.message)
+      toast.error(`${t('pipeline.update_error')}: ${err.message}`)
     }
   }
 
@@ -149,7 +151,7 @@ export default function Pipeline() {
       const data = await pipelineApi.getNotes(notesModal.entryId)
       setNotes(data.data || [])
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -161,7 +163,7 @@ export default function Pipeline() {
       setAddPanelOpen(false)
       setAddSearch('')
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     } finally {
       setSaving(false)
     }
@@ -175,7 +177,7 @@ export default function Pipeline() {
         [stage]: prev[stage].filter(e => e.id !== entryId)
       }))
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -187,7 +189,7 @@ export default function Pipeline() {
       const result = await matchingApi.run(job.description, job.title, candidateIds)
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
-      alert(t('pipeline.matching_failed') + ': ' + err.message)
+      toast.error(`${t('pipeline.matching_failed')}: ${err.message}`)
     } finally {
       setMatchingRunning(false)
     }
@@ -227,14 +229,14 @@ export default function Pipeline() {
       await pipelineApi.updateStage(entry.id, targetStage)
     } catch (err) {
       loadBoard()
-      alert(t('common.error') + ': ' + err.message)
+      toast.error(`${t('common.error')}: ${err.message}`)
     }
   }
 
   if (loading) return <LoadingSpinner text={t('pipeline.loading')} />
 
   return (
-    <div className="fade-in flex flex-col flex-1 min-h-0">
+    <PageContainer width="wide" className="flex flex-col flex-1 min-h-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-4 sm:mb-6">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
@@ -417,21 +419,15 @@ export default function Pipeline() {
         })}
       </div>
 
-      {/* Add Candidate Modal — rendered via Portal to escape overflow-hidden */}
-      {addPanelOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6">
-          <div className="fixed inset-0 bg-black/30" onClick={() => setAddPanelOpen(false)} />
-          <div className="relative z-10 w-[520px] max-h-[80vh] bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-10 pt-10 pb-8 flex-shrink-0">
-              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('pipeline.add')}</h2>
-              <button
-                onClick={() => setAddPanelOpen(false)}
-                className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center cursor-pointer transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
-            </div>
-            <div className="px-10 pb-10 flex flex-col gap-6 flex-1 overflow-auto">
+      {/* Add Candidate Modal */}
+      <Modal
+        open={addPanelOpen}
+        onClose={() => setAddPanelOpen(false)}
+        size="md"
+        icon={Plus}
+        title={t('pipeline.add')}
+      >
+        <div className="flex flex-col gap-6">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -442,7 +438,7 @@ export default function Pipeline() {
                   onChange={e => setAddSearch(e.target.value)}
                   className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] text-black dark:text-white font-medium
                     focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
-                  autoFocus
+                  data-autofocus
                 />
               </div>
 
@@ -477,20 +473,25 @@ export default function Pipeline() {
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          )}
+        </div>
+      </Modal>
 
       {/* Stage Change Note Modal */}
-      {stageChangeModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6">
-          <div className="fixed inset-0 bg-black/30" onClick={() => { setStageChangeModal(null); loadBoard() }} />
-          <div className="relative z-10 w-[480px] bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 p-10">
-            <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-2">{t('pipeline.stage_change')}</h2>
-            <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-6">
+      <Modal
+        open={!!stageChangeModal}
+        onClose={() => { setStageChangeModal(null); loadBoard() }}
+        size="sm"
+        title={t('pipeline.stage_change')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setStageChangeModal(null); loadBoard() }}>{t('common.cancel')}</Button>
+            <Button variant="dark" onClick={confirmStageChange}>{t('pipeline.confirm')}</Button>
+          </>
+        }
+      >
+        {stageChangeModal && (<>
+          <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-6">
               <span className="font-semibold text-black dark:text-white">{stageChangeModal.entry.candidate_name}</span>
               {' '}{t('pipeline.stage_from')} <span className="font-semibold">{stageChangeModal.entry.stage}</span>
               {' '}{t('pipeline.stage_to')} <span className="font-semibold">{stageChangeModal.targetStage}</span>
@@ -502,38 +503,47 @@ export default function Pipeline() {
               rows={3}
               className="w-full px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] text-black dark:text-white font-medium resize-none
                 focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
-              autoFocus
+              data-autofocus
             />
-            <div className="flex items-center justify-end gap-4 mt-6">
-              <Button variant="secondary" onClick={() => { setStageChangeModal(null); loadBoard() }}>{t('common.cancel')}</Button>
-              <Button variant="dark" onClick={confirmStageChange}>
-                {t('pipeline.confirm')}
-              </Button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+        </>)}
+      </Modal>
 
       {/* Notes Modal */}
-      {notesModal && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6">
-          <div className="fixed inset-0 bg-black/30" onClick={() => setNotesModal(null)} />
-          <div className="relative z-10 w-[520px] max-h-[80vh] bg-white dark:bg-[#1c1c1e] rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-10 pt-10 pb-6 flex-shrink-0">
-              <div>
-                <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('pipeline.notes')}</h2>
-                <p className="text-[15px] text-gray-500 dark:text-gray-400 mt-1">{notesModal.candidateName}</p>
-              </div>
-              <button onClick={() => setNotesModal(null)} className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center cursor-pointer transition-colors">
-                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
-            </div>
-            <div className="px-10 pb-4 flex-1 overflow-auto">
+      <Modal
+        open={!!notesModal}
+        onClose={() => setNotesModal(null)}
+        size="md"
+        icon={MessageSquare}
+        title={t('pipeline.notes')}
+        subtitle={notesModal?.candidateName}
+        footer={
+          <div className="flex gap-3 w-full">
+            <input
+              type="text"
+              value={newNote}
+              onChange={e => setNewNote(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && submitNote()}
+              placeholder={t('pipeline.notes_write')}
+              aria-label={t('pipeline.notes_write')}
+              className="flex-1 px-5 py-3.5 bg-white dark:bg-[#1c1c1e] rounded-[16px] text-[15px] text-black dark:text-white font-medium
+                focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-gray-200/60 dark:border-gray-700/60 focus:border-[#0071e3]/30 transition-all"
+            />
+            <IconButton
+              icon={Send}
+              label={t('pipeline.notes_write')}
+              variant="primary"
+              size="lg"
+              onClick={submitNote}
+              disabled={!newNote.trim()}
+            />
+          </div>
+        }
+      >
+        <div>
               {loadingNotes ? (
                 <p className="text-gray-400 text-center py-8">{t('common.loading')}</p>
               ) : notes.length === 0 ? (
-                <p className="text-gray-400 text-center py-8 text-[15px]">{t('pipeline.notes_empty')}</p>
+                <EmptyState icon={MessageSquare} title={t('pipeline.notes_empty')} size="sm" />
               ) : (
                 <div className="space-y-4">
                   {notes.map(n => (
@@ -555,32 +565,9 @@ export default function Pipeline() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-            <div className="px-10 pb-8 pt-4 flex-shrink-0 border-t border-gray-100 dark:border-gray-700">
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={newNote}
-                  onChange={e => setNewNote(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && submitNote()}
-                  placeholder={t('pipeline.notes_write')}
-                  className="flex-1 px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] text-black dark:text-white font-medium
-                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
-                />
-                <button
-                  onClick={submitNote}
-                  disabled={!newNote.trim()}
-                  className="w-12 h-12 rounded-full bg-[#0071e3] hover:bg-[#0077ed] text-white flex items-center justify-center transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          )}
+        </div>
+      </Modal>
 
       {/* Interview Scheduler Modal */}
       {interviewModal && (
@@ -593,7 +580,7 @@ export default function Pipeline() {
       )}
 
 
-    </div>
+    </PageContainer>
   )
 }
 
@@ -602,7 +589,7 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
     <div
       draggable
       onDragStart={onDragStart}
-      className="bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/8 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-all duration-200 group"
+      className="bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/80 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-all duration-200 group"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -708,7 +695,7 @@ function MobileKanbanCard({ entry, t, interviews, rating, prevStage, nextStage, 
     Angebot: '#8b5cf6', Hired: '#34c759', Abgesagt: '#ff3b30'
   }[stage] || '#9ca3af')
   return (
-    <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80">
+    <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

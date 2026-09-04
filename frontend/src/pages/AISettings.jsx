@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Bot, Server, Check, Loader2, AlertTriangle, RefreshCw, Wifi, WifiOff, Info, ChevronDown, Cpu } from 'lucide-react'
 import { settingsApi } from '../api'
-import { Card, Button, Input, LoadingSpinner } from '../components/UI'
+import { Card, Button, Input, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
 
 // Common presets to help users who switch away from Ollama's default host.
@@ -295,7 +295,7 @@ export default function AISettings() {
   if (loading) return <LoadingSpinner text={t('ai_settings.loading')} />
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-8 py-8 sm:py-12 space-y-8">
+    <PageContainer width="narrow" className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
         <div className="w-14 h-14 rounded-2xl bg-[#8B5CF6]/10 flex items-center justify-center flex-shrink-0">
@@ -635,6 +635,6 @@ export default function AISettings() {
           </span>
         )}
       </div>
-    </div>
+    </PageContainer>
   )
 }

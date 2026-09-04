@@ -5,7 +5,9 @@ import {
   Clock, Archive, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft, Upload
 } from 'lucide-react'
 import { jobsApi } from '../api'
-import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
+import { Card, Button, EmptyState, LoadingSpinner, PageContainer, SkeletonList } from '../components/UI'
+import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 import BatchJobImportDialog from '../components/BatchJobImportDialog'
 import { useI18n } from '../I18nContext'
 
@@ -21,11 +23,12 @@ const statusColor = {
 }
 
 export default function Jobs() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const { t } = useI18n()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [filterStatus, setFilterStatus] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -49,19 +52,26 @@ export default function Jobs() {
   useEffect(() => { loadJobs() }, [loadJobs])
   useEffect(() => { setCurrentPage(1) }, [filterStatus])
 
-  const handleArchive = async (id) => {
+  const handleArchive = async (job) => {
+    const ok = await confirm({
+      title: t('jobs.archive'),
+      message: t('jobs.archive_confirm'),
+      confirmLabel: t('jobs.archive'),
+      tone: 'warning',
+    })
+    if (!ok) return
     try {
-      await jobsApi.delete(id)
-      setDeleteConfirm(null)
+      await jobsApi.delete(job.id)
+      toast.success(t('jobs.archived_success', 'Stelle archiviert'))
       loadJobs()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
   return (
     <>
-    <div className="fade-in max-w-[1600px] mx-auto">
+    <PageContainer width="content">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 sm:mb-14 gap-4">
         <div>
@@ -98,7 +108,7 @@ export default function Jobs() {
       </div>
 
       {loading ? (
-        <LoadingSpinner text={t('jobs.loading')} />
+        <SkeletonList rows={4} />
       ) : jobs.length === 0 ? (
         <Card className="p-16">
           <EmptyState
@@ -116,15 +126,7 @@ export default function Jobs() {
         <div className="space-y-5">
           {jobs.map(job => (
             <Card key={job.id} className="p-0 overflow-hidden" hover>
-              {deleteConfirm === job.id ? (
-                <div className="flex items-center justify-between px-10 py-6 bg-amber-500/5 border-t border-amber-500/20">
-                  <span className="text-[16px] font-medium text-amber-600 dark:text-amber-400">{t('jobs.archive_confirm')}</span>
-                  <div className="flex gap-4">
-                    <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>{t('common.cancel')}</Button>
-                    <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleArchive(job.id)}>{t('jobs.archive')}</Button>
-                  </div>
-                </div>
-              ) : (
+              {(
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 p-5 sm:p-8">
                   {/* Icon */}
                   <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-[16px] sm:rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center flex-shrink-0">
@@ -185,7 +187,7 @@ export default function Jobs() {
                         variant="ghost"
                         size="sm"
                         className="w-10 h-10 !p-0 rounded-full hover:bg-amber-500/10 hover:text-amber-600"
-                        onClick={() => setDeleteConfirm(job.id)}
+                        onClick={() => handleArchive(job)}
                       >
                         <Archive className="w-4 h-4" />
                       </Button>
@@ -241,7 +243,7 @@ export default function Jobs() {
           )}
         </div>
       )}
-    </div>
+    </PageContainer>
 
       {showBatchImport && (
         <BatchJobImportDialog

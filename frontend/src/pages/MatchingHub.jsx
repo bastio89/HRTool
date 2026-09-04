@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { FileText, UserSearch, GitCompare, ArrowRight } from 'lucide-react'
-import { Card } from '../components/UI'
+import { Card, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
 
 const MODES = [
@@ -18,7 +18,7 @@ export default function MatchingHub() {
   const { t } = useI18n()
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <PageContainer width="content">
       <div className="mb-8 sm:mb-14">
         <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('matching.hub_title')}</h1>
         <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">{t('matching.hub_subtitle')}</p>
@@ -46,6 +46,6 @@ export default function MatchingHub() {
           </button>
         ))}
       </div>
-    </div>
+    </PageContainer>
   )
 }

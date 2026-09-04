@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server, AlertOctagon, TestTubes, Lightbulb, Bell, Play, Plus, ExternalLink, Pencil, Trash2, ChevronDown, ChevronUp, ListTodo, CircleDot, CircleCheck, LayoutDashboard, Download, HelpCircle } from 'lucide-react'
-import { Card, LoadingSpinner } from '../components/UI'
+import { Card, LoadingSpinner, PageContainer } from '../components/UI'
 import { aiLogsApi, complianceApi } from '../api'
 import { useI18n } from '../I18nContext'
+import useRevealOnOpen from '../hooks/useRevealOnOpen'
 
 // Two-level navigation: an entry dashboard, two thematic groups, and a help area.
 // This replaces the old flat list of 8 equally-weighted tabs.
@@ -128,7 +129,7 @@ export default function KITransparenz() {
   const activeGroup = GROUPS.find(g => g.id === group)
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <PageContainer width="content">
       <div className="flex items-center gap-4 sm:gap-8 mb-8">
         <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
@@ -188,7 +189,7 @@ export default function KITransparenz() {
         </div>
       )}
       {group === 'fairness' && sub === 'biastest' && <BiasTestsetTab t={t} />}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -352,6 +353,7 @@ function ComplianceTab({ t }) {
   const [actions, setActions] = useState([])
   const [actionSummary, setActionSummary] = useState(null)
   const [showNewAction, setShowNewAction] = useState(null) // check id
+  const newActionRef = useRevealOnOpen(showNewAction !== null)
   const [newActionTitle, setNewActionTitle] = useState('')
   const [newActionPriority, setNewActionPriority] = useState('medium')
 
@@ -611,7 +613,7 @@ function ComplianceTab({ t }) {
 
                   {/* New action form */}
                   {showNewAction === c.id && (
-                    <div className="px-5 pb-4 pt-2 border-t border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-black/10">
+                    <div ref={newActionRef} className="px-5 pb-4 pt-2 border-t border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-black/10">
                       <div className="flex items-center gap-2">
                         <input type="text" value={newActionTitle} onChange={e => setNewActionTitle(e.target.value)}
                           placeholder={t('ki.action_title_placeholder')}
@@ -1214,6 +1216,7 @@ function RiskRegisterTab({ t }) {
   const [overrideStatus, setOverrideStatus] = useState('')
   const [overrideNotes, setOverrideNotes] = useState('')
   const [showNewTask, setShowNewTask] = useState(null) // risk.id
+  const newTaskRef = useRevealOnOpen(showNewTask !== null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskPriority, setNewTaskPriority] = useState('high')
   const [expandedRisk, setExpandedRisk] = useState(null) // risk.id
@@ -1448,7 +1451,7 @@ function RiskRegisterTab({ t }) {
                 <>
                   {/* New task form */}
                   {showNewTask === risk.id && (
-                    <div className="flex items-center gap-2 mb-3">
+                    <div ref={newTaskRef} className="flex items-center gap-2 mb-3">
                       <input type="text" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)}
                         placeholder={t('ki.action_title_placeholder')}
                         className="flex-1 px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:border-[#0071e3]/30 focus:ring-2 focus:ring-[#0071e3]/10"

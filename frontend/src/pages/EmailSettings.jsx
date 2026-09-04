@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
 import { Mail, Send, Settings, FileText, Plus, Trash2, Edit3, Eye, Check, X, Loader2, AlertTriangle, TestTube, Zap, Sparkles, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react'
 import { emailApi } from '../api'
-import { Card, Button, Input, LoadingSpinner } from '../components/UI'
+import { Card, Button, Input, LoadingSpinner, PageContainer } from '../components/UI'
+import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 import { useI18n } from '../I18nContext'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
 const TEMPLATE_VARS = ['{{anrede}}', '{{vorname}}', '{{nachname}}', '{{name}}', '{{email}}', '{{stelle}}', '{{unternehmen}}', '{{datum}}']
 
 export default function EmailSettings() {
+  const toast = useToast()
+  const confirm = useConfirm()
   const { t } = useI18n()
   const [tab, setTab] = useState('smtp')
   const [loading, setLoading] = useState(true)
@@ -116,19 +120,25 @@ export default function EmailSettings() {
       const res = await emailApi.getTemplates()
       setTemplates(res.data || [])
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     } finally {
       setTplSaving(false)
     }
   }
 
   const deleteTemplate = async (id) => {
-    if (!confirm(t('email.confirm_delete_template'))) return
+    const ok = await confirm({
+      title: t('email.delete_template_title', 'Vorlage löschen'),
+      message: t('email.confirm_delete_template'),
+      confirmLabel: t('common.delete'),
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await emailApi.deleteTemplate(id)
       setTemplates(templates.filter(t => t.id !== id))
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -169,7 +179,7 @@ export default function EmailSettings() {
       setAiPurpose('')
       setAiTone('')
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     } finally {
       setAiGenerating(false)
     }
@@ -185,7 +195,7 @@ export default function EmailSettings() {
   ]
 
   return (
-    <div className="space-y-6">
+    <PageContainer width="content" className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-[28px] sm:text-[34px] font-bold tracking-tight text-black dark:text-white">{t('email.title')}</h1>
@@ -674,6 +684,6 @@ export default function EmailSettings() {
           )}
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }

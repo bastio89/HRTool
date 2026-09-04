@@ -2,26 +2,95 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ---------------------------------------------------------------------------
+   Design tokens
+   Single source of truth for colours. Never hardcode hex values in components –
+   use the Tailwind aliases registered in @theme below (bg-app, bg-card,
+   text-app, border-app, text-accent, …) or the CSS variables directly.
+--------------------------------------------------------------------------- */
 :root {
   --apple-bg: #f5f5f7;
   --apple-text: #1d1d1f;
+  --apple-text-muted: #86868b;
   --apple-blue: #0071e3;
+  --apple-blue-hover: #0077ed;
   --apple-card: #ffffff;
   --apple-surface: #f5f5f7;
-  --apple-border: rgba(0,0,0,0.06);
-  --apple-border-card: rgba(0,0,0,0.04);
+  --apple-surface-hover: #e8e8ed;
+  --apple-border: rgba(0, 0, 0, 0.06);
+  --apple-border-card: rgba(0, 0, 0, 0.04);
+
+  /* Semantic status colours */
+  --apple-green: #34c759;
+  --apple-orange: #ff9f0a;
+  --apple-red: #ff3b30;
+  --apple-purple: #8b5cf6;
+
+  /* Elevation */
+  --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.08);
+  --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.22);
+
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
 }
 
 .dark {
   --apple-bg: #000000;
   --apple-text: #f5f5f7;
+  --apple-text-muted: #98989d;
   --apple-blue: #0a84ff;
+  --apple-blue-hover: #339dff;
   --apple-card: #1c1c1e;
   --apple-surface: #2c2c2e;
-  --apple-border: rgba(255,255,255,0.1);
-  --apple-border-card: rgba(255,255,255,0.06);
+  --apple-surface-hover: #3a3a3c;
+  --apple-border: rgba(255, 255, 255, 0.1);
+  --apple-border-card: rgba(255, 255, 255, 0.06);
+
+  --apple-green: #30d158;
+  --apple-orange: #ff9f0a;
+  --apple-red: #ff453a;
+  --apple-purple: #a78bfa;
+
+  --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.6);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+
   color-scheme: dark;
 }
+
+/* Expose the tokens to Tailwind so `bg-card`, `text-muted`, `border-app` … work
+   in both themes without needing a `dark:` twin on every single utility. */
+@theme inline {
+  --color-app: var(--apple-bg);
+  --color-card: var(--apple-card);
+  --color-surface: var(--apple-surface);
+  --color-surface-hover: var(--apple-surface-hover);
+  --color-app-text: var(--apple-text);
+  --color-muted: var(--apple-text-muted);
+  --color-accent: var(--apple-blue);
+  --color-accent-hover: var(--apple-blue-hover);
+  --color-app-border: var(--apple-border);
+  --color-card-border: var(--apple-border-card);
+  --color-success: var(--apple-green);
+  --color-warning: var(--apple-orange);
+  --color-danger: var(--apple-red);
+  --color-info: var(--apple-purple);
+}
+
+/* ---------------------------------------------------------------------------
+   Stacking layers
+   One scale for the whole app so overlays can never fight each other.
+   sidebar 100 < sticky header 200 < popover 300 < modal 500 < toast 900
+--------------------------------------------------------------------------- */
+.layer-sidebar-backdrop { z-index: 90; }
+.layer-sidebar { z-index: 100; }
+.layer-sticky { z-index: 200; }
+.layer-popover { z-index: 300; }
+.layer-modal { z-index: 500; }
+.layer-toast { z-index: 900; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -32,18 +101,84 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* ---------------------------------------------------------------------------
+   Page entry animation
+
+   IMPORTANT: no `forwards` here, and the base state must already equal the end
+   state (opacity 1, transform none).
+
+   Any transform other than `none` turns an element into a containing block for
+   its `position: fixed` descendants, which made modals position themselves
+   against the full page height instead of the viewport – so a dialog opened on
+   a long page appeared far below the fold and the user had to scroll to find
+   it. `animation-fill-mode: forwards` made that permanent, and writing
+   `transform: none` in the end keyframe does NOT help: an interpolated `none`
+   still computes to `matrix(1, 0, 0, 1, 0, 0)`, which is not `none`.
+
+   Dropping `forwards` lets the element fall back to its untransformed base
+   style once the animation ends, so the computed transform really is `none`.
+   Verified in Chromium, not just assumed.
+--------------------------------------------------------------------------- */
 .fade-in {
-  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 1;
+  transform: none;
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Modal entry animations – applied by the shared <Modal> component. */
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.animate-overlay-in {
+  animation: overlayIn 0.2s ease-out;
+}
+
+.animate-modal-in {
+  animation: modalIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(80px) scale(0.95); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+/* Skeleton placeholder used by <Skeleton> while data loads. */
+.skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--apple-surface) 25%,
+    var(--apple-surface-hover) 37%,
+    var(--apple-surface) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .animate-overlay-in,
+  .animate-modal-in,
+  .skeleton {
+    animation: none !important;
+  }
+  .fade-in { opacity: 1; transform: none; }
 }
 
 .scrollbar-none {
@@ -56,7 +191,7 @@ body {
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0,0,0,0.12) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;
@@ -65,6 +200,6 @@ body {
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.12);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }

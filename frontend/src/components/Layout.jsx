@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import Avatar from './Avatar'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Loader2, Wifi, WifiOff, Server } from 'lucide-react'
 import { useAuth } from '../AuthContext'
@@ -188,14 +189,14 @@ export default function Layout() {
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm layer-sidebar-backdrop lg:hidden"
           onClick={closeSidebar}
         />
       )}
 
       {/* Sidebar */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-50
+        fixed lg:static inset-y-0 left-0 layer-sidebar
         w-[280px] flex-shrink-0 flex flex-col py-8 lg:py-10 px-6 lg:px-8
         bg-[#f5f5f7] dark:bg-black lg:bg-transparent
         transform transition-transform duration-300 ease-in-out
@@ -356,7 +357,7 @@ export default function Layout() {
       {/* Main Content Area */}
       <main className="flex-1 bg-white dark:bg-[#1c1c1e] rounded-none lg:rounded-l-[48px] lg:my-4 lg:mr-4 shadow-[0_0_40px_rgba(0,0,0,0.03)] border-0 lg:border lg:border-gray-200/50 dark:lg:border-gray-700/50 overflow-hidden flex flex-col relative">
         {/* Top Bar */}
-        <header className="h-16 sm:h-24 flex items-center justify-between lg:justify-end px-4 sm:px-8 lg:px-14 flex-shrink-0 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-2xl border-b border-gray-100/50 dark:border-gray-800/50 z-10 sticky top-0">
+        <header className="h-16 sm:h-24 flex items-center justify-between lg:justify-end px-4 sm:px-8 lg:px-14 flex-shrink-0 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-2xl border-b border-gray-100/50 dark:border-gray-800/50 layer-sticky sticky top-0">
           {/* Mobile hamburger */}
           <button
             onClick={() => setSidebarOpen(true)}
@@ -380,7 +381,7 @@ export default function Layout() {
                 : t('auth.recruiter')
               }</p>
             </div>
-            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.display_name || user?.username}`} alt="Profile" className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-100 border border-gray-200 shadow-sm" />
+            <Avatar name={user?.display_name || user?.username || ''} size={44} className="w-10 h-10 sm:w-11 sm:h-11 text-[15px]" />
             <button onClick={logout} className="p-2 sm:p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title={t('auth.logout')}>
               <LogOut className="w-5 h-5" />
             </button>
@@ -388,7 +389,7 @@ export default function Layout() {
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-auto flex flex-col">
+        <div className="flex-1 overflow-auto flex flex-col" data-app-scroll-container>
           <div className="max-w-[1600px] w-full mx-auto p-4 sm:p-6 lg:p-10 flex-1 flex flex-col min-h-0">
             <Breadcrumb />
             <Outlet />

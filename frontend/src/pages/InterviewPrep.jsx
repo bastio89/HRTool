@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useI18n } from '../I18nContext'
+import useRevealOnOpen from '../hooks/useRevealOnOpen'
 import { useAuth } from '../AuthContext'
 import {
   ArrowLeft, Sparkles, Star, ChevronDown, ChevronUp, Loader2, ClipboardList,
@@ -9,7 +10,7 @@ import {
   User, Award, Globe, MessageSquare
 } from 'lucide-react'
 import { jobsApi, candidatesApi, pipelineApi, scorecardsApi, interviewsApi, activitiesApi, candidateDetailsApi } from '../api'
-import { Button, LoadingSpinner } from '../components/UI'
+import { Button, LoadingSpinner, PageContainer } from '../components/UI'
 import { KiBadge, KiDisclaimer } from '../components/KiBadge'
 
 const CATEGORIES = ['Fachkompetenz', 'Soft Skills', 'Motivation', 'Erfahrung']
@@ -52,6 +53,7 @@ export default function InterviewPrep() {
   const [saved, setSaved] = useState(false)
   const [questionCount, setQuestionCount] = useState(8)
   const [showTemplateSelect, setShowTemplateSelect] = useState(false)
+  const templateSelectRef = useRevealOnOpen(showTemplateSelect)
 
   useEffect(() => {
     loadAllData()
@@ -263,7 +265,7 @@ export default function InterviewPrep() {
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto pb-20">
+    <PageContainer width="content" className="pb-20">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
@@ -486,7 +488,7 @@ export default function InterviewPrep() {
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
                 {showTemplateSelect && templates.length > 0 && (
-                  <div className="absolute top-full left-0 mt-2 w-80 bg-white dark:bg-[#2c2c2e] rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 max-h-64 overflow-y-auto">
+                  <div ref={templateSelectRef} role="listbox" aria-label={t('interview_prep.select_template')} className="absolute top-full left-0 mt-2 w-80 bg-white dark:bg-[#2c2c2e] rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 layer-popover max-h-64 overflow-y-auto">
                     {templates.map(tpl => (
                       <div
                         key={tpl.id}
@@ -713,6 +715,6 @@ export default function InterviewPrep() {
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   )
 }

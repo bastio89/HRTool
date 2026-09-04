@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, FileText, GitMerge, Loader2 } from 'lucide-react'
 import { matchingApi } from '../api'
-import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner } from '../components/UI'
+import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner, PageContainer } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useI18n } from '../I18nContext'
 
@@ -214,7 +214,7 @@ export default function MatchingResults() {
     }
 
     return (
-      <div className="fade-in max-w-[1400px] mx-auto">
+      <PageContainer width="content">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
           <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
             <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -403,7 +403,7 @@ export default function MatchingResults() {
             </div>
           </Card>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
@@ -443,7 +443,7 @@ export default function MatchingResults() {
   }
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <PageContainer width="content">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
           <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -627,7 +627,7 @@ export default function MatchingResults() {
               </div>
 
               <div className={`overflow-hidden transition-all duration-500 ease-in-out ${expandedIdx === idx ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                <div className="px-10 pb-10 border-t border-gray-100/8 dark:border-gray-700/80 dark:border-gray-700/80">
+                <div className="px-10 pb-10 border-t border-gray-100/80 dark:border-gray-700/80">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-10">
                     {result.strengths?.length > 0 && (
                       <div>
@@ -703,6 +703,6 @@ export default function MatchingResults() {
           <p className="text-[20px] font-medium text-gray-500 dark:text-gray-400">{t('matching.no_results')}</p>
         </Card>
       )}
-    </div>
+    </PageContainer>
   )
 }

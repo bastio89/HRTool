@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { X, Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Users, Wifi, WifiOff } from 'lucide-react'
+import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Users, Wifi, WifiOff } from 'lucide-react'
 import { cvParserApi, uploadsApi, healthApi } from '../api'
 import { Button } from './UI'
+import Modal from './Modal'
 import { useI18n } from '../I18nContext'
 
 const ALLOWED_TYPES = [
@@ -171,215 +172,206 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
   const canRun = !running && files.some(f => f.status === STATUS.PENDING || f.status === STATUS.ERROR)
   const allDone = files.length > 0 && files.every(f => f.status === STATUS.DONE || f.status === STATUS.SKIPPED)
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/40 backdrop-blur-sm">
-      <div className="my-6 w-full max-w-2xl bg-white dark:bg-[#1c1c1e] rounded-[28px] shadow-2xl flex flex-col max-h-[calc(100vh-3rem)] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-8 pt-8 pb-6 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#0071e3]/10 rounded-2xl flex items-center justify-center">
-              <Users className="w-5 h-5 text-[#0071e3]" />
-            </div>
-            <div>
-              <h2 className="text-[20px] font-semibold text-black dark:text-white">{t('batch_import.title')}</h2>
-              <p className="text-[13px] text-gray-400">{t('batch_import.subtitle')}</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-9 h-9 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-200 dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4 text-black dark:text-white" />
-          </button>
-        </div>
+  const footer = (
+    <div className="w-full">
+    {/* Stats row */}
+    {files.length > 0 && (
+      <div className="flex items-center gap-4 text-[13px] mb-5">
+        <span className="text-gray-400">{t('batch_import.total').replace('{n}', files.length)}</span>
+        {counts.done > 0 && <span className="text-[#34c759] font-medium">{t('batch_import.count_done').replace('{n}', counts.done)}</span>}
+        {counts.error > 0 && <span className="text-[#ff3b30] font-medium">{t('batch_import.count_error').replace('{n}', counts.error)}</span>}
+        {counts.pending > 0 && <span className="text-gray-400">{t('batch_import.count_pending').replace('{n}', counts.pending)}</span>}
+      </div>
+    )}
 
-        {/* Drop zone */}
-        {!running && (
-          <div className="px-8 pt-6">
-            <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() => fileInputRef.current?.click()}
-              className={`flex flex-col items-center justify-center py-10 gap-3 rounded-[20px] border-2 border-dashed cursor-pointer transition-all ${
-                isDragging
-                  ? 'border-[#0071e3] bg-[#0071e3]/8 scale-[1.01]'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-[#0071e3]/50 hover:bg-[#0071e3]/4'
-              }`}
-            >
-              <div className="w-14 h-14 bg-white dark:bg-[#2c2c2e] rounded-[18px] shadow-sm flex items-center justify-center border border-gray-100 dark:border-gray-700">
-                <Upload className="w-6 h-6 text-[#0071e3]" />
-              </div>
-              <div className="text-center">
-                <p className="text-[15px] font-semibold text-black dark:text-white">{t('batch_import.drop_hint')}</p>
-                <p className="text-[13px] text-gray-400 mt-1">{t('batch_import.formats')}</p>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-            </div>
-          </div>
+    <div className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-100 dark:border-gray-800">
+      <div className="flex items-center gap-2 text-[13px] font-medium text-black dark:text-white">
+        {aiHealth.isChecking ? (
+          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+        ) : aiHealth.isOnline ? (
+          <Wifi className="w-4 h-4 text-[#34c759]" />
+        ) : (
+          <WifiOff className="w-4 h-4 text-[#ff3b30]" />
         )}
-
-        {/* File list */}
-        {files.length > 0 && (
-          <div className="flex-1 overflow-y-auto px-8 py-4 space-y-2 min-h-0">
-            {files.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center gap-3 px-4 py-3 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e]"
-              >
-                {/* Status icon */}
-                <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
-                  {item.status === STATUS.DONE && <CheckCircle2 className="w-5 h-5 text-[#34c759]" />}
-                  {item.status === STATUS.ERROR && <XCircle className="w-5 h-5 text-[#ff3b30]" />}
-                  {item.status === STATUS.PROCESSING && (
-                    <Loader2 className="w-5 h-5 text-[#0071e3] animate-spin" />
-                  )}
-                  {item.status === STATUS.PENDING && (
-                    <FileText className="w-5 h-5 text-gray-400" />
-                  )}
-                </div>
-
-                {/* File info */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-medium text-black dark:text-white truncate">
-                    {item.status === STATUS.DONE && item.candidate
-                      ? item.candidate.name
-                      : item.file.name}
-                  </p>
-                  {item.status === STATUS.PROCESSING && (
-                    <div className="mt-1.5 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#0071e3] to-[#5856d6] rounded-full transition-all duration-500"
-                        style={{ width: `${item.progress}%` }}
-                      />
-                    </div>
-                  )}
-                  {item.status === STATUS.DONE && (
-                    <div className="mt-0.5 space-y-0.5">
-                      <p className="text-[12px] text-[#34c759]">{t('batch_import.created')}</p>
-                      <div className="flex flex-wrap gap-2 text-[11px]">
-                        <span className={`px-2 py-0.5 rounded-full ${item.storage?.postgres ? 'bg-[#34c759]/10 text-[#1e7f38]' : 'bg-gray-200 text-gray-500'}`}>
-                          PostgreSQL: {item.storage?.postgres ? 'gespeichert' : 'nicht gespeichert'}
-                        </span>
-                        <span className={`px-2 py-0.5 rounded-full ${item.storage?.neo4j ? 'bg-[#0071e3]/10 text-[#0058b0]' : 'bg-gray-200 text-gray-500'}`}>
-                          Neo4j: {item.storage?.neo4j ? 'gespeichert' : 'nicht gespeichert'}
-                        </span>
-                        {item.parsingMethod && (
-                          <span className={`px-2 py-0.5 rounded-full ${item.parsingMethod === 'llm' ? 'bg-[#5856d6]/10 text-[#4a3f9e]' : 'bg-[#ff9500]/10 text-[#a35b00]'}`}>
-                            Methode: {item.parsingMethod === 'llm' ? 'KI-Analyse' : 'Text-Erkennung (Fallback)'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {item.status === STATUS.ERROR && (
-                    <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}</p>
-                  )}
-                  {item.status === STATUS.PENDING && (
-                    <p className="text-[12px] text-gray-400 mt-0.5">
-                      {(item.file.size / 1024).toFixed(0)} KB
-                    </p>
-                  )}
-                </div>
-
-                {/* Remove button (only when not running) */}
-                {!running && item.status !== STATUS.DONE && (
-                  <button
-                    onClick={() => removeFile(item.id)}
-                    className="flex-shrink-0 w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-[#ff3b30]" />
-                  </button>
-                )}
-
-                {/* Link to candidate when done */}
-                {item.status === STATUS.DONE && item.candidate && (
-                  <a
-                    href={`/candidates/${item.candidate.id}`}
-                    onClick={(e) => { e.stopPropagation(); onClose() }}
-                    className="flex-shrink-0 w-7 h-7 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors"
-                    title={t('batch_import.open_profile')}
-                  >
-                    <ChevronRight className="w-4 h-4 text-[#0071e3]" />
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Empty state */}
-        {files.length === 0 && (
-          <div className="flex-1 flex items-center justify-center py-8 text-gray-400 text-[14px]">
-            {t('batch_import.empty')}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="px-8 pb-8 pt-4 border-t border-gray-100 dark:border-gray-800">
-          {/* Stats row */}
-          {files.length > 0 && (
-            <div className="flex items-center gap-4 text-[13px] mb-5">
-              <span className="text-gray-400">{t('batch_import.total').replace('{n}', files.length)}</span>
-              {counts.done > 0 && <span className="text-[#34c759] font-medium">{t('batch_import.count_done').replace('{n}', counts.done)}</span>}
-              {counts.error > 0 && <span className="text-[#ff3b30] font-medium">{t('batch_import.count_error').replace('{n}', counts.error)}</span>}
-              {counts.pending > 0 && <span className="text-gray-400">{t('batch_import.count_pending').replace('{n}', counts.pending)}</span>}
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-100 dark:border-gray-800">
-            <div className="flex items-center gap-2 text-[13px] font-medium text-black dark:text-white">
-              {aiHealth.isChecking ? (
-                <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-              ) : aiHealth.isOnline ? (
-                <Wifi className="w-4 h-4 text-[#34c759]" />
-              ) : (
-                <WifiOff className="w-4 h-4 text-[#ff3b30]" />
-              )}
-              <span>{aiHealth.isOnline ? 'KI online' : 'KI offline'}</span>
-            </div>
-            <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
-              <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
-                {formatCompactNumber(aiHealth.calls)} Calls
-              </span>
-              <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
-                {formatCompactNumber(aiHealth.totalTokens)} Tokens
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-4">
-            <Button variant="secondary" size="md" onClick={onClose} disabled={running}>
-              {allDone ? t('batch_import.close') : t('batch_import.cancel')}
-            </Button>
-            <Button
-              variant="dark"
-              size="md"
-              onClick={processAll}
-              disabled={!canRun}
-            >
-              {running ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {t('batch_import.importing')}
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4" />
-                  {t('batch_import.start').replace('{n}', files.filter(f => f.status === STATUS.PENDING || f.status === STATUS.ERROR).length)}
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+        <span>{aiHealth.isOnline ? 'KI online' : 'KI offline'}</span>
+      </div>
+      <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+        <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
+          {formatCompactNumber(aiHealth.calls)} Calls
+        </span>
+        <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
+          {formatCompactNumber(aiHealth.totalTokens)} Tokens
+        </span>
       </div>
     </div>
+
+    <div className="flex items-center justify-between gap-4">
+      <Button variant="secondary" size="md" onClick={onClose} disabled={running}>
+        {allDone ? t('batch_import.close') : t('batch_import.cancel')}
+      </Button>
+      <Button
+        variant="dark"
+        size="md"
+        onClick={processAll}
+        disabled={!canRun}
+      >
+        {running ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {t('batch_import.importing')}
+          </>
+        ) : (
+          <>
+            <Play className="w-4 h-4" />
+            {t('batch_import.start').replace('{n}', files.filter(f => f.status === STATUS.PENDING || f.status === STATUS.ERROR).length)}
+          </>
+        )}
+      </Button>
+    </div>
+    </div>
+  )
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="lg"
+      icon={Users}
+      title={t('batch_import.title')}
+      subtitle={t('batch_import.subtitle')}
+      closeOnBackdrop={!running}
+      closeOnEscape={!running}
+      footer={footer}
+    >
+      <div>
+      {/* Drop zone */}
+      {!running && (
+        <div>
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => fileInputRef.current?.click()}
+            className={`flex flex-col items-center justify-center py-10 gap-3 rounded-[20px] border-2 border-dashed cursor-pointer transition-all ${
+              isDragging
+                ? 'border-[#0071e3] bg-[#0071e3]/8 scale-[1.01]'
+                : 'border-gray-200 dark:border-gray-700 hover:border-[#0071e3]/50 hover:bg-[#0071e3]/4'
+            }`}
+          >
+            <div className="w-14 h-14 bg-white dark:bg-[#2c2c2e] rounded-[18px] shadow-sm flex items-center justify-center border border-gray-100 dark:border-gray-700">
+              <Upload className="w-6 h-6 text-[#0071e3]" />
+            </div>
+            <div className="text-center">
+              <p className="text-[15px] font-semibold text-black dark:text-white">{t('batch_import.drop_hint')}</p>
+              <p className="text-[13px] text-gray-400 mt-1">{t('batch_import.formats')}</p>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* File list */}
+      {files.length > 0 && (
+        <div className="space-y-2 mt-5">
+          {files.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center gap-3 px-4 py-3 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e]"
+            >
+              {/* Status icon */}
+              <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+                {item.status === STATUS.DONE && <CheckCircle2 className="w-5 h-5 text-[#34c759]" />}
+                {item.status === STATUS.ERROR && <XCircle className="w-5 h-5 text-[#ff3b30]" />}
+                {item.status === STATUS.PROCESSING && (
+                  <Loader2 className="w-5 h-5 text-[#0071e3] animate-spin" />
+                )}
+                {item.status === STATUS.PENDING && (
+                  <FileText className="w-5 h-5 text-gray-400" />
+                )}
+              </div>
+
+              {/* File info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-medium text-black dark:text-white truncate">
+                  {item.status === STATUS.DONE && item.candidate
+                    ? item.candidate.name
+                    : item.file.name}
+                </p>
+                {item.status === STATUS.PROCESSING && (
+                  <div className="mt-1.5 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#0071e3] to-[#5856d6] rounded-full transition-all duration-500"
+                      style={{ width: `${item.progress}%` }}
+                    />
+                  </div>
+                )}
+                {item.status === STATUS.DONE && (
+                  <div className="mt-0.5 space-y-0.5">
+                    <p className="text-[12px] text-[#34c759]">{t('batch_import.created')}</p>
+                    <div className="flex flex-wrap gap-2 text-[11px]">
+                      <span className={`px-2 py-0.5 rounded-full ${item.storage?.postgres ? 'bg-[#34c759]/10 text-[#1e7f38]' : 'bg-gray-200 text-gray-500'}`}>
+                        PostgreSQL: {item.storage?.postgres ? 'gespeichert' : 'nicht gespeichert'}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full ${item.storage?.neo4j ? 'bg-[#0071e3]/10 text-[#0058b0]' : 'bg-gray-200 text-gray-500'}`}>
+                        Neo4j: {item.storage?.neo4j ? 'gespeichert' : 'nicht gespeichert'}
+                      </span>
+                      {item.parsingMethod && (
+                        <span className={`px-2 py-0.5 rounded-full ${item.parsingMethod === 'llm' ? 'bg-[#5856d6]/10 text-[#4a3f9e]' : 'bg-[#ff9500]/10 text-[#a35b00]'}`}>
+                          Methode: {item.parsingMethod === 'llm' ? 'KI-Analyse' : 'Text-Erkennung (Fallback)'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {item.status === STATUS.ERROR && (
+                  <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}</p>
+                )}
+                {item.status === STATUS.PENDING && (
+                  <p className="text-[12px] text-gray-400 mt-0.5">
+                    {(item.file.size / 1024).toFixed(0)} KB
+                  </p>
+                )}
+              </div>
+
+              {/* Remove button (only when not running) */}
+              {!running && item.status !== STATUS.DONE && (
+                <button
+                  onClick={() => removeFile(item.id)}
+                  className="flex-shrink-0 w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-[#ff3b30]" />
+                </button>
+              )}
+
+              {/* Link to candidate when done */}
+              {item.status === STATUS.DONE && item.candidate && (
+                <a
+                  href={`/candidates/${item.candidate.id}`}
+                  onClick={(e) => { e.stopPropagation(); onClose() }}
+                  className="flex-shrink-0 w-7 h-7 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors"
+                  title={t('batch_import.open_profile')}
+                >
+                  <ChevronRight className="w-4 h-4 text-[#0071e3]" />
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {files.length === 0 && (
+        <div className="flex items-center justify-center py-8 text-gray-400 text-[14px]">
+          {t('batch_import.empty')}
+        </div>
+      )}
+      </div>
+    </Modal>
   )
 }

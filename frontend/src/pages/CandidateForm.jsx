@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Save, AlertTriangle, Upload, FileText, Sparkles, X, Paperclip, Tag, Plus, Trash2, Linkedin, Github, Globe, DollarSign, Shield, Calendar, Building2 } from 'lucide-react'
+import { ArrowLeft, Save, AlertTriangle, Upload, FileText, Sparkles, X, Paperclip, Tag, Plus, Trash2, Linkedin, Github, Globe, DollarSign, Shield, Calendar, Building2, Briefcase, GraduationCap } from 'lucide-react'
 import { candidatesApi, cvParserApi, uploadsApi, candidateDetailsApi } from '../api'
-import { Card, Button, Input, Textarea, LoadingSpinner } from '../components/UI'
+import { Card, Button, Input, Textarea, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
+import FormActionBar from '../components/FormActionBar'
+import useUnsavedChanges from '../hooks/useUnsavedChanges'
 import { useI18n } from '../I18nContext'
 
 const SUGGESTED_TAGS = ['Top-Kandidat', 'Senior', 'Junior', 'Freelancer', 'Remote', 'Sofort verfügbar', 'Führungskraft', 'Teilzeit', 'Werkstudent', 'Intern']
@@ -38,9 +41,13 @@ export default function CandidateForm() {
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const confirm = useConfirm()
   const { t } = useI18n()
   const isEdit = Boolean(id)
   const [form, setForm] = useState(emptyCandidate)
+  // Baseline for the unsaved-changes guard: replaced once the record loads.
+  const [pristine, setPristine] = useState(emptyCandidate)
+  const [justSaved, setJustSaved] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -72,6 +79,7 @@ export default function CandidateForm() {
         const formData = {}
         for (const f of fields) formData[f] = data[f] ?? emptyCandidate[f]
         setForm(formData)
+        setPristine(formData)
         const candidateWorkHistory = Array.isArray(data.work_history) ? data.work_history : []
         const candidateEducationHistory = Array.isArray(data.education_history) ? data.education_history : []
         setWorkHistory((whRes.data && whRes.data.length > 0 ? whRes.data : candidateWorkHistory).map(w => ({ ...emptyWorkEntry, ...w })))
@@ -173,9 +181,22 @@ export default function CandidateForm() {
         try { await candidateDetailsApi.saveCustomValues(candidateId, customValues) } catch (e) { console.warn('Custom values save failed:', e) }
       }
       toast.success(isEdit ? t('candidates.updated') : t('candidates.created'))
+      setJustSaved(true)
       navigate('/candidates')
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
+  }
+
+  const isDirty = !justSaved && JSON.stringify(form) !== JSON.stringify(pristine)
+  const confirmLeave = useUnsavedChanges(isDirty, confirm, {
+    title: t('form.unsaved_title'),
+    message: t('form.unsaved_message'),
+    discardLabel: t('form.unsaved_discard'),
+    stayLabel: t('form.unsaved_stay'),
+  })
+
+  const leaveTo = async (path) => {
+    if (await confirmLeave()) navigate(path)
   }
 
   if (loading) return <LoadingSpinner text={t('candidates.candidate_loading')} />
@@ -183,10 +204,10 @@ export default function CandidateForm() {
   const selectClass = "w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
 
   return (
-    <div className="fade-in max-w-[1000px] mx-auto">
+    <PageContainer width="narrow">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
-        <button onClick={() => navigate('/candidates')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
+        <button onClick={() => leaveTo('/candidates')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
         <div>
@@ -345,7 +366,7 @@ export default function CandidateForm() {
             <button type="button" onClick={addWorkEntry} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#ff9f0a]/10 text-[#ff9f0a] text-[14px] font-semibold hover:bg-[#ff9f0a]/20 transition-colors cursor-pointer"><Plus className="w-4 h-4" />{t('form.add_entry')}</button>
           </div>
           {workHistory.length === 0 ? (
-            <p className="text-center text-gray-400 py-8">{t('form.no_work_history')}</p>
+            <EmptyState icon={Briefcase} title={t('form.no_work_history')} size="sm" />
           ) : (
             <div className="space-y-6">
               {workHistory.map((w, idx) => (
@@ -378,7 +399,7 @@ export default function CandidateForm() {
             <button type="button" onClick={addEduEntry} className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#8b5cf6]/10 text-[#8b5cf6] text-[14px] font-semibold hover:bg-[#8b5cf6]/20 transition-colors cursor-pointer"><Plus className="w-4 h-4" />{t('form.add_entry')}</button>
           </div>
           {educationList.length === 0 ? (
-            <p className="text-center text-gray-400 py-8">{t('form.no_education')}</p>
+            <EmptyState icon={GraduationCap} title={t('form.no_education')} size="sm" />
           ) : (
             <div className="space-y-6">
               {educationList.map((e, idx) => (
@@ -604,11 +625,17 @@ export default function CandidateForm() {
           </div>
         </Card>
 
-        <div className="flex items-center justify-end gap-5 pt-6 pb-12">
-          <Button variant="secondary" size="lg" type="button" onClick={() => navigate('/candidates')}>{t('form.cancel')}</Button>
+        <FormActionBar>
+          {isDirty && (
+            <span className="mr-auto text-[14px] font-medium text-[#ff9f0a] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#ff9f0a]" aria-hidden="true" />
+              {t('form.unsaved_title')}
+            </span>
+          )}
+          <Button variant="secondary" size="lg" type="button" onClick={() => leaveTo('/candidates')}>{t('form.cancel')}</Button>
           <Button variant="dark" type="submit" size="lg" disabled={saving || !form.name.trim()}><Save className="w-5 h-5" />{saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}</Button>
-        </div>
+        </FormActionBar>
       </form>
-    </div>
+    </PageContainer>
   )
 }

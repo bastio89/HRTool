@@ -8,7 +8,9 @@ import {
   DollarSign, Building2, ExternalLink, Camera, ClipboardList, ChevronDown, ChevronUp, MessageCircle
 } from 'lucide-react'
 import { candidatesApi, activitiesApi, uploadsApi, ratingsApi, candidateDetailsApi, scorecardsApi } from '../api'
-import { Button, LoadingSpinner } from '../components/UI'
+import { Button, IconButton, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
+import { useToast } from '../components/Toast'
+import Modal from '../components/Modal'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 import SendEmailModal from '../components/SendEmailModal'
 import CommentSection from '../components/CommentSection'
@@ -47,6 +49,7 @@ function formatMonth(dateStr) {
 }
 
 export default function CandidateDetail() {
+  const toast = useToast()
   const { id } = useParams()
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -135,13 +138,13 @@ export default function CandidateDetail() {
       setNewText('')
       const aRes = await activitiesApi.getByCandidate(candidateId)
       setActivities(aRes.data || [])
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
     finally { setSubmitting(false) }
   }
 
   const handleDeleteActivity = async (actId) => {
     try { await activitiesApi.delete(actId); setActivities(prev => prev.filter(a => a.id !== actId)); setDeleteConfirm(null) }
-    catch (err) { alert(err.message) }
+    catch (err) { toast.error(err.message) }
   }
 
   const handleFileUpload = async (fileList) => {
@@ -153,20 +156,20 @@ export default function CandidateDetail() {
       setFiles(fRes.data || [])
       const aRes = await activitiesApi.getByCandidate(candidateId)
       setActivities(aRes.data || [])
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
     finally { setUploading(false); setDragOver(false) }
   }
 
   const handleDeleteFile = async (fileId) => {
     try { await uploadsApi.delete(fileId); setFiles(prev => prev.filter(f => f.id !== fileId)) }
-    catch (err) { alert(err.message) }
+    catch (err) { toast.error(err.message) }
   }
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     try { await candidateDetailsApi.uploadPhoto(candidateId, file); setPhotoError(false); loadData() }
-    catch (err) { alert(err.message) }
+    catch (err) { toast.error(err.message) }
     e.target.value = ''
   }
 
@@ -189,7 +192,7 @@ export default function CandidateDetail() {
       setRatings(rRes.data || [])
       setRatingAverages(rRes.averages || {})
       setRatingOverall(rRes.overall)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
     finally { setRatingSubmitting(false) }
   }
 
@@ -200,7 +203,7 @@ export default function CandidateDetail() {
       setRatings(rRes.data || [])
       setRatingAverages(rRes.averages || {})
       setRatingOverall(rRes.overall)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const RATING_CATEGORIES = [
@@ -215,10 +218,10 @@ export default function CandidateDetail() {
 
   if (loading) return <LoadingSpinner text={t('detail.loading')} />
   if (!candidate) return (
-    <div className="fade-in max-w-[1000px] mx-auto text-center py-24">
+    <PageContainer width="content" className="text-center py-24">
       <p className="text-[20px] font-semibold text-gray-400">{t('detail.not_found')}</p>
       <Button variant="dark" size="md" onClick={() => navigate('/candidates')} className="mt-8"><ArrowLeft className="w-5 h-5" /> {t('common.back')}</Button>
-    </div>
+    </PageContainer>
   )
 
   const tags = candidate.tags ? candidate.tags.split(',').map(t => t.trim()).filter(Boolean) : []
@@ -229,7 +232,7 @@ export default function CandidateDetail() {
   const intervalLabel = { yearly: t('form.yearly'), monthly: t('form.monthly'), hourly: t('form.hourly') }[candidate.salary_interval] || ''
 
   return (
-    <div className="fade-in max-w-[1600px] mx-auto">
+    <PageContainer width="content">
       {/* Header */}
       <div className="flex items-center gap-4 sm:gap-6 mb-6 sm:mb-10">
         <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -244,7 +247,7 @@ export default function CandidateDetail() {
       </div>
 
       {/* Candidate Info Card with Photo */}
-      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row items-start gap-5 sm:gap-8">
           <div className="relative group flex-shrink-0">
             {candidate.photo_filename && !photoError ? (
@@ -357,7 +360,7 @@ export default function CandidateDetail() {
 
       {/* Work History Timeline */}
       {workHistory.length > 0 && (
-        <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
           <div className="flex items-center gap-3 mb-8">
             <Briefcase className="w-5 h-5 text-[#ff9f0a]" />
             <h2 className="text-[22px] font-semibold text-black dark:text-white">{t('form.work_history')}</h2>
@@ -388,7 +391,7 @@ export default function CandidateDetail() {
 
       {/* Education Timeline */}
       {educationList.length > 0 && (
-        <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
           <div className="flex items-center gap-3 mb-8">
             <GraduationCap className="w-5 h-5 text-[#8b5cf6]" />
             <h2 className="text-[22px] font-semibold text-black dark:text-white">{t('form.education_history')}</h2>
@@ -413,7 +416,7 @@ export default function CandidateDetail() {
       )}
 
       {/* Rating Section */}
-      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-[22px] font-semibold text-black dark:text-white">{t('detail.rating')}</h2>
           {ratingOverall !== null && (
@@ -449,7 +452,7 @@ export default function CandidateDetail() {
           </div>
         </form>
         {ratings.length === 0 ? (
-          <div className="text-center py-8"><Star className="w-10 h-10 text-gray-200 dark:text-gray-600 mx-auto mb-3" /><p className="text-[16px] font-semibold text-gray-400">{t('detail.no_ratings')}</p></div>
+          <EmptyState icon={Star} title={t('detail.no_ratings')} size="sm" />
         ) : (
           <div className="space-y-3">
             {ratings.map(r => { const cat = RATING_CATEGORIES.find(c => c.key === r.category); return (
@@ -464,7 +467,7 @@ export default function CandidateDetail() {
       </div>
 
       {/* Files Section */}
-      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
         <h2 className="text-[22px] font-semibold text-black dark:text-white mb-6">{t('detail.documents')}</h2>
         <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); handleFileUpload(e.dataTransfer.files) }} className={`border-2 border-dashed rounded-[24px] p-8 text-center transition-all cursor-pointer mb-6 ${dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png'; input.onchange = (e) => handleFileUpload(e.target.files); input.click() }}>
           <Upload className={`w-8 h-8 mx-auto mb-3 ${dragOver ? 'text-[#0071e3]' : 'text-gray-300'}`} />
@@ -477,9 +480,9 @@ export default function CandidateDetail() {
               <div key={f.id} className="flex items-center gap-4 p-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] group">
                 <div className="w-10 h-10 rounded-[12px] bg-white dark:bg-[#1c1c1e] flex items-center justify-center flex-shrink-0"><FileIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" /></div>
                 <div className="flex-1 min-w-0"><p className="text-[15px] font-semibold text-black dark:text-white truncate">{f.original_name}</p><p className="text-[12px] text-gray-400 mt-0.5">{formatFileSize(f.size)} \u00b7 {new Date(f.created_at).toLocaleDateString('de-DE')}</p></div>
-                {canPreview(f.mime_type) && <button onClick={() => setPreviewFile(f)} className="w-9 h-9 rounded-full hover:bg-[#8b5cf6]/10 flex items-center justify-center transition-colors cursor-pointer" title={t('detail.preview')}><Eye className="w-4.5 h-4.5 text-[#8b5cf6]" /></button>}
-                <a href={uploadsApi.getDownloadUrl(f.id)} className="w-9 h-9 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors cursor-pointer" title={t('detail.download')}><Download className="w-4.5 h-4.5 text-[#0071e3]" /></a>
-                <button onClick={() => handleDeleteFile(f.id)} className="w-9 h-9 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer" title={t('common.delete')}><X className="w-4 h-4 text-[#ff3b30]" /></button>
+                {canPreview(f.mime_type) && <IconButton icon={Eye} label={t('detail.preview')} variant="ghost" size="sm" onClick={() => setPreviewFile(f)} className="text-[#8b5cf6] hover:bg-[#8b5cf6]/10 hover:text-[#8b5cf6]" />}
+                <a href={uploadsApi.getDownloadUrl(f.id)} aria-label={t('detail.download')} className="w-8 h-8 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors cursor-pointer" title={t('detail.download')}><Download className="w-4 h-4 text-[#0071e3]" /></a>
+                <IconButton icon={X} label={t('common.delete')} variant="ghost" size="sm" onClick={() => handleDeleteFile(f.id)} className="text-[#ff3b30] hover:bg-[#ff3b30]/10 hover:text-[#ff3b30] opacity-0 group-hover:opacity-100" />
               </div>
             )})}
           </div>
@@ -488,7 +491,7 @@ export default function CandidateDetail() {
       </div>
 
       {/* Activity Log */}
-      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
         <h2 className="text-[22px] font-semibold text-black dark:text-white mb-8">{t('detail.activity_log')}</h2>
         <form onSubmit={handleAddActivity} className="bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-6 mb-10">
           <p className="text-[15px] font-semibold text-gray-600 dark:text-gray-400 mb-5">{t('detail.new_activity')}</p>
@@ -503,7 +506,7 @@ export default function CandidateDetail() {
           </div>
         </form>
         {activities.length === 0 ? (
-          <div className="text-center py-16"><div className="w-16 h-16 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center mx-auto mb-5"><FileText className="w-8 h-8 text-gray-300" /></div><p className="text-[18px] font-semibold text-gray-400">{t('detail.no_activities')}</p><p className="text-[15px] font-medium text-gray-300 mt-2">{t('detail.no_activities_desc')}</p></div>
+          <EmptyState icon={FileText} title={t('detail.no_activities')} description={t('detail.no_activities_desc')} size="sm" />
         ) : (
           <div className="space-y-4">
             {activities.map((activity, idx) => { const { Icon, color, bg } = activityIcon[activity.type] || activityIcon.Notiz; return (
@@ -582,7 +585,7 @@ export default function CandidateDetail() {
 
       {/* Pipeline History */}
       {pipelineHistory.entries.length > 0 && (
-        <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
           <h2 className="text-[22px] font-semibold text-black dark:text-white mb-8"><GitBranch className="w-5 h-5 inline mr-2 text-[#0071e3]" />{t('detail.history')}</h2>
           <div className="space-y-4">
             {pipelineHistory.entries.map(entry => {
@@ -609,26 +612,53 @@ export default function CandidateDetail() {
       )}
 
       {/* Team Comments */}
-      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/8 dark:border-gray-700/80 p-5 sm:p-10">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10">
         <CommentSection entityType="candidate" entityId={parseInt(id)} />
       </div>
 
       <CandidatePrintProfile candidate={candidate} open={showPrint} onClose={() => setShowPrint(false)} />
       {showEmailModal && <SendEmailModal candidate={candidate} onClose={() => setShowEmailModal(false)} onSent={() => { activitiesApi.getByCandidate(id).then(r => setActivities(r.data || [])).catch(() => {}) }} />}
-      {previewFile && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setPreviewFile(null)}>
-          <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700/80 flex-shrink-0">
-              <div className="flex items-center gap-3 min-w-0"><Eye className="w-5 h-5 text-[#8b5cf6] flex-shrink-0" /><p className="text-[16px] font-semibold text-black dark:text-white truncate">{previewFile.original_name}</p><span className="text-[13px] text-gray-400 flex-shrink-0">{formatFileSize(previewFile.size)}</span></div>
-              <div className="flex items-center gap-2"><a href={uploadsApi.getDownloadUrl(previewFile.id)} className="px-4 py-2 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[14px] font-semibold hover:bg-[#0071e3]/20 transition-colors"><Download className="w-4 h-4 inline mr-1.5" />Download</a><button onClick={() => setPreviewFile(null)} className="w-9 h-9 rounded-full hover:bg-gray-100 dark:hover:bg-[#2c2c2e] flex items-center justify-center cursor-pointer transition-colors"><X className="w-5 h-5 text-gray-500" /></button></div>
+      <Modal
+        open={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        size="full"
+        icon={Eye}
+        title={previewFile?.original_name}
+        subtitle={previewFile ? formatFileSize(previewFile.size) : undefined}
+        bodyClassName="p-0 sm:p-0"
+        footer={
+          <a
+            href={previewFile ? uploadsApi.getDownloadUrl(previewFile.id) : undefined}
+            className="px-6 py-3 rounded-full bg-[#0071e3] text-white text-[15px] font-semibold hover:bg-[#0077ed] transition-colors inline-flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Download
+          </a>
+        }
+      >
+        {previewFile && (
+          previewFile.mime_type?.startsWith('image/') ? (
+            <div className="flex items-center justify-center">
+              <img
+                src={uploadsApi.getPreviewUrl(previewFile.id)}
+                alt={previewFile.original_name}
+                className="max-w-full max-h-[70dvh] object-contain rounded-[16px]"
+              />
             </div>
-            <div className="flex-1 overflow-auto p-2 min-h-0">
-              {previewFile.mime_type?.startsWith('image/') ? (<div className="flex items-center justify-center h-full"><img src={uploadsApi.getPreviewUrl(previewFile.id)} alt={previewFile.original_name} className="max-w-full max-h-[75vh] object-contain rounded-[16px]" /></div>) : previewFile.mime_type === 'application/pdf' ? (<iframe src={uploadsApi.getPreviewUrl(previewFile.id)} className="w-full h-[75vh] rounded-[16px]" title={previewFile.original_name} />) : (<div className="flex items-center justify-center h-64"><p className="text-[16px] text-gray-400">{t('detail.preview_unavailable')}</p></div>)}
+          ) : previewFile.mime_type === 'application/pdf' ? (
+            <iframe
+              src={uploadsApi.getPreviewUrl(previewFile.id)}
+              className="w-full h-[70dvh] rounded-[16px]"
+              title={previewFile.original_name}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-64">
+              <p className="text-[16px] text-gray-400">{t('detail.preview_unavailable')}</p>
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+          )
+        )}
+      </Modal>
+    </PageContainer>
   )
 }
 

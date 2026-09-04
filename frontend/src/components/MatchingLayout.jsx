@@ -2,6 +2,7 @@ import { Outlet, Link } from 'react-router-dom'
 import { LayoutGrid } from 'lucide-react'
 import MatchingTabs from './MatchingTabs'
 import { useI18n } from '../I18nContext'
+import { PageContainer } from './UI'
 
 /**
  * Wraps the three matching sub-pages (job / candidate / matrix) with a shared
@@ -12,7 +13,7 @@ export default function MatchingLayout() {
   const { t } = useI18n()
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <PageContainer width="content">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <MatchingTabs />
         <Link
@@ -24,6 +25,6 @@ export default function MatchingLayout() {
         </Link>
       </div>
       <Outlet />
-    </div>
+    </PageContainer>
   )
 }

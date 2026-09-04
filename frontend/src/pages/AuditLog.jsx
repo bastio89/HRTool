@@ -2,16 +2,19 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
 import { auditApi } from '../api'
-import { useTheme } from '../ThemeContext'
 import { Shield, Search, ChevronLeft, ChevronRight, Activity, User, Briefcase, Users, GitBranch, Clock, Filter, Download, Calendar } from 'lucide-react'
 import { useToast } from '../components/Toast'
+import { Card, Button, IconButton, EmptyState, LoadingSpinner, PageContainer } from '../components/UI'
 
-const ENTITY_COLORS = {
-  Candidate: { bg: '#e8f5e9', text: '#2e7d32', darkBg: '#1b3a1e', darkText: '#66bb6a' },
-  Job:       { bg: '#e3f2fd', text: '#1565c0', darkBg: '#0d2744', darkText: '#42a5f5' },
-  Pipeline:  { bg: '#fff3e0', text: '#e65100', darkBg: '#3d2200', darkText: '#ff9800' },
-  User:      { bg: '#f3e5f5', text: '#7b1fa2', darkBg: '#2a0e38', darkText: '#ba68c8' },
-  System:    { bg: '#fce4ec', text: '#c62828', darkBg: '#3a0e14', darkText: '#ef5350' },
+// Tailwind classes rather than isDark ternaries – this page used to carry its
+// own inline-style system, which drifted from the rest of the app on radii,
+// spacing and type scale.
+const ENTITY_STYLES = {
+  Candidate: 'bg-[#34c759]/10 text-[#1f9d55] dark:text-[#66bb6a]',
+  Job:       'bg-[#0071e3]/10 text-[#1565c0] dark:text-[#42a5f5]',
+  Pipeline:  'bg-[#ff9f0a]/10 text-[#e65100] dark:text-[#ff9800]',
+  User:      'bg-[#8b5cf6]/10 text-[#7b1fa2] dark:text-[#ba68c8]',
+  System:    'bg-[#ff3b30]/10 text-[#c62828] dark:text-[#ef5350]',
 }
 
 const ENTITY_ICONS = {
@@ -22,9 +25,30 @@ const ENTITY_ICONS = {
   System: Shield,
 }
 
+const FIELD_CLASS =
+  'px-4 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700/60 ' +
+  'text-[14px] text-black dark:text-white cursor-pointer ' +
+  'focus:outline-none focus:ring-4 focus:ring-[#0071e3]/15 focus:border-[#0071e3]/30 transition-all'
+
+const TH_CLASS = 'px-4 py-3 text-left font-semibold text-[12px] uppercase tracking-wider text-gray-500 dark:text-gray-400 whitespace-nowrap'
+const TD_CLASS = 'px-4 py-3 text-black dark:text-white align-middle'
+
+function StatCard({ icon: Icon, iconClass, value, label }) {
+  return (
+    <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] border border-gray-200/60 dark:border-gray-700/60 p-6 flex items-center gap-4">
+      <div className={`w-11 h-11 rounded-[14px] flex items-center justify-center flex-shrink-0 ${iconClass}`}>
+        <Icon className="w-5.5 h-5.5" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[28px] font-bold leading-none text-black dark:text-white">{value}</div>
+        <div className="text-[13px] text-gray-500 dark:text-gray-400 mt-1.5 truncate">{label}</div>
+      </div>
+    </div>
+  )
+}
+
 export default function AuditLog() {
   const { isAdmin } = useAuth()
-  const { isDark } = useTheme()
   const { t } = useI18n()
   const toast = useToast()
   const [entries, setEntries] = useState([])
@@ -82,128 +106,77 @@ export default function AuditLog() {
     setFilters(f => ({ ...f, [key]: value }))
   }
 
-  if (!isAdmin) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center', color: isDark ? '#aaa' : '#86868b' }}>
-        <Shield size={48} style={{ marginBottom: 12, opacity: 0.3 }} />
-        <p>{t('audit.admin_only')}</p>
-      </div>
-    )
-  }
-
   const formatDate = (dateStr) => {
     const d = new Date(dateStr)
     return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
       ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
 
-  const cardStyle = {
-    background: isDark ? '#1c1c1e' : '#fff',
-    borderRadius: 16,
-    padding: '24px',
-    border: `1px solid ${isDark ? '#38383a' : '#e5e5e7'}`,
+  if (!isAdmin) {
+    return (
+      <PageContainer width="content">
+        <EmptyState icon={Shield} title={t('audit.admin_only')} />
+      </PageContainer>
+    )
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }}>
+    <PageContainer width="content">
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{
-          fontSize: 34, fontWeight: 700, margin: 0,
-          color: isDark ? '#f5f5f7' : '#1d1d1f',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif'
-        }}>
-          {t('audit.title')}
-        </h1>
-        <p style={{ margin: '8px 0 0', color: isDark ? '#98989d' : '#86868b', fontSize: 17 }}>
-          {t('audit.subtitle')}
-        </p>
-      </div>
-      <div style={{ marginTop: -20, marginBottom: 24, display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '10px 20px', borderRadius: 12, border: 'none', cursor: exporting ? 'default' : 'pointer',
-            background: isDark ? '#0a84ff' : '#0071e3', color: '#fff',
-            fontSize: 14, fontWeight: 600, opacity: exporting ? 0.6 : 1,
-            transition: 'opacity 0.2s'
-          }}
-        >
-          <Download size={16} />
+      <div className="flex flex-wrap items-end justify-between gap-4 mb-8 sm:mb-10">
+        <div>
+          <h1 className="text-[28px] sm:text-[34px] font-bold tracking-tight text-black dark:text-white">
+            {t('audit.title')}
+          </h1>
+          <p className="text-[16px] sm:text-[17px] text-gray-500 dark:text-gray-400 mt-2">
+            {t('audit.subtitle')}
+          </p>
+        </div>
+        <Button onClick={handleExport} disabled={exporting}>
+          <Download className="w-4 h-4" />
           {exporting ? t('audit.exporting') : t('audit.csv_export')}
-        </button>
+        </Button>
       </div>
 
       {/* Stats Cards */}
       {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
-          <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: isDark ? 'rgba(10,132,255,0.15)' : 'rgba(0,113,227,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <Activity size={22} color={isDark ? '#0a84ff' : '#0071e3'} />
-            </div>
-            <div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: isDark ? '#f5f5f7' : '#1d1d1f' }}>
-                {stats.today}
-              </div>
-              <div style={{ fontSize: 13, color: isDark ? '#98989d' : '#86868b' }}>{t('audit.today')}</div>
-            </div>
-          </div>
-          <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: isDark ? 'rgba(52,199,89,0.15)' : 'rgba(52,199,89,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
-              <Clock size={22} color='#34c759' />
-            </div>
-            <div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: isDark ? '#f5f5f7' : '#1d1d1f' }}>
-                {stats.thisWeek}
-              </div>
-              <div style={{ fontSize: 13, color: isDark ? '#98989d' : '#86868b' }}>{t('audit.this_week')}</div>
-            </div>
-          </div>
-          {stats.byType?.slice(0, 3).map(t => {
-            const colors = ENTITY_COLORS[t.entity_type] || ENTITY_COLORS.System
-            const Icon = ENTITY_ICONS[t.entity_type] || Activity
+        <div className="grid gap-4 mb-6 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+          <StatCard
+            icon={Activity}
+            iconClass="bg-[#0071e3]/10 text-[#0071e3] dark:text-[#0a84ff]"
+            value={stats.today}
+            label={t('audit.today')}
+          />
+          <StatCard
+            icon={Clock}
+            iconClass="bg-[#34c759]/10 text-[#34c759]"
+            value={stats.thisWeek}
+            label={t('audit.this_week')}
+          />
+          {stats.byType?.slice(0, 3).map(row => {
+            const Icon = ENTITY_ICONS[row.entity_type] || Activity
             return (
-              <div key={t.entity_type} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{
-                  width: 44, height: 44, borderRadius: 12,
-                  background: isDark ? colors.darkBg : colors.bg,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                  <Icon size={22} color={isDark ? colors.darkText : colors.text} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 28, fontWeight: 700, color: isDark ? '#f5f5f7' : '#1d1d1f' }}>
-                    {t.count}
-                  </div>
-                  <div style={{ fontSize: 13, color: isDark ? '#98989d' : '#86868b' }}>{t.entity_type}</div>
-                </div>
-              </div>
+              <StatCard
+                key={row.entity_type}
+                icon={Icon}
+                iconClass={ENTITY_STYLES[row.entity_type] || ENTITY_STYLES.System}
+                value={row.count}
+                label={row.entity_type}
+              />
             )
           })}
         </div>
       )}
 
       {/* Filters */}
-      <div style={{ ...cardStyle, marginBottom: 24, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-        <Filter size={18} color={isDark ? '#98989d' : '#86868b'} />
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] border border-gray-200/60 dark:border-gray-700/60 p-5 mb-6 flex flex-wrap items-center gap-3">
+        <Filter className="w-4.5 h-4.5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+
         <select
           value={filters.entity_type}
           onChange={e => handleFilterChange('entity_type', e.target.value)}
-          style={{
-            padding: '8px 12px', borderRadius: 10, border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
-            background: isDark ? '#2c2c2e' : '#f5f5f7', color: isDark ? '#f5f5f7' : '#1d1d1f',
-            fontSize: 14, outline: 'none', cursor: 'pointer'
-          }}
+          aria-label={t('audit.col_area')}
+          className={FIELD_CLASS}
         >
           <option value="">{t('audit.all_areas')}</option>
           <option value="Candidate">{t('audit.type_candidates')}</option>
@@ -216,11 +189,8 @@ export default function AuditLog() {
         <select
           value={filters.action}
           onChange={e => handleFilterChange('action', e.target.value)}
-          style={{
-            padding: '8px 12px', borderRadius: 10, border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
-            background: isDark ? '#2c2c2e' : '#f5f5f7', color: isDark ? '#f5f5f7' : '#1d1d1f',
-            fontSize: 14, outline: 'none', cursor: 'pointer'
-          }}
+          aria-label={t('audit.col_action')}
+          className={FIELD_CLASS}
         >
           <option value="">{t('audit.all_actions')}</option>
           <option value="erstellt">{t('audit.action_created')}</option>
@@ -237,140 +207,99 @@ export default function AuditLog() {
           <option value="backup-erstellt">{t('audit.action_backup')}</option>
         </select>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Calendar size={16} color={isDark ? '#98989d' : '#86868b'} />
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
           <input
             type="date"
             value={filters.date_from}
             onChange={e => handleFilterChange('date_from', e.target.value)}
-            style={{
-              padding: '8px 10px', borderRadius: 10, border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
-              background: isDark ? '#2c2c2e' : '#f5f5f7', color: isDark ? '#f5f5f7' : '#1d1d1f',
-              fontSize: 13, outline: 'none', cursor: 'pointer'
-            }}
+            aria-label={t('audit.date_from', 'Von')}
+            className={FIELD_CLASS}
           />
-          <span style={{ color: isDark ? '#98989d' : '#86868b', fontSize: 13 }}>–</span>
+          <span className="text-gray-500 dark:text-gray-400 text-[13px]">–</span>
           <input
             type="date"
             value={filters.date_to}
             onChange={e => handleFilterChange('date_to', e.target.value)}
-            style={{
-              padding: '8px 10px', borderRadius: 10, border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
-              background: isDark ? '#2c2c2e' : '#f5f5f7', color: isDark ? '#f5f5f7' : '#1d1d1f',
-              fontSize: 13, outline: 'none', cursor: 'pointer'
-            }}
+            aria-label={t('audit.date_to', 'Bis')}
+            className={FIELD_CLASS}
           />
         </div>
 
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, flex: 1, minWidth: 200 }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={16} style={{
-              position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-              color: isDark ? '#636366' : '#86868b'
-            }} />
+        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-[200px]">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               type="text"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               placeholder={t('audit.search_placeholder')}
-              style={{
-                width: '100%', padding: '8px 12px 8px 36px', borderRadius: 10,
-                border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
-                background: isDark ? '#2c2c2e' : '#f5f5f7', color: isDark ? '#f5f5f7' : '#1d1d1f',
-                fontSize: 14, outline: 'none', boxSizing: 'border-box'
-              }}
+              aria-label={t('audit.search_placeholder')}
+              className={`w-full pl-11 ${FIELD_CLASS} cursor-text`}
             />
           </div>
-          <button type="submit" style={{
-            padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
-            background: isDark ? '#0a84ff' : '#0071e3', color: '#fff', fontSize: 14, fontWeight: 500
-          }}>
-            {t('audit.search')}
-          </button>
+          <Button type="submit" size="sm">{t('audit.search')}</Button>
         </form>
       </div>
 
       {/* Table */}
-      <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] border border-gray-200/60 dark:border-gray-700/60 overflow-hidden">
         {loading ? (
-          <div style={{ padding: 48, textAlign: 'center', color: isDark ? '#98989d' : '#86868b' }}>
-            {t('audit.loading')}
-          </div>
+          <LoadingSpinner text={t('audit.loading')} />
         ) : entries.length === 0 ? (
-          <div style={{ padding: 48, textAlign: 'center', color: isDark ? '#98989d' : '#86868b' }}>
-            {t('audit.no_entries')}
-          </div>
+          <EmptyState icon={Activity} title={t('audit.no_entries')} size="sm" />
         ) : (
           <>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <div className="overflow-x-auto scrollbar-thin">
+              <table className="w-full border-collapse text-[14px]">
                 <thead>
-                  <tr style={{
-                    borderBottom: `1px solid ${isDark ? '#38383a' : '#e5e5e7'}`,
-                    background: isDark ? '#2c2c2e' : '#f9f9fb'
-                  }}>
-                    <th style={thStyle(isDark)}>{t('audit.col_timestamp')}</th>
-                    <th style={thStyle(isDark)}>{t('audit.col_user')}</th>
-                    <th style={thStyle(isDark)}>{t('audit.col_action')}</th>
-                    <th style={thStyle(isDark)}>{t('audit.col_area')}</th>
-                    <th style={thStyle(isDark)}>{t('audit.col_object')}</th>
-                    <th style={thStyle(isDark)}>{t('audit.col_details')}</th>
+                  <tr className="border-b border-gray-200/60 dark:border-gray-700/60 bg-[#f9f9fb] dark:bg-[#2c2c2e]">
+                    <th className={TH_CLASS}>{t('audit.col_timestamp')}</th>
+                    <th className={TH_CLASS}>{t('audit.col_user')}</th>
+                    <th className={TH_CLASS}>{t('audit.col_action')}</th>
+                    <th className={TH_CLASS}>{t('audit.col_area')}</th>
+                    <th className={TH_CLASS}>{t('audit.col_object')}</th>
+                    <th className={TH_CLASS}>{t('audit.col_details')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map(entry => {
-                    const colors = ENTITY_COLORS[entry.entity_type] || ENTITY_COLORS.System
                     const Icon = ENTITY_ICONS[entry.entity_type] || Activity
                     return (
-                      <tr key={entry.id} style={{
-                        borderBottom: `1px solid ${isDark ? '#2c2c2e' : '#f0f0f2'}`,
-                        transition: 'background 0.15s'
-                      }}
-                        onMouseEnter={e => e.currentTarget.style.background = isDark ? '#2c2c2e' : '#f9f9fb'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      <tr
+                        key={entry.id}
+                        className="border-b border-gray-100 dark:border-[#2c2c2e] hover:bg-[#f9f9fb] dark:hover:bg-[#2c2c2e] transition-colors"
                       >
-                        <td style={tdStyle(isDark)}>
-                          <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', fontSize: 13 }}>
+                        <td className={TD_CLASS}>
+                          <span className="tabular-nums whitespace-nowrap text-[13px]">
                             {formatDate(entry.created_at)}
                           </span>
                         </td>
-                        <td style={tdStyle(isDark)}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <User size={14} color={isDark ? '#98989d' : '#86868b'} />
-                            <span style={{ fontWeight: 500 }}>{entry.username || '—'}</span>
+                        <td className={TD_CLASS}>
+                          <div className="flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                            <span className="font-medium">{entry.username || '—'}</span>
                           </div>
                         </td>
-                        <td style={tdStyle(isDark)}>
-                          <span style={{
-                            padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                            background: isDark ? 'rgba(10,132,255,0.12)' : 'rgba(0,113,227,0.06)',
-                            color: isDark ? '#0a84ff' : '#0071e3'
-                          }}>
+                        <td className={TD_CLASS}>
+                          <span className="px-2.5 py-1 rounded-lg text-[12px] font-semibold bg-[#0071e3]/10 text-[#0071e3] dark:text-[#0a84ff] whitespace-nowrap">
                             {entry.action}
                           </span>
                         </td>
-                        <td style={tdStyle(isDark)}>
-                          <div style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 6,
-                            padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                            background: isDark ? colors.darkBg : colors.bg,
-                            color: isDark ? colors.darkText : colors.text
-                          }}>
-                            <Icon size={12} />
+                        <td className={TD_CLASS}>
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-semibold whitespace-nowrap ${ENTITY_STYLES[entry.entity_type] || ENTITY_STYLES.System}`}>
+                            <Icon className="w-3 h-3" />
                             {entry.entity_type}
-                          </div>
+                          </span>
                         </td>
-                        <td style={tdStyle(isDark)}>
-                          <span style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                        <td className={TD_CLASS}>
+                          <span className="block max-w-[200px] truncate">
                             {entry.entity_label || `#${entry.entity_id || '—'}`}
                           </span>
                         </td>
-                        <td style={tdStyle(isDark)}>
+                        <td className={TD_CLASS}>
                           {entry.details ? (
-                            <span style={{
-                              fontSize: 12, color: isDark ? '#98989d' : '#86868b',
-                              maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block'
-                            }}>
+                            <span className="block max-w-[250px] truncate text-[12px] text-gray-500 dark:text-gray-400">
                               {typeof entry.details === 'string' ? entry.details : JSON.stringify(entry.details)}
                             </span>
                           ) : '—'}
@@ -383,59 +312,31 @@ export default function AuditLog() {
             </div>
 
             {/* Pagination */}
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '16px 20px', borderTop: `1px solid ${isDark ? '#38383a' : '#e5e5e7'}`,
-              fontSize: 13, color: isDark ? '#98989d' : '#86868b'
-            }}>
+            <div className="flex items-center justify-between gap-4 px-5 py-4 border-t border-gray-200/60 dark:border-gray-700/60 text-[13px] text-gray-500 dark:text-gray-400">
               <span>{t('audit.total_entries').replace('{count}', total)}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
+              <div className="flex items-center gap-2">
+                <IconButton
+                  icon={ChevronLeft}
+                  label={t('common.back')}
+                  size="sm"
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  style={paginationBtn(isDark, page <= 1)}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <span style={{ fontWeight: 500, color: isDark ? '#f5f5f7' : '#1d1d1f' }}>
+                />
+                <span className="font-medium text-black dark:text-white tabular-nums">
                   {page} / {totalPages}
                 </span>
-                <button
+                <IconButton
+                  icon={ChevronRight}
+                  label={t('common.forward')}
+                  size="sm"
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  style={paginationBtn(isDark, page >= totalPages)}
-                >
-                  <ChevronRight size={16} />
-                </button>
+                />
               </div>
             </div>
           </>
         )}
       </div>
-    </div>
+    </PageContainer>
   )
-}
-
-function thStyle(isDark) {
-  return {
-    padding: '12px 16px', textAlign: 'left', fontWeight: 600, fontSize: 12,
-    textTransform: 'uppercase', letterSpacing: '0.5px',
-    color: isDark ? '#98989d' : '#86868b'
-  }
-}
-
-function tdStyle(isDark) {
-  return {
-    padding: '12px 16px', color: isDark ? '#f5f5f7' : '#1d1d1f'
-  }
-}
-
-function paginationBtn(isDark, disabled) {
-  return {
-    padding: '6px 8px', borderRadius: 8, border: `1px solid ${isDark ? '#38383a' : '#d2d2d7'}`,
-    background: disabled ? 'transparent' : (isDark ? '#2c2c2e' : '#f5f5f7'),
-    color: disabled ? (isDark ? '#48484a' : '#d2d2d7') : (isDark ? '#f5f5f7' : '#1d1d1f'),
-    cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center',
-    opacity: disabled ? 0.4 : 1
-  }
 }

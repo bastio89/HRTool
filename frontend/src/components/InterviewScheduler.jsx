@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Calendar, Clock, MapPin, Video, Phone, Users, Link2, Save, Loader2, Trash2, Check } from 'lucide-react'
 import { interviewsApi } from '../api'
+import Modal from './Modal'
 import { useI18n } from '../I18nContext'
 
 const INTERVIEW_TYPES = [
@@ -117,22 +118,14 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white dark:bg-[#1c1c1e] rounded-[24px] shadow-2xl w-full max-w-[560px] max-h-[85vh] overflow-hidden flex flex-col mx-4">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-          <div>
-            <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('interview.title')}</h3>
-            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">{entry.candidate_name}</p>
-          </div>
-          <button onClick={onClose} className="w-9 h-9 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer">
-            <X className="w-4 h-4 text-gray-500" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="overflow-y-auto flex-1 p-6">
+    <Modal
+      onClose={onClose}
+      size="md"
+      icon={Calendar}
+      title={t('interview.title')}
+      subtitle={entry.candidate_name}
+    >
+      <div>
           {loading ? (
             <div className="text-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" />
@@ -357,8 +350,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
               )}
             </>
           )}
-        </div>
       </div>
-    </div>
+    </Modal>
   )
 }

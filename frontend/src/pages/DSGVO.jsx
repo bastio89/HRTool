@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Shield, Trash2, AlertTriangle, Clock, Users, Settings, Check, Loader2 } from 'lucide-react'
 import { settingsApi } from '../api'
-import { Card, Button, LoadingSpinner } from '../components/UI'
+import { Card, Button, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
 
 export default function DSGVO() {
@@ -84,7 +84,7 @@ export default function DSGVO() {
   if (loading) return <LoadingSpinner text={t('dsgvo.loading')} />
 
   return (
-    <div className="fade-in max-w-[1200px] mx-auto">
+    <PageContainer width="content">
       {/* Header */}
       <div className="mb-8 sm:mb-14">
         <div className="flex items-center gap-4 mb-3">
@@ -260,6 +260,6 @@ export default function DSGVO() {
           </div>
         )}
       </Card>
-    </div>
+    </PageContainer>
   )
 }

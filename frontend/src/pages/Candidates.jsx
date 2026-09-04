@@ -2,10 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer, Star, Tag } from 'lucide-react'
 import { candidatesApi, ratingsApi } from '../api'
-import { Card, Button, EmptyState, LoadingSpinner } from '../components/UI'
+import { Card, Button, EmptyState, LoadingSpinner, PageContainer, SkeletonList } from '../components/UI'
 import CSVImportDialog from '../components/CSVImportDialog'
 import BatchCVImportDialog from '../components/BatchCVImportDialog'
 import { useToast } from '../components/Toast'
+import { useConfirm } from '../components/ConfirmDialog'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 import { useI18n } from '../I18nContext'
 
@@ -33,7 +34,6 @@ export default function Candidates() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [expandedId, setExpandedId] = useState(null)
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [filterStatus, setFilterStatus] = useState([])
   const [filterAvail, setFilterAvail] = useState('')
   const [filterSkills, setFilterSkills] = useState([])
@@ -43,7 +43,6 @@ export default function Candidates() {
   const [sortBy, setSortBy] = useState('newest')
   const [showFilters, setShowFilters] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
-  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showBatchImport, setShowBatchImport] = useState(false)
   const [printCandidate, setPrintCandidate] = useState(null)
@@ -53,6 +52,7 @@ export default function Candidates() {
   const [availableTags, setAvailableTags] = useState([])
   const navigate = useNavigate()
   const toast = useToast()
+  const confirm = useConfirm()
   const { t } = useI18n()
 
   // Debounce search input
@@ -116,10 +116,16 @@ export default function Candidates() {
 
   useEffect(() => { loadCandidates() }, [loadCandidates])
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (candidate) => {
+    const ok = await confirm({
+      title: t('candidates.delete'),
+      message: t('candidates.delete_confirm_named', 'Kandidat/in „{name}" wirklich löschen? Das lässt sich nicht rückgängig machen.').replace('{name}', candidate.name),
+      confirmLabel: t('candidates.delete'),
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
-      await candidatesApi.delete(id)
-      setDeleteConfirm(null)
+      await candidatesApi.delete(candidate.id)
       toast.success(t('candidates.deleted'))
       loadCandidates()
     } catch (err) {
@@ -200,11 +206,17 @@ export default function Candidates() {
   }
 
   const handleBatchDelete = async () => {
+    const count = selectedIds.size
+    const ok = await confirm({
+      title: t('candidates.delete'),
+      message: t('candidates.batch_delete_confirm').replace('{count}', count),
+      confirmLabel: t('candidates.final_delete'),
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
-      const count = selectedIds.size
       await candidatesApi.batchDelete([...selectedIds])
       setSelectedIds(new Set())
-      setBatchDeleteConfirm(false)
       toast.success(t('candidates.batch_deleted').replace('{count}', count))
       loadCandidates()
     } catch (err) {
@@ -255,7 +267,7 @@ export default function Candidates() {
   }, [candidates, filterAvail])
 
   return (
-    <div className="fade-in max-w-[1400px] mx-auto">
+    <PageContainer width="content">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 sm:mb-14 gap-4">
         <div>
@@ -471,7 +483,7 @@ export default function Candidates() {
               </button>
             ))}
             <button
-              onClick={() => setBatchDeleteConfirm(true)}
+              onClick={handleBatchDelete}
               className="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition-all flex items-center gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" /> {t('candidates.delete')}
@@ -480,22 +492,9 @@ export default function Candidates() {
         </div>
       )}
 
-      {/* Batch Delete Confirmation */}
-      {batchDeleteConfirm && (
-        <div className="mb-6 bg-[#ff3b30]/5 border border-[#ff3b30]/20 rounded-[20px] p-5 flex items-center justify-between">
-          <span className="text-[16px] font-medium text-[#ff3b30]">
-            {t('candidates.batch_delete_confirm').replace('{count}', selectedIds.size)}
-          </span>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={() => setBatchDeleteConfirm(false)}>{t('candidates.cancel')}</Button>
-            <Button variant="danger" onClick={handleBatchDelete}>{t('candidates.final_delete')}</Button>
-          </div>
-        </div>
-      )}
-
       {/* Candidates List */}
       {loading ? (
-        <LoadingSpinner text={t('candidates.loading')} />
+        <SkeletonList rows={5} />
       ) : filtered.length === 0 ? (
         <Card className="p-16">
           <EmptyState
@@ -637,7 +636,7 @@ export default function Candidates() {
                     variant="ghost"
                     size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#ff3b30]/10 hover:text-[#ff3b30]"
-                    onClick={(e) => { e.stopPropagation(); setDeleteConfirm(candidate.id) }}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(candidate) }}
                   >
                     <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
@@ -680,14 +679,6 @@ export default function Candidates() {
                 </div>
               </div>
 
-              {/* Delete confirmation */}
-              {deleteConfirm === candidate.id && (
-                <div className="px-10 py-6 flex items-center justify-end gap-4 border-t border-[#ff3b30]/20 bg-[#ff3b30]/5">
-                  <span className="text-[16px] font-medium text-[#ff3b30] mr-auto">{t('candidates.delete_confirm')}</span>
-                  <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>{t('candidates.cancel')}</Button>
-                  <Button variant="danger" onClick={() => handleDelete(candidate.id)}>{t('candidates.delete')}</Button>
-                </div>
-              )}
             </Card>
           ))}
 
@@ -755,7 +746,7 @@ export default function Candidates() {
         open={!!printCandidate}
         onClose={() => setPrintCandidate(null)}
       />
-    </div>
+    </PageContainer>
   )
 }
 

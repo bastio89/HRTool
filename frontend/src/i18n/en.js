@@ -1112,6 +1112,17 @@ export default {
   'common.no': 'No',
   'common.search': 'Search',
   'common.close': 'Close',
+  'audit.date_from': 'From',
+  'audit.date_to': 'To',
+  'common.confirm_title': 'Are you sure?',
+  'candidates.delete_confirm_named': 'Really delete "{name}"? This cannot be undone.',
+  'jobs.archived_success': 'Job archived',
+  'users.delete_user_title': 'Delete user',
+  'email.delete_template_title': 'Delete template',
+  'form.unsaved_title': 'Unsaved changes',
+  'form.unsaved_message': 'You have changes that have not been saved yet. Leave this page?',
+  'form.unsaved_discard': 'Discard',
+  'form.unsaved_stay': 'Keep editing',
   'common.language': 'Language',
 
   // Email

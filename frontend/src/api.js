@@ -446,6 +446,7 @@ export const settingsApi = {
   getAiModels: (baseUrl, apiKey, provider) => request(`/settings/ai/models?${new URLSearchParams({ ...(baseUrl ? { baseUrl } : {}), ...(provider ? { provider } : {}) })}`, { timeout: 8000, headers: apiKey ? { 'X-OpenRouter-Key': apiKey } : {} }),
   getAiEmbeddingModels: (baseUrl, apiKey, provider) => request(`/settings/ai/embedding-models?${new URLSearchParams({ ...(baseUrl ? { baseUrl } : {}), ...(provider ? { provider } : {}) })}`, { timeout: 8000, headers: apiKey ? { 'X-OpenRouter-Key': apiKey } : {} }),
   testAiConnection: (baseUrl, apiKey, provider) => request('/settings/ai/test', { method: 'POST', body: JSON.stringify({ ...(baseUrl ? { baseUrl } : {}), ...(apiKey ? { apiKey } : {}), ...(provider ? { provider } : {}) }), timeout: 8000 }),
+  testLlmModel: (baseUrl, apiKey, provider, model, reasoningLevel, prompt = 'Reply with exactly: OK') => request('/settings/ai/llm-test', { method: 'POST', body: JSON.stringify({ ...(baseUrl ? { baseUrl } : {}), ...(apiKey ? { apiKey } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}), ...(reasoningLevel ? { reasoningLevel } : {}), prompt }), timeout: 35000 }),
   testEmbeddingModel: (baseUrl, apiKey, provider, embeddingModel, sampleText = 'Kubernetes') => request('/settings/ai/embedding-test', {
     method: 'POST',
     body: JSON.stringify({

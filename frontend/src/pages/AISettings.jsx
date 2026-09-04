@@ -26,6 +26,13 @@ const PROVIDER_OPTIONS = [
   { value: 'openai', label: 'OpenAI-kompatibel', desc: 'LM Studio, Jan, Text Generation WebUI u.a. (/v1/chat/completions)' },
 ]
 
+const REASONING_LEVELS = [
+  { value: 'none', label: 'Aus', desc: 'Schnellste Antwort ohne Reasoning' },
+  { value: 'low', label: 'Niedrig', desc: 'Kurze Denkphase' },
+  { value: 'medium', label: 'Mittel', desc: 'Ausgewogen zwischen Qualität und Geschwindigkeit' },
+  { value: 'high', label: 'Hoch', desc: 'Mehr Denkzeit für komplexe Aufgaben' },
+]
+
 export default function AISettings() {
   const { t } = useI18n()
   const [loading, setLoading] = useState(true)
@@ -35,6 +42,7 @@ export default function AISettings() {
   const [apiKey, setApiKey] = useState('')
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
   const [provider, setProvider] = useState('auto')
+  const [reasoningLevel, setReasoningLevel] = useState('none')
   const [loggingEnabled, setLoggingEnabled] = useState(false)
   const [source, setSource] = useState({ baseUrl: 'default', model: 'default', embeddingModel: 'default' })
 
@@ -50,6 +58,8 @@ export default function AISettings() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
+  const [llmTesting, setLlmTesting] = useState(false)
+  const [llmTestResult, setLlmTestResult] = useState(null)
   const [embeddingTesting, setEmbeddingTesting] = useState(false)
   const [embeddingTestResult, setEmbeddingTestResult] = useState(null)
   const [successMsg, setSuccessMsg] = useState('')
@@ -64,6 +74,7 @@ export default function AISettings() {
       setModel(cfg.model || '')
       setEmbeddingModel(cfg.embeddingModel || '')
       setProvider(cfg.provider || 'auto')
+      setReasoningLevel(cfg.reasoningLevel || 'none')
       setApiKeyConfigured(Boolean(cfg.apiKeyConfigured))
       setLoggingEnabled(Boolean(cfg.loggingEnabled))
       setSource(cfg.source || { baseUrl: 'default', model: 'default', embeddingModel: 'default' })
@@ -182,6 +193,20 @@ export default function AISettings() {
     }
   }
 
+  const handleLlmTest = async () => {
+    setLlmTesting(true)
+    setLlmTestResult(null)
+    setError('')
+    try {
+      const res = await settingsApi.testLlmModel(baseUrl, apiKey, provider, model, reasoningLevel)
+      setLlmTestResult(res)
+    } catch (err) {
+      setLlmTestResult({ reachable: false, error: err.message })
+    } finally {
+      setLlmTesting(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setError('')
@@ -195,6 +220,7 @@ export default function AISettings() {
         model: model.trim(),
         embeddingModel: embeddingModel.trim(),
         provider,
+        reasoningLevel,
         loggingEnabled,
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       })
@@ -202,6 +228,7 @@ export default function AISettings() {
       setModel(res.model)
       setEmbeddingModel(res.embeddingModel || embeddingModel)
       setProvider(res.provider || 'auto')
+      setReasoningLevel(res.reasoningLevel || reasoningLevel)
       setApiKey('')
       setApiKeyConfigured(Boolean(res.apiKeyConfigured))
       setLoggingEnabled(Boolean(res.loggingEnabled))
@@ -220,6 +247,7 @@ export default function AISettings() {
     if (presetProvider) setProvider(presetProvider)
     setTestResult(null)
     setEmbeddingTestResult(null)
+    setLlmTestResult(null)
     loadModels(url, model, presetProvider || provider)
     loadEmbeddingModels(url, embeddingModel, presetProvider || provider)
   }
@@ -228,6 +256,7 @@ export default function AISettings() {
     setProvider(value)
     setTestResult(null)
     setEmbeddingTestResult(null)
+    setLlmTestResult(null)
     loadModels(baseUrl, model, value)
     loadEmbeddingModels(baseUrl, embeddingModel, value)
   }
@@ -240,12 +269,22 @@ export default function AISettings() {
         ? { tone: 'error', label: embeddingTestResult.error || 'Fehler' }
         : { tone: 'idle', label: 'Nicht getestet' }
 
+  const llmStatus = llmTesting
+    ? { tone: 'checking', label: 'Test läuft' }
+    : llmTestResult?.reachable
+      ? { tone: 'success', label: `OK${llmTestResult?.latencyMs ? ` · ${llmTestResult.latencyMs} ms` : ''}` }
+      : llmTestResult
+        ? { tone: 'error', label: llmTestResult.error || 'Fehler' }
+        : { tone: 'idle', label: 'Nicht getestet' }
+
   const embeddingStatusClasses = {
     checking: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-300 dark:border-gray-700',
     success: 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25',
     error: 'bg-[#ff3b30]/10 text-[#d92d20] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25',
     idle: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-400 dark:border-gray-700',
   }
+
+  const llmStatusClasses = embeddingStatusClasses
 
   const sourceLabel = (src) => {
     if (src === 'settings') return t('ai_settings.source_settings')
@@ -410,7 +449,7 @@ export default function AISettings() {
             <div className="relative">
               <select
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
+                onChange={(e) => { setModel(e.target.value); setLlmTestResult(null) }}
                 className="w-full appearance-none px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
                   text-black dark:text-white text-[16px] focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c]
                   focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 cursor-pointer pr-12"
@@ -433,7 +472,7 @@ export default function AISettings() {
             <Input
               label={t('ai_settings.model_label')}
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => { setModel(e.target.value); setLlmTestResult(null) }}
               placeholder="llama3.2"
               spellCheck={false}
               autoCapitalize="off"
@@ -455,9 +494,47 @@ export default function AISettings() {
             )}
           </div>
         )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" size="sm" onClick={handleLlmTest} disabled={llmTesting || !baseUrl.trim() || !model.trim()}>
+            {llmTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+            LLM testen
+          </Button>
+          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[12px] font-semibold ${llmStatusClasses[llmStatus.tone]}`}>
+            <span className={`w-2.5 h-2.5 rounded-full ${llmStatus.tone === 'success' ? 'bg-[#34c759]' : llmStatus.tone === 'error' ? 'bg-[#ff3b30]' : llmStatus.tone === 'checking' ? 'bg-[#8e8e93] animate-pulse' : 'bg-[#8e8e93]'}`} />
+            {llmStatus.label}
+          </span>
+        </div>
         <p className="text-[13px] text-gray-400 ml-2">
           {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.model)}</span>
         </p>
+      </Card>
+
+      {/* Reasoning level */}
+      <Card className="space-y-5">
+        <div className="flex items-center gap-3">
+          <Cpu className="w-5 h-5 text-gray-400" />
+          <div>
+            <h2 className="text-[19px] font-semibold text-black dark:text-white">Reasoning-Level</h2>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Steuert, wie viel Denkzeit das LLM für Antworten verwendet.</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-4 gap-2">
+          {REASONING_LEVELS.map((level) => (
+            <button
+              key={level.value}
+              type="button"
+              onClick={() => { setReasoningLevel(level.value); setLlmTestResult(null) }}
+              className={`text-left px-3 py-3 rounded-2xl border transition-all duration-200 cursor-pointer ${
+                reasoningLevel === level.value
+                  ? 'bg-[#0071e3]/10 border-[#0071e3]/40 text-[#0071e3]'
+                  : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] border-transparent text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
+              }`}
+            >
+              <div className="font-semibold text-[14px]">{level.label}</div>
+              <div className="text-[11px] opacity-70 mt-1 leading-snug">{level.desc}</div>
+            </button>
+          ))}
+        </div>
       </Card>
 
       {/* Embedding model */}

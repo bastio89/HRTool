@@ -10,7 +10,7 @@ def _reload_config_module():
     return importlib.reload(config)
 
 
-def test_resolved_embedding_model_defaults_to_qwen_embedding_when_provider_is_openrouter(monkeypatch):
+def test_resolved_embedding_model_defaults_to_openai_embedding_when_provider_is_openrouter(monkeypatch):
     monkeypatch.delenv("AI_EMBEDDING_MODEL", raising=False)
     monkeypatch.delenv("BACKEND_DB_PATH", raising=False)
     monkeypatch.setenv("AI_PROVIDER", "openrouter")
@@ -20,7 +20,7 @@ def test_resolved_embedding_model_defaults_to_qwen_embedding_when_provider_is_op
     monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
 
     config = _reload_config_module()
-    assert config.settings.resolved_embedding_model == "qwen3-embedding:4b"
+    assert config.settings.resolved_embedding_model == "openai/text-embedding-3-small"
 
 
 def test_resolved_embedding_model_uses_ollama_default_for_ollama_provider(monkeypatch):

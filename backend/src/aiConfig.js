@@ -4,6 +4,7 @@ const db = require('./database');
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 const DEFAULT_MODEL = 'llama3.2';
 const DEFAULT_PROVIDER = 'auto'; // 'auto' | 'ollama' | 'openai'
+const DEFAULT_REASONING_LEVEL = 'none'; // 'none' | 'low' | 'medium' | 'high'
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 function readSetting(key) {
@@ -36,6 +37,7 @@ function getAiConfig() {
   const dbEmbeddingModel = readSetting('ai_embedding_model');
   const dbProvider = readSetting('ai_provider');
   const dbApiKey = readSetting('ai_api_key');
+  const dbReasoningLevel = readSetting('ai_reasoning_level');
   const dbLoggingEnabled = readSetting('ai_log_llm_calls');
 
   const envBaseUrl = process.env.AI_BASE_URL?.trim() || process.env.OLLAMA_BASE_URL?.trim() || null;
@@ -44,6 +46,7 @@ function getAiConfig() {
   const envProvider = process.env.AI_PROVIDER?.trim() || null;
   const envApiKey = process.env.AI_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim() || null;
   const envLogging = process.env.AI_LOG_LLM_CALLS?.trim() || null;
+  const envReasoningLevel = process.env.AI_REASONING_LEVEL?.trim().toLowerCase() || null;
 
   const provider = dbProvider || envProvider || DEFAULT_PROVIDER;
   const normalizedProvider = provider.trim().toLowerCase();
@@ -60,6 +63,11 @@ function getAiConfig() {
   const apiKey = dbApiKey || envApiKey || null;
   const loggingEnabledRaw = dbLoggingEnabled || envLogging || null;
   const loggingEnabled = ['1', 'true', 'yes', 'on'].includes(String(loggingEnabledRaw).trim().toLowerCase());
+  const reasoningLevel = ['none', 'low', 'medium', 'high'].includes(dbReasoningLevel || '')
+    ? dbReasoningLevel
+    : ['none', 'low', 'medium', 'high'].includes(envReasoningLevel || '')
+      ? envReasoningLevel
+      : DEFAULT_REASONING_LEVEL;
 
   const baseUrl = normalizeAiBaseUrl(rawBaseUrl);
 
@@ -69,6 +77,7 @@ function getAiConfig() {
     embeddingModel,
     provider,
     apiKey,
+    reasoningLevel,
     loggingEnabled,
     source: {
       baseUrl: dbBaseUrl ? 'settings' : envBaseUrl ? 'env' : 'default',
@@ -76,6 +85,7 @@ function getAiConfig() {
       embeddingModel: dbEmbeddingModel ? 'settings' : envEmbeddingModel ? 'env' : 'default',
       provider: dbProvider ? 'settings' : envProvider ? 'env' : 'default',
       apiKey: dbApiKey ? 'settings' : envApiKey ? 'env' : 'default',
+      reasoningLevel: dbReasoningLevel ? 'settings' : envReasoningLevel ? 'env' : 'default',
     },
   };
 }
@@ -150,6 +160,10 @@ function buildAiRequest({ baseUrl, model, provider, prompt, format, options = {}
     if (typeof options.temperature === 'number') body.temperature = options.temperature;
     if (typeof options.num_predict === 'number') body.max_tokens = options.num_predict;
     if (format === 'json') body.response_format = { type: 'text' };
+    if (baseUrl.includes('openrouter.ai')) {
+      const reasoningLevel = getAiConfig().reasoningLevel;
+      body.reasoning = reasoningLevel === 'none' ? { enabled: false } : { effort: reasoningLevel };
+    }
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     if (baseUrl.includes('openrouter.ai')) {
       headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'http://localhost:5173';
@@ -159,6 +173,7 @@ function buildAiRequest({ baseUrl, model, provider, prompt, format, options = {}
   }
   // Ollama
   const body = { model, prompt, stream: false, options };
+  if (typeof body.options.think !== 'boolean') body.options.think = getAiConfig().reasoningLevel !== 'none';
   if (format) body.format = format;
   return { url: `${baseUrl}/api/generate`, body, headers };
 }

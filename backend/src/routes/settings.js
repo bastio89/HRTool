@@ -50,6 +50,7 @@ router.get('/ai/config', (req, res) => {
       provider: config.provider,
       apiKeyConfigured: Boolean(config.apiKey),
       loggingEnabled: Boolean(config.loggingEnabled),
+      reasoningLevel: config.reasoningLevel,
       source: config.source,
       defaults: {
         baseUrl: DEFAULT_BASE_URL,
@@ -88,7 +89,7 @@ router.put('/ai/config', (req, res) => {
       return res.status(403).json({ error: 'Nur Administratoren dürfen die KI-Konfiguration ändern' });
     }
 
-    const { baseUrl, model, embeddingModel, provider, apiKey, loggingEnabled } = req.body;
+    const { baseUrl, model, embeddingModel, provider, apiKey, loggingEnabled, reasoningLevel } = req.body;
 
     if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
       return res.status(400).json({ error: 'Host / Base-URL ist erforderlich' });
@@ -98,6 +99,9 @@ router.put('/ai/config', (req, res) => {
     }
     const validProviders = ['auto', 'ollama', 'openai'];
     const normalizedProvider = (typeof provider === 'string' && validProviders.includes(provider.trim())) ? provider.trim() : 'auto';
+    const normalizedReasoningLevel = ['none', 'low', 'medium', 'high'].includes(String(reasoningLevel || '').trim().toLowerCase())
+      ? String(reasoningLevel).trim().toLowerCase()
+      : 'none';
 
     const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
     try {
@@ -114,6 +118,7 @@ router.put('/ai/config', (req, res) => {
     upsert.run('ai_model', model.trim());
     if (typeof embeddingModel === 'string' && embeddingModel.trim()) upsert.run('ai_embedding_model', embeddingModel.trim());
     upsert.run('ai_provider', normalizedProvider);
+    upsert.run('ai_reasoning_level', normalizedReasoningLevel);
     if (typeof apiKey === 'string' && apiKey.trim()) upsert.run('ai_api_key', apiKey.trim());
     if (typeof loggingEnabled === 'boolean') upsert.run('ai_log_llm_calls', loggingEnabled ? '1' : '0');
 
@@ -137,6 +142,7 @@ router.put('/ai/config', (req, res) => {
       provider: normalizedProvider,
       apiKeyConfigured: Boolean(updatedConfig.apiKey),
       loggingEnabled: Boolean(updatedConfig.loggingEnabled),
+      reasoningLevel: updatedConfig.reasoningLevel,
     });
   } catch (error) {
     console.error('Error saving AI config:', error);
@@ -244,6 +250,76 @@ router.post('/ai/test', async (req, res) => {
 });
 
 /**
+ * Test the configured chat model with a real completion request.
+ */
+router.post('/ai/llm-test', async (req, res) => {
+  try {
+    const override = typeof req.body?.baseUrl === 'string' && req.body.baseUrl.trim()
+      ? normalizeAiBaseUrl(req.body.baseUrl)
+      : null;
+    const cfg = getAiConfig();
+    const requestApiKey = typeof req.body?.apiKey === 'string' && req.body.apiKey.trim() ? req.body.apiKey.trim() : cfg.apiKey;
+    const baseUrl = override || cfg.baseUrl;
+    const configuredProvider = ['auto', 'ollama', 'openai'].includes(req.body?.provider) ? req.body.provider : cfg.provider;
+    const model = typeof req.body?.model === 'string' && req.body.model.trim() ? req.body.model.trim() : cfg.model;
+    const reasoningLevel = ['none', 'low', 'medium', 'high'].includes(req.body?.reasoningLevel) ? req.body.reasoningLevel : cfg.reasoningLevel;
+    const prompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
+      ? req.body.prompt.trim()
+      : 'Reply with exactly: OK';
+
+    let provider;
+    try {
+      provider = await resolveAiProvider(baseUrl, configuredProvider);
+    } catch {
+      provider = configuredProvider === 'ollama' ? 'ollama' : 'openai';
+    }
+
+    const started = Date.now();
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 30000);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (requestApiKey) headers.Authorization = `Bearer ${requestApiKey}`;
+      let url;
+      let body;
+      if (provider === 'openai') {
+        if (baseUrl.includes('openrouter.ai')) {
+          headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'http://localhost:5173';
+          headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'HRTool';
+        }
+        url = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
+        body = { model, messages: [{ role: 'user', content: prompt }], max_tokens: 64, stream: false };
+        if (baseUrl.includes('openrouter.ai')) body.reasoning = reasoningLevel === 'none' ? { enabled: false } : { effort: reasoningLevel };
+      } else {
+        url = `${baseUrl}/api/generate`;
+        body = { model, prompt, stream: false, options: { num_predict: 16 } };
+      }
+
+      const response = await fetch(url, { method: 'POST', headers, signal: ctrl.signal, body: JSON.stringify(body) });
+      const payload = await response.json().catch(() => ({}));
+      const text = provider === 'openai' ? payload?.choices?.[0]?.message?.content : payload?.response;
+      if (!response.ok || typeof text !== 'string' || !text.trim()) {
+        return res.status(response.ok ? 502 : response.status).json({
+          reachable: false,
+          provider,
+          baseUrl,
+          model,
+          latencyMs: Date.now() - started,
+          error: payload?.error?.message || payload?.error || payload?.message || (response.ok ? 'Keine Modellantwort erhalten' : `HTTP ${response.status}`),
+        });
+      }
+
+      return res.json({ reachable: true, provider, baseUrl, model, latencyMs: Date.now() - started, response: text.trim() });
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    console.error('Error testing LLM model:', error);
+    res.status(500).json({ reachable: false, error: error.name === 'AbortError' ? 'Zeitüberschreitung (>30s)' : error.message || 'Fehler beim LLM-Test' });
+  }
+});
+
+/**
  * @swagger
  * /settings/ai/embedding-test:
  *   post:
@@ -319,6 +395,18 @@ router.post('/ai/embedding-test', async (req, res) => {
       const embedding = provider === 'openai'
         ? payload?.data?.[0]?.embedding
         : payload?.embedding;
+
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        return res.status(502).json({
+          reachable: false,
+          provider,
+          baseUrl,
+          embeddingModel,
+          sampleText,
+          latencyMs: Date.now() - started,
+          error: 'Keine Embedding-Antwort vom Modell erhalten',
+        });
+      }
 
       res.json({
         reachable: true,

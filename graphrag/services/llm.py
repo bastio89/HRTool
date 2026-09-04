@@ -36,6 +36,7 @@ class LLMService:
         provider: str = "ollama",
         api_key: str | None = None,
         enable_reasoning: bool = True,
+        reasoning_level: str | None = None,
         enable_parse_latency_aggregation: bool = False,
         parse_latency_window_size: int = 200,
         parse_latency_log_every: int = 20,
@@ -51,6 +52,7 @@ class LLMService:
         self.embedding_model = embedding_model
         self.embedding_dimensions = embedding_dimensions
         self.enable_reasoning = enable_reasoning
+        self.reasoning_level = reasoning_level or ("medium" if enable_reasoning else "none")
         self.enable_parse_latency_aggregation = enable_parse_latency_aggregation
         self.parse_latency_window_size = max(1, parse_latency_window_size)
         self.parse_latency_log_every = max(1, parse_latency_log_every)
@@ -230,7 +232,7 @@ class LLMService:
                 # "exclude" only hides reasoning from the response but still burns completion
                 # tokens on hidden thinking, which truncated JSON output for longer CVs.
                 # "enabled": False actually turns reasoning generation off.
-                "reasoning": {"enabled": False},
+                "reasoning": {"enabled": False} if self.reasoning_level == "none" else {"effort": self.reasoning_level},
             }
         else:
             headers = {}

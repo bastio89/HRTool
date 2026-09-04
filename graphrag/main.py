@@ -41,6 +41,7 @@ llm_service = LLMService(
 	embedding_model=settings.resolved_embedding_model,
 	embedding_dimensions=settings.embedding_dimensions,
 	enable_reasoning=settings.ollama_enable_reasoning,
+	reasoning_level=settings.resolved_reasoning_level,
 	enable_parse_latency_aggregation=settings.enable_parse_latency_aggregation,
 	parse_latency_window_size=settings.parse_latency_window_size,
 	parse_latency_log_every=settings.parse_latency_log_every,

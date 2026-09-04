@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     ollama_chat_model: str = "qwen3.6:35b"
     ollama_embedding_model: str = "qwen3-embedding:4b"
     ollama_enable_reasoning: bool = True
+    ai_reasoning_level: str | None = None
     enable_parse_latency_aggregation: bool = False
     parse_latency_window_size: int = 200
     parse_latency_log_every: int = 20
@@ -65,8 +66,21 @@ class Settings(BaseSettings):
         if self.ai_embedding_model:
             return self.ai_embedding_model
         if self.resolved_provider == "openrouter":
-            return "qwen3-embedding:4b"
+            return "openai/text-embedding-3-small"
         return self.ollama_embedding_model
+
+    @property
+    def resolved_reasoning_level(self) -> str:
+        try:
+            with psycopg.connect(self.database_url) as connection:
+                row = connection.execute("SELECT value FROM settings WHERE key = %s", ("ai_reasoning_level",)).fetchone()
+            level = row[0].strip().lower() if row and isinstance(row[0], str) else None
+        except psycopg.Error:
+            level = None
+        level = level or self.ai_reasoning_level or ""
+        if level in {"none", "low", "medium", "high"}:
+            return level
+        return "none"
 
 
 settings = Settings()

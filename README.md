@@ -310,8 +310,6 @@ JWT_SECRET=ihr-sicherer-schlüssel
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2
 EXTERNAL_API_KEY=ihr-externer-api-key
-N8N_BASE_URL=http://localhost:5678
-N8N_API_KEY=ihr-n8n-api-key
 ```
 
 ---
@@ -346,7 +344,6 @@ N8N_API_KEY=ihr-n8n-api-key
 | Technologie | Zweck |
 |-------------|-------|
 | **Ollama** | Lokales LLM (llama3.2) für alle KI-Features |
-| **n8n** | Workflow-Automation (optional, für CV-Parser & Matching) |
 | **Tesseract OCR** | Texterkennung in gescannten PDFs |
 | **Poppler** | PDF-zu-Bild-Konvertierung |
 

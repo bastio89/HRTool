@@ -74,7 +74,7 @@ app.use('/api/add/job', addJobRouter);
  * @swagger
  * /health:
  *   get:
- *     summary: System-Status inkl. n8n-Erreichbarkeit
+ *     summary: System-Status aller Services
  *     tags: [System]
  *     security: []
  *     responses:
@@ -85,20 +85,9 @@ app.get('/api/health/live', (req, res) => {
 });
 
 app.get('/api/health', async (req, res) => {
-  const n8nUrl = process.env.N8N_BASE_URL || 'http://localhost:5678';
   const graphRagUrl = process.env.GRAPHRAG_BASE_URL || 'http://graphrag:8000';
-  let n8nStatus = 'unreachable';
   let graphRagStatus = 'unreachable';
   let aiUsage = { calls: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0 };
-  try {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 3000);
-    const resp = await fetch(`${n8nUrl}/healthz`, { signal: ctrl.signal });
-    clearTimeout(timeout);
-    n8nStatus = resp.ok ? 'ok' : `error (${resp.status})`;
-  } catch (_) {
-    n8nStatus = 'unreachable';
-  }
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 3000);
@@ -135,14 +124,11 @@ app.get('/api/health', async (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    n8nUrl,
-    n8nStatus,
     graphRagUrl,
     aiUsage,
     services: {
       backend: 'ok',
       database: 'ok',
-      n8n: n8nStatus,
       graphrag: graphRagStatus,
     }
   });

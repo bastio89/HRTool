@@ -1127,7 +1127,6 @@ export default {
   'system.service_graphrag': 'GraphRAG',
   'system.service_backend': 'Backend',
   'system.service_database': 'Datenbank',
-  'system.service_n8n': 'n8n',
   'system.state_ok': 'erreichbar',
   'system.state_degraded': 'eingeschränkt',
   'system.state_down': 'nicht erreichbar',

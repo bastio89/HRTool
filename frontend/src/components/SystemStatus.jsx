@@ -64,7 +64,6 @@ export function SystemStatusProvider({ children }) {
         database: normalise(health?.services?.database),
         ai,
         graphrag: normalise(health?.services?.graphrag),
-        n8n: normalise(health?.services?.n8n),
       },
       usage: {
         calls: Number(health?.aiUsage?.calls) || 0,
@@ -111,7 +110,6 @@ const SERVICES = [
   { key: 'graphrag', labelKey: 'system.service_graphrag', to: '/admin/ai' },
   { key: 'backend',  labelKey: 'system.service_backend',  to: null },
   { key: 'database', labelKey: 'system.service_database', to: null },
-  { key: 'n8n',      labelKey: 'system.service_n8n',      to: null },
 ]
 
 function relativeTime(date, t, locale) {

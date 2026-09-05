@@ -242,8 +242,8 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.type_label')}</label>
-                      <div className="flex gap-2">
+                      <span id={`${fieldIdPrefix}-type-label`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.type_label')}</span>
+                      <div role="group" aria-labelledby={`${fieldIdPrefix}-type-label`} className="flex gap-2">
                         {INTERVIEW_TYPES.map(({ value, labelKey, icon: Icon }) => (
                           <button
                             key={value}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { Bot, Server, Check, Loader2, AlertTriangle, RefreshCw, Wifi, WifiOff, Info, ChevronDown, Cpu } from 'lucide-react'
 import { settingsApi } from '../api'
 import { Card, Button, Input, LoadingSpinner, PageContainer } from '../components/UI'
@@ -34,6 +34,7 @@ const REASONING_LEVELS = [
 ]
 
 export default function AISettings() {
+  const fieldIdPrefix = useId()
   const { t } = useI18n()
   const [loading, setLoading] = useState(true)
   const [baseUrl, setBaseUrl] = useState('')
@@ -443,11 +444,12 @@ export default function AISettings() {
 
         {!manualModel && models.length > 0 ? (
           <div className="space-y-3">
-            <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
+            <label htmlFor={`${fieldIdPrefix}-model`} className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
               {t('ai_settings.model_label')}
             </label>
             <div className="relative">
               <select
+                id={`${fieldIdPrefix}-model`}
                 aria-label={t('ai_settings.model_label')}
                 value={model}
                 onChange={(e) => { setModel(e.target.value); setLlmTestResult(null) }}
@@ -553,11 +555,12 @@ export default function AISettings() {
 
         {!manualEmbeddingModel && embeddingModels.length > 0 ? (
           <div className="space-y-3">
-            <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
+            <label htmlFor={`${fieldIdPrefix}-embedding-model`} className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
               {t('ai_settings.embedding_model_label')}
             </label>
             <div className="relative">
               <select
+                id={`${fieldIdPrefix}-embedding-model`}
                 aria-label={t('ai_settings.embedding_model_label')}
                 value={embeddingModel}
                 onChange={(e) => { setEmbeddingModel(e.target.value); setEmbeddingTestResult(null) }}

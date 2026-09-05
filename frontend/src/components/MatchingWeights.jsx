@@ -223,10 +223,10 @@ export default function MatchingWeights({ weights, onChange }) {
           {/* Profile selector */}
           {profiles.length > 0 && (
             <div className="mb-6">
-              <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 block">
+              <span id="weights-profiles-label" className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 block">
                 {t('weights.profiles')}
-              </label>
-              <div className="flex flex-wrap gap-2">
+              </span>
+              <div role="group" aria-labelledby="weights-profiles-label" className="flex flex-wrap gap-2">
                 {profiles.map(profile => (
                   <div key={profile.id} className="flex items-center">
                     <button

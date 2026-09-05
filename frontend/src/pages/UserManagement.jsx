@@ -286,10 +286,10 @@ export default function UserManagement() {
             {/* Job assignment for Fachbereich */}
             {form.role === 'fachbereich' && (
               <div className="col-span-2">
-                <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">
-                  Zugewiesene Stellen <span className="text-gray-500 dark:text-gray-400 font-normal">(mindestens eine auswählen)</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl p-3">
+                <span id={`${fieldIdPrefix}-assigned-jobs-label`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">
+                  {t('users.assigned_jobs')} <span className="text-gray-500 dark:text-gray-400 font-normal">{t('users.assigned_jobs_hint')}</span>
+                </span>
+                <div role="group" aria-labelledby={`${fieldIdPrefix}-assigned-jobs-label`} className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl p-3">
                   {jobs.filter(j => j.status === 'Offen').map(job => (
                     <label key={job.id} className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-[#2c2c2e] cursor-pointer text-[13px]">
                       <input

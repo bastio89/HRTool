@@ -183,13 +183,14 @@ export default function CandidateForm() {
       }
       toast.success(isEdit ? t('candidates.updated') : t('candidates.created'))
       setJustSaved(true)
+      markSaved()
       navigate('/candidates')
     } catch (err) { setError(err.message) }
     finally { setSaving(false) }
   }
 
   const isDirty = !justSaved && JSON.stringify(form) !== JSON.stringify(pristine)
-  const confirmLeave = useUnsavedChanges(isDirty, confirm, {
+  const { confirmLeave, markSaved } = useUnsavedChanges(isDirty, confirm, {
     title: t('form.unsaved_title'),
     message: t('form.unsaved_message'),
     discardLabel: t('form.unsaved_discard'),
@@ -380,8 +381,8 @@ export default function CandidateForm() {
                     {!w.is_current && <Input label={t('form.to_date')} type="month" value={w.to_date} onChange={(e) => updateWorkEntry(idx, 'to_date', e.target.value)} />}
                     <Input label={t('form.work_location')} placeholder="Berlin" value={w.location} onChange={(e) => updateWorkEntry(idx, 'location', e.target.value)} />
                     <div className="flex items-center gap-3 self-end pb-2">
-                      <input aria-label={t('form.is_current')} type="checkbox" checked={w.is_current} onChange={(e) => updateWorkEntry(idx, 'is_current', e.target.checked)} className="w-5 h-5 rounded accent-[#34c759]" />
-                      <label className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{t('form.is_current')}</label>
+                      <input id={`${fieldIdPrefix}-work-current-${idx}`} aria-label={t('form.is_current')} type="checkbox" checked={w.is_current} onChange={(e) => updateWorkEntry(idx, 'is_current', e.target.checked)} className="w-5 h-5 rounded accent-[#34c759]" />
+                      <label htmlFor={`${fieldIdPrefix}-work-current-${idx}`} className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{t('form.is_current')}</label>
                     </div>
                   </div>
                   <div className="mt-4">
@@ -526,8 +527,8 @@ export default function CandidateForm() {
                   {cf.field_type === 'text' && <Input label={cf.name} value={customValues[cf.id] || ''} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.value }))} />}
                   {cf.field_type === 'dropdown' && (
                     <div className="flex flex-col gap-3">
-                      <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{cf.name}</label>
-                      <select aria-label={cf.name} value={customValues[cf.id] || ''} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.value }))} className={selectClass}>
+                      <label htmlFor={`${fieldIdPrefix}-cf-${cf.id}`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{cf.name}</label>
+                      <select id={`${fieldIdPrefix}-cf-${cf.id}`} aria-label={cf.name} value={customValues[cf.id] || ''} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.value }))} className={selectClass}>
                         <option value="">{t('form.select')}</option>
                         {(cf.options ? JSON.parse(cf.options) : []).map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
@@ -535,8 +536,8 @@ export default function CandidateForm() {
                   )}
                   {cf.field_type === 'checkbox' && (
                     <div className="flex items-center gap-3 pt-8">
-                      <input aria-label={cf.name} type="checkbox" checked={customValues[cf.id] === 'true'} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.checked ? 'true' : 'false' }))} className="w-5 h-5 rounded accent-[#0071e3]" />
-                      <label className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{cf.name}</label>
+                      <input id={`${fieldIdPrefix}-cf-${cf.id}`} aria-label={cf.name} type="checkbox" checked={customValues[cf.id] === 'true'} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.checked ? 'true' : 'false' }))} className="w-5 h-5 rounded accent-[#0071e3]" />
+                      <label htmlFor={`${fieldIdPrefix}-cf-${cf.id}`} className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{cf.name}</label>
                     </div>
                   )}
                   {cf.field_type === 'date' && <Input label={cf.name} type="date" value={customValues[cf.id] || ''} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.value }))} />}
@@ -583,7 +584,7 @@ export default function CandidateForm() {
               return (
                 <div className="md:col-span-2">
                   <div className="flex flex-col gap-3 mb-4">
-                    <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.tags')}</label>
+                    <span id={`${fieldIdPrefix}-tags-label`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.tags')}</span>
                     <div className="flex items-center gap-3">
                       <input
                         aria-label={t('form.tags')}

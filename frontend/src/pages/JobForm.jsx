@@ -84,6 +84,7 @@ export default function JobForm() {
       }
       toast.success(isEdit ? t('jobs.updated') : t('jobs.created'))
       setJustSaved(true)
+      markSaved()
       navigate('/jobs')
     } catch (err) {
       setError(err.message)
@@ -159,7 +160,7 @@ export default function JobForm() {
   }
 
   const isDirty = !justSaved && JSON.stringify(form) !== JSON.stringify(pristine)
-  const confirmLeave = useUnsavedChanges(isDirty, confirm, {
+  const { confirmLeave, markSaved } = useUnsavedChanges(isDirty, confirm, {
     title: t('form.unsaved_title'),
     message: t('form.unsaved_message'),
     discardLabel: t('form.unsaved_discard'),
@@ -304,10 +305,10 @@ export default function JobForm() {
 
           <div className="space-y-8">
             <div className="space-y-3">
-              <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
+              <span id={`${fieldIdPrefix}-upload-label`} className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
                 {t('jobs.upload_label')}
-              </label>
-              <div className="flex items-center gap-3 ml-1">
+              </span>
+              <div role="group" aria-labelledby={`${fieldIdPrefix}-upload-label`} className="flex items-center gap-3 ml-1">
                 <button
                   type="button"
                   onClick={() => setParseThinking(v => !v)}

@@ -113,6 +113,9 @@ summary:focus-visible:focus-visible,
 [tabindex]:not([tabindex="-1"]):focus-visible:focus-visible {
   outline: 2px solid var(--apple-blue);
   outline-offset: 2px;
+  /* `transition-all` is used widely and animates outline-width too, which made
+     the ring fade in over ~300ms instead of confirming focus immediately. */
+  transition-property: none;
 }
 
 /* Skip link: reachable by keyboard, invisible until focused. */

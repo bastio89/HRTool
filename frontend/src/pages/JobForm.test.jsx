@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { vi } from 'vitest'
 import JobForm from './JobForm'
 import { I18nProvider } from '../I18nContext'
@@ -16,18 +16,24 @@ vi.mock('../api', () => ({
   },
 }))
 
+// The app runs on a data router (createBrowserRouter) so that useUnsavedChanges
+// can block navigation via useBlocker; the test router has to match, otherwise
+// useBlocker throws "must be used within a data router".
 function renderJobForm() {
-  return render(
-    <MemoryRouter initialEntries={['/jobs/new']}>
-      <I18nProvider>
-        <ToastProvider>
-          <Routes>
-            <Route path="/jobs/new" element={<JobForm />} />
-          </Routes>
-        </ToastProvider>
-      </I18nProvider>
-    </MemoryRouter>
+  const router = createMemoryRouter(
+    [{
+      path: '/jobs/new',
+      element: (
+        <I18nProvider>
+          <ToastProvider>
+            <JobForm />
+          </ToastProvider>
+        </I18nProvider>
+      ),
+    }],
+    { initialEntries: ['/jobs/new'] }
   )
+  return render(<RouterProvider router={router} />)
 }
 
 describe('JobForm', () => {

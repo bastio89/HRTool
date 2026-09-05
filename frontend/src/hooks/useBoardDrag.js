@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
-import { springTo, projectMomentum, SPRING_MOVE, SPRING_FLICK } from '../utils/spring'
+import { springTo, projectMomentum, rubberband, SPRING_MOVE, SPRING_FLICK } from '../utils/spring'
 
 /**
  * Pointer-driven card dragging for the kanban board.
@@ -70,6 +70,40 @@ export default function useBoardDrag({ onDrop, canDrag = true }) {
       if (point.x >= r.left && point.x <= r.right && point.y >= r.top && point.y <= r.bottom) return col.stage
     }
     return null
+  }
+
+  /**
+   * Progressive resistance past the outer columns.
+   *
+   * Without it the card follows the pointer into empty space, which says
+   * nothing; a hard stop instead would read as "frozen". Resistance says
+   * "still responding, but there is nothing more this way" - and it keeps the
+   * card visually attached to the board it belongs to.
+   */
+  const resist = (g, offset) => {
+    if (!g.bounds || !g.cardRect) return offset
+    const out = { ...offset }
+    // The reference dimension is also the asymptote: however hard you pull, the
+    // card cannot get further past the edge than this. One column horizontally
+    // reads as "one more stage would be off the board"; vertically half the
+    // board is enough to show the give without letting the card wander away.
+    const columnWidth = columnsRef.current[0]?.rect.width || 200
+    const axes = [
+      { key: 'x', lo: 'left', hi: 'right', size: columnWidth },
+      { key: 'y', lo: 'top', hi: 'bottom', size: (g.bounds.bottom - g.bounds.top) / 2 },
+    ]
+    for (const a of axes) {
+      const lead = g.cardRect[a.lo] + out[a.key]
+      const trail = g.cardRect[a.hi] + out[a.key]
+      if (lead < g.bounds[a.lo]) {
+        const over = g.bounds[a.lo] - lead
+        out[a.key] += over - rubberband(over, a.size)
+      } else if (trail > g.bounds[a.hi]) {
+        const over = trail - g.bounds[a.hi]
+        out[a.key] -= over - rubberband(over, a.size)
+      }
+    }
+    return out
   }
 
   const endGesture = useCallback((commit) => {
@@ -200,6 +234,22 @@ export default function useBoardDrag({ onDrop, canDrag = true }) {
       // Measured once, here: the board does not reflow while a card is airborne,
       // and re-measuring per frame would be the expensive part of the gesture.
       columnsRef.current = getColumnsRef.current() || []
+
+      // The card's own box, with any transform from an interrupted spring taken
+      // back out, so the boundary maths works on real page coordinates.
+      const r = g.el.getBoundingClientRect()
+      g.cardRect = {
+        left: r.left - g.base.x, right: r.right - g.base.x,
+        top: r.top - g.base.y, bottom: r.bottom - g.base.y,
+        width: r.width, height: r.height,
+      }
+      const cols = columnsRef.current
+      g.bounds = cols.length ? {
+        left: Math.min(...cols.map(c => c.rect.left)),
+        right: Math.max(...cols.map(c => c.rect.right)),
+        top: Math.min(...cols.map(c => c.rect.top)),
+        bottom: Math.max(...cols.map(c => c.rect.bottom)),
+      } : null
       try { g.el.setPointerCapture(g.pointerId) } catch { /* capture unsupported */ }
       g.el.style.zIndex = '40'
       g.el.style.willChange = 'transform'
@@ -208,7 +258,7 @@ export default function useBoardDrag({ onDrop, canDrag = true }) {
 
     e.preventDefault()
     g.pointer = { x: e.clientX, y: e.clientY }
-    g.offset = { x: g.base.x + dx, y: g.base.y + dy }
+    g.offset = resist(g, { x: g.base.x + dx, y: g.base.y + dy })
     setTransform(g.el, g.offset.x, g.offset.y, true)
 
     g.samples.push({ x: e.clientX, y: e.clientY, t: performance.now() })

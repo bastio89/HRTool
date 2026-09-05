@@ -4,6 +4,7 @@ import { scorecardsApi } from '../api'
 import { KiBadge, KiDisclaimer } from './KiBadge'
 import { useI18n } from '../I18nContext'
 import Modal from './Modal'
+import { localeTag } from '../utils/format'
 
 const CATEGORY_KEYS = {
   'Fachkompetenz': 'scorecard.cat_technical',
@@ -15,7 +16,7 @@ const CATEGORY_KEYS = {
 const CATEGORIES = Object.keys(CATEGORY_KEYS)
 
 export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [tab, setTab] = useState('evaluate') // evaluate | templates | compare
   const [templates, setTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState(null)
@@ -199,11 +200,11 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
           {/* Template Selection */}
           {!selectedTemplate ? (
             <div>
-              <p className="text-[12px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">{t('scorecard.select_template')}</p>
+              <p className="text-[12px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider mb-3">{t('scorecard.select_template')}</p>
               {templates.length === 0 ? (
                 <div className="text-center py-8">
                   <ClipboardList className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                  <p className="text-[15px] text-gray-500">{t('scorecard.no_templates')}</p>
+                  <p className="text-[15px] text-gray-500 dark:text-gray-400">{t('scorecard.no_templates')}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -239,11 +240,12 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
               </div>
 
               <input
+                aria-label={t('scorecard.evaluator')}
                 type="text"
                 placeholder={t('scorecard.evaluator')}
                 value={evaluatorName}
                 onChange={e => setEvaluatorName(e.target.value)}
-                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] font-medium text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
               />
 
               {/* Questions & Ratings */}
@@ -254,7 +256,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                     {q.category && (
                       <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#0071e3]/10 text-[#0071e3]">{t(CATEGORY_KEYS[q.category]) || q.category}</span>
                     )}
-                    {q.hint && <p className="text-[13px] text-gray-500 mt-2 italic">💡 {q.hint}</p>}
+                    {q.hint && <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 italic">💡 {q.hint}</p>}
                   </div>
                   {/* Star rating */}
                   <div className="flex items-center gap-2 mb-3">
@@ -274,22 +276,24 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                     )}
                   </div>
                   <input
+                    aria-label={t('scorecard.comment')}
                     type="text"
                     placeholder={t('scorecard.comment')}
                     value={answers[idx]?.comment || ''}
                     onChange={e => updateAnswer(idx, 'comment', e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
                   />
                 </div>
               ))}
 
               {/* Notes */}
               <textarea
+                aria-label={t('scorecard.general_notes')}
                 placeholder={t('scorecard.general_notes')}
                 value={evalNotes}
                 onChange={e => setEvalNotes(e.target.value)}
                 rows={3}
-                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all resize-none"
+                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all resize-none"
               />
 
               {/* Summary & Submit */}
@@ -298,7 +302,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                   <p className="text-[14px] font-semibold text-[#0071e3]">
                     Ø {t('scorecard.avg_rating')}: {avgScore || '—'} / 5
                   </p>
-                  <p className="text-[12px] text-gray-500">
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400">
                     {answers.filter(a => a.score > 0).length} {t('common.of')} {answers.length} {t('scorecard.questions')}
                   </p>
                 </div>
@@ -317,14 +321,14 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
           {/* Previous Responses */}
           {responses.length > 0 && (
             <div className="mt-6">
-              <p className="text-[12px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">{t('scorecard.previous')} ({responses.length})</p>
+              <p className="text-[12px] font-bold text-gray-500 dark:text-gray-500 uppercase tracking-wider mb-3">{t('scorecard.previous')} ({responses.length})</p>
               <div className="space-y-2">
                 {responses.map(r => (
                   <div key={r.id} className="p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-[14px] font-semibold text-black dark:text-white">{r.evaluator_name}</p>
-                        <p className="text-[12px] text-gray-500">{r.template_title} · {new Date(r.created_at).toLocaleDateString('de-DE')}</p>
+                        <p className="text-[12px] text-gray-500 dark:text-gray-400">{r.template_title} · {new Date(r.created_at).toLocaleDateString(localeTag(locale))}</p>
                       </div>
                       <div className="flex items-center gap-1">
                         <Star className="w-4 h-4 text-[#ff9f0a] fill-[#ff9f0a]" />
@@ -352,25 +356,28 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
           {showNewTemplate && (
             <div className="p-5 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] space-y-4">
               <input
+                aria-label={t('scorecard.template_name')}
                 type="text"
                 placeholder={t('scorecard.template_name')}
                 value={newTemplateName}
                 onChange={e => setNewTemplateName(e.target.value)}
-                className="w-full px-4 py-3 bg-white dark:bg-[#1c1c1e] rounded-xl text-[15px] font-medium text-black dark:text-white placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
+                className="w-full px-4 py-3 bg-white dark:bg-[#1c1c1e] rounded-xl text-[15px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
               />
               {newQuestions.map((q, idx) => (
                 <div key={idx} className="flex items-start gap-3">
-                  <span className="text-[14px] font-bold text-gray-400 mt-3">{idx + 1}.</span>
+                  <span className="text-[14px] font-bold text-gray-500 dark:text-gray-400 mt-3">{idx + 1}.</span>
                   <div className="flex-1 space-y-2">
                     <input
+                      aria-label={t('scorecard.question_label')}
                       type="text"
                       placeholder={t('scorecard.question_label')}
                       value={q.text}
                       onChange={e => setNewQuestions(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
-                      className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
+                      className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
                     />
                     <div className="flex gap-2">
                       <select
+                        aria-label={t('scorecard.category', 'Kategorie')}
                         value={q.category}
                         onChange={e => setNewQuestions(prev => prev.map((x, i) => i === idx ? { ...x, category: e.target.value } : x))}
                         className="px-3 py-2 bg-white dark:bg-[#1c1c1e] rounded-xl text-[13px] text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 focus:outline-none appearance-none cursor-pointer"
@@ -380,16 +387,17 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                         ))}
                       </select>
                       <input
+                        aria-label={t('scorecard.hint_optional')}
                         type="text"
                         placeholder={t('scorecard.hint_optional')}
                         value={q.hint}
                         onChange={e => setNewQuestions(prev => prev.map((x, i) => i === idx ? { ...x, hint: e.target.value } : x))}
-                        className="flex-1 px-3 py-2 bg-white dark:bg-[#1c1c1e] rounded-xl text-[13px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 transition-all"
+                        className="flex-1 px-3 py-2 bg-white dark:bg-[#1c1c1e] rounded-xl text-[13px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 transition-all"
                       />
                     </div>
                   </div>
                   {newQuestions.length > 1 && (
-                    <button onClick={() => setNewQuestions(prev => prev.filter((_, i) => i !== idx))} className="mt-3 text-gray-400 hover:text-[#ff3b30] cursor-pointer transition-colors">
+                    <button onClick={() => setNewQuestions(prev => prev.filter((_, i) => i !== idx))} className="mt-3 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] cursor-pointer transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
@@ -403,7 +411,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                   + {t('scorecard.add_question')}
                 </button>
                 <div className="flex-1" />
-                <button onClick={() => setShowNewTemplate(false)} className="px-4 py-2 rounded-xl text-[13px] font-semibold text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer transition-all">{t('common.cancel')}</button>
+                <button onClick={() => setShowNewTemplate(false)} className="px-4 py-2 rounded-xl text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer transition-all">{t('common.cancel')}</button>
                 <button
                   onClick={handleCreateTemplate}
                   disabled={saving || !newTemplateName.trim()}
@@ -419,7 +427,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
           {templates.length === 0 && !showNewTemplate && (
             <div className="text-center py-8">
               <ClipboardList className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-              <p className="text-[15px] text-gray-500">{t('scorecard.no_templates')}</p>
+              <p className="text-[15px] text-gray-500 dark:text-gray-400">{t('scorecard.no_templates')}</p>
             </div>
           )}
 
@@ -432,7 +440,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                 </div>
                 <button
                   onClick={async () => { await scorecardsApi.deleteTemplate(tpl.id); loadData() }}
-                  className="text-gray-400 hover:text-[#ff3b30] cursor-pointer transition-colors"
+                  className="text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -440,10 +448,10 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
               <div className="space-y-1.5">
                 {tpl.questions.map((q, i) => (
                   <div key={i} className="flex items-start gap-2">
-                    <span className="text-[12px] font-bold text-gray-400 mt-0.5">{i + 1}.</span>
+                    <span className="text-[12px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">{i + 1}.</span>
                     <div>
                       <p className="text-[14px] text-black dark:text-white">{q.text}</p>
-                      <span className="text-[11px] text-gray-400">{t(CATEGORY_KEYS[q.category]) || q.category}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">{t(CATEGORY_KEYS[q.category]) || q.category}</span>
                     </div>
                   </div>
                 ))}
@@ -456,7 +464,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
           {!comparison || comparison.evaluatorCount === 0 ? (
             <div className="text-center py-8">
               <Users className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-              <p className="text-[15px] text-gray-500">{t('scorecard.no_evaluations')}</p>
+              <p className="text-[15px] text-gray-500 dark:text-gray-400">{t('scorecard.no_evaluations')}</p>
             </div>
           ) : (
             <>
@@ -465,12 +473,12 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[14px] font-semibold text-[#0071e3]">{t('scorecard.overall_avg')}</p>
-                    <p className="text-[12px] text-gray-500">{comparison.evaluatorCount} {t('scorecard.previous')}</p>
+                    <p className="text-[12px] text-gray-500 dark:text-gray-400">{comparison.evaluatorCount} {t('scorecard.previous')}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <Star className="w-6 h-6 text-[#ff9f0a] fill-[#ff9f0a]" />
                     <span className="text-[28px] font-bold text-[#ff9f0a]">{comparison.overallAverage?.toFixed(1) || '—'}</span>
-                    <span className="text-[14px] text-gray-400"> / 5</span>
+                    <span className="text-[14px] text-gray-500 dark:text-gray-400"> / 5</span>
                   </div>
                 </div>
               </div>
@@ -478,7 +486,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
               {/* Per-question averages */}
               {comparison.averages?.length > 0 && (
                 <div>
-                  <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">{t('scorecard.per_question')}</p>
+                  <p className="text-[12px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{t('scorecard.per_question')}</p>
                   <div className="space-y-2">
                     {comparison.averages.map((a, i) => (
                       <div key={i} className="flex items-center justify-between p-3 rounded-[12px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
@@ -491,7 +499,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                             />
                           </div>
                           <span className="text-[13px] font-bold text-[#ff9f0a] w-8 text-right">{a.avgScore?.toFixed(1)}</span>
-                          <span className="text-[11px] text-gray-400">({a.evaluations}x)</span>
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400">({a.evaluations}x)</span>
                         </div>
                       </div>
                     ))}
@@ -501,14 +509,14 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
 
               {/* Individual evaluators */}
               <div>
-                <p className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">{t('scorecard.individual')}</p>
+                <p className="text-[12px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{t('scorecard.individual')}</p>
                 <div className="space-y-2">
                   {comparison.responses?.map(r => (
                     <div key={r.id} className="p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <p className="text-[14px] font-semibold text-black dark:text-white">{r.evaluator_name}</p>
-                          <p className="text-[12px] text-gray-500">{new Date(r.created_at).toLocaleDateString('de-DE')}</p>
+                          <p className="text-[12px] text-gray-500 dark:text-gray-400">{new Date(r.created_at).toLocaleDateString(localeTag(locale))}</p>
                         </div>
                         <div className="flex items-center gap-1">
                           <Star className="w-4 h-4 text-[#ff9f0a] fill-[#ff9f0a]" />
@@ -527,7 +535,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                           </div>
                         ))}
                       </div>
-                      {r.notes && <p className="text-[13px] text-gray-500 mt-2 italic">{r.notes}</p>}
+                      {r.notes && <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 italic">{r.notes}</p>}
                     </div>
                   ))}
                 </div>

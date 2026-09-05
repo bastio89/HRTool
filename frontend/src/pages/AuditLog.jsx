@@ -5,6 +5,7 @@ import { auditApi } from '../api'
 import { Shield, Search, ChevronLeft, ChevronRight, Activity, User, Briefcase, Users, GitBranch, Clock, Filter, Download, Calendar } from 'lucide-react'
 import { useToast } from '../components/Toast'
 import { Card, Button, IconButton, EmptyState, LoadingSpinner, PageContainer } from '../components/UI'
+import { localeTag } from '../utils/format'
 
 // Tailwind classes rather than isDark ternaries – this page used to carry its
 // own inline-style system, which drifted from the rest of the app on radii,
@@ -49,7 +50,7 @@ function StatCard({ icon: Icon, iconClass, value, label }) {
 
 export default function AuditLog() {
   const { isAdmin } = useAuth()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const toast = useToast()
   const [entries, setEntries] = useState([])
   const [stats, setStats] = useState(null)
@@ -108,8 +109,8 @@ export default function AuditLog() {
 
   const formatDate = (dateStr) => {
     const d = new Date(dateStr)
-    return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
-      ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return d.toLocaleDateString(localeTag(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+      ' ' + d.toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
 
   if (!isAdmin) {
@@ -228,7 +229,7 @@ export default function AuditLog() {
 
         <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-[200px]">
           <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 dark:text-gray-400 pointer-events-none" />
             <input
               type="text"
               value={searchInput}

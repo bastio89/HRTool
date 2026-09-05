@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useI18n } from '../I18nContext'
 
 /**
  * Shared modal primitive for the whole app.
@@ -87,6 +88,7 @@ export default function Modal({
   bodyClassName = '',
   labelledBy,
 }) {
+  const { t } = useI18n()
   const panelRef = useRef(null)
   const triggerRef = useRef(null)
   const generatedId = useId()
@@ -180,7 +182,7 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
-        aria-label={!title ? 'Dialog' : undefined}
+        aria-label={!title ? t('common.dialog', 'Dialog') : undefined}
         tabIndex={-1}
         className={`relative w-full ${SIZES[size] || SIZES.md} max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)]
           bg-white dark:bg-[#1c1c1e] rounded-[24px]
@@ -213,10 +215,9 @@ export default function Modal({
               <button
                 type="button"
                 onClick={handleClose}
-                aria-label="Dialog schließen"
+                aria-label={t('common.close_dialog')}
                 className="w-9 h-9 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]
-                  flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors
-                  focus:outline-none focus:ring-4 focus:ring-[#0071e3]/20"
+                  flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors"
               >
                 <X className="w-4.5 h-4.5 text-gray-600 dark:text-gray-400" />
               </button>

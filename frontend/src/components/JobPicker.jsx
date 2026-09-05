@@ -19,7 +19,7 @@ export default function JobPicker({ jobs, selectedJobId, onSelect, search, onSea
     return (
       <div className="flex flex-col items-center justify-center py-12 rounded-[24px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
         <Briefcase className="w-10 h-10 text-gray-300 mb-4" />
-        <p className="text-[17px] font-semibold text-gray-400">{t('matching.no_jobs')}</p>
+        <p className="text-[17px] font-semibold text-gray-500 dark:text-gray-400">{t('matching.no_jobs')}</p>
         <button
           type="button"
           onClick={() => navigate('/jobs')}
@@ -40,8 +40,9 @@ export default function JobPicker({ jobs, selectedJobId, onSelect, search, onSea
   return (
     <>
       <div className="relative mb-5">
-        <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-400" />
         <input
+          aria-label={t('matching.search_jobs')}
           type="text"
           placeholder={t('matching.search_jobs')}
           value={search}
@@ -73,7 +74,7 @@ export default function JobPicker({ jobs, selectedJobId, onSelect, search, onSea
                 {[job.location, job.type, job.status].filter(Boolean).join(' · ')}
               </p>
             </div>
-            <ChevronRight className={`w-5 h-5 flex-shrink-0 ${selectedJobId === job.id ? 'text-white' : 'text-gray-400'}`} />
+            <ChevronRight className={`w-5 h-5 flex-shrink-0 ${selectedJobId === job.id ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
           </button>
         ))}
       </div>

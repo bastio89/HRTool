@@ -4,6 +4,7 @@ import { cvParserApi, uploadsApi, healthApi } from '../api'
 import { Button } from './UI'
 import Modal from './Modal'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 const ALLOWED_TYPES = [
   'application/pdf',
@@ -24,7 +25,7 @@ const STATUS = {
 }
 
 export default function BatchCVImportDialog({ onClose, onImported }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([]) // { file, id, status, progress, candidate, error }
   const [running, setRunning] = useState(false)
@@ -34,7 +35,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
   const abortRef = useRef(false)
 
   const formatCompactNumber = useCallback((value) => {
-    return new Intl.NumberFormat('de-DE', { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
+    return new Intl.NumberFormat(localeTag(locale), { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
   }, [])
 
   useEffect(() => {
@@ -177,30 +178,30 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
     {/* Stats row */}
     {files.length > 0 && (
       <div className="flex items-center gap-4 text-[13px] mb-5">
-        <span className="text-gray-400">{t('batch_import.total').replace('{n}', files.length)}</span>
+        <span className="text-gray-500 dark:text-gray-400">{t('batch_import.total').replace('{n}', files.length)}</span>
         {counts.done > 0 && <span className="text-[#34c759] font-medium">{t('batch_import.count_done').replace('{n}', counts.done)}</span>}
         {counts.error > 0 && <span className="text-[#ff3b30] font-medium">{t('batch_import.count_error').replace('{n}', counts.error)}</span>}
-        {counts.pending > 0 && <span className="text-gray-400">{t('batch_import.count_pending').replace('{n}', counts.pending)}</span>}
+        {counts.pending > 0 && <span className="text-gray-500 dark:text-gray-400">{t('batch_import.count_pending').replace('{n}', counts.pending)}</span>}
       </div>
     )}
 
     <div className="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-100 dark:border-gray-800">
       <div className="flex items-center gap-2 text-[13px] font-medium text-black dark:text-white">
         {aiHealth.isChecking ? (
-          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+          <Loader2 className="w-4 h-4 animate-spin text-gray-500 dark:text-gray-400" />
         ) : aiHealth.isOnline ? (
           <Wifi className="w-4 h-4 text-[#34c759]" />
         ) : (
           <WifiOff className="w-4 h-4 text-[#ff3b30]" />
         )}
-        <span>{aiHealth.isOnline ? 'KI online' : 'KI offline'}</span>
+        <span>{aiHealth.isOnline ? t('batch_import.ai_online') : t('batch_import.ai_offline')}</span>
       </div>
       <div className="flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
         <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
-          {formatCompactNumber(aiHealth.calls)} Calls
+          {formatCompactNumber(aiHealth.calls)} {t('batch_import.calls')}
         </span>
         <span className="px-2 py-1 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700">
-          {formatCompactNumber(aiHealth.totalTokens)} Tokens
+          {formatCompactNumber(aiHealth.totalTokens)} {t('batch_import.tokens')}
         </span>
       </div>
     </div>
@@ -262,7 +263,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
             </div>
             <div className="text-center">
               <p className="text-[15px] font-semibold text-black dark:text-white">{t('batch_import.drop_hint')}</p>
-              <p className="text-[13px] text-gray-400 mt-1">{t('batch_import.formats')}</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('batch_import.formats')}</p>
             </div>
             <input
               ref={fileInputRef}
@@ -292,7 +293,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
                   <Loader2 className="w-5 h-5 text-[#0071e3] animate-spin" />
                 )}
                 {item.status === STATUS.PENDING && (
-                  <FileText className="w-5 h-5 text-gray-400" />
+                  <FileText className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 )}
               </div>
 
@@ -333,7 +334,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
                   <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}</p>
                 )}
                 {item.status === STATUS.PENDING && (
-                  <p className="text-[12px] text-gray-400 mt-0.5">
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
                     {(item.file.size / 1024).toFixed(0)} KB
                   </p>
                 )}
@@ -345,7 +346,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
                   onClick={() => removeFile(item.id)}
                   className="flex-shrink-0 w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center transition-colors cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-[#ff3b30]" />
+                  <Trash2 className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30]" />
                 </button>
               )}
 
@@ -367,7 +368,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
 
       {/* Empty state */}
       {files.length === 0 && (
-        <div className="flex items-center justify-center py-8 text-gray-400 text-[14px]">
+        <div className="flex items-center justify-center py-8 text-gray-500 dark:text-gray-400 text-[14px]">
           {t('batch_import.empty')}
         </div>
       )}

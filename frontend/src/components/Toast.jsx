@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import { CheckCircle, AlertTriangle, XCircle, Info, X } from 'lucide-react'
+import { useI18n } from '../I18nContext'
 
 const ToastContext = createContext()
 
@@ -26,6 +27,7 @@ const COLORS = {
 let toastId = 0
 
 export function ToastProvider({ children }) {
+  const { t: translate } = useI18n()
   const [toasts, setToasts] = useState([])
 
   const addToast = useCallback((message, type = 'success', duration = 4000) => {
@@ -57,7 +59,7 @@ export function ToastProvider({ children }) {
       <div
         className="fixed bottom-6 right-6 layer-toast flex flex-col gap-3 pointer-events-none max-w-[calc(100vw-3rem)]"
         role="region"
-        aria-label="Benachrichtigungen"
+        aria-label={translate('common.notifications_region')}
       >
         {toasts.map(t => {
           const Icon = ICONS[t.type]
@@ -77,10 +79,10 @@ export function ToastProvider({ children }) {
               <span className="text-[14px] font-medium text-black dark:text-white flex-1">{t.message}</span>
               <button
                 onClick={() => removeToast(t.id)}
-                aria-label="Benachrichtigung schließen"
-                className="w-6 h-6 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0071e3]/25"
+                aria-label={translate('common.close_notification')}
+                className="w-6 h-6 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer"
               >
-                <X className="w-3.5 h-3.5 text-gray-400" />
+                <X className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
           )

@@ -5,11 +5,12 @@ import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner, PageContainer } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 export default function MatchingResults() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [expandedIdx, setExpandedIdx] = useState(null)
@@ -225,9 +226,9 @@ export default function MatchingResults() {
               <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
                 <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
                 {matrixData.matchedAt && (
-                  <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
+                  <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                     <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    {new Date(matrixData.matchedAt).toLocaleString('de-DE')}
+                    {new Date(matrixData.matchedAt).toLocaleString(localeTag(locale))}
                   </span>
                 )}
               </div>
@@ -292,17 +293,17 @@ export default function MatchingResults() {
                     type="button"
                     onClick={() => handleMatchingRow(row)}
                     disabled={isLoading || matchingRow !== null}
-                    className="text-[18px] font-semibold text-gray-400 text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-[18px] font-semibold text-gray-500 dark:text-gray-400 text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     #{idx + 1}
                   </button>
                   <div>
                     <p className="text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p>
-                    <p className="text-[13px] text-gray-500 mt-1">Bewerber</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Bewerber</p>
                   </div>
                   <div>
                     <p className="text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p>
-                    <p className="text-[13px] text-gray-500 mt-1">Stelle</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Stelle</p>
                   </div>
                   <div className="flex items-center justify-end gap-3">
                     {isLoading ? (
@@ -321,7 +322,7 @@ export default function MatchingResults() {
                         ) : (
                           <div className="text-[26px] font-semibold text-[#0071e3]">{row.score}%</div>
                         )}
-                        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 mb-1" />
+                        <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0 mb-1" />
                       </div>
                     )}
                   </div>
@@ -454,9 +455,9 @@ export default function MatchingResults() {
             <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
               <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
               {matchedAt && (
-                <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
+                <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                   <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  {new Date(matchedAt).toLocaleString('de-DE')}
+                  {new Date(matchedAt).toLocaleString(localeTag(locale))}
                 </span>
               )}
             </div>
@@ -514,7 +515,7 @@ export default function MatchingResults() {
                 <div>
                   <p className="text-[15px] font-semibold text-[#34c759]">{t('matching.human_reviewed')}</p>
                   <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                    {t('matching.reviewed_by')} {data.reviewed_by} {t('matching.reviewed_at')} {new Date(data.reviewed_at).toLocaleString('de-DE')}
+                    {t('matching.reviewed_by')} {data.reviewed_by} {t('matching.reviewed_at')} {new Date(data.reviewed_at).toLocaleString(localeTag(locale))}
                   </p>
                 </div>
               </>
@@ -603,7 +604,7 @@ export default function MatchingResults() {
                   ${idx === 0 ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' : 
                     idx === 1 ? 'bg-gray-100 dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400' : 
                     idx === 2 ? 'bg-[#ff3b30]/10 text-[#ff3b30]' : 
-                    'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-400'}`
+                    'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400'}`
                 }>
                   {idx + 1}
                 </div>

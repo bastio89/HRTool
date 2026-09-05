@@ -92,6 +92,47 @@
 .layer-modal { z-index: 500; }
 .layer-toast { z-index: 900; }
 
+/* ---------------------------------------------------------------------------
+   Focus visibility
+
+   Interactive elements were built with `outline-none` in 79 places and no
+   replacement, leaving 202 of 207 buttons with no visible focus state at all -
+   keyboard navigation was effectively invisible. This is the app-wide floor.
+
+   The doubled `:focus-visible:focus-visible` is deliberate, not a typo: it
+   raises specificity to (0,2,1) so this rule outranks Tailwind's
+   `focus:outline-none` (0,2,0), which is what was suppressing the indicator.
+   `:focus-visible` keeps the ring off for pointer users.
+--------------------------------------------------------------------------- */
+a:focus-visible:focus-visible,
+button:focus-visible:focus-visible,
+input:focus-visible:focus-visible,
+select:focus-visible:focus-visible,
+textarea:focus-visible:focus-visible,
+summary:focus-visible:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible:focus-visible {
+  outline: 2px solid var(--apple-blue);
+  outline-offset: 2px;
+}
+
+/* Skip link: reachable by keyboard, invisible until focused. */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 1000;
+  padding: 0.625rem 1.25rem;
+  border-radius: 9999px;
+  background: var(--apple-blue);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  transition: top 0.2s ease;
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--apple-bg);

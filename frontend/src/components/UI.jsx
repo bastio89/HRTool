@@ -1,3 +1,5 @@
+import { useId } from 'react'
+
 export function Card({ children, className = '', hover = false, ...props }) {
   return (
     <div
@@ -37,7 +39,7 @@ const BUTTON_VARIANTS = {
   danger: 'bg-[#ff3b30]/10 hover:bg-[#ff3b30]/20 text-[#ff3b30]',
   'danger-solid': 'bg-[#ff3b30] hover:bg-[#ff2d20] text-white shadow-sm',
   success: 'bg-[#34c759]/10 hover:bg-[#34c759]/20 text-[#1f9d55] dark:text-[#7dffaf]',
-  ghost: 'hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] text-gray-500 hover:text-black dark:hover:text-white',
+  ghost: 'hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white',
   dark: 'bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black shadow-sm',
 }
 
@@ -51,7 +53,6 @@ export function Button({ children, variant = 'primary', size = 'md', className =
   return (
     <button
       className={`inline-flex items-center justify-center gap-2.5 font-medium transition-all duration-300
-        focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0071e3]/25
         ${BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.primary} ${BUTTON_SIZES[size] || BUTTON_SIZES.md}
         ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}
         ${className}`}
@@ -88,7 +89,6 @@ export function IconButton({ icon: Icon, label, variant = 'secondary', size = 'm
       aria-label={label}
       title={label}
       className={`inline-flex items-center justify-center rounded-full transition-all duration-300
-        focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0071e3]/25
         ${BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.secondary} ${ICON_BUTTON_SIZES[size] || ICON_BUTTON_SIZES.md}
         ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}
         ${className}`}
@@ -100,17 +100,22 @@ export function IconButton({ icon: Icon, label, variant = 'secondary', size = 'm
   )
 }
 
-export function Input({ label, className = '', ...props }) {
+export function Input({ label, className = '', id, ...props }) {
+  // Link label and control so clicking the label focuses the field and screen
+  // readers announce a name instead of a bare "edit field".
+  const generatedId = useId()
+  const fieldId = id || generatedId
   return (
     <div className="space-y-3">
       {label && (
-        <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
+        <label htmlFor={fieldId} className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
           {label}
         </label>
       )}
       <input
+        id={fieldId}
         className={`w-full px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
-          text-black dark:text-white text-[16px] placeholder:text-gray-400
+text-black dark:text-white text-[16px] placeholder:text-gray-500 dark:placeholder:text-gray-400
           focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
           transition-all duration-300 ${className}`}
         {...props}
@@ -119,17 +124,20 @@ export function Input({ label, className = '', ...props }) {
   )
 }
 
-export function Textarea({ label, className = '', ...props }) {
+export function Textarea({ label, className = '', id, ...props }) {
+  const generatedId = useId()
+  const fieldId = id || generatedId
   return (
     <div className="space-y-3">
       {label && (
-        <label className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
+        <label htmlFor={fieldId} className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
           {label}
         </label>
       )}
       <textarea
+        id={fieldId}
         className={`w-full px-6 py-5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[24px]
-          text-black dark:text-white text-[16px] placeholder:text-gray-400
+text-black dark:text-white text-[16px] placeholder:text-gray-500 dark:placeholder:text-gray-400
           focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
           transition-all duration-300 resize-y min-h-[180px] leading-relaxed ${className}`}
         {...props}
@@ -199,7 +207,7 @@ export function EmptyState({ icon: Icon, title, description, action, size = 'md'
     <div className={`flex flex-col items-center justify-center text-center ${s.wrap} ${className}`}>
       {Icon && (
         <div className={`${s.icon} rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center`}>
-          <Icon className={`${s.glyph} text-gray-400`} />
+          <Icon className={`${s.glyph}text-gray-500 dark:text-gray-400`} />
         </div>
       )}
       <h3 className={`${s.title} font-semibold tracking-tight text-black dark:text-white`}>{title}</h3>
@@ -222,7 +230,7 @@ export function LoadingSpinner({ text = 'Laden...', size = 'md', className = '' 
   return (
     <div className={`flex flex-col items-center justify-center ${s.wrap} ${className}`} role="status" aria-live="polite">
       <div className={`${s.ring} border-gray-100 dark:border-gray-700 border-t-[#0071e3] rounded-full animate-spin`} />
-      {text && <p className={`${s.text} font-medium text-gray-500`}>{text}</p>}
+      {text && <p className={`${s.text}font-medium text-gray-500 dark:text-gray-400`}>{text}</p>}
     </div>
   )
 }

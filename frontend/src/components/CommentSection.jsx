@@ -3,10 +3,11 @@ import { MessageSquare, Send, Trash2, AtSign, X } from 'lucide-react'
 import { collaborationApi } from '../api'
 import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 export default function CommentSection({ entityType, entityId }) {
   const { user } = useAuth()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [comments, setComments] = useState([])
   const [newComment, setNewComment] = useState('')
   const [loading, setLoading] = useState(true)
@@ -111,19 +112,19 @@ export default function CommentSection({ entityType, entityId }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-bold text-black dark:text-white">{c.author_name || c.author_username}</span>
-                    <span className="text-[11px] text-gray-400">{new Date(c.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400">{new Date(c.created_at).toLocaleString(localeTag(locale), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <p className="text-[13px] text-gray-700 dark:text-gray-300 mt-0.5 break-words" dangerouslySetInnerHTML={{ __html: formatContent(c.content) }} />
                 </div>
                 {(c.user_id === user?.id || user?.role === 'admin') && (
-                  <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-[#ff3b30] transition-all cursor-pointer">
+                  <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] transition-all cursor-pointer">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
               </div>
             ))}
             {comments.length === 0 && (
-              <p className="text-center text-[13px] text-gray-400 py-4">{t('collab.no_comments')}</p>
+              <p className="text-center text-[13px] text-gray-500 dark:text-gray-400 py-4">{t('collab.no_comments')}</p>
             )}
           </div>
 
@@ -131,6 +132,7 @@ export default function CommentSection({ entityType, entityId }) {
           <div className="relative flex items-end gap-2">
             <div className="flex-1 relative">
               <textarea value={newComment} onChange={handleInputChange} onKeyDown={handleKeyDown}
+                aria-label={t('collab.write_comment')}
                 rows={2} placeholder={t('collab.write_comment')}
                 className="w-full px-4 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-gray-200 dark:border-gray-700 text-[13px] outline-none focus:ring-2 focus:ring-[#5e5ce6]/30 resize-none" />
               
@@ -142,7 +144,7 @@ export default function CommentSection({ entityType, entityId }) {
                       className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-[#f5f5f7] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer">
                       <AtSign className="w-3 h-3 text-[#5e5ce6]" />
                       <span className="text-[13px] font-semibold text-black dark:text-white">{u.display_name}</span>
-                      <span className="text-[11px] text-gray-400">@{u.username}</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">@{u.username}</span>
                     </button>
                   ))}
                 </div>

@@ -54,7 +54,7 @@ function WeightSlider({ label, icon, value, onChange, t }) {
           >
             {value > 0 ? `+${value}` : value}
           </span>
-          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 w-[80px] text-right">
+          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-500 w-[80px] text-right">
             {getLabel(value)}
           </span>
         </div>
@@ -71,6 +71,7 @@ function WeightSlider({ label, icon, value, onChange, t }) {
         <div className="absolute top-0 left-1/2 w-[1px] h-full bg-gray-300 dark:bg-gray-600" />
       </div>
       <input
+        aria-label={label}
         type="range"
         min={-10}
         max={10}
@@ -205,7 +206,7 @@ export default function MatchingWeights({ weights, onChange }) {
               {t('weights.customized')}
             </span>
           )}
-          {expanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+          {expanded ? <ChevronUp className="w-5 h-5 text-gray-500 dark:text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />}
         </div>
       </button>
 
@@ -245,7 +246,7 @@ export default function MatchingWeights({ weights, onChange }) {
                         className={`px-2 py-2 rounded-r-full text-[13px] transition-all cursor-pointer border-l ${
                           selectedProfileId === profile.id
                             ? 'bg-[#af52de]/80 text-white/80 hover:text-white border-white/20'
-                            : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-400 hover:text-[#ff3b30] border-gray-200 dark:border-gray-600'
+                            : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] border-gray-200 dark:border-gray-600'
                         }`}
                         title={t('weights.delete_profile')}
                       >
@@ -301,6 +302,7 @@ export default function MatchingWeights({ weights, onChange }) {
             {showSaveDialog ? (
               <div className="flex items-center gap-2">
                 <input
+                  aria-label={t('weights.profile_name_placeholder')}
                   type="text"
                   value={profileName}
                   onChange={e => setProfileName(e.target.value)}
@@ -340,7 +342,7 @@ export default function MatchingWeights({ weights, onChange }) {
           </div>
 
           {/* Scale legend */}
-          <div className="mt-5 flex items-center justify-between text-[11px] font-medium text-gray-400 dark:text-gray-500 px-1">
+          <div className="mt-5 flex items-center justify-between text-[11px] font-medium text-gray-500 dark:text-gray-500 px-1">
             <span>-10 ({t('weights.ignore')})</span>
             <span>0 ({t('weights.standard')})</span>
             <span>+10 ({t('weights.very_high')})</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Save, AlertTriangle, Upload, FileText, Sparkles, X, Paperclip, Tag, Plus, Trash2, Linkedin, Github, Globe, DollarSign, Shield, Calendar, Building2, Briefcase, GraduationCap } from 'lucide-react'
 import { candidatesApi, cvParserApi, uploadsApi, candidateDetailsApi } from '../api'
@@ -38,6 +38,7 @@ const emptyWorkEntry = { employer: '', position: '', from_date: '', to_date: '',
 const emptyEduEntry = { institution: '', degree: '', field_of_study: '', from_date: '', to_date: '', description: '' }
 
 export default function CandidateForm() {
+  const fieldIdPrefix = useId()
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
@@ -224,7 +225,7 @@ export default function CandidateForm() {
           <div className="space-y-2">
             {duplicates.map(d => (
               <div key={d.id} className="flex items-center justify-between bg-white/6 dark:bg-[#1c1c1e]/60 rounded-[14px] px-5 py-3">
-                <div><span className="text-[15px] font-semibold text-black dark:text-white">{d.name}</span>{d.email && <span className="text-[14px] text-gray-500 dark:text-gray-400 ml-3">{d.email}</span>}{d.location && <span className="text-[14px] text-gray-400 ml-3">{d.location}</span>}</div>
+                <div><span className="text-[15px] font-semibold text-black dark:text-white">{d.name}</span>{d.email && <span className="text-[14px] text-gray-500 dark:text-gray-400 ml-3">{d.email}</span>}{d.location && <span className="text-[14px] text-gray-500 dark:text-gray-400 ml-3">{d.location}</span>}</div>
                 <span className="text-[12px] font-semibold text-[#ff9f0a] bg-[#ff9f0a]/10 px-3 py-1 rounded-full">{d.matchType === 'email' ? t('form.duplicate_email') : t('form.duplicate_name')}</span>
               </div>
             ))}
@@ -283,13 +284,13 @@ export default function CandidateForm() {
                     <span className="w-4 h-4 border-2 border-[#0071e3]/30 border-t-[#0071e3] rounded-full animate-spin inline-block" />
                     {parseProgress.detail || t('cv.analyzing')}
                   </p>
-                  <p className="text-[12px] text-gray-400">{parseProgress.progress}%</p>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400">{parseProgress.progress}%</p>
                 </div>
               </div>
             ) : (
               <div onDrop={handleFileDrop} onDragOver={(e) => e.preventDefault()} onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center py-10 gap-4 cursor-pointer rounded-[20px] border-2 border-dashed border-gray-300 hover:border-[#0071e3]/40 hover:bg-[#0071e3]/5 transition-all">
                 <div className="w-16 h-16 bg-white dark:bg-[#1c1c1e] rounded-[20px] shadow-sm flex items-center justify-center border border-gray-200 dark:border-gray-700"><Upload className="w-7 h-7 text-[#0071e3]" /></div>
-                <div className="text-center"><p className="text-[16px] font-semibold text-black dark:text-white">{t('cv.drop_hint')}</p><p className="text-[14px] text-gray-400 mt-1">{t('cv.click_hint')}</p></div>
+                <div className="text-center"><p className="text-[16px] font-semibold text-black dark:text-white">{t('cv.drop_hint')}</p><p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('cv.click_hint')}</p></div>
                 <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileSelect} className="hidden" />
               </div>
             )}
@@ -304,8 +305,8 @@ export default function CandidateForm() {
                 <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('cv.attached_files')}</p>
                 {attachedFiles.map((f, idx) => (
                   <div key={idx} className="flex items-center justify-between bg-white dark:bg-[#1c1c1e] rounded-2xl px-5 py-3 border border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-[#0071e3]" /><span className="text-[14px] font-medium text-black dark:text-white">{f.name}</span><span className="text-[12px] text-gray-400">{(f.size / 1024).toFixed(0)} KB</span></div>
-                    <button type="button" onClick={() => removeAttachedFile(idx)} className="p-1 text-gray-400 hover:text-[#ff3b30] transition-colors"><X className="w-4 h-4" /></button>
+                    <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-[#0071e3]" /><span className="text-[14px] font-medium text-black dark:text-white">{f.name}</span><span className="text-[12px] text-gray-500 dark:text-gray-400">{(f.size / 1024).toFixed(0)} KB</span></div>
+                    <button type="button" onClick={() => removeAttachedFile(idx)} className="p-1 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                 ))}
               </div>
@@ -319,8 +320,8 @@ export default function CandidateForm() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <Input label={t('form.name') + ' *'} placeholder="Max Mustermann" value={form.name} onChange={handleChange('name')} required />
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.gender')}</label>
-              <select value={form.gender} onChange={handleChange('gender')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-gender`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.gender')}</label>
+              <select id={`${fieldIdPrefix}-gender`} value={form.gender} onChange={handleChange('gender')} className={selectClass}>
                 <option value="">{t('form.select')}</option>
                 {GENDER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
@@ -379,7 +380,7 @@ export default function CandidateForm() {
                     {!w.is_current && <Input label={t('form.to_date')} type="month" value={w.to_date} onChange={(e) => updateWorkEntry(idx, 'to_date', e.target.value)} />}
                     <Input label={t('form.work_location')} placeholder="Berlin" value={w.location} onChange={(e) => updateWorkEntry(idx, 'location', e.target.value)} />
                     <div className="flex items-center gap-3 self-end pb-2">
-                      <input type="checkbox" checked={w.is_current} onChange={(e) => updateWorkEntry(idx, 'is_current', e.target.checked)} className="w-5 h-5 rounded accent-[#34c759]" />
+                      <input aria-label={t('form.is_current')} type="checkbox" checked={w.is_current} onChange={(e) => updateWorkEntry(idx, 'is_current', e.target.checked)} className="w-5 h-5 rounded accent-[#34c759]" />
                       <label className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{t('form.is_current')}</label>
                     </div>
                   </div>
@@ -438,14 +439,14 @@ export default function CandidateForm() {
             <Input label={t('form.salary_min')} type="number" placeholder="50000" value={form.salary_min} onChange={handleChange('salary_min')} />
             <Input label={t('form.salary_max')} type="number" placeholder="70000" value={form.salary_max} onChange={handleChange('salary_max')} />
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.salary_currency')}</label>
-              <select value={form.salary_currency} onChange={handleChange('salary_currency')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-salary-currency`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.salary_currency')}</label>
+              <select id={`${fieldIdPrefix}-salary-currency`} value={form.salary_currency} onChange={handleChange('salary_currency')} className={selectClass}>
                 <option value="EUR">EUR (€)</option><option value="USD">USD ($)</option><option value="GBP">GBP (£)</option><option value="CHF">CHF</option>
               </select>
             </div>
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.salary_interval')}</label>
-              <select value={form.salary_interval} onChange={handleChange('salary_interval')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-salary-interval`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.salary_interval')}</label>
+              <select id={`${fieldIdPrefix}-salary-interval`} value={form.salary_interval} onChange={handleChange('salary_interval')} className={selectClass}>
                 <option value="yearly">{t('form.yearly')}</option><option value="monthly">{t('form.monthly')}</option><option value="hourly">{t('form.hourly')}</option>
               </select>
             </div>
@@ -460,14 +461,14 @@ export default function CandidateForm() {
           <div className="flex items-center gap-3 mb-8"><Calendar className="w-5 h-5 text-[#0071e3]" /><h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('form.availability_structure')}</h2></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.notice_period')}</label>
-              <select value={form.notice_period} onChange={handleChange('notice_period')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-notice-period`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.notice_period')}</label>
+              <select id={`${fieldIdPrefix}-notice-period`} value={form.notice_period} onChange={handleChange('notice_period')} className={selectClass}>
                 <option value="">{t('form.select')}</option>
                 {NOTICE_PERIOD_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
             <Input label={t('form.available_from')} type="date" value={form.available_from} onChange={handleChange('available_from')} />
-            <Input label={t('form.availability') + ' (Freitext)'} placeholder="Ab sofort" value={form.availability} onChange={handleChange('availability')} />
+            <Input label={t('form.availability_free')} placeholder={t('form.availability_placeholder_free')} value={form.availability} onChange={handleChange('availability')} />
           </div>
         </Card>
 
@@ -476,8 +477,8 @@ export default function CandidateForm() {
           <div className="flex items-center gap-3 mb-8"><Shield className="w-5 h-5 text-[#ff9f0a]" /><h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('form.work_permit_section')}</h2></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.work_permit')}</label>
-              <select value={form.work_permit} onChange={handleChange('work_permit')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-work-permit`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.work_permit')}</label>
+              <select id={`${fieldIdPrefix}-work-permit`} value={form.work_permit} onChange={handleChange('work_permit')} className={selectClass}>
                 <option value="">{t('form.select')}</option>
                 {WORK_PERMIT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
@@ -490,12 +491,12 @@ export default function CandidateForm() {
         {/* GDPR Consent */}
         <Card className="p-12">
           <div className="flex items-center gap-3 mb-4"><Shield className="w-5 h-5 text-[#34c759]" /><h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('form.gdpr_section')}</h2></div>
-          <p className="text-[14px] text-gray-400 mb-8">{t('form.gdpr_hint')}</p>
+          <p className="text-[14px] text-gray-500 dark:text-gray-400 mb-8">{t('form.gdpr_hint')}</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Input label={t('form.gdpr_consent_date')} type="date" value={form.gdpr_consent_date} onChange={handleChange('gdpr_consent_date')} />
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.gdpr_consent_type')}</label>
-              <select value={form.gdpr_consent_type} onChange={handleChange('gdpr_consent_type')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-gdpr-consent`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.gdpr_consent_type')}</label>
+              <select id={`${fieldIdPrefix}-gdpr-consent`} value={form.gdpr_consent_type} onChange={handleChange('gdpr_consent_type')} className={selectClass}>
                 <option value="">{t('form.select')}</option>
                 {GDPR_TYPES.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
@@ -526,7 +527,7 @@ export default function CandidateForm() {
                   {cf.field_type === 'dropdown' && (
                     <div className="flex flex-col gap-3">
                       <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{cf.name}</label>
-                      <select value={customValues[cf.id] || ''} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.value }))} className={selectClass}>
+                      <select aria-label={cf.name} value={customValues[cf.id] || ''} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.value }))} className={selectClass}>
                         <option value="">{t('form.select')}</option>
                         {(cf.options ? JSON.parse(cf.options) : []).map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
@@ -534,7 +535,7 @@ export default function CandidateForm() {
                   )}
                   {cf.field_type === 'checkbox' && (
                     <div className="flex items-center gap-3 pt-8">
-                      <input type="checkbox" checked={customValues[cf.id] === 'true'} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.checked ? 'true' : 'false' }))} className="w-5 h-5 rounded accent-[#0071e3]" />
+                      <input aria-label={cf.name} type="checkbox" checked={customValues[cf.id] === 'true'} onChange={(e) => setCustomValues(prev => ({ ...prev, [cf.id]: e.target.checked ? 'true' : 'false' }))} className="w-5 h-5 rounded accent-[#0071e3]" />
                       <label className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{cf.name}</label>
                     </div>
                   )}
@@ -555,14 +556,14 @@ export default function CandidateForm() {
           <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.settings')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.status')}</label>
-              <select value={form.status} onChange={handleChange('status')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-status`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.status')}</label>
+              <select id={`${fieldIdPrefix}-status`} value={form.status} onChange={handleChange('status')} className={selectClass}>
                 <option value="Aktiv">Aktiv</option><option value="Passiv">Passiv</option><option value="In Prozess">In Prozess</option><option value="Blacklist">Blacklist</option>
               </select>
             </div>
             <div className="flex flex-col gap-3">
-              <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.source')}</label>
-              <select value={form.source} onChange={handleChange('source')} className={selectClass}>
+              <label htmlFor={`${fieldIdPrefix}-source`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.source')}</label>
+              <select id={`${fieldIdPrefix}-source`} value={form.source} onChange={handleChange('source')} className={selectClass}>
                 <option value="">{t('form.select')}</option>
                 {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -585,6 +586,7 @@ export default function CandidateForm() {
                     <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.tags')}</label>
                     <div className="flex items-center gap-3">
                       <input
+                        aria-label={t('form.tags')}
                         type="text"
                         placeholder="Tag eingeben…"
                         value={tagInput}
@@ -613,7 +615,7 @@ export default function CandidateForm() {
                     </div>
                   )}
                   {availableSuggestions.length > 0 && (
-                    <div><p className="text-[12px] font-medium text-gray-400 dark:text-gray-500 mb-2">{t('form.tags_suggestions')}</p>
+                    <div><p className="text-[12px] font-medium text-gray-500 dark:text-gray-500 mb-2">{t('form.tags_suggestions')}</p>
                       <div className="flex flex-wrap gap-2">
                         {availableSuggestions.map(tag => (<button key={tag} type="button" onClick={() => addTag(tag)} className="px-3 py-1.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:bg-[#5e5ce6]/10 hover:text-[#5e5ce6] transition-all cursor-pointer border border-transparent hover:border-[#5e5ce6]/20">+ {tag}</button>))}
                       </div>

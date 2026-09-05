@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { Mail, Send, Loader2, Check, AlertTriangle } from 'lucide-react'
 import { emailApi } from '../api'
 import { Button } from './UI'
@@ -6,6 +6,7 @@ import Modal from './Modal'
 import { useI18n } from '../I18nContext'
 
 export default function SendEmailModal({ candidate, jobTitle, onClose, onSent }) {
+  const fieldIdPrefix = useId()
   const { t } = useI18n()
   const [templates, setTemplates] = useState([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
@@ -89,10 +90,11 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
       <div className="space-y-4">
         {/* Template selector */}
         <div>
-          <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+          <label htmlFor={`${fieldIdPrefix}-template`} className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
             {t('email.choose_template')}
           </label>
           <select
+            id={`${fieldIdPrefix}-template`}
             value={selectedTemplate}
             onChange={e => handleTemplateChange(e.target.value)}
             data-autofocus
@@ -107,15 +109,16 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
 
         {previewing ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <Loader2 className="w-6 h-6 animate-spin text-gray-500 dark:text-gray-400" />
           </div>
         ) : (
           <>
             <div>
-              <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label htmlFor={`${fieldIdPrefix}-subject`} className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 {t('email.subject')}
               </label>
               <input
+                id={`${fieldIdPrefix}-subject`}
                 type="text"
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
@@ -125,10 +128,11 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+              <label htmlFor={`${fieldIdPrefix}-body`} className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                 {t('email.body')}
               </label>
               <textarea
+                id={`${fieldIdPrefix}-body`}
                 rows={10}
                 value={body}
                 onChange={e => setBody(e.target.value)}

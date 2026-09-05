@@ -8,6 +8,7 @@ import { useI18n } from '../I18nContext'
 import { healthApi, settingsApi } from '../api'
 import Breadcrumb from './Breadcrumb'
 import NotificationBell from './NotificationBell'
+import { localeTag } from '../utils/format'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav.overview' },
@@ -28,12 +29,12 @@ const adminItems = [
 ]
 
 function AiStatusPill() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [isChecking, setIsChecking] = useState(true)
   const [isOnline, setIsOnline] = useState(false)
   const [aiUsage, setAiUsage] = useState({ calls: 0, total_tokens: 0 })
 
-  const formatCompactNumber = (value) => new Intl.NumberFormat('de-DE', { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
+  const formatCompactNumber = (value) => new Intl.NumberFormat(localeTag(locale), { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
 
   useEffect(() => {
     let isMounted = true
@@ -186,6 +187,9 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen bg-[#f5f5f7] dark:bg-black overflow-hidden selection:bg-[#0071e3] selection:text-white">
+      {/* Lets keyboard users jump past the navigation straight to the page. */}
+      <a href="#main-content" className="skip-link">{t('nav.skip_to_content')}</a>
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -214,7 +218,7 @@ export default function Layout() {
             onClick={closeSidebar}
             className="lg:hidden w-10 h-10 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
@@ -261,7 +265,7 @@ export default function Layout() {
               {/* Revisor: show audit/reports/ki section */}
               {isRevisor && (
                 <div className="mt-2">
-                  <p className="px-5 py-2 text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-gray-600">{t('nav.review')}</p>
+                  <p className="px-5 py-2 text-[11px] font-semibold tracking-wider uppercase text-gray-500 dark:text-gray-600">{t('nav.review')}</p>
                   {[
                     { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
                     { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
@@ -332,7 +336,7 @@ export default function Layout() {
           {/* Language Switcher */}
           <button
             onClick={() => changeLocale(locale === 'de' ? 'en' : 'de')}
-            className="flex items-center justify-center gap-1.5 w-full py-2.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-xl text-[13px] transition-all duration-300 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 w-full py-2.5 text-gray-500 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-xl text-[13px] transition-all duration-300 cursor-pointer"
             title={locale === 'de' ? 'Switch to English' : 'Auf Deutsch wechseln'}
           >
             <Globe className="w-4 h-4" />
@@ -374,7 +378,7 @@ export default function Layout() {
             <NotificationBell />
             <div className="text-right hidden sm:block">
               <p className="text-[14px] sm:text-[16px] font-semibold text-black dark:text-white tracking-tight">{user?.display_name || user?.username}</p>
-              <p className="text-[12px] sm:text-[14px] text-gray-500 font-medium">{
+              <p className="text-[12px] sm:text-[14px] text-gray-500 dark:text-gray-400 font-medium">{
                 user?.role === 'admin' ? t('auth.administrator')
                 : user?.role === 'revisor' ? 'Revisor'
                 : user?.role === 'fachbereich' ? 'Fachbereich'
@@ -382,14 +386,14 @@ export default function Layout() {
               }</p>
             </div>
             <Avatar name={user?.display_name || user?.username || ''} size={44} className="w-10 h-10 sm:w-11 sm:h-11 text-[15px]" />
-            <button onClick={logout} className="p-2 sm:p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title={t('auth.logout')}>
+            <button onClick={logout} className="p-2 sm:p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title={t('auth.logout')}>
               <LogOut className="w-5 h-5" />
             </button>
           </div>
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-auto flex flex-col" data-app-scroll-container>
+        <div id="main-content" tabIndex={-1} className="flex-1 overflow-auto flex flex-col" data-app-scroll-container>
           <div className="max-w-[1600px] w-full mx-auto p-4 sm:p-6 lg:p-10 flex-1 flex flex-col min-h-0">
             <Breadcrumb />
             <Outlet />

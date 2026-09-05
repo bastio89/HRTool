@@ -5,6 +5,7 @@ import { Card, LoadingSpinner, PageContainer } from '../components/UI'
 import { aiLogsApi, complianceApi } from '../api'
 import { useI18n } from '../I18nContext'
 import useRevealOnOpen from '../hooks/useRevealOnOpen'
+import { localeTag } from '../utils/format'
 
 // Two-level navigation: an entry dashboard, two thematic groups, and a help area.
 // This replaces the old flat list of 8 equally-weighted tabs.
@@ -35,7 +36,7 @@ function WhyTooltip({ text }) {
   return (
     <span className="relative inline-flex align-middle">
       <button type="button" onClick={() => setOpen(o => !o)} onBlur={() => setTimeout(() => setOpen(false), 150)}
-        className="w-5 h-5 rounded-full flex items-center justify-center text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
+        className="w-5 h-5 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
         aria-label="Erklärung">
         <HelpCircle className="w-[15px] h-[15px]" />
       </button>
@@ -345,6 +346,7 @@ function OverviewTab({ t, goTo }) {
 }
 
 function ComplianceTab({ t }) {
+  const { locale } = useI18n()
   const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [stats, setStats] = useState(null)
@@ -428,7 +430,7 @@ function ComplianceTab({ t }) {
     const rows = data.checks.map(c => [c.id, c.article, c.title, statusLabel[c.status] || c.status, c.details || c.description || ''].map(esc).join(','))
     const meta = [
       esc(t('ki.export_meta_score')) + ',' + esc(`${data.summary?.complianceScore ?? 0}%`),
-      esc(t('ki.export_meta_date')) + ',' + esc(new Date().toLocaleString('de-DE')),
+      esc(t('ki.export_meta_date')) + ',' + esc(new Date().toLocaleString(localeTag(locale))),
     ]
     const csv = '\uFEFF' + meta.join('\n') + '\n\n' + header.map(esc).join(',') + '\n' + rows.join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -462,7 +464,7 @@ function ComplianceTab({ t }) {
           <Shield className="w-8 h-8 text-[#0071e3]" />
           <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.compliance_title')}</h2>
-            <p className="text-[14px] text-gray-500">{t('ki.compliance_subtitle')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.compliance_subtitle')}</p>
           </div>
           <button onClick={handleExportCsv} disabled={!data?.checks}
             className="flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-bold bg-white/70 dark:bg-black/20 text-[#0071e3] hover:bg-white dark:hover:bg-black/40 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
@@ -490,7 +492,7 @@ function ComplianceTab({ t }) {
               <p className="text-[14px] font-medium text-gray-500 dark:text-gray-400">{t('ki.compliance_score')}</p>
               <WhyTooltip text={t('ki.compliance_score_why')} />
             </div>
-            <p className="text-[12px] text-gray-400 mt-1">{data.summary.passed}/{data.checks?.length || 0} {t('ki.checks_passed_short')}</p>
+            <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-1">{data.summary.passed}/{data.checks?.length || 0} {t('ki.checks_passed_short')}</p>
           </Card>
           <Card className="p-8 text-center">
             <div className="text-[52px] font-bold tracking-tight text-[#34c759]">{data.summary.passed}</div>
@@ -512,19 +514,19 @@ function ComplianceTab({ t }) {
           <h3 className="text-[18px] font-semibold text-black dark:text-white mb-6">{t('ki.usage_overview')}</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-              <p className="text-[12px] font-medium text-gray-500 mb-1">{t('ki.total_calls')}</p>
+              <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('ki.total_calls')}</p>
               <p className="text-[28px] font-bold text-black dark:text-white">{stats.totals.total}</p>
             </div>
             <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-              <p className="text-[12px] font-medium text-gray-500 mb-1">{t('ki.success_rate')}</p>
+              <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('ki.success_rate')}</p>
               <p className="text-[28px] font-bold text-[#34c759]">{stats.totals.successRate}%</p>
             </div>
             <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-              <p className="text-[12px] font-medium text-gray-500 mb-1">{t('ki.high_risk_calls')}</p>
+              <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('ki.high_risk_calls')}</p>
               <p className="text-[28px] font-bold text-[#ff9f0a]">{stats.totals.highRiskCount}</p>
             </div>
             <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-              <p className="text-[12px] font-medium text-gray-500 mb-1">{t('ki.high_risk_share')}</p>
+              <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('ki.high_risk_share')}</p>
               <p className="text-[28px] font-bold text-[#ff9f0a]">{stats.totals.highRiskPercentage}%</p>
             </div>
           </div>
@@ -542,10 +544,10 @@ function ComplianceTab({ t }) {
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: `${riskColor}15`, color: riskColor }}>{riskLevel}</span>
                     </div>
                     <div className="flex items-center gap-6 text-[13px]">
-                      <span className="text-gray-400">{f.total} {t('ki.calls')}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{f.total} {t('ki.calls')}</span>
                       <span className="text-[#34c759] font-semibold">{f.successful} OK</span>
                       {f.failed > 0 && <span className="text-[#ff3b30] font-semibold">{f.failed} {t('ki.errors')}</span>}
-                      {f.avg_duration_ms && <span className="text-gray-400">{(f.avg_duration_ms / 1000).toFixed(1)}s Ø</span>}
+                      {f.avg_duration_ms && <span className="text-gray-500 dark:text-gray-400">{(f.avg_duration_ms / 1000).toFixed(1)}s Ø</span>}
                     </div>
                   </div>
                 )
@@ -562,7 +564,7 @@ function ComplianceTab({ t }) {
             <ListTodo className="w-6 h-6 text-[#ff9f0a]" />
             <div className="flex-1">
               <p className="text-[14px] font-bold text-black dark:text-white">{t('ki.actions_pending')}</p>
-              <p className="text-[12px] text-gray-500 mt-0.5">
+              <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
                 {actionSummary.open} {t('ki.action_open')} · {actionSummary.inProgress} {t('ki.action_in_progress')} · {actionSummary.done} {t('ki.action_done')}
                 {actionSummary.overdue > 0 && <span className="text-[#ff3b30] font-bold"> · {actionSummary.overdue} {t('ki.action_overdue')}</span>}
               </p>
@@ -588,7 +590,7 @@ function ComplianceTab({ t }) {
                         <span className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[11px] font-bold">{c.article}</span>
                       </div>
                       <p className="text-[13px] text-gray-600 dark:text-gray-400">{c.description}</p>
-                      <p className="text-[12px] text-gray-400 mt-1">{c.details}</p>
+                      <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-1">{c.details}</p>
 
                       {/* Quick actions row */}
                       <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -603,7 +605,7 @@ function ComplianceTab({ t }) {
                           <Plus className="w-3 h-3" />{t('ki.action_create')}
                         </button>
                         {checkActions.length > 0 && (
-                          <span className="text-[11px] font-medium text-gray-400">
+                          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
                             {checkActions.filter(a => a.status === 'done').length}/{checkActions.length} {t('ki.action_tasks_done')}
                           </span>
                         )}
@@ -616,11 +618,13 @@ function ComplianceTab({ t }) {
                     <div ref={newActionRef} className="px-5 pb-4 pt-2 border-t border-gray-200/50 dark:border-gray-700/50 bg-white/50 dark:bg-black/10">
                       <div className="flex items-center gap-2">
                         <input type="text" value={newActionTitle} onChange={e => setNewActionTitle(e.target.value)}
+                          aria-label={t('ki.action_title_placeholder')}
                           placeholder={t('ki.action_title_placeholder')}
                           className="flex-1 px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:border-[#0071e3]/30 focus:ring-2 focus:ring-[#0071e3]/10"
                           onKeyDown={e => e.key === 'Enter' && handleCreateAction(c.id, c.title)}
                           autoFocus />
                         <select value={newActionPriority} onChange={e => setNewActionPriority(e.target.value)}
+                          aria-label={t('ki.priority_label', 'Priorität')}
                           className="px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[12px] font-bold border-none outline-none text-black dark:text-white">
                           <option value="critical">{t('ki.priority_critical')}</option>
                           <option value="high">{t('ki.priority_high')}</option>
@@ -650,17 +654,17 @@ function ComplianceTab({ t }) {
                                 : <div className="w-4 h-4 rounded-full border-2 border-gray-300 dark:border-gray-600" />
                               }
                             </button>
-                            <span className={`flex-1 text-[12px] font-medium ${action.status === 'done' ? 'line-through text-gray-400' : 'text-black dark:text-white'}`}>
+                            <span className={`flex-1 text-[12px] font-medium ${action.status === 'done' ? 'line-through text-gray-500 dark:text-gray-400' : 'text-black dark:text-white'}`}>
                               {action.title}
                             </span>
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
                               action.priority === 'critical' ? 'bg-[#ff3b30]/10 text-[#ff3b30]' :
                               action.priority === 'high' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' :
-                              action.priority === 'low' ? 'bg-gray-100 dark:bg-gray-800 text-gray-400' :
+                              action.priority === 'low' ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' :
                               'bg-[#0071e3]/10 text-[#0071e3]'
                             }`}>{action.priority}</span>
                             <button onClick={() => handleDeleteAction(action.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-gray-400 hover:text-[#ff3b30]">
+                              className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-gray-500 dark:text-gray-400 hover:text-[#ff3b30]">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -679,6 +683,7 @@ function ComplianceTab({ t }) {
 }
 
 function LogsTab({ t }) {
+  const { locale } = useI18n()
   const [logs, setLogs] = useState([])
   const [pagination, setPagination] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -716,7 +721,7 @@ function LogsTab({ t }) {
           <FileText className="w-8 h-8 text-[#5e5ce6]" />
           <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.logs_title')}</h2>
-            <p className="text-[14px] text-gray-500">{t('ki.logs_subtitle')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.logs_subtitle')}</p>
           </div>
           <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
@@ -733,6 +738,7 @@ function LogsTab({ t }) {
       <Card className="p-5">
         <div className="flex items-center gap-4 flex-wrap">
           <select value={filter.feature} onChange={e => setFilter({ ...filter, feature: e.target.value, page: 1 })}
+            aria-label={t('ki.all_features')}
             className="px-4 py-2.5 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[14px] font-medium border-none outline-none text-black dark:text-white">
             <option value="">{t('ki.all_features')}</option>
             <option value="matching">{t('ki.feature_matching')}</option>
@@ -742,12 +748,13 @@ function LogsTab({ t }) {
             <option value="interview-questions">{t('ki.feature_interview_q')}</option>
           </select>
           <select value={filter.success} onChange={e => setFilter({ ...filter, success: e.target.value, page: 1 })}
+            aria-label={t('ki.all_decisions', 'Entscheidungen')}
             className="px-4 py-2.5 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[14px] font-medium border-none outline-none text-black dark:text-white">
             <option value="">{t('ki.all_status')}</option>
             <option value="true">{t('ki.successful')}</option>
             <option value="false">{t('ki.failed')}</option>
           </select>
-          {pagination && <span className="text-[13px] text-gray-400 ml-auto">{t('ki.logs_total').replace('{count}', pagination.total)}</span>}
+          {pagination && <span className="text-[13px] text-gray-500 dark:text-gray-400 ml-auto">{t('ki.logs_total').replace('{count}', pagination.total)}</span>}
         </div>
       </Card>
 
@@ -766,8 +773,8 @@ function LogsTab({ t }) {
                       </span>
                       {log.model && <span className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[10px] font-bold">{log.model}</span>}
                     </div>
-                    <div className="flex items-center gap-4 text-[12px] text-gray-400">
-                      <span><Clock className="w-3 h-3 inline mr-1" />{parseSqliteTimestamp(log.created_at)?.toLocaleString('de-DE')}</span>
+                    <div className="flex items-center gap-4 text-[12px] text-gray-500 dark:text-gray-400">
+                      <span><Clock className="w-3 h-3 inline mr-1" />{parseSqliteTimestamp(log.created_at)?.toLocaleString(localeTag(locale))}</span>
                       {log.user_name && <span>{t('ki.by_user').replace('{name}', log.user_name)}</span>}
                       {log.duration_ms && <span>{(log.duration_ms / 1000).toFixed(1)}s</span>}
                       {log.input_tokens && <span>{log.input_tokens} in / {log.output_tokens} out</span>}
@@ -790,18 +797,18 @@ function LogsTab({ t }) {
                       ))}
                     </div>
                     <div className="p-4 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                      <p className="text-[11px] font-bold text-gray-400 uppercase mb-1">{t('ki.prompt_hash')}</p>
+                      <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">{t('ki.prompt_hash')}</p>
                       <code className="text-[13px] font-mono text-black dark:text-white">{detail.prompt_hash || '—'}</code>
                     </div>
                     {detail.skills && (
                       <div className="p-4 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                        <p className="text-[11px] font-bold text-gray-400 uppercase mb-1">Skills</p>
+                        <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Skills</p>
                         <p className="text-[13px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{detail.skills}</p>
                       </div>
                     )}
                     {detail.prompt && (
                       <div className="p-4 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                        <p className="text-[11px] font-bold text-gray-400 uppercase mb-2">{t('ki.prompt_input')}</p>
+                        <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">{t('ki.prompt_input')}</p>
                         <pre className="text-[12px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto font-mono leading-relaxed">
                           {detail.prompt.length > 2000 ? detail.prompt.slice(0, 2000) + '\n' + t('ki.truncated') : detail.prompt}
                         </pre>
@@ -809,7 +816,7 @@ function LogsTab({ t }) {
                     )}
                     {detail.response && (
                       <div className="p-4 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                        <p className="text-[11px] font-bold text-gray-400 uppercase mb-2">{t('ki.response_output')}</p>
+                        <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">{t('ki.response_output')}</p>
                         <pre className="text-[12px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap max-h-48 overflow-y-auto font-mono leading-relaxed">
                           {detail.response.length > 2000 ? detail.response.slice(0, 2000) + '\n' + t('ki.truncated') : detail.response}
                         </pre>
@@ -829,14 +836,14 @@ function LogsTab({ t }) {
           {logs.length === 0 && (
             <Card className="p-16 text-center">
               <Bot className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-              <p className="text-[16px] text-gray-500">{t('ki.no_logs')}</p>
+              <p className="text-[16px] text-gray-500 dark:text-gray-400">{t('ki.no_logs')}</p>
             </Card>
           )}
           {pagination && pagination.totalPages > 1 && (
             <div className="flex items-center justify-center gap-3">
               <button onClick={() => setFilter(f => ({ ...f, page: f.page - 1 }))} disabled={filter.page <= 1}
                 className="px-4 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[14px] font-semibold disabled:opacity-30 cursor-pointer disabled:cursor-default">{t('ki.page_prev')}</button>
-              <span className="text-[14px] text-gray-500">{t('ki.page_of').replace('{page}', pagination.page).replace('{total}', pagination.totalPages)}</span>
+              <span className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.page_of').replace('{page}', pagination.page).replace('{total}', pagination.totalPages)}</span>
               <button onClick={() => setFilter(f => ({ ...f, page: f.page + 1 }))} disabled={filter.page >= pagination.totalPages}
                 className="px-4 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[14px] font-semibold disabled:opacity-30 cursor-pointer disabled:cursor-default">{t('ki.page_next')}</button>
             </div>
@@ -855,7 +862,7 @@ function BiasTab({ t }) {
   useEffect(() => { aiLogsApi.getBiasReport().then(setData).catch(() => {}).finally(() => setLoading(false)) }, [])
 
   if (loading) return <LoadingSpinner text={t('ki.bias_loading')} />
-  if (!data) return <Card className="p-16 text-center"><p className="text-gray-500">{t('ki.bias_error')}</p></Card>
+  if (!data) return <Card className="p-16 text-center"><p className="text-gray-500 dark:text-gray-400">{t('ki.bias_error')}</p></Card>
 
   const distColors = { '0-20': '#ff3b30', '20-40': '#ff9f0a', '40-60': '#ffcc00', '60-80': '#34c759', '80-100': '#0071e3' }
   const maxDist = Math.max(...Object.values(data.scoreAnalysis.distribution), 1)
@@ -867,7 +874,7 @@ function BiasTab({ t }) {
           <Scale className="w-8 h-8 text-[#5e5ce6] flex-shrink-0" />
           <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.bias_title')}</h2>
-            <p className="text-[14px] text-gray-500">{t('ki.bias_desc')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.bias_desc')}</p>
           </div>
           <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
@@ -884,7 +891,7 @@ function BiasTab({ t }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-6">
           <h3 className="text-[16px] font-semibold text-black dark:text-white mb-1">{t('ki.score_distribution')}</h3>
-          <p className="text-[12px] text-gray-400 mb-5">{t('ki.scores_from').replace('{scores}', data.scoreAnalysis.totalScoresAnalyzed).replace('{matchings}', data.scoreAnalysis.matchingsAnalyzed)}</p>
+          <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-5">{t('ki.scores_from').replace('{scores}', data.scoreAnalysis.totalScoresAnalyzed).replace('{matchings}', data.scoreAnalysis.matchingsAnalyzed)}</p>
           <div className="space-y-3">
             {Object.entries(data.scoreAnalysis.distribution).map(([range, count]) => (
               <div key={range}>
@@ -900,8 +907,8 @@ function BiasTab({ t }) {
           </div>
           {data.scoreAnalysis.avgScore != null && (
             <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-[13px]">
-              <span className="text-gray-400">{t('ki.avg_score')}: <strong className="text-black dark:text-white">{data.scoreAnalysis.avgScore}%</strong></span>
-              <span className="text-gray-400">{t('ki.std_dev')}: <strong className="text-black dark:text-white">{data.scoreAnalysis.stdDeviation}%</strong></span>
+              <span className="text-gray-500 dark:text-gray-400">{t('ki.avg_score')}: <strong className="text-black dark:text-white">{data.scoreAnalysis.avgScore}%</strong></span>
+              <span className="text-gray-500 dark:text-gray-400">{t('ki.std_dev')}: <strong className="text-black dark:text-white">{data.scoreAnalysis.stdDeviation}%</strong></span>
             </div>
           )}
         </Card>
@@ -916,7 +923,7 @@ function BiasTab({ t }) {
                   {data.anonymization.rate}%
                 </span>
               </div>
-              <p className="text-[12px] text-gray-400">{t('ki.anon_of').replace('{done}', data.anonymization.anonymizedMatchings).replace('{total}', data.anonymization.totalMatchings)}</p>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400">{t('ki.anon_of').replace('{done}', data.anonymization.anonymizedMatchings).replace('{total}', data.anonymization.totalMatchings)}</p>
               <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-600 mt-2">
                 <div className="h-full rounded-full bg-[#0071e3] transition-all" style={{ width: `${data.anonymization.rate}%` }} />
               </div>
@@ -928,7 +935,7 @@ function BiasTab({ t }) {
                   {data.humanReview.rate}%
                 </span>
               </div>
-              <p className="text-[12px] text-gray-400">{t('ki.review_of').replace('{done}', data.humanReview.reviewed).replace('{total}', data.humanReview.total)}</p>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400">{t('ki.review_of').replace('{done}', data.humanReview.reviewed).replace('{total}', data.humanReview.total)}</p>
               <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-600 mt-2">
                 <div className="h-full rounded-full bg-[#ff9f0a] transition-all" style={{ width: `${data.humanReview.rate}%` }} />
               </div>
@@ -939,14 +946,14 @@ function BiasTab({ t }) {
         {data.locationAnalysis?.length > 0 && (
           <Card className="p-6">
             <h3 className="text-[16px] font-semibold text-black dark:text-white mb-1">{t('ki.location_analysis')}</h3>
-            <p className="text-[12px] text-gray-400 mb-5">{t('ki.location_desc')}</p>
+            <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-5">{t('ki.location_desc')}</p>
             <div className="space-y-3">
               {data.locationAnalysis.map(l => (
                 <div key={l.location} className="flex items-center justify-between p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                   <span className="text-[14px] font-medium text-black dark:text-white">{l.location}</span>
                   <div className="flex items-center gap-3 text-[13px]">
-                    <span className="text-gray-400">{l.total_in_matchings} {t('ki.applicants')}</span>
-                    <span className={`font-semibold ${l.hired_rate > 0 ? 'text-[#34c759]' : 'text-gray-400'}`}>{Math.round(l.hired_rate)}% Hired</span>
+                    <span className="text-gray-500 dark:text-gray-400">{l.total_in_matchings} {t('ki.applicants')}</span>
+                    <span className={`font-semibold ${l.hired_rate > 0 ? 'text-[#34c759]' : 'text-gray-500 dark:text-gray-400'}`}>{Math.round(l.hired_rate)}% Hired</span>
                   </div>
                 </div>
               ))}
@@ -957,15 +964,15 @@ function BiasTab({ t }) {
         {data.sourceBias?.length > 0 && (
           <Card className="p-6">
             <h3 className="text-[16px] font-semibold text-black dark:text-white mb-1">{t('ki.source_bias')}</h3>
-            <p className="text-[12px] text-gray-400 mb-5">{t('ki.source_desc')}</p>
+            <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-5">{t('ki.source_desc')}</p>
             <div className="space-y-3">
               {data.sourceBias.map(s => (
                 <div key={s.source} className="flex items-center justify-between p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                   <span className="text-[14px] font-medium text-black dark:text-white">{s.source}</span>
                   <div className="flex items-center gap-3 text-[13px]">
-                    <span className="text-gray-400">{s.count}</span>
+                    <span className="text-gray-500 dark:text-gray-400">{s.count}</span>
                     <span className="text-[#0071e3] font-semibold">{Math.round(s.advancement_rate)}% {t('ki.advancement')}</span>
-                    <span className={`font-semibold ${s.hired_rate > 0 ? 'text-[#34c759]' : 'text-gray-400'}`}>{Math.round(s.hired_rate)}% Hired</span>
+                    <span className={`font-semibold ${s.hired_rate > 0 ? 'text-[#34c759]' : 'text-gray-500 dark:text-gray-400'}`}>{Math.round(s.hired_rate)}% Hired</span>
                   </div>
                 </div>
               ))}
@@ -985,7 +992,7 @@ function ModelCardTab({ t }) {
   useEffect(() => { aiLogsApi.getModelCard().then(setData).catch(() => {}).finally(() => setLoading(false)) }, [])
 
   if (loading) return <LoadingSpinner text={t('ki.mc_loading')} />
-  if (!data) return <Card className="p-16 text-center"><p className="text-gray-500">{t('ki.mc_error')}</p></Card>
+  if (!data) return <Card className="p-16 text-center"><p className="text-gray-500 dark:text-gray-400">{t('ki.mc_error')}</p></Card>
 
   const riskColors = { high: '#ff3b30', low: '#34c759' }
   const riskLabels = { high: t('ki.high_risk'), low: t('ki.low_risk') }
@@ -999,7 +1006,7 @@ function ModelCardTab({ t }) {
           </div>
           <div className="flex-1">
             <h2 className="text-[20px] font-semibold text-black dark:text-white mb-1">{t('ki.mc_title')}</h2>
-            <p className="text-[14px] text-gray-500">{t('ki.mc_subtitle')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.mc_subtitle')}</p>
           </div>
           <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
@@ -1029,7 +1036,7 @@ function ModelCardTab({ t }) {
             [t('ki.mc_endpoint'), data.model.endpoint],
           ].map(([label, val]) => (
             <div key={label} className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-              <p className="text-[11px] font-bold text-gray-400 uppercase mb-1">{label}</p>
+              <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">{label}</p>
               <p className="text-[15px] font-semibold text-black dark:text-white">{val}</p>
             </div>
           ))}
@@ -1050,7 +1057,7 @@ function ModelCardTab({ t }) {
                   <span className="text-[14px] font-bold text-black dark:text-white">{u.feature}</span>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: `${riskColors[u.riskLevel]}15`, color: riskColors[u.riskLevel] }}>{riskLabels[u.riskLevel]}</span>
                 </div>
-                <p className="text-[12px] text-gray-500">{u.description}</p>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400">{u.description}</p>
                 <p className="text-[11px] text-[#5e5ce6] font-semibold mt-1">{u.aiActCategory}</p>
               </div>
             </div>
@@ -1102,9 +1109,9 @@ function ModelCardTab({ t }) {
               <div key={m.model} className="flex items-center justify-between p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                 <span className="text-[14px] font-bold text-black dark:text-white">{m.model}</span>
                 <div className="flex items-center gap-4 text-[12px]">
-                  <span className="text-gray-400">{m.total_calls} {t('ki.calls')}</span>
+                  <span className="text-gray-500 dark:text-gray-400">{m.total_calls} {t('ki.calls')}</span>
                   <span className="text-[#34c759] font-semibold">{m.successful} OK</span>
-                  {m.avg_duration_ms && <span className="text-gray-400">{(m.avg_duration_ms / 1000).toFixed(1)}s Ø</span>}
+                  {m.avg_duration_ms && <span className="text-gray-500 dark:text-gray-400">{(m.avg_duration_ms / 1000).toFixed(1)}s Ø</span>}
                 </div>
               </div>
             ))}
@@ -1165,7 +1172,7 @@ function ModelCardTab({ t }) {
             </div>
           ))}
         </div>
-        <p className="text-[12px] text-gray-400 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+        <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
           {t('ki.mc_last_review')}: {data.regulatoryInfo.lastReview}
         </p>
       </Card>
@@ -1282,7 +1289,7 @@ function RiskRegisterTab({ t }) {
   }
 
   if (loading) return <LoadingSpinner text={t('ki.risk_loading')} />
-  if (!data) return <Card className="p-8"><p className="text-gray-500">{t('ki.risk_error')}</p></Card>
+  if (!data) return <Card className="p-8"><p className="text-gray-500 dark:text-gray-400">{t('ki.risk_error')}</p></Card>
 
   const levelColors = { high: '#ff3b30', medium: '#ff9f0a', low: '#34c759' }
   const statusLabels = { mitigated: t('ki.risk_mitigated'), active: t('ki.risk_active'), 'partially-mitigated': t('ki.risk_partial') }
@@ -1309,7 +1316,7 @@ function RiskRegisterTab({ t }) {
           <AlertOctagon className="w-8 h-8 text-[#ff3b30]" />
           <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.risk_title')}</h2>
-            <p className="text-[14px] text-gray-500">{t('ki.risk_subtitle')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.risk_subtitle')}</p>
           </div>
           <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff3b30" t={t} />
         </div>
@@ -1324,15 +1331,15 @@ function RiskRegisterTab({ t }) {
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#ff3b30]">{active}</p>
-            <p className="text-[13px] text-gray-500">{t('ki.risk_active')}</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('ki.risk_active')}</p>
           </div>
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#ff9f0a]">{partial}</p>
-            <p className="text-[13px] text-gray-500">{t('ki.risk_partial')}</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('ki.risk_partial')}</p>
           </div>
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#34c759]">{mitigated}</p>
-            <p className="text-[13px] text-gray-500">{t('ki.risk_mitigated')}</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('ki.risk_mitigated')}</p>
           </div>
         </div>
       </Card>
@@ -1349,7 +1356,7 @@ function RiskRegisterTab({ t }) {
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[12px] font-mono font-bold text-gray-400">{risk.id}</span>
+                    <span className="text-[12px] font-mono font-bold text-gray-500 dark:text-gray-400">{risk.id}</span>
                     <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: `${levelColors[risk.riskLevel]}15`, color: levelColors[risk.riskLevel] }}>
                       {risk.riskLevel.toUpperCase()}
                     </span>
@@ -1359,7 +1366,7 @@ function RiskRegisterTab({ t }) {
                     )}
                   </div>
                   <h3 className="text-[16px] font-bold text-black dark:text-white">{risk.title}</h3>
-                  <p className="text-[13px] text-gray-500 mt-1">{risk.description}</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{risk.description}</p>
                   {risk._overridden && risk._overrideNotes && (
                     <p className="text-[12px] text-[#af52de] mt-1 italic">💬 {risk._overrideNotes} — {risk._overrideBy}</p>
                   )}
@@ -1372,7 +1379,7 @@ function RiskRegisterTab({ t }) {
                 <button onClick={() => { setEditingRisk(editingRisk === risk.id ? null : risk.id); setOverrideStatus(risk.status); setOverrideNotes(risk._overrideNotes || '') }}
                   className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer"
                   title={t('ki.risk_change_status')}>
-                  <Pencil className="w-3.5 h-3.5 text-gray-500" />
+                  <Pencil className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
             </div>
@@ -1392,12 +1399,13 @@ function RiskRegisterTab({ t }) {
                   ))}
                   {risk._overridden && (
                     <button onClick={() => setOverrideStatus('')}
-                      className="px-3 py-1.5 rounded-full text-[12px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
+                      className="px-3 py-1.5 rounded-full text-[12px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
                       ↩ {t('ki.risk_reset_auto')}
                     </button>
                   )}
                 </div>
                 <textarea value={overrideNotes} onChange={e => setOverrideNotes(e.target.value)}
+                  aria-label={t('ki.risk_override_notes_placeholder')}
                   placeholder={t('ki.risk_override_notes_placeholder')}
                   rows={2}
                   className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#1c1c1e] text-[13px] font-medium text-black dark:text-white border border-[#af52de]/20 focus:outline-none focus:border-[#af52de] focus:ring-2 focus:ring-[#af52de]/10 resize-none mb-3" />
@@ -1407,7 +1415,7 @@ function RiskRegisterTab({ t }) {
                     {t('ki.risk_save_override')}
                   </button>
                   <button onClick={() => setEditingRisk(null)}
-                    className="px-4 py-2 rounded-xl text-[12px] font-bold text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
+                    className="px-4 py-2 rounded-xl text-[12px] font-bold text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
                     {t('ki.action_cancel')}
                   </button>
                 </div>
@@ -1439,7 +1447,7 @@ function RiskRegisterTab({ t }) {
                       {riskActions.filter(a => a.status === 'done').length}/{riskActions.length}
                     </span>
                   )}
-                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />}
                 </button>
                 <button onClick={() => { setShowNewTask(showNewTask === risk.id ? null : risk.id); setExpandedRisk(risk.id) }}
                   className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer">
@@ -1453,11 +1461,13 @@ function RiskRegisterTab({ t }) {
                   {showNewTask === risk.id && (
                     <div ref={newTaskRef} className="flex items-center gap-2 mb-3">
                       <input type="text" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)}
+                        aria-label={t('ki.action_title_placeholder')}
                         placeholder={t('ki.action_title_placeholder')}
                         className="flex-1 px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:border-[#0071e3]/30 focus:ring-2 focus:ring-[#0071e3]/10"
                         onKeyDown={e => e.key === 'Enter' && handleCreateTask(risk.id, risk.title)}
                         autoFocus />
                       <select value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value)}
+                        aria-label={t('ki.priority_label', 'Priorität')}
                         className="px-3 py-2 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[12px] font-bold border-none outline-none text-black dark:text-white">
                         <option value="critical">{t('ki.priority_critical')}</option>
                         <option value="high">{t('ki.priority_high')}</option>
@@ -1485,27 +1495,27 @@ function RiskRegisterTab({ t }) {
                               : <div className="w-4 h-4 rounded-full border-2 border-gray-300 dark:border-gray-600" />
                             }
                           </button>
-                          <span className={`flex-1 text-[12px] font-medium ${action.status === 'done' ? 'line-through text-gray-400' : 'text-black dark:text-white'}`}>
+                          <span className={`flex-1 text-[12px] font-medium ${action.status === 'done' ? 'line-through text-gray-500 dark:text-gray-400' : 'text-black dark:text-white'}`}>
                             {action.title}
                           </span>
                           {action.created_by && (
-                            <span className="text-[10px] text-gray-400 hidden sm:block">{action.created_by}</span>
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block">{action.created_by}</span>
                           )}
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
                             action.priority === 'critical' ? 'bg-[#ff3b30]/10 text-[#ff3b30]' :
                             action.priority === 'high' ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]' :
-                            action.priority === 'low' ? 'bg-gray-100 dark:bg-gray-800 text-gray-400' :
+                            action.priority === 'low' ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400' :
                             'bg-[#0071e3]/10 text-[#0071e3]'
                           }`}>{action.priority}</span>
                           <button onClick={() => handleDeleteTask(action.id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-gray-400 hover:text-[#ff3b30]">
+                            className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-gray-500 dark:text-gray-400 hover:text-[#ff3b30]">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[12px] text-gray-400 italic">{t('ki.risk_no_tasks')}</p>
+                    <p className="text-[12px] text-gray-500 dark:text-gray-400 italic">{t('ki.risk_no_tasks')}</p>
                   )}
                 </>
               )}
@@ -1555,7 +1565,7 @@ function BiasTestsetTab({ t }) {
           <TestTubes className="w-8 h-8 text-[#5e5ce6]" />
           <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.biastest_title')}</h2>
-            <p className="text-[14px] text-gray-500">{t('ki.biastest_subtitle')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.biastest_subtitle')}</p>
           </div>
           <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#5e5ce6" t={t} />
         </div>
@@ -1583,8 +1593,10 @@ function BiasTestsetTab({ t }) {
         <h3 className="text-[16px] font-bold text-black dark:text-white mb-4">{t('ki.biastest_run')}</h3>
         <div className="space-y-3">
           <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder={t('ki.biastest_job_title')}
+            aria-label={t('ki.biastest_job_title')}
             className="w-full px-4 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-gray-200 dark:border-gray-700 text-[14px] outline-none focus:ring-2 focus:ring-[#5e5ce6]/30" />
           <textarea value={jobDesc} onChange={e => setJobDesc(e.target.value)} rows={4} placeholder={t('ki.biastest_job_desc')}
+            aria-label={t('ki.biastest_job_desc')}
             className="w-full px-4 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-gray-200 dark:border-gray-700 text-[14px] outline-none focus:ring-2 focus:ring-[#5e5ce6]/30 resize-none" />
           <button onClick={runTest} disabled={running || !jobDesc.trim()}
             className="flex items-center gap-2 px-6 py-3 bg-[#5e5ce6] hover:bg-[#4d4bc5] text-white rounded-xl font-semibold text-[14px] disabled:opacity-50 transition-colors cursor-pointer">
@@ -1601,8 +1613,8 @@ function BiasTestsetTab({ t }) {
             {profiles.profiles?.map(p => (
               <div key={p.id} className="p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/50 dark:border-gray-700/50">
                 <p className="text-[13px] font-bold text-black dark:text-white">{p.name}</p>
-                <p className="text-[12px] text-gray-500 mt-0.5">{p.location} · {p.experience}</p>
-                <p className="text-[11px] text-gray-400 mt-1">{p.skills}</p>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">{p.location} · {p.experience}</p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{p.skills}</p>
               </div>
             ))}
           </div>
@@ -1617,19 +1629,19 @@ function BiasTestsetTab({ t }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
               <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
                 <p className="text-[24px] font-bold text-[#0071e3]">{Math.round(results.analysis.avgScore * 100)}%</p>
-                <p className="text-[12px] text-gray-500">⌀ Score</p>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400">⌀ Score</p>
               </div>
               <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
                 <p className="text-[24px] font-bold text-[#5e5ce6]">{Math.round(results.analysis.stdDeviation * 100)}%</p>
-                <p className="text-[12px] text-gray-500">σ {t('ki.biastest_deviation')}</p>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400">σ {t('ki.biastest_deviation')}</p>
               </div>
               <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
                 <p className="text-[24px] font-bold text-black dark:text-white">{results.analysis.scoredProfiles}/{results.analysis.totalProfiles}</p>
-                <p className="text-[12px] text-gray-500">{t('ki.biastest_scored')}</p>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400">{t('ki.biastest_scored')}</p>
               </div>
               <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
                 <p className="text-[24px] font-bold text-gray-600">{Math.round(results.duration / 1000)}s</p>
-                <p className="text-[12px] text-gray-500">{t('ki.biastest_duration')}</p>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400">{t('ki.biastest_duration')}</p>
               </div>
             </div>
 
@@ -1645,7 +1657,7 @@ function BiasTestsetTab({ t }) {
                       <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
                     </div>
                     <span className="text-[13px] font-bold w-12 text-right" style={{ color: barColor }}>{pct}%</span>
-                    <span className="text-[11px] text-gray-500 w-24 truncate hidden sm:block">{r.location}</span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 w-24 truncate hidden sm:block">{r.location}</span>
                   </div>
                 )
               })}
@@ -1708,7 +1720,7 @@ function BiasAlertsTab({ t }) {
   }, [])
 
   if (loading) return <LoadingSpinner text={t('ki.alerts_loading')} />
-  if (!data) return <Card className="p-8"><p className="text-gray-500">{t('ki.alerts_error')}</p></Card>
+  if (!data) return <Card className="p-8"><p className="text-gray-500 dark:text-gray-400">{t('ki.alerts_error')}</p></Card>
 
   const severityColors = {
     critical: { bg: 'bg-[#ff3b30]/10', border: 'border-[#ff3b30]/20', text: 'text-[#ff3b30]', icon: '#ff3b30' },
@@ -1723,7 +1735,7 @@ function BiasAlertsTab({ t }) {
           <Bell className="w-8 h-8 text-[#ff9f0a]" />
           <div className="flex-1">
             <h2 className="text-[20px] font-bold text-black dark:text-white">{t('ki.alerts_title')}</h2>
-            <p className="text-[14px] text-gray-500">{t('ki.alerts_subtitle')}</p>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('ki.alerts_subtitle')}</p>
           </div>
           <InfoButton show={showInfo} onToggle={() => setShowInfo(!showInfo)} color="#ff9f0a" t={t} />
         </div>
@@ -1738,15 +1750,15 @@ function BiasAlertsTab({ t }) {
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#ff3b30]">{data.summary.critical}</p>
-            <p className="text-[13px] text-gray-500">{t('ki.alerts_critical')}</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('ki.alerts_critical')}</p>
           </div>
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#ff9f0a]">{data.summary.warnings}</p>
-            <p className="text-[13px] text-gray-500">{t('ki.alerts_warnings')}</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('ki.alerts_warnings')}</p>
           </div>
           <div className="text-center p-3 bg-white/50 dark:bg-black/20 rounded-xl">
             <p className="text-[28px] font-bold text-[#0071e3]">{data.summary.info}</p>
-            <p className="text-[13px] text-gray-500">{t('ki.alerts_info')}</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('ki.alerts_info')}</p>
           </div>
         </div>
       </Card>
@@ -1755,7 +1767,7 @@ function BiasAlertsTab({ t }) {
         <Card className="p-8 text-center">
           <CheckCircle className="w-12 h-12 text-[#34c759] mx-auto mb-3" />
           <p className="text-[16px] font-semibold text-black dark:text-white">{t('ki.alerts_none')}</p>
-          <p className="text-[14px] text-gray-500 mt-1">{t('ki.alerts_none_desc')}</p>
+          <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('ki.alerts_none_desc')}</p>
         </Card>
       ) : (
         data.alerts.map((alert, i) => {
@@ -1769,13 +1781,13 @@ function BiasAlertsTab({ t }) {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold uppercase ${colors.bg} ${colors.text}`}>{alert.severity}</span>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 font-medium">{alert.type}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 font-medium">{alert.type}</span>
                   </div>
                   <h3 className="text-[15px] font-bold text-black dark:text-white mt-1">{alert.title}</h3>
                   <p className="text-[13px] text-gray-600 dark:text-gray-400 mt-1">{alert.message}</p>
                   {alert.recommendation && (
                     <div className="mt-3 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                      <p className="text-[12px] font-bold text-gray-500 mb-1">{t('ki.alerts_recommendation')}</p>
+                      <p className="text-[12px] font-bold text-gray-500 dark:text-gray-400 mb-1">{t('ki.alerts_recommendation')}</p>
                       <p className="text-[13px] text-gray-700 dark:text-gray-300">{alert.recommendation}</p>
                     </div>
                   )}
@@ -1833,8 +1845,8 @@ function InfoTab({ t, locale }) {
         <p className="text-[14px] font-medium text-gray-600 dark:text-gray-400 leading-relaxed">
           {t('ki.legal_text2')}
         </p>
-        <p className="text-[13px] text-gray-400 mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-          {t('ki.last_update')}: {new Date().toLocaleDateString(locale === 'en' ? 'en-US' : 'de-DE', { year: 'numeric', month: 'long', day: 'numeric' })}
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+          {t('ki.last_update')}: {new Date().toLocaleDateString(localeTag(locale), { year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </Card>
     </div>

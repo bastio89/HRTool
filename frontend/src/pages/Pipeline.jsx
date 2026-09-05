@@ -9,6 +9,7 @@ import InterviewScheduler from '../components/InterviewScheduler'
 import { Button, IconButton, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
+import { localeTag } from '../utils/format'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
 
@@ -25,7 +26,7 @@ export default function Pipeline() {
   const toast = useToast()
   const { jobId } = useParams()
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [job, setJob] = useState(null)
   const [board, setBoard] = useState({})
   const [allCandidates, setAllCandidates] = useState([])
@@ -102,6 +103,15 @@ export default function Pipeline() {
     setStageChangeModal({ entry: dragEntry, targetStage })
     setStageNote('')
     setDragEntry(null)
+  }
+
+  // The desktop board could only be operated by dragging, which no keyboard
+  // user can do. This routes a keyboard move through the very same modal the
+  // drop handler opens, so both paths behave identically.
+  const requestStageChange = (entry, targetStage) => {
+    if (!targetStage || entry.stage === targetStage) return
+    setStageChangeModal({ entry, targetStage })
+    setStageNote('')
   }
 
   const confirmStageChange = async () => {
@@ -244,7 +254,7 @@ export default function Pipeline() {
             <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5 sm:mb-1">{t('pipeline.title')}</p>
+            <p className="text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 sm:mb-1">{t('pipeline.title')}</p>
             <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black dark:text-white leading-tight truncate">
               {job?.title}
             </h1>
@@ -278,7 +288,7 @@ export default function Pipeline() {
                 className={`snap-center flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition-all cursor-pointer
                   ${idx === activeStage
                     ? `${style.col} ${style.header} ring-2 ring-current`
-                    : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-400'}`}
+                    : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400'}`}
               >
                 <span className={`w-2 h-2 rounded-full ${idx === activeStage ? style.dot : 'bg-gray-300 dark:bg-gray-600'}`} />
                 {stage}
@@ -316,7 +326,7 @@ export default function Pipeline() {
                 <div className="flex items-center gap-2">
                   <span className={`w-3 h-3 rounded-full ${style.dot}`} />
                   <span className={`text-[17px] font-bold ${style.header}`}>{stage}</span>
-                  <span className="text-[15px] font-semibold text-gray-400 bg-white dark:bg-[#1c1c1e] px-2.5 py-0.5 rounded-full ml-1">
+                  <span className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 bg-white dark:bg-[#1c1c1e] px-2.5 py-0.5 rounded-full ml-1">
                     {cards.length}
                   </span>
                 </div>
@@ -336,7 +346,7 @@ export default function Pipeline() {
               </div>
               <div className="flex flex-col gap-3">
                 {cards.length === 0 && (
-                  <div className="flex items-center justify-center h-24 rounded-[20px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-400">
+                  <div className="flex items-center justify-center h-24 rounded-[20px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-500 dark:text-gray-400">
                     {t('pipeline.no_candidates')}
                   </div>
                 )}
@@ -363,10 +373,12 @@ export default function Pipeline() {
 
       {/* Desktop Kanban board — horizontal scroll (hidden on mobile) */}
       <div className="hidden md:flex gap-3 flex-1 min-h-0 pb-2">
-        {STAGES.map(stage => {
+        {STAGES.map((stage, stageIdx) => {
           const style = stageStyle[stage]
           const cards = board[stage] || []
           const isOver = dragOverStage === stage
+          const prevStageName = STAGES[stageIdx - 1] || null
+          const nextStageName = STAGES[stageIdx + 1] || null
 
           return (
             <div
@@ -386,7 +398,7 @@ export default function Pipeline() {
                     {stage}
                   </span>
                 </div>
-                <span className="text-[13px] font-semibold text-gray-400 bg-white dark:bg-[#1c1c1e] px-2 py-0.5 rounded-full">
+                <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 bg-white dark:bg-[#1c1c1e] px-2 py-0.5 rounded-full">
                   {cards.length}
                 </span>
               </div>
@@ -394,7 +406,7 @@ export default function Pipeline() {
               {/* Cards */}
               <div className="flex flex-col gap-2.5 flex-1 overflow-y-auto min-h-[60px] scrollbar-thin">
                 {cards.length === 0 && (
-                  <div className={`flex items-center justify-center h-16 rounded-[16px] border-2 border-dashed text-[13px] font-medium text-gray-400 
+                  <div className={`flex items-center justify-center h-16 rounded-[16px] border-2 border-dashed text-[13px] font-medium text-gray-500 dark:text-gray-400
                     ${isOver ? 'border-[#0071e3] text-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700'}`}>
                     {isOver ? t('pipeline.drop_here') : t('pipeline.empty')}
                   </div>
@@ -407,6 +419,9 @@ export default function Pipeline() {
                     interviews={entryInterviews[entry.id] || []}
                     rating={candidateRatings[entry.candidate_id]}
                     onDragStart={() => handleDragStart(entry)}
+                    prevStage={prevStageName}
+                    nextStage={nextStageName}
+                    onMoveStage={(target) => requestStageChange(entry, target)}
                     onRemove={() => handleRemove(entry.id, stage)}
                     onOpenNotes={() => openNotes(entry.id, entry.candidate_name)}
                     onOpenInterview={() => setInterviewModal({ entry })}
@@ -430,8 +445,9 @@ export default function Pipeline() {
         <div className="flex flex-col gap-6">
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-400" />
                 <input
+                  aria-label={t('pipeline.search')}
                   type="text"
                   placeholder={t('pipeline.search')}
                   value={addSearch}
@@ -443,7 +459,7 @@ export default function Pipeline() {
               </div>
 
               {availableCandidates.length === 0 ? (
-                <p className="text-[16px] font-medium text-gray-400 text-center py-12">
+                <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 text-center py-12">
                   {pipelineIds.length === allCandidates.length
                     ? t('pipeline.already_in')
                     : t('pipeline.no_match')}
@@ -468,7 +484,7 @@ export default function Pipeline() {
                         </p>
                       </div>
                       <div className="ml-auto">
-                        <Plus className="w-5 h-5 text-gray-400" />
+                        <Plus className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                       </div>
                     </button>
                   ))}
@@ -497,6 +513,7 @@ export default function Pipeline() {
               {' '}{t('pipeline.stage_to')} <span className="font-semibold">{stageChangeModal.targetStage}</span>
             </p>
             <textarea
+              aria-label={t('pipeline.note_optional')}
               value={stageNote}
               onChange={e => setStageNote(e.target.value)}
               placeholder={t('pipeline.note_optional')}
@@ -541,7 +558,7 @@ export default function Pipeline() {
       >
         <div>
               {loadingNotes ? (
-                <p className="text-gray-400 text-center py-8">{t('common.loading')}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-center py-8">{t('common.loading')}</p>
               ) : notes.length === 0 ? (
                 <EmptyState icon={MessageSquare} title={t('pipeline.notes_empty')} size="sm" />
               ) : (
@@ -555,11 +572,11 @@ export default function Pipeline() {
                             {n.old_stage} → {n.new_stage}
                           </span>
                         )}
-                        <span className="text-[12px] text-gray-400 font-medium">
-                          {new Date(n.created_at).toLocaleString('de-DE')}
+                        <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">
+                          {new Date(n.created_at).toLocaleString(localeTag(locale))}
                         </span>
                         {n.author === 'System' && (
-                          <span className="text-[11px] text-gray-400 bg-gray-100 dark:bg-[#2c2c2e] px-2 py-0.5 rounded-full">Auto</span>
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-[#2c2c2e] px-2 py-0.5 rounded-full">Auto</span>
                         )}
                       </div>
                     </div>
@@ -584,11 +601,22 @@ export default function Pipeline() {
   )
 }
 
-function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpenNotes, onOpenInterview, jobId }) {
+function KanbanCard({ entry, t, interviews, rating, onDragStart, prevStage, nextStage, onMoveStage, onRemove, onOpenNotes, onOpenInterview, jobId }) {
+  const { locale } = useI18n()
+  const handleKeyDown = (e) => {
+    if (e.target !== e.currentTarget) return          // let controls inside the card keep their keys
+    if (e.key === 'ArrowLeft' && prevStage) { e.preventDefault(); onMoveStage(prevStage) }
+    if (e.key === 'ArrowRight' && nextStage) { e.preventDefault(); onMoveStage(nextStage) }
+  }
   return (
     <div
       draggable
       onDragStart={onDragStart}
+      tabIndex={0}
+      role="group"
+      aria-label={`${entry.candidate_name}, ${entry.stage}`}
+      aria-keyshortcuts="ArrowLeft ArrowRight"
+      onKeyDown={handleKeyDown}
       className="bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/80 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-all duration-200 group"
     >
       <div className="flex items-start justify-between gap-3">
@@ -642,7 +670,7 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
             <div className="flex items-center gap-1.5">
               <Calendar className="w-3 h-3 text-[#ff9f0a]" />
               <span className="text-[11px] font-semibold text-[#ff9f0a]">
-                {new Date(next.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}
+                {new Date(next.interview_date + 'T00:00:00').toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'short' })}
                 {next.interview_time && ` · ${next.interview_time}`}
               </span>
               <TypeIcon className="w-3 h-3 text-[#ff9f0a] ml-auto" />
@@ -661,14 +689,14 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
         </Link>
         <button
           onClick={(e) => { e.stopPropagation(); onOpenNotes() }}
-          className="text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
+          className="text-gray-500 dark:text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
           title={t('pipeline.notes')}
         >
           <MessageSquare className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onOpenInterview() }}
-          className="text-gray-400 hover:text-[#ff9f0a] transition-colors cursor-pointer relative"
+          className="text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] transition-colors cursor-pointer relative"
           title={t('pipeline.interview')}
         >
           <Calendar className="w-3.5 h-3.5" />
@@ -679,17 +707,43 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, onRemove, onOpe
         <Link
           to={`/pipeline/${jobId}/interview-prep/${entry.id}`}
           onClick={(e) => e.stopPropagation()}
-          className="text-gray-400 hover:text-[#5e5ce6] transition-colors cursor-pointer"
+          className="text-gray-500 dark:text-gray-400 hover:text-[#5e5ce6] transition-colors cursor-pointer"
           title={t('pipeline.interview_prep')}
         >
           <ClipboardList className="w-3.5 h-3.5" />
         </Link>
+
+        {/* Stage move: the visible, pointer-free counterpart to dragging.
+            Arrow keys do the same while the card itself has focus. */}
+        <div className="flex items-center gap-1 ml-auto">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onMoveStage(prevStage) }}
+            disabled={!prevStage}
+            aria-label={prevStage ? `${t('pipeline.move_to')} ${prevStage}` : t('pipeline.move_first')}
+            title={prevStage ? `${t('pipeline.move_to')} ${prevStage}` : undefined}
+            className="w-6 h-6 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] hover:text-black dark:hover:text-white transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onMoveStage(nextStage) }}
+            disabled={!nextStage}
+            aria-label={nextStage ? `${t('pipeline.move_to')} ${nextStage}` : t('pipeline.move_last')}
+            title={nextStage ? `${t('pipeline.move_to')} ${nextStage}` : undefined}
+            className="w-6 h-6 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] hover:text-black dark:hover:text-white transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
 function MobileKanbanCard({ entry, t, interviews, rating, prevStage, nextStage, onMove, onRemove, onOpenNotes, onOpenInterview }) {
+  const { locale } = useI18n()
   const stageColor = (stage) => ({
     Beworben: '#9ca3af', Vorauswahl: '#0071e3', Interview: '#ff9f0a',
     Angebot: '#8b5cf6', Hired: '#34c759', Abgesagt: '#ff3b30'
@@ -736,7 +790,7 @@ function MobileKanbanCard({ entry, t, interviews, rating, prevStage, nextStage, 
             <div className="flex items-center gap-2">
               <Calendar className="w-3 h-3 text-[#ff9f0a]" />
               <span className="text-[12px] font-semibold text-[#ff9f0a]">
-                {new Date(next.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}
+                {new Date(next.interview_date + 'T00:00:00').toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'short' })}
                 {next.interview_time && ` · ${next.interview_time}`}
               </span>
             </div>

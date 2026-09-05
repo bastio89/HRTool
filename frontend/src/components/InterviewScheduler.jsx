@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { X, Calendar, Clock, MapPin, Video, Phone, Users, Link2, Save, Loader2, Trash2, Check } from 'lucide-react'
 import { interviewsApi } from '../api'
 import Modal from './Modal'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 const INTERVIEW_TYPES = [
   { value: 'vor Ort', labelKey: 'interview.type_onsite', icon: MapPin },
@@ -24,6 +25,7 @@ const STATUS_LABEL_KEYS = {
 }
 
 export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
+  const fieldIdPrefix = useId()
   const { t, locale } = useI18n()
   const [interviews, setInterviews] = useState([])
   const [loading, setLoading] = useState(true)
@@ -107,13 +109,13 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
 
   const formatDate = (d) => {
     if (!d) return '—'
-    return new Date(d + 'T00:00:00').toLocaleDateString(locale === 'en' ? 'en-US' : 'de-DE', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+    return new Date(d + 'T00:00:00').toLocaleDateString(localeTag(locale), { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
   }
 
   const statusColors = {
     geplant: 'bg-[#0071e3]/10 text-[#0071e3]',
     bestätigt: 'bg-[#34c759]/10 text-[#34c759]',
-    abgeschlossen: 'bg-gray-100 dark:bg-gray-800 text-gray-500',
+    abgeschlossen: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
     abgesagt: 'bg-[#ff3b30]/10 text-[#ff3b30]',
   }
 
@@ -128,7 +130,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
       <div>
           {loading ? (
             <div className="text-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto" />
+              <Loader2 className="w-6 h-6 animate-spin text-gray-500 dark:text-gray-400 mx-auto" />
             </div>
           ) : (
             <>
@@ -151,7 +153,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                               <span className={`px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${statusColors[iv.status] || statusColors.geplant}`}>
                                 {t(STATUS_LABEL_KEYS[iv.status]) || iv.status}
                               </span>
-                              <span className="text-[12px] text-gray-400">
+                              <span className="text-[12px] text-gray-500 dark:text-gray-400">
                                 {t(TYPE_LABEL_KEYS[iv.interview_type]) || iv.interview_type} · {iv.duration_minutes} {t('interview.minutes_short')}
                               </span>
                             </div>
@@ -163,17 +165,17 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                               <Check className="w-3.5 h-3.5 text-[#ff3b30]" />
                             </button>
                             <button onClick={() => setDeleteConfirm(null)} className="w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center cursor-pointer">
-                              <X className="w-3.5 h-3.5 text-gray-400" />
+                              <X className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
                             </button>
                           </div>
                         ) : (
                           <button onClick={() => setDeleteConfirm(iv.id)} className="w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center transition-colors cursor-pointer opacity-0 group-hover:opacity-100">
-                            <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-[#ff3b30]" />
+                            <Trash2 className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30]" />
                           </button>
                         )}
                       </div>
                       {iv.location && (
-                        <p className="text-[13px] text-gray-500 mt-2 flex items-center gap-1.5 ml-[52px]">
+                        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 flex items-center gap-1.5 ml-[52px]">
                           <MapPin className="w-3 h-3" /> {iv.location}
                         </p>
                       )}
@@ -183,7 +185,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                         </a>
                       )}
                       {iv.participants && (
-                        <p className="text-[13px] text-gray-500 mt-1 flex items-center gap-1.5 ml-[52px]">
+                        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5 ml-[52px]">
                           <Users className="w-3 h-3" /> {iv.participants}
                         </p>
                       )}
@@ -201,7 +203,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                             className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
                               iv.status === s.value
                                 ? statusColors[s.value]
-                                : 'bg-transparent text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                             }`}
                           >
                             {t(s.labelKey)}
@@ -218,8 +220,8 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.date_label')} *</label>
-                      <input
+                      <label htmlFor={`${fieldIdPrefix}-date`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.date_label')} *</label>
+                      <input id={`${fieldIdPrefix}-date`}
                         type="date"
                         value={form.interview_date}
                         onChange={e => setForm(f => ({ ...f, interview_date: e.target.value }))}
@@ -228,8 +230,8 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                       />
                     </div>
                     <div>
-                      <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.time_label')}</label>
-                      <input
+                      <label htmlFor={`${fieldIdPrefix}-time`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.time_label')}</label>
+                      <input id={`${fieldIdPrefix}-time`}
                         type="time"
                         value={form.interview_time}
                         onChange={e => setForm(f => ({ ...f, interview_time: e.target.value }))}
@@ -260,8 +262,8 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                       </div>
                     </div>
                     <div>
-                      <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.duration_label')}</label>
-                      <select
+                      <label htmlFor={`${fieldIdPrefix}-duration`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.duration_label')}</label>
+                      <select id={`${fieldIdPrefix}-duration`}
                         value={form.duration_minutes}
                         onChange={e => setForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))}
                         className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
@@ -277,47 +279,47 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
 
                   {form.interview_type === 'vor Ort' && (
                     <div>
-                      <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.location_label')}</label>
-                      <input
+                      <label htmlFor={`${fieldIdPrefix}-location`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.location_label')}</label>
+                      <input id={`${fieldIdPrefix}-location`}
                         value={form.location}
                         onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                         placeholder={t('interview.location_placeholder')}
-                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
                       />
                     </div>
                   )}
 
                   {form.interview_type === 'Video' && (
                     <div>
-                      <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.meeting_link_label')}</label>
-                      <input
+                      <label htmlFor={`${fieldIdPrefix}-meeting-link`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.meeting_link_label')}</label>
+                      <input id={`${fieldIdPrefix}-meeting-link`}
                         value={form.meeting_link}
                         onChange={e => setForm(f => ({ ...f, meeting_link: e.target.value }))}
                         placeholder="https://meet.google.com/... oder https://zoom.us/..."
                         type="url"
-                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
                       />
                     </div>
                   )}
 
                   <div>
-                    <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.participants_label')}</label>
-                    <input
+                    <label htmlFor={`${fieldIdPrefix}-participants`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.participants_label')}</label>
+                    <input id={`${fieldIdPrefix}-participants`}
                       value={form.participants}
                       onChange={e => setForm(f => ({ ...f, participants: e.target.value }))}
                       placeholder={t('interview.participants_placeholder')}
-                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.notes_label')}</label>
-                    <textarea
+                    <label htmlFor={`${fieldIdPrefix}-notes`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-1.5 block">{t('interview.notes_label')}</label>
+                    <textarea id={`${fieldIdPrefix}-notes`}
                       value={form.notes}
                       onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                       placeholder={t('interview.notes_placeholder')}
                       rows={2}
-                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all resize-none"
+                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all resize-none"
                     />
                   </div>
 
@@ -333,7 +335,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                     <button
                       type="button"
                       onClick={() => setShowForm(false)}
-                      className="px-4 py-2.5 rounded-full text-[14px] font-medium text-gray-500 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-all cursor-pointer"
+                      className="px-4 py-2.5 rounded-full text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-all cursor-pointer"
                     >
                       {t('common.cancel')}
                     </button>
@@ -342,7 +344,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
               ) : (
                 <button
                   onClick={() => setShowForm(true)}
-                  className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-[16px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-500 hover:border-[#0071e3] hover:text-[#0071e3] transition-all cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-[16px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:border-[#0071e3] hover:text-[#0071e3] transition-all cursor-pointer"
                 >
                   <Calendar className="w-4 h-4" />
                   {t('interview.plan')}

@@ -3,6 +3,7 @@ import { Printer, EyeOff, Eye, MapPin, Briefcase, GraduationCap, Globe, Award, C
 import { useI18n } from '../I18nContext'
 import Modal from './Modal'
 import { Button } from './UI'
+import { localeTag } from '../utils/format'
 
 const STATUS_STYLES = {
   'Aktiv':      { bg: '#34c759', text: '#fff' },
@@ -99,7 +100,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
         ${printContent.innerHTML}
         <div class="footer">
           <span class="footer-brand">HR-Tool</span>
-          <span>${t('print.generated_on')} ${new Date().toLocaleDateString(locale === 'en' ? 'en-US' : 'de-DE', { day: '2-digit', month: 'long', year: 'numeric' })}${anonymized ? ' · ' + t('print.anonymized_profile') : ''}</span>
+          <span>${t('print.generated_on')} ${new Date().toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'long', year: 'numeric' })}${anonymized ? ' · ' + t('print.anonymized_profile') : ''}</span>
         </div>
       </body>
       </html>

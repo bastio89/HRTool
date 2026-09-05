@@ -7,6 +7,7 @@ import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
 import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 const PERIOD_OPTIONS = [
   { value: 7, labelKey: 'dashboard.period_7' },
@@ -16,7 +17,7 @@ const PERIOD_OPTIONS = [
 
 export default function Dashboard() {
   const { isAdmin } = useAuth()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
@@ -102,11 +103,11 @@ export default function Dashboard() {
                 }, 100)
               })
             }}
-            className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0071e3]/25"
+            className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer"
             title={t('dashboard.pdf_export')}
             aria-label={t('dashboard.pdf_export')}
           >
-            <FileText className="w-5 h-5 text-gray-500" />
+            <FileText className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
           <WidgetConfigurator
           widgets={widgets}
@@ -297,6 +298,7 @@ function LocationsContent({ stats, t }) {
 }
 
 function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
+  const { locale } = useI18n()
   const showLocations = visibleWidgets.some(w => w.id === 'locations')
   return (
     <div className={`grid grid-cols-1 ${showLocations ? 'lg:grid-cols-3' : ''} gap-8`}>
@@ -326,7 +328,7 @@ function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
                         <p className="text-[20px] font-semibold tracking-tight text-black dark:text-white">{match.job_title}</p>
                         <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-2 flex items-center gap-2">
                           <Clock className="w-4 h-4" />
-                          {new Date(match.created_at).toLocaleDateString('de-DE')}
+                          {new Date(match.created_at).toLocaleDateString(localeTag(locale))}
                         </p>
                       </div>
                     </div>
@@ -429,28 +431,28 @@ function TimeToHireWidget({ data, t }) {
           <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_avg')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-black dark:text-white">
             {overview.avgDaysToHire != null ? `${overview.avgDaysToHire}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
+            <span className="text-[14px] font-medium text-gray-500 dark:text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
           <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_median')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-black dark:text-white">
             {overview.medianDays != null ? `${overview.medianDays}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
+            <span className="text-[14px] font-medium text-gray-500 dark:text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
           <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_fastest')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-[#34c759]">
             {overview.minDays != null ? `${overview.minDays}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
+            <span className="text-[14px] font-medium text-gray-500 dark:text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
         <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
           <p className="text-[12px] font-medium text-gray-500 dark:text-gray-400 mb-1">{t('dashboard.tth_slowest')}</p>
           <p className="text-[28px] font-semibold tracking-tight text-[#ff3b30]">
             {overview.maxDays != null ? `${overview.maxDays}` : '—'}
-            <span className="text-[14px] font-medium text-gray-400 ml-1">{t('common.days')}</span>
+            <span className="text-[14px] font-medium text-gray-500 dark:text-gray-400 ml-1">{t('common.days')}</span>
           </p>
         </div>
       </div>
@@ -469,7 +471,7 @@ function TimeToHireWidget({ data, t }) {
                     <span className="text-[14px] font-medium text-black dark:text-white">{s.stage}</span>
                     <span className="text-[14px] font-semibold" style={{ color }}>
                       {s.avgDays != null ? `${s.avgDays} ${t('common.days')}` : '—'}
-                      {s.count > 0 && <span className="text-[11px] text-gray-400 ml-1">({s.count}x)</span>}
+                      {s.count > 0 && <span className="text-[11px] text-gray-500 dark:text-gray-400 ml-1">({s.count}x)</span>}
                     </span>
                   </div>
                   <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-600">
@@ -505,7 +507,7 @@ function TimeToHireWidget({ data, t }) {
                       </span>
                       {isImproved && <TrendingDown className="w-3.5 h-3.5 text-[#34c759]" />}
                       {isWorse && <TrendingUp className="w-3.5 h-3.5 text-[#ff3b30]" />}
-                      <span className="text-[11px] text-gray-400">{m.hired} hired</span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">{m.hired} hired</span>
                     </div>
                   </div>
                   <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-600">
@@ -536,7 +538,7 @@ function TimeToHireWidget({ data, t }) {
                     <span className="text-[14px] font-medium text-black dark:text-white truncate">{j.jobTitle}</span>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                    <span className="text-[13px] text-gray-400">{j.hired}x</span>
+                    <span className="text-[13px] text-gray-500 dark:text-gray-400">{j.hired}x</span>
                     <span className="text-[14px] font-bold text-[#ff9500] tabular-nums">{j.avgDays}d</span>
                   </div>
                 </div>
@@ -612,11 +614,12 @@ function DSGVOWidget({ data, t }) {
 }
 
 function CalendarWidget({ interviews, t }) {
+  const { locale } = useI18n()
   const typeIcons = { 'Video': Video, 'Telefon': Phone, 'vor Ort': MapPin }
   const statusColors = {
     geplant: 'bg-[#0071e3]/10 text-[#0071e3]',
     bestätigt: 'bg-[#34c759]/10 text-[#34c759]',
-    abgeschlossen: 'bg-gray-100 dark:bg-gray-800 text-gray-500',
+    abgeschlossen: 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
     abgesagt: 'bg-[#ff3b30]/10 text-[#ff3b30]',
   }
 
@@ -642,7 +645,7 @@ function CalendarWidget({ interviews, t }) {
               <div key={iv.id} className="flex items-center gap-4 p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors">
                 <div className="w-12 h-12 rounded-[14px] bg-white dark:bg-[#1c1c1e] flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
                   <span className="text-[10px] font-bold text-[#ff9f0a] uppercase leading-none">
-                    {new Date(iv.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { month: 'short' })}
+                    {new Date(iv.interview_date + 'T00:00:00').toLocaleDateString(localeTag(locale), { month: 'short' })}
                   </span>
                   <span className="text-[18px] font-bold text-black dark:text-white leading-tight">
                     {new Date(iv.interview_date + 'T00:00:00').getDate()}
@@ -656,9 +659,9 @@ function CalendarWidget({ interviews, t }) {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {iv.interview_time && (
-                    <span className="text-[13px] font-medium text-gray-500">{iv.interview_time}</span>
+                    <span className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{iv.interview_time}</span>
                   )}
-                  <TypeIcon className="w-4 h-4 text-gray-400" />
+                  <TypeIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${statusColors[iv.status] || statusColors.geplant}`}>
                     {iv.status}
                   </span>

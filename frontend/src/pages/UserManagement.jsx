@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
 import { authApi, jobsApi } from '../api'
@@ -10,6 +10,7 @@ import useRevealOnOpen from '../hooks/useRevealOnOpen'
 import { PageContainer } from '../components/UI'
 
 export default function UserManagement() {
+  const fieldIdPrefix = useId()
   const { user: currentUser, isAdmin } = useAuth()
   const { t } = useI18n()
   const toast = useToast()
@@ -235,8 +236,8 @@ export default function UserManagement() {
           <h2 className="text-[20px] font-semibold text-black dark:text-white mb-6">{t('users.create_user')}</h2>
           <form onSubmit={handleCreate} className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.username')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-username`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.username')}</label>
+              <input id={`${fieldIdPrefix}-username`}
                 type="text"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -246,8 +247,8 @@ export default function UserManagement() {
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.password')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-password`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.password')}</label>
+              <input id={`${fieldIdPrefix}-password`}
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -259,8 +260,8 @@ export default function UserManagement() {
               <PasswordStrength password={form.password} />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.display_name')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-display-name`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.display_name')}</label>
+              <input id={`${fieldIdPrefix}-display-name`}
                 type="text"
                 value={form.display_name}
                 onChange={(e) => setForm({ ...form, display_name: e.target.value })}
@@ -270,8 +271,8 @@ export default function UserManagement() {
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.role')}</label>
-              <select
+              <label htmlFor={`${fieldIdPrefix}-role`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.role')}</label>
+              <select id={`${fieldIdPrefix}-role`}
                 value={form.role}
                 onChange={(e) => { setForm({ ...form, role: e.target.value }); setSelectedJobIds([]) }}
                 className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all appearance-none"
@@ -286,7 +287,7 @@ export default function UserManagement() {
             {form.role === 'fachbereich' && (
               <div className="col-span-2">
                 <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">
-                  Zugewiesene Stellen <span className="text-gray-400 font-normal">(mindestens eine auswählen)</span>
+                  Zugewiesene Stellen <span className="text-gray-500 dark:text-gray-400 font-normal">(mindestens eine auswählen)</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 rounded-2xl p-3">
                   {jobs.filter(j => j.status === 'Offen').map(job => (
@@ -304,7 +305,7 @@ export default function UserManagement() {
                     </label>
                   ))}
                   {jobs.filter(j => j.status === 'Offen').length === 0 && (
-                    <p className="text-[13px] text-gray-400 col-span-2 py-2 text-center">Keine offenen Stellen</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 col-span-2 py-2 text-center">Keine offenen Stellen</p>
                   )}
                 </div>
               </div>
@@ -338,8 +339,8 @@ export default function UserManagement() {
           </h2>
           <form onSubmit={handleChangeOwnPassword} className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.current_password')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-current-password`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.current_password')}</label>
+              <input id={`${fieldIdPrefix}-current-password`}
                 type="password"
                 value={changeForm.currentPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, currentPassword: e.target.value })}
@@ -348,8 +349,8 @@ export default function UserManagement() {
               />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.new_password')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-new-password`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.new_password')}</label>
+              <input id={`${fieldIdPrefix}-new-password`}
                 type="password"
                 value={changeForm.newPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, newPassword: e.target.value })}
@@ -361,8 +362,8 @@ export default function UserManagement() {
               <PasswordStrength password={changeForm.newPassword} />
             </div>
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.confirm_password')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-confirm-password`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.confirm_password')}</label>
+              <input id={`${fieldIdPrefix}-confirm-password`}
                 type="password"
                 value={changeForm.confirmPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, confirmPassword: e.target.value })}
@@ -400,8 +401,8 @@ export default function UserManagement() {
           </h2>
           <form onSubmit={handleResetPassword} className="flex flex-col gap-4">
             <div className="flex-1 max-w-md">
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.new_password')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-reset-password`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('users.new_password')}</label>
+              <input id={`${fieldIdPrefix}-reset-password`}
                 type="password"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
@@ -475,14 +476,14 @@ export default function UserManagement() {
                   <>
                     <button
                       onClick={() => { setResetUserId(u.id); setResetPassword(''); setShowForm(false); setShowChangePassword(false); setError(''); setSuccess('') }}
-                      className="p-2.5 text-gray-400 hover:text-[#ff9f0a] hover:bg-orange-50 rounded-xl transition-all cursor-pointer"
+                      className="p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] hover:bg-orange-50 rounded-xl transition-all cursor-pointer"
                       title={t('users.reset_password')}
                     >
                       <Key className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(u.id, u.username)}
-                    className="p-2.5 text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all"
+                    className="p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all"
                     title={t('users.delete_user')}
                   >
                     <Trash2 className="w-4 h-4" />

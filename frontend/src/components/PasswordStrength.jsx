@@ -46,7 +46,7 @@ export default function PasswordStrength({ password = '' }) {
       {/* Rules checklist */}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {results.map(r => (
-          <span key={r.label} className={`flex items-center gap-1 text-[12px] font-medium transition-colors ${r.pass ? 'text-[#34c759]' : 'text-gray-400 dark:text-gray-500'}`}>
+          <span key={r.label} className={`flex items-center gap-1 text-[12px] font-medium transition-colors ${r.pass ? 'text-[#34c759]' : 'text-gray-500 dark:text-gray-400'}`}>
             {r.pass ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
             {r.label}
           </span>

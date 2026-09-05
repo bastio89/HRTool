@@ -111,25 +111,25 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
         {/* Paare */}
         <div className="rounded-[14px] p-3 bg-white/60 dark:bg-black/20 text-center">
           <div className="flex items-center justify-center mb-1">
-            <BarChart3 className="w-4 h-4 text-gray-400" />
+            <BarChart3 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none">{totalPairs}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Paare gesamt</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Paare gesamt</p>
         </div>
 
         {/* Verstrichene Zeit */}
         <div className="rounded-[14px] p-3 bg-white/60 dark:bg-black/20 text-center">
           <div className="flex items-center justify-center mb-1">
-            <Clock className="w-4 h-4 text-gray-400" />
+            <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none tabular-nums">{fmt(elapsed)}</p>
-          <p className="text-[11px] text-gray-400 mt-1">Verstrichene Zeit</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Verstrichene Zeit</p>
         </div>
 
         {/* ETA / Fertig */}
         <div className="rounded-[14px] p-3 bg-white/60 dark:bg-black/20 text-center">
           <div className="flex items-center justify-center mb-1">
-            <Hourglass className="w-4 h-4 text-gray-400" />
+            <Hourglass className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none tabular-nums">
             {running
@@ -137,18 +137,18 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
               : fmt(elapsed)
             }
           </p>
-          <p className="text-[11px] text-gray-400 mt-1">{running ? 'Noch ca.' : 'Dauer gesamt'}</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{running ? 'Noch ca.' : 'Dauer gesamt'}</p>
         </div>
 
         {/* Durchschnitt */}
         <div className="rounded-[14px] p-3 bg-white/60 dark:bg-black/20 text-center">
           <div className="flex items-center justify-center mb-1">
-            <CheckCircle2 className="w-4 h-4 text-gray-400" />
+            <CheckCircle2 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none tabular-nums">
             {avgTime !== null ? fmt(avgTime) : '–'}
           </p>
-          <p className="text-[11px] text-gray-400 mt-1">Ø letzte {history.length} Runs</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Ø letzte {history.length} Runs</p>
         </div>
       </div>
     </div>

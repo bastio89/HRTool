@@ -148,7 +148,7 @@ export default function CandidateToJobs() {
                 )}
               </div>
             ) : (
-              <p className="text-[15px] font-medium text-gray-400">{t('matching.candidate_single_hint')}</p>
+              <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">{t('matching.candidate_single_hint')}</p>
             )}
           </Card>
 

@@ -3,9 +3,10 @@ import { Shield, Trash2, AlertTriangle, Clock, Users, Settings, Check, Loader2 }
 import { settingsApi } from '../api'
 import { Card, Button, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 export default function DSGVO() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [loading, setLoading] = useState(true)
   const [retentionMonths, setRetentionMonths] = useState(6)
   const [savedMonths, setSavedMonths] = useState(6)
@@ -78,7 +79,7 @@ export default function DSGVO() {
 
   const formatDate = (dt) => {
     if (!dt) return '—'
-    return new Date(dt).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
+    return new Date(dt).toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'short', year: 'numeric' })
   }
 
   if (loading) return <LoadingSpinner text={t('dsgvo.loading')} />
@@ -115,17 +116,17 @@ export default function DSGVO() {
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8">
         <Card className="p-6 text-center">
-          <Users className="w-6 h-6 text-gray-400 mx-auto mb-3" />
+          <Users className="w-6 h-6 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
           <p className="text-[28px] font-bold text-black dark:text-white">{totalCandidates}</p>
           <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.total_candidates')}</p>
         </Card>
         <Card className={`p-6 text-center ${expiredCount > 0 ? 'ring-2 ring-[#ff9f0a]/30' : ''}`}>
-          <AlertTriangle className={`w-6 h-6 mx-auto mb-3 ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-gray-400'}`} />
+          <AlertTriangle className={`w-6 h-6 mx-auto mb-3 ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-gray-500 dark:text-gray-400'}`} />
           <p className={`text-[28px] font-bold ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-black dark:text-white'}`}>{expiredCount}</p>
           <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.expired')}</p>
         </Card>
         <Card className="p-6 text-center">
-          <Clock className="w-6 h-6 text-gray-400 mx-auto mb-3" />
+          <Clock className="w-6 h-6 text-gray-500 dark:text-gray-400 mx-auto mb-3" />
           <p className="text-[28px] font-bold text-black dark:text-white">{savedMonths}</p>
           <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('dsgvo.months_period')}</p>
         </Card>
@@ -134,7 +135,7 @@ export default function DSGVO() {
       {/* Retention Period Config */}
       <Card className="p-6 sm:p-10 mb-8">
         <div className="flex items-center gap-3 mb-6">
-          <Settings className="w-5 h-5 text-gray-400" />
+          <Settings className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           <h2 className="text-[20px] font-semibold text-black dark:text-white">{t('dsgvo.retention')}</h2>
         </div>
         <p className="text-[15px] text-gray-500 dark:text-gray-400 mb-6">
@@ -147,9 +148,10 @@ export default function DSGVO() {
               <span className="text-[14px] font-semibold text-gray-600 dark:text-gray-400">
                 {retentionMonths} {retentionMonths === 1 ? t('dsgvo.month_singular') : t('dsgvo.months_plural')}
               </span>
-              <span className="text-[12px] text-gray-400">{t('dsgvo.months_range')}</span>
+              <span className="text-[12px] text-gray-500 dark:text-gray-400">{t('dsgvo.months_range')}</span>
             </div>
             <input
+              aria-label={t('dsgvo.retention_months', 'Aufbewahrungsdauer')}
               type="range"
               min={1}
               max={24}
@@ -161,7 +163,7 @@ export default function DSGVO() {
                 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer
                 [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white"
             />
-            <div className="flex justify-between mt-2 text-[11px] text-gray-400">
+            <div className="flex justify-between mt-2 text-[11px] text-gray-500 dark:text-gray-400">
               <span>{t('dsgvo.slider_tick').replace('{n}', '1')}</span>
               <span>{t('dsgvo.slider_tick').replace('{n}', '6')}</span>
               <span>{t('dsgvo.slider_tick').replace('{n}', '12')}</span>
@@ -187,7 +189,7 @@ export default function DSGVO() {
       <Card className="p-6 sm:p-10">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <AlertTriangle className={`w-5 h-5 ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-gray-400'}`} />
+            <AlertTriangle className={`w-5 h-5 ${expiredCount > 0 ? 'text-[#ff9f0a]' : 'text-gray-500 dark:text-gray-400'}`} />
             <h2 className="text-[20px] font-semibold text-black dark:text-white">
               {t('dsgvo.expired_candidates')}
               {expiredCount > 0 && (
@@ -237,7 +239,7 @@ export default function DSGVO() {
             {expired.map(c => (
               <div key={c.id} className="flex items-center justify-between p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-colors">
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-white dark:bg-[#1c1c1e] flex items-center justify-center text-[14px] font-semibold text-gray-500 flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-white dark:bg-[#1c1c1e] flex items-center justify-center text-[14px] font-semibold text-gray-500 dark:text-gray-400 flex-shrink-0">
                     {c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0">
@@ -251,7 +253,7 @@ export default function DSGVO() {
                   <p className="text-[13px] font-medium text-[#ff9f0a]">
                     {t('dsgvo.days_over').replace('{days}', Math.round(c.days_since_update))}
                   </p>
-                  <p className="text-[12px] text-gray-400">
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400">
                     {t('dsgvo.last_change').replace('{date}', formatDate(c.updated_at || c.created_at))}
                   </p>
                 </div>

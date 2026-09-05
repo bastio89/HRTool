@@ -53,7 +53,7 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
           <div className="flex items-center justify-between gap-4 w-full">
             <button
               onClick={onReset}
-              className="flex items-center gap-2 text-[14px] font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-2 text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               {t('widget.reset')}
@@ -87,20 +87,20 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
                   }`}
                 style={{ cursor: 'grab' }}
               >
-                <GripVertical className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                <GripVertical className="w-5 h-5 text-gray-500 dark:text-gray-500 flex-shrink-0" />
 
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
                   widget.visible 
                     ? 'bg-[#0071e3]/10' 
                     : 'bg-gray-200/60 dark:bg-gray-700/60'
                 }`}>
-                  <Icon className={`w-4.5 h-4.5 ${widget.visible ? 'text-[#0071e3]' : 'text-gray-400'}`} />
+                  <Icon className={`w-4.5 h-4.5 ${widget.visible ? 'text-[#0071e3]' : 'text-gray-500 dark:text-gray-400'}`} />
                 </div>
 
                 <span className={`flex-1 text-[15px] font-medium ${
                   widget.visible 
                     ? 'text-black dark:text-white' 
-                    : 'text-gray-400 dark:text-gray-500 line-through'
+                    : 'text-gray-500 dark:text-gray-400 line-through'
                 }`}>
                   {widget.label}
                 </span>

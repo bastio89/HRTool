@@ -88,12 +88,12 @@ export default function MatrixMatching() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               <div className="p-8 rounded-[24px] bg-[#f5f5f7] dark:bg-[#2c2c2e] text-center">
-                <Briefcase className="w-7 h-7 text-gray-400 mx-auto mb-4" />
+                <Briefcase className="w-7 h-7 text-gray-500 dark:text-gray-400 mx-auto mb-4" />
                 <p className="text-[40px] leading-none font-semibold tracking-tight text-black dark:text-white">{jobs.length}</p>
                 <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">Stellen</p>
               </div>
               <div className="p-8 rounded-[24px] bg-[#f5f5f7] dark:bg-[#2c2c2e] text-center">
-                <Users className="w-7 h-7 text-gray-400 mx-auto mb-4" />
+                <Users className="w-7 h-7 text-gray-500 dark:text-gray-400 mx-auto mb-4" />
                 <p className="text-[40px] leading-none font-semibold tracking-tight text-black dark:text-white">{candidates.length}</p>
                 <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">Bewerber</p>
               </div>

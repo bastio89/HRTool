@@ -54,7 +54,7 @@ export default function Breadcrumb() {
     <nav className="flex items-center gap-1.5 text-[13px] font-medium mb-6">
       <Link
         to="/"
-        className="text-gray-400 dark:text-gray-500 hover:text-[#0071e3] dark:hover:text-[#0a84ff] transition-colors flex items-center"
+        className="text-gray-500 dark:text-gray-500 hover:text-[#0071e3] dark:hover:text-[#0a84ff] transition-colors flex items-center"
       >
         <Home className="w-3.5 h-3.5" />
       </Link>
@@ -66,7 +66,7 @@ export default function Breadcrumb() {
           ) : (
             <Link
               to={crumb.path}
-              className="text-gray-400 dark:text-gray-500 hover:text-[#0071e3] dark:hover:text-[#0a84ff] transition-colors"
+              className="text-gray-500 dark:text-gray-500 hover:text-[#0071e3] dark:hover:text-[#0a84ff] transition-colors"
             >
               {crumb.label}
             </Link>

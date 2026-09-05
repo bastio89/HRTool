@@ -14,6 +14,7 @@ import Modal from '../components/Modal'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 import SendEmailModal from '../components/SendEmailModal'
 import CommentSection from '../components/CommentSection'
+import { localeTag } from '../utils/format'
 
 const ACTIVITY_TYPES = ['Notiz', 'Anruf', 'E-Mail', 'Interview', 'Angebot', 'Absage', 'Pipeline']
 
@@ -34,11 +35,11 @@ const STATUS_STYLES = {
   'Blacklist':  'bg-[#ff3b30]/10 text-[#ff3b30]',
 }
 
-function formatDate(dt) {
+function formatDate(dt, locale) {
   if (!dt) return ''
   const d = new Date(dt)
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }) +
-    ' \u00b7 ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'short', year: 'numeric' }) +
+    ' \u00b7 ' + d.toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' })
 }
 
 function formatMonth(dateStr) {
@@ -52,7 +53,7 @@ export default function CandidateDetail() {
   const toast = useToast()
   const { id } = useParams()
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [candidate, setCandidate] = useState(null)
   const [activities, setActivities] = useState([])
   const [loading, setLoading] = useState(true)
@@ -219,7 +220,7 @@ export default function CandidateDetail() {
   if (loading) return <LoadingSpinner text={t('detail.loading')} />
   if (!candidate) return (
     <PageContainer width="content" className="text-center py-24">
-      <p className="text-[20px] font-semibold text-gray-400">{t('detail.not_found')}</p>
+      <p className="text-[20px] font-semibold text-gray-500 dark:text-gray-400">{t('detail.not_found')}</p>
       <Button variant="dark" size="md" onClick={() => navigate('/candidates')} className="mt-8"><ArrowLeft className="w-5 h-5" /> {t('common.back')}</Button>
     </PageContainer>
   )
@@ -239,7 +240,7 @@ export default function CandidateDetail() {
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
         <div className="flex-1">
-          <p className="text-[13px] sm:text-[15px] font-medium text-gray-400 mb-0.5">{t('detail.profile')}</p>
+          <p className="text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400 mb-0.5">{t('detail.profile')}</p>
           <h1 className="text-[24px] sm:text-[36px] font-semibold tracking-tight text-black dark:text-white leading-tight">{candidate.name}</h1>
         </div>
         <button onClick={() => setShowEmailModal(true)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#0071e3]/10 dark:bg-[#0a84ff]/20 hover:bg-[#0071e3]/20 dark:hover:bg-[#0a84ff]/30 flex items-center justify-center transition-colors cursor-pointer flex-shrink-0" title={t('email.send_email')}><Mail className="w-5 h-5 sm:w-6 sm:h-6 text-[#0071e3] dark:text-[#0a84ff]" /></button>
@@ -283,8 +284,8 @@ export default function CandidateDetail() {
               {candidate.mobility && <InfoRow icon={Car} text={candidate.mobility} />}
               {candidate.availability && <InfoRow icon={Clock} text={candidate.availability} />}
               {candidate.notice_period && <InfoRow icon={Calendar} text={`${t('form.notice_period')}: ${candidate.notice_period}`} />}
-              {candidate.available_from && <InfoRow icon={Calendar} text={`${t('form.available_from')}: ${new Date(candidate.available_from).toLocaleDateString('de-DE')}`} />}
-              {candidate.work_permit && <InfoRow icon={Shield} text={`${candidate.work_permit}${candidate.work_permit_until ? ` (bis ${new Date(candidate.work_permit_until).toLocaleDateString('de-DE')})` : ''}`} />}
+              {candidate.available_from && <InfoRow icon={Calendar} text={`${t('form.available_from')}: ${new Date(candidate.available_from).toLocaleDateString(localeTag(locale))}`} />}
+              {candidate.work_permit && <InfoRow icon={Shield} text={`${candidate.work_permit}${candidate.work_permit_until ? ` (bis ${new Date(candidate.work_permit_until).toLocaleDateString(localeTag(locale))})` : ''}`} />}
             </div>
 
             {(hasSalaryStructure || candidate.desired_salary) && (
@@ -292,7 +293,7 @@ export default function CandidateDetail() {
                 <DollarSign className="w-4 h-4 text-[#34c759]" />
                 {hasSalaryStructure ? (
                   <span className="text-[15px] font-semibold text-[#34c759]">
-                    {candidate.salary_min?.toLocaleString('de-DE')} \u2013 {candidate.salary_max?.toLocaleString('de-DE')} {currencySymbol} {intervalLabel}
+                    {candidate.salary_min?.toLocaleString(localeTag(locale))} \u2013 {candidate.salary_max?.toLocaleString(localeTag(locale))} {currencySymbol} {intervalLabel}
                   </span>
                 ) : (
                   <span className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{candidate.desired_salary}</span>
@@ -311,7 +312,7 @@ export default function CandidateDetail() {
 
             {candidate.skills && (
               <div className="mt-5">
-                <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Skills</p>
+                <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Skills</p>
                 <div className="flex flex-wrap gap-2">
                   {candidate.skills.split(',').map((s, i) => (<span key={i} className="px-3.5 py-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full text-[14px] font-medium text-gray-700 dark:text-gray-300">{s.trim()}</span>))}
                 </div>
@@ -319,7 +320,7 @@ export default function CandidateDetail() {
             )}
             {tags.length > 0 && (
               <div className="mt-4">
-                <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Tags</p>
+                <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Tags</p>
                 <div className="flex flex-wrap gap-2">
                   {tags.map((tg, i) => (<span key={i} className="px-3.5 py-1.5 bg-[#0071e3]/10 rounded-full text-[14px] font-semibold text-[#0071e3]">{tg}</span>))}
                 </div>
@@ -327,15 +328,15 @@ export default function CandidateDetail() {
             )}
 
             {candidate.gdpr_consent_date && (
-              <div className="mt-4 flex items-center gap-2 text-[13px] text-gray-400">
+              <div className="mt-4 flex items-center gap-2 text-[13px] text-gray-500 dark:text-gray-400">
                 <Shield className="w-3.5 h-3.5 text-[#34c759]" />
-                DSGVO: {candidate.gdpr_consent_type} am {new Date(candidate.gdpr_consent_date).toLocaleDateString('de-DE')}
-                {candidate.gdpr_consent_expires && <span className="text-[#ff9f0a]"> (l\u00e4uft ab: {new Date(candidate.gdpr_consent_expires).toLocaleDateString('de-DE')})</span>}
+                DSGVO: {candidate.gdpr_consent_type} am {new Date(candidate.gdpr_consent_date).toLocaleDateString(localeTag(locale))}
+                {candidate.gdpr_consent_expires && <span className="text-[#ff9f0a]"> (l\u00e4uft ab: {new Date(candidate.gdpr_consent_expires).toLocaleDateString(localeTag(locale))})</span>}
               </div>
             )}
 
             {candidate.referrer_name && (
-              <div className="mt-2 flex items-center gap-2 text-[13px] text-gray-400">
+              <div className="mt-2 flex items-center gap-2 text-[13px] text-gray-500 dark:text-gray-400">
                 <Building2 className="w-3.5 h-3.5 text-[#8b5cf6]" />
                 {t('form.referral_section')}: {candidate.referrer_name} {candidate.referrer_email && `(${candidate.referrer_email})`}
               </div>
@@ -343,11 +344,11 @@ export default function CandidateDetail() {
 
             {customValues.length > 0 && (
               <div className="mt-5">
-                <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-wider mb-3">{t('form.custom_fields')}</p>
+                <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">{t('form.custom_fields')}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {customValues.map(cv => (
                     <div key={cv.field_id} className="text-[14px]">
-                      <span className="font-medium text-gray-500">{cv.name}: </span>
+                      <span className="font-medium text-gray-500 dark:text-gray-400">{cv.name}: </span>
                       <span className="text-black dark:text-white">{cv.value}</span>
                     </div>
                   ))}
@@ -380,7 +381,7 @@ export default function CandidateDetail() {
                     {w.is_current ? <span className="px-2.5 py-0.5 rounded-full bg-[#34c759]/10 text-[#34c759] text-[12px] font-semibold">{t('form.is_current')}</span> : null}
                   </div>
                   <p className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{w.employer}{w.location ? ` \u00b7 ${w.location}` : ''}</p>
-                  <p className="text-[13px] text-gray-400 mt-1">{formatMonth(w.from_date)} {' \u2013 '} {w.is_current ? t('detail.present') : formatMonth(w.to_date)}</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{formatMonth(w.from_date)} {' \u2013 '} {w.is_current ? t('detail.present') : formatMonth(w.to_date)}</p>
                   {w.description && <p className="text-[14px] text-gray-600 dark:text-gray-400 mt-2 whitespace-pre-wrap">{w.description}</p>}
                 </div>
               </div>
@@ -406,7 +407,7 @@ export default function CandidateDetail() {
                 <div className="flex-1 pb-6">
                   <h3 className="text-[16px] font-bold text-black dark:text-white">{edu.degree || edu.institution}</h3>
                   <p className="text-[15px] font-medium text-gray-600 dark:text-gray-400">{edu.institution}{edu.field_of_study ? ` \u00b7 ${edu.field_of_study}` : ''}</p>
-                  <p className="text-[13px] text-gray-400 mt-1">{formatMonth(edu.from_date)} {' \u2013 '} {formatMonth(edu.to_date)}</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{formatMonth(edu.from_date)} {' \u2013 '} {formatMonth(edu.to_date)}</p>
                   {edu.description && <p className="text-[14px] text-gray-600 dark:text-gray-400 mt-2 whitespace-pre-wrap">{edu.description}</p>}
                 </div>
               </div>
@@ -423,7 +424,7 @@ export default function CandidateDetail() {
             <div className="flex items-center gap-2">
               <div className="flex">{[1,2,3,4,5].map(s => <Star key={s} className={`w-5 h-5 ${s <= Math.round(ratingOverall) ? 'text-[#ff9f0a] fill-[#ff9f0a]' : 'text-gray-200 dark:text-gray-600'}`} />)}</div>
               <span className="text-[18px] font-bold text-black dark:text-white">{ratingOverall}</span>
-              <span className="text-[14px] font-medium text-gray-400">({ratings.length})</span>
+              <span className="text-[14px] font-medium text-gray-500 dark:text-gray-400">({ratings.length})</span>
             </div>
           )}
         </div>
@@ -447,7 +448,7 @@ export default function CandidateDetail() {
               {[1,2,3,4,5].map(s => (<button key={s} type="button" onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} onClick={() => setNewRating(prev => ({ ...prev, rating: s }))} className="p-1 cursor-pointer transition-transform hover:scale-110"><Star className={`w-8 h-8 transition-colors ${s <= (hoverRating || newRating.rating) ? 'text-[#ff9f0a] fill-[#ff9f0a]' : 'text-gray-300 dark:text-gray-600'}`} /></button>))}
               {newRating.rating > 0 && <span className="ml-3 text-[16px] font-bold text-black dark:text-white">{newRating.rating}/5</span>}
             </div>
-            <textarea value={newRating.comment} onChange={e => setNewRating(prev => ({ ...prev, comment: e.target.value }))} placeholder={t('detail.comment_placeholder')} rows={2} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all" />
+            <textarea aria-label={t('detail.comment_placeholder')} value={newRating.comment} onChange={e => setNewRating(prev => ({ ...prev, comment: e.target.value }))} placeholder={t('detail.comment_placeholder')} rows={2} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all" />
             <div className="flex justify-end"><Button variant="dark" size="md" disabled={ratingSubmitting || newRating.rating < 1}><Star className="w-5 h-5" /> {t('detail.rate')}</Button></div>
           </div>
         </form>
@@ -458,7 +459,7 @@ export default function CandidateDetail() {
             {ratings.map(r => { const cat = RATING_CATEGORIES.find(c => c.key === r.category); return (
               <div key={r.id} className="flex items-start gap-4 p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] group">
                 <div className="flex-shrink-0"><div className="flex">{[1,2,3,4,5].map(s => <Star key={s} className={`w-4 h-4 ${s <= r.rating ? 'fill-[#ff9f0a] text-[#ff9f0a]' : 'text-gray-300 dark:text-gray-600'}`} />)}</div></div>
-                <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="px-2.5 py-0.5 rounded-full text-[12px] font-semibold" style={{ background: `${cat?.color||'#999'}20`, color: cat?.color||'#999' }}>{cat ? t(cat.labelKey) : r.category}</span><span className="text-[13px] font-medium text-gray-400">{r.created_by}</span><span className="text-[13px] font-medium text-gray-400">{formatDate(r.created_at)}</span></div>{r.comment && <p className="text-[15px] font-medium text-gray-700 dark:text-gray-300 mt-2">{r.comment}</p>}</div>
+                <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="px-2.5 py-0.5 rounded-full text-[12px] font-semibold" style={{ background: `${cat?.color||'#999'}20`, color: cat?.color||'#999' }}>{cat ? t(cat.labelKey) : r.category}</span><span className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{r.created_by}</span><span className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{formatDate(r.created_at, locale)}</span></div>{r.comment && <p className="text-[15px] font-medium text-gray-700 dark:text-gray-300 mt-2">{r.comment}</p>}</div>
                 <button onClick={() => handleDeleteRating(r.id)} className="w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-[#ff3b30]" /></button>
               </div>
             )})}
@@ -472,14 +473,14 @@ export default function CandidateDetail() {
         <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); handleFileUpload(e.dataTransfer.files) }} className={`border-2 border-dashed rounded-[24px] p-8 text-center transition-all cursor-pointer mb-6 ${dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png'; input.onchange = (e) => handleFileUpload(e.target.files); input.click() }}>
           <Upload className={`w-8 h-8 mx-auto mb-3 ${dragOver ? 'text-[#0071e3]' : 'text-gray-300'}`} />
           <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">{uploading ? t('detail.uploading') : t('detail.drop_files')}</p>
-          <p className="text-[13px] text-gray-400 mt-1">{t('detail.file_format_hint')}</p>
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('detail.file_format_hint')}</p>
         </div>
         {files.length > 0 && (
           <div className="space-y-3">
             {files.map(f => { const FileIcon = getFileIcon(f.mime_type); return (
               <div key={f.id} className="flex items-center gap-4 p-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] group">
                 <div className="w-10 h-10 rounded-[12px] bg-white dark:bg-[#1c1c1e] flex items-center justify-center flex-shrink-0"><FileIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" /></div>
-                <div className="flex-1 min-w-0"><p className="text-[15px] font-semibold text-black dark:text-white truncate">{f.original_name}</p><p className="text-[12px] text-gray-400 mt-0.5">{formatFileSize(f.size)} \u00b7 {new Date(f.created_at).toLocaleDateString('de-DE')}</p></div>
+                <div className="flex-1 min-w-0"><p className="text-[15px] font-semibold text-black dark:text-white truncate">{f.original_name}</p><p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">{formatFileSize(f.size)} \u00b7 {new Date(f.created_at).toLocaleDateString(localeTag(locale))}</p></div>
                 {canPreview(f.mime_type) && <IconButton icon={Eye} label={t('detail.preview')} variant="ghost" size="sm" onClick={() => setPreviewFile(f)} className="text-[#8b5cf6] hover:bg-[#8b5cf6]/10 hover:text-[#8b5cf6]" />}
                 <a href={uploadsApi.getDownloadUrl(f.id)} aria-label={t('detail.download')} className="w-8 h-8 rounded-full hover:bg-[#0071e3]/10 flex items-center justify-center transition-colors cursor-pointer" title={t('detail.download')}><Download className="w-4 h-4 text-[#0071e3]" /></a>
                 <IconButton icon={X} label={t('common.delete')} variant="ghost" size="sm" onClick={() => handleDeleteFile(f.id)} className="text-[#ff3b30] hover:bg-[#ff3b30]/10 hover:text-[#ff3b30] opacity-0 group-hover:opacity-100" />
@@ -487,7 +488,7 @@ export default function CandidateDetail() {
             )})}
           </div>
         )}
-        {files.length === 0 && !uploading && <p className="text-[15px] text-gray-400 text-center">{t('detail.no_documents')}</p>}
+        {files.length === 0 && !uploading && <p className="text-[15px] text-gray-500 dark:text-gray-400 text-center">{t('detail.no_documents')}</p>}
       </div>
 
       {/* Activity Log */}
@@ -501,7 +502,7 @@ export default function CandidateDetail() {
                 <button key={type} type="button" onClick={() => setNewType(type)} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${newType === type ? 'bg-black text-white shadow-md' : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{displayLabel}</button>
               )})}
             </div>
-            <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder={t('detail.activity_placeholder')} rows={3} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all" />
+            <textarea aria-label={t('detail.activity_placeholder')} value={newText} onChange={e => setNewText(e.target.value)} placeholder={t('detail.activity_placeholder')} rows={3} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all" />
             <div className="flex justify-end"><Button variant="dark" size="md" disabled={submitting || !newText.trim()}><Plus className="w-5 h-5" /> {t('detail.add')}</Button></div>
           </div>
         </form>
@@ -516,12 +517,12 @@ export default function CandidateDetail() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3"><span className="text-[15px] font-bold text-black dark:text-white">{(() => { const typeLabels = t('detail.activity_types'); const i = ACTIVITY_TYPES.indexOf(activity.type); return Array.isArray(typeLabels) && i >= 0 ? typeLabels[i] : activity.type })()}</span>{activity.auto_generated === 1 && <span className="px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-[12px] font-medium text-gray-500 dark:text-gray-400">{t('detail.auto_generated')}</span>}</div>
                     <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-[13px] font-medium text-gray-400">{formatDate(activity.created_at)}</span>
+                      <span className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{formatDate(activity.created_at, locale)}</span>
                       {deleteConfirm === activity.id ? (
                         <div className="flex items-center gap-2"><button onClick={() => handleDeleteActivity(activity.id)} className="px-3 py-1.5 rounded-full bg-[#ff3b30] text-white text-[13px] font-semibold cursor-pointer hover:opacity-80 transition-opacity">{t('common.delete')}</button><button onClick={() => setDeleteConfirm(null)} className="px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 text-[13px] font-semibold cursor-pointer hover:opacity-80 transition-opacity">{t('common.cancel')}</button></div>
                       ) : (<button onClick={() => setDeleteConfirm(activity.id)} className="w-8 h-8 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center cursor-pointer transition-colors"><Trash2 className="w-4 h-4 text-[#ff3b30]" /></button>)}
                     </div>
-                    {deleteConfirm !== activity.id && <span className="text-[13px] font-medium text-gray-400 group-hover:hidden">{formatDate(activity.created_at)}</span>}
+                    {deleteConfirm !== activity.id && <span className="text-[13px] font-medium text-gray-500 dark:text-gray-400 group-hover:hidden">{formatDate(activity.created_at, locale)}</span>}
                   </div>
                   <p className="text-[16px] font-medium text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{activity.content}</p>
                   {/* Expandable interview scorecard details */}
@@ -555,11 +556,11 @@ export default function CandidateDetail() {
                                       <span className="text-[13px] font-bold text-[#ff9f0a]">{a.score}/5</span>
                                     </div>
                                   )}
-                                  {a.score === 0 && <span className="text-[12px] font-medium text-gray-400 italic">{t('detail.not_rated')}</span>}
+                                  {a.score === 0 && <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400 italic">{t('detail.not_rated')}</span>}
                                 </div>
                                 {a.comment && (
                                   <div className="flex items-start gap-2 mt-2">
-                                    <MessageCircle className="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0" />
+                                    <MessageCircle className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0" />
                                     <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">{a.comment}</p>
                                   </div>
                                 )}
@@ -595,15 +596,15 @@ export default function CandidateDetail() {
               return (
                 <div key={entry.id} className="p-5 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                   <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-                    <div className="flex items-center gap-3"><Briefcase className="w-5 h-5 text-gray-400" /><Link to={`/pipeline/${entry.job_id}`} className="text-[17px] font-bold text-black dark:text-white hover:text-[#0071e3] transition-colors">{entry.job_title}</Link>{entry.job_location && <span className="text-[13px] text-gray-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{entry.job_location}</span>}</div>
+                    <div className="flex items-center gap-3"><Briefcase className="w-5 h-5 text-gray-500 dark:text-gray-400" /><Link to={`/pipeline/${entry.job_id}`} className="text-[17px] font-bold text-black dark:text-white hover:text-[#0071e3] transition-colors">{entry.job_title}</Link>{entry.job_location && <span className="text-[13px] text-gray-500 dark:text-gray-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{entry.job_location}</span>}</div>
                     <div className="flex items-center gap-2"><span className="px-3 py-1 rounded-full text-[13px] font-bold text-white" style={{ backgroundColor: stageColor }}>{entry.stage}</span><span className="px-3 py-1 rounded-full text-[12px] font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{entry.job_status}</span></div>
                   </div>
-                  {stageChanges.length > 0 && <div className="ml-7 mt-3 space-y-1.5">{stageChanges.slice(0, 5).map(sc => (<div key={sc.id} className="flex items-center gap-2 text-[13px]"><span className="font-medium text-gray-400">{new Date(sc.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}</span><span className="text-gray-500 dark:text-gray-400">{sc.old_stage}</span><span className="text-gray-400">{'\u2192'}</span><span className="font-semibold text-black dark:text-white">{sc.new_stage}</span>{sc.content && <span className="text-gray-400 truncate max-w-[200px]">{'\u2014'} {sc.content}</span>}</div>))}</div>}
-                  {interviews.length > 0 && <div className="ml-7 mt-3 flex flex-wrap gap-2">{interviews.map(iv => (<span key={iv.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ff9f0a]/10 text-[12px] font-semibold text-[#ff9f0a]"><Calendar className="w-3 h-3" />{new Date(iv.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}{iv.interview_time && ` \u00b7 ${iv.interview_time}`}<span className="text-[#ff9f0a]/60">({iv.status})</span></span>))}</div>}
+                  {stageChanges.length > 0 && <div className="ml-7 mt-3 space-y-1.5">{stageChanges.slice(0, 5).map(sc => (<div key={sc.id} className="flex items-center gap-2 text-[13px]"><span className="font-medium text-gray-500 dark:text-gray-400">{new Date(sc.created_at).toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'short' })}</span><span className="text-gray-500 dark:text-gray-400">{sc.old_stage}</span><span className="text-gray-500 dark:text-gray-400">{'\u2192'}</span><span className="font-semibold text-black dark:text-white">{sc.new_stage}</span>{sc.content && <span className="text-gray-500 dark:text-gray-400 truncate max-w-[200px]">{'\u2014'} {sc.content}</span>}</div>))}</div>}
+                  {interviews.length > 0 && <div className="ml-7 mt-3 flex flex-wrap gap-2">{interviews.map(iv => (<span key={iv.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ff9f0a]/10 text-[12px] font-semibold text-[#ff9f0a]"><Calendar className="w-3 h-3" />{new Date(iv.interview_date + 'T00:00:00').toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'short' })}{iv.interview_time && ` \u00b7 ${iv.interview_time}`}<span className="text-[#ff9f0a]/60">({iv.status})</span></span>))}</div>}
                   <div className="ml-7 mt-3 flex items-center gap-3">
                     <Link to={`/pipeline/${entry.job_id}/interview-prep/${entry.id}`} className="flex items-center gap-1.5 text-[12px] font-semibold text-[#5e5ce6] hover:underline"><ClipboardList className="w-3.5 h-3.5" />{t('interview_prep.prepare')}</Link>
                   </div>
-                  <div className="ml-7 mt-2 text-[12px] text-gray-400">{t('detail.added_on')}: {new Date(entry.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                  <div className="ml-7 mt-2 text-[12px] text-gray-500 dark:text-gray-400">{t('detail.added_on')}: {new Date(entry.created_at).toLocaleDateString(localeTag(locale), { day: '2-digit', month: 'short', year: 'numeric' })}</div>
                 </div>
               )
             })}
@@ -653,7 +654,7 @@ export default function CandidateDetail() {
             />
           ) : (
             <div className="flex items-center justify-center h-64">
-              <p className="text-[16px] text-gray-400">{t('detail.preview_unavailable')}</p>
+              <p className="text-[16px] text-gray-500 dark:text-gray-400">{t('detail.preview_unavailable')}</p>
             </div>
           )
         )}
@@ -665,7 +666,7 @@ export default function CandidateDetail() {
 function InfoRow({ icon: Icon, text, link }) {
   const content = (
     <div className="flex items-center gap-3 text-[15px] font-medium text-gray-600 dark:text-gray-400">
-      <Icon className="w-4.5 h-4.5 text-gray-400 flex-shrink-0" />
+      <Icon className="w-4.5 h-4.5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
       <span>{text}</span>
     </div>
   )

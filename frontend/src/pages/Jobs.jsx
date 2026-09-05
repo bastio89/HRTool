@@ -10,6 +10,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import BatchJobImportDialog from '../components/BatchJobImportDialog'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
@@ -26,7 +27,7 @@ export default function Jobs() {
   const toast = useToast()
   const confirm = useConfirm()
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('')
@@ -151,9 +152,9 @@ export default function Jobs() {
                       <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.candidate_count || 0} {t('jobs.in_pipeline')}
                       </span>
-                      <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-400">
+                      <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        {new Date(job.created_at).toLocaleDateString('de-DE')}
+                        {new Date(job.created_at).toLocaleDateString(localeTag(locale))}
                       </span>
                       {job.url && (
                         <a
@@ -217,7 +218,7 @@ export default function Jobs() {
                 }, [])
                 .map((p, i) =>
                   p === '...' ? (
-                    <span key={`dots-${i}`} className="px-2 text-gray-400 text-[15px]">...</span>
+                    <span key={`dots-${i}`} className="px-2 text-gray-500 dark:text-gray-400 text-[15px]">...</span>
                   ) : (
                     <button
                       key={p}

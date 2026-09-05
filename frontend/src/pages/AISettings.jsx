@@ -322,7 +322,7 @@ export default function AISettings() {
         {/* Provider / API dialect */}
       <Card className="space-y-5">
         <div className="flex items-center gap-3">
-          <Cpu className="w-5 h-5 text-gray-400" />
+          <Cpu className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           <h2 className="text-[19px] font-semibold text-black dark:text-white">API-Dialekt</h2>
         </div>
         <p className="text-[14px] text-gray-500 dark:text-gray-400 leading-relaxed">
@@ -349,7 +349,7 @@ export default function AISettings() {
       {/* Host / Base URL */}
       <Card className="space-y-6">
         <div className="flex items-center gap-3">
-          <Server className="w-5 h-5 text-gray-400" />
+          <Server className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.host_title')}</h2>
         </div>
 
@@ -363,14 +363,14 @@ export default function AISettings() {
             autoCapitalize="off"
             autoCorrect="off"
           />
-          <p className="text-[13px] text-gray-400 ml-2">
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 ml-2">
             {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.baseUrl)}</span>
           </p>
         </div>
 
         {/* Presets */}
         <div className="space-y-2">
-          <p className="text-[13px] font-medium text-gray-500 ml-2">{t('ai_settings.presets')}</p>
+          <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 ml-2">{t('ai_settings.presets')}</p>
           <div className="flex flex-wrap gap-2">
             {HOST_PRESETS.map((p) => (
               <button
@@ -409,7 +409,7 @@ export default function AISettings() {
       {/* API key */}
       <Card className="space-y-4">
         <div className="flex items-center gap-3">
-          <Server className="w-5 h-5 text-gray-400" />
+          <Server className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           <h2 className="text-[19px] font-semibold text-black dark:text-white">API-Key</h2>
         </div>
         <Input
@@ -423,7 +423,7 @@ export default function AISettings() {
           autoCorrect="off"
           autoComplete="new-password"
         />
-        <p className="text-[13px] text-gray-400 ml-2">
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 ml-2">
           Der Key wird nur serverseitig gespeichert und nicht wieder angezeigt. Für Ollama kann dieses Feld leer bleiben.
         </p>
       </Card>
@@ -432,7 +432,7 @@ export default function AISettings() {
       <Card className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Bot className="w-5 h-5 text-gray-400" />
+            <Bot className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.model_title')}</h2>
           </div>
           <Button variant="ghost" size="sm" onClick={() => loadModels(baseUrl, model, provider)} disabled={modelsLoading}>
@@ -448,6 +448,7 @@ export default function AISettings() {
             </label>
             <div className="relative">
               <select
+                aria-label={t('ai_settings.model_label')}
                 value={model}
                 onChange={(e) => { setModel(e.target.value); setLlmTestResult(null) }}
                 className="w-full appearance-none px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
@@ -458,7 +459,7 @@ export default function AISettings() {
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
-              <ChevronDown className="w-5 h-5 text-gray-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
             <button
               onClick={() => setManualModel(true)}
@@ -504,7 +505,7 @@ export default function AISettings() {
             {llmStatus.label}
           </span>
         </div>
-        <p className="text-[13px] text-gray-400 ml-2">
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 ml-2">
           {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.model)}</span>
         </p>
       </Card>
@@ -512,7 +513,7 @@ export default function AISettings() {
       {/* Reasoning level */}
       <Card className="space-y-5">
         <div className="flex items-center gap-3">
-          <Cpu className="w-5 h-5 text-gray-400" />
+          <Cpu className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           <div>
             <h2 className="text-[19px] font-semibold text-black dark:text-white">Reasoning-Level</h2>
             <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Steuert, wie viel Denkzeit das LLM für Antworten verwendet.</p>
@@ -541,7 +542,7 @@ export default function AISettings() {
       <Card className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Cpu className="w-5 h-5 text-gray-400" />
+            <Cpu className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.embedding_model_title')}</h2>
           </div>
           <Button variant="ghost" size="sm" onClick={() => loadEmbeddingModels(baseUrl, embeddingModel, provider)} disabled={embeddingModelsLoading}>
@@ -557,6 +558,7 @@ export default function AISettings() {
             </label>
             <div className="relative">
               <select
+                aria-label={t('ai_settings.embedding_model_label')}
                 value={embeddingModel}
                 onChange={(e) => { setEmbeddingModel(e.target.value); setEmbeddingTestResult(null) }}
                 className="w-full appearance-none px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
@@ -567,7 +569,7 @@ export default function AISettings() {
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
-              <ChevronDown className="w-5 h-5 text-gray-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400 absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
             <button
               onClick={() => setManualEmbeddingModel(true)}
@@ -613,7 +615,7 @@ export default function AISettings() {
             {embeddingStatus.label}
           </span>
         </div>
-        <p className="text-[13px] text-gray-400 ml-2">
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 ml-2">
           {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.embeddingModel)}</span>
         </p>
       </Card>

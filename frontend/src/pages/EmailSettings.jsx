@@ -1,18 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { Mail, Send, Settings, FileText, Plus, Trash2, Edit3, Eye, Check, X, Loader2, AlertTriangle, TestTube, Zap, Sparkles, ToggleLeft, ToggleRight, ChevronDown } from 'lucide-react'
 import { emailApi } from '../api'
 import { Card, Button, Input, LoadingSpinner, PageContainer } from '../components/UI'
 import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
 const TEMPLATE_VARS = ['{{anrede}}', '{{vorname}}', '{{nachname}}', '{{name}}', '{{email}}', '{{stelle}}', '{{unternehmen}}', '{{datum}}']
 
 export default function EmailSettings() {
+  const fieldIdPrefix = useId()
   const toast = useToast()
   const confirm = useConfirm()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [tab, setTab] = useState('smtp')
   const [loading, setLoading] = useState(true)
 
@@ -199,7 +201,7 @@ export default function EmailSettings() {
       {/* Header */}
       <div>
         <h1 className="text-[28px] sm:text-[34px] font-bold tracking-tight text-black dark:text-white">{t('email.title')}</h1>
-        <p className="text-[15px] sm:text-[17px] text-gray-500 mt-1">{t('email.subtitle')}</p>
+        <p className="text-[15px] sm:text-[17px] text-gray-500 dark:text-gray-400 mt-1">{t('email.subtitle')}</p>
       </div>
 
       {/* Tabs */}
@@ -230,7 +232,7 @@ export default function EmailSettings() {
             </div>
             <div>
               <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('email.smtp_title')}</h2>
-              <p className="text-[13px] text-gray-500">{t('email.smtp_desc')}</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('email.smtp_desc')}</p>
             </div>
           </div>
 
@@ -306,7 +308,7 @@ export default function EmailSettings() {
             </div>
             <div>
               <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('email.guides_title')}</h2>
-              <p className="text-[13px] text-gray-500">{t('email.guides_subtitle')}</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('email.guides_subtitle')}</p>
             </div>
           </div>
 
@@ -345,7 +347,7 @@ export default function EmailSettings() {
                   <span className="text-xl">{provider.logo}</span>
                   <span className="text-[15px] font-semibold text-black dark:text-white">{t(provider.nameKey)}</span>
                 </div>
-                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${openGuide === provider.id ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform duration-200${openGuide === provider.id ? 'rotate-180' : ''}`} />
               </button>
               {openGuide === provider.id && (
                 <div className="px-5 pb-5 space-y-4 border-t border-gray-100 dark:border-gray-700">
@@ -373,7 +375,7 @@ export default function EmailSettings() {
                     >
                       {t('email.apply_settings')}
                     </Button>
-                    <span className="text-[12px] text-gray-400">Host: {provider.settings.host} | Port: {provider.settings.port}</span>
+                    <span className="text-[12px] text-gray-500 dark:text-gray-400">Host: {provider.settings.host} | Port: {provider.settings.port}</span>
                   </div>
                 </div>
               )}
@@ -392,7 +394,7 @@ export default function EmailSettings() {
             </div>
             <div>
               <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('email.triggers_title')}</h2>
-              <p className="text-[13px] text-gray-500">{t('email.triggers_desc')}</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('email.triggers_desc')}</p>
             </div>
           </div>
 
@@ -454,8 +456,8 @@ export default function EmailSettings() {
                   onChange={e => setEditTpl({ ...editTpl, name: e.target.value })}
                 />
                 <div>
-                  <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('email.trigger_stage')}</label>
-                  <select
+                  <label htmlFor={`${fieldIdPrefix}-trigger-stage`} className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('email.trigger_stage')}</label>
+                  <select id={`${fieldIdPrefix}-trigger-stage`}
                     value={editTpl.trigger_stage || ''}
                     onChange={e => setEditTpl({ ...editTpl, trigger_stage: e.target.value || null })}
                     className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition-all"
@@ -472,8 +474,8 @@ export default function EmailSettings() {
                 onChange={e => setEditTpl({ ...editTpl, subject: e.target.value })}
               />
               <div>
-                <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('email.body')}</label>
-                <textarea
+                <label htmlFor={`${fieldIdPrefix}-body`} className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1.5">{t('email.body')}</label>
+                <textarea id={`${fieldIdPrefix}-body`}
                   rows={8}
                   value={editTpl.body}
                   onChange={e => setEditTpl({ ...editTpl, body: e.target.value })}
@@ -484,7 +486,7 @@ export default function EmailSettings() {
 
               {/* Variable help */}
               <div className="flex flex-wrap gap-2">
-                <span className="text-[12px] text-gray-500 font-medium">{t('email.variables')}:</span>
+                <span className="text-[12px] text-gray-500 dark:text-gray-400 font-medium">{t('email.variables')}:</span>
                 {TEMPLATE_VARS.map(v => (
                   <button
                     key={v}
@@ -504,6 +506,7 @@ export default function EmailSettings() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input
+                    aria-label={t('email.ai_purpose_placeholder')}
                     type="text"
                     value={aiPurpose}
                     onChange={e => setAiPurpose(e.target.value)}
@@ -512,6 +515,7 @@ export default function EmailSettings() {
                   />
                   <div className="flex gap-2">
                     <select
+                      aria-label={t('email.ai_tone', 'Tonalität')}
                       value={aiTone}
                       onChange={e => setAiTone(e.target.value)}
                       className="flex-1 px-3 py-2.5 bg-white dark:bg-[#1c1c1e] border border-purple-200 dark:border-purple-700/50 rounded-lg text-[14px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
@@ -527,7 +531,7 @@ export default function EmailSettings() {
                       disabled={aiGenerating || !aiPurpose.trim()}
                       className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold transition-all cursor-pointer ${
                         aiGenerating || !aiPurpose.trim()
-                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                           : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow-md'
                       }`}
                     >
@@ -568,7 +572,7 @@ export default function EmailSettings() {
           {/* Template List */}
           <div className="space-y-3">
             {templates.length === 0 ? (
-              <Card className="p-8 text-center text-gray-500">
+              <Card className="p-8 text-center text-gray-500 dark:text-gray-400">
                 <FileText className="w-8 h-8 mx-auto mb-3 opacity-30" />
                 <p>{t('email.no_templates')}</p>
               </Card>
@@ -585,19 +589,19 @@ export default function EmailSettings() {
                     )}
                     <span className={`w-2 h-2 rounded-full ${tpl.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
                   </div>
-                  <p className="text-[13px] text-gray-500 truncate mt-0.5">{tpl.subject}</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate mt-0.5">{tpl.subject}</p>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   <button
                     onClick={() => setEditTpl({ ...tpl })}
-                    className="p-2 text-gray-400 hover:text-[#0071e3] hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all cursor-pointer"
+                    className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#0071e3] hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all cursor-pointer"
                     title={t('email.edit_template')}
                   >
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => deleteTemplate(tpl.id)}
-                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all cursor-pointer"
+                    className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all cursor-pointer"
                     title={t('common.delete')}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -614,7 +618,7 @@ export default function EmailSettings() {
         <div className="space-y-4">
           <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('email.log_title')}</h2>
           {logs.length === 0 ? (
-            <Card className="p-8 text-center text-gray-500">
+            <Card className="p-8 text-center text-gray-500 dark:text-gray-400">
               <Mail className="w-8 h-8 mx-auto mb-3 opacity-30" />
               <p>{t('email.no_logs')}</p>
             </Card>
@@ -634,13 +638,13 @@ export default function EmailSettings() {
                           {log.status === 'sent' ? t('email.status_sent') : t('email.status_failed')}
                         </span>
                         {log.template_name && (
-                          <span className="text-[11px] text-gray-400 font-medium">
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">
                             {log.template_name}
                           </span>
                         )}
                       </div>
                       <p className="text-[14px] font-medium text-black dark:text-white truncate">{log.subject}</p>
-                      <p className="text-[13px] text-gray-500">
+                      <p className="text-[13px] text-gray-500 dark:text-gray-400">
                         {t('email.to')}: {log.to_email}
                         {log.candidate_name && ` (${log.candidate_name})`}
                       </p>
@@ -648,9 +652,9 @@ export default function EmailSettings() {
                         <p className="text-[12px] text-red-500 mt-1">{log.error_message}</p>
                       )}
                     </div>
-                    <div className="text-right text-[12px] text-gray-400 whitespace-nowrap ml-4">
-                      <p>{new Date(log.created_at).toLocaleDateString('de-DE')}</p>
-                      <p>{new Date(log.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</p>
+                    <div className="text-right text-[12px] text-gray-500 dark:text-gray-400 whitespace-nowrap ml-4">
+                      <p>{new Date(log.created_at).toLocaleDateString(localeTag(locale))}</p>
+                      <p>{new Date(log.created_at).toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' })}</p>
                       {log.sent_by && <p className="mt-1">{log.sent_by}</p>}
                     </div>
                   </div>
@@ -667,7 +671,7 @@ export default function EmailSettings() {
                   >
                     {t('common.back')}
                   </Button>
-                  <span className="px-3 py-2 text-[13px] text-gray-500">
+                  <span className="px-3 py-2 text-[13px] text-gray-500 dark:text-gray-400">
                     {logPagination.page} / {Math.ceil(logPagination.total / 30)}
                   </span>
                   <Button

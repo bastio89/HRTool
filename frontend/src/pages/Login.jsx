@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useId } from 'react'
 import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
 import { Command, LogIn, AlertCircle } from 'lucide-react'
 
 export default function Login() {
+  const fieldIdPrefix = useId()
   const { login } = useAuth()
   const { t } = useI18n()
   const [username, setUsername] = useState('')
@@ -47,8 +48,8 @@ export default function Login() {
             )}
 
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('auth.username')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-username`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('auth.username')}</label>
+              <input id={`${fieldIdPrefix}-username`}
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -60,8 +61,8 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('auth.password')}</label>
-              <input
+              <label htmlFor={`${fieldIdPrefix}-password`} className="block text-[14px] font-medium text-gray-700 dark:text-gray-300 mb-2 ml-1">{t('auth.password')}</label>
+              <input id={`${fieldIdPrefix}-password`}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -88,7 +89,7 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mt-6">
+        <p className="text-center text-[13px] text-gray-500 dark:text-gray-500 mt-6">
           Standardzugang: admin / admin123
         </p>
       </div>

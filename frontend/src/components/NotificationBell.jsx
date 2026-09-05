@@ -4,9 +4,10 @@ import { Bell, Check, CheckCheck, MessageSquare, AtSign, X } from 'lucide-react'
 import { collaborationApi } from '../api'
 import { useI18n } from '../I18nContext'
 import { EmptyState } from './UI'
+import { localeTag } from '../utils/format'
 
 export default function NotificationBell() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const navigate = useNavigate()
   const [count, setCount] = useState(0)
   const [open, setOpen] = useState(false)
@@ -84,7 +85,7 @@ export default function NotificationBell() {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={toggleOpen} className="relative p-2 text-gray-400 hover:text-black dark:hover:text-white hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] rounded-xl transition-all cursor-pointer">
+      <button onClick={toggleOpen} className="relative p-2 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] rounded-xl transition-all cursor-pointer">
         <Bell className="w-5 h-5" />
         {count > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#ff3b30] text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">{count > 9 ? '9+' : count}</span>
@@ -101,7 +102,7 @@ export default function NotificationBell() {
                   <CheckCheck className="w-3 h-3" />{t('collab.mark_all_read')}
                 </button>
               )}
-              <button onClick={() => setOpen(false)} className="p-1 text-gray-400 hover:text-black dark:hover:text-white cursor-pointer">
+              <button onClick={() => setOpen(false)} className="p-1 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -119,12 +120,12 @@ export default function NotificationBell() {
                 <div key={n.id} onClick={() => handleNotificationClick(n)}
                   className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-700/50 transition-colors cursor-pointer hover:bg-[#f5f5f7] dark:hover:bg-[#3a3a3c] ${!n.is_read ? 'bg-[#0071e3]/5' : ''}`}>
                   <div className="w-8 h-8 rounded-xl bg-[#f5f5f7] dark:bg-[#1c1c1e] flex items-center justify-center flex-shrink-0">
-                    {typeIcons[n.type] || <Bell className="w-4 h-4 text-gray-400" />}
+                    {typeIcons[n.type] || <Bell className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-[13px] font-medium ${!n.is_read ? 'text-black dark:text-white' : 'text-gray-500'}`}>{n.title}</p>
-                    {n.message && <p className="text-[12px] text-gray-400 mt-0.5 truncate">{n.message}</p>}
-                    <p className="text-[11px] text-gray-400 mt-1">{new Date(n.created_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                    {n.message && <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">{n.message}</p>}
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{new Date(n.created_at).toLocaleString(localeTag(locale), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                   {!n.is_read && <div className="w-2 h-2 rounded-full bg-[#0071e3] mt-2 flex-shrink-0" />}
                 </div>

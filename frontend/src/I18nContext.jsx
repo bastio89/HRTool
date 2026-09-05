@@ -3,7 +3,18 @@ import de from './i18n/de'
 import en from './i18n/en'
 
 const translations = { de, en }
-const I18nContext = createContext()
+
+// A usable default so components that call useI18n() keep working (and stay
+// independently testable) when they are rendered outside the provider, instead
+// of crashing on a destructured undefined.
+const fallbackI18n = {
+  locale: 'de',
+  changeLocale: () => {},
+  t: (key, fallback) => translations.de?.[key] || fallback || key,
+  availableLocales: ['de', 'en'],
+}
+
+const I18nContext = createContext(fallbackI18n)
 
 export function I18nProvider({ children }) {
   const [locale, setLocale] = useState(() => {
@@ -32,4 +43,4 @@ export function I18nProvider({ children }) {
   )
 }
 
-export const useI18n = () => useContext(I18nContext)
+export const useI18n = () => useContext(I18nContext) || fallbackI18n

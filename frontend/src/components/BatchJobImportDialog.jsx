@@ -153,10 +153,10 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
     <div className="w-full">
     {files.length > 0 && (
       <div className="flex items-center gap-4 text-[13px] mb-5">
-        <span className="text-gray-400">{t('batch_job_import.total').replace('{n}', files.length)}</span>
+        <span className="text-gray-500 dark:text-gray-400">{t('batch_job_import.total').replace('{n}', files.length)}</span>
         {counts.done  > 0 && <span className="text-[#34c759] font-medium">{t('batch_job_import.count_done').replace('{n}', counts.done)}</span>}
         {counts.error > 0 && <span className="text-[#ff3b30] font-medium">{t('batch_job_import.count_error').replace('{n}', counts.error)}</span>}
-        {counts.pending > 0 && <span className="text-gray-400">{t('batch_job_import.count_pending').replace('{n}', counts.pending)}</span>}
+        {counts.pending > 0 && <span className="text-gray-500 dark:text-gray-400">{t('batch_job_import.count_pending').replace('{n}', counts.pending)}</span>}
       </div>
     )}
 
@@ -175,7 +175,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
             <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform ring-0 transition duration-200 ${thinking ? 'translate-x-4' : 'translate-x-0'}`} />
           </div>
           <span className="text-[12px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
-            {thinking ? 'Mit Reasoning' : 'Ohne Reasoning'}
+            {thinking ? t('batch_job_import.reasoning_on') : t('batch_job_import.reasoning_off')}
           </span>
         </button>
         <Button variant="dark" size="md" onClick={processAll} disabled={!canRun}>
@@ -227,7 +227,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
             </div>
             <div className="text-center">
               <p className="text-[15px] font-semibold text-black dark:text-white">{t('batch_job_import.drop_hint')}</p>
-              <p className="text-[13px] text-gray-400 mt-1">{t('batch_job_import.formats')}</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('batch_job_import.formats')}</p>
             </div>
             <input
               ref={fileInputRef}
@@ -254,7 +254,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
                 {item.status === STATUS.DONE       && <CheckCircle2 className="w-5 h-5 text-[#34c759]" />}
                 {item.status === STATUS.ERROR      && <XCircle      className="w-5 h-5 text-[#ff3b30]" />}
                 {item.status === STATUS.PROCESSING && <Loader2      className="w-5 h-5 text-[#5e5ce6] animate-spin" />}
-                {item.status === STATUS.PENDING    && <FileText     className="w-5 h-5 text-gray-400" />}
+                {item.status === STATUS.PENDING    && <FileText     className="w-5 h-5 text-gray-500 dark:text-gray-400" />}
               </div>
 
               {/* File info */}
@@ -293,7 +293,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
                   <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}{item.elapsed != null ? ` (${item.elapsed}s)` : ''}</p>
                 )}
                 {item.status === STATUS.PENDING && (
-                  <p className="text-[12px] text-gray-400 mt-0.5">
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
                     {(item.file.size / 1024).toFixed(0)} KB
                   </p>
                 )}
@@ -305,7 +305,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
                   onClick={() => removeFile(item.id)}
                   className="flex-shrink-0 w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center transition-colors cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5 text-gray-400 hover:text-[#ff3b30]" />
+                  <Trash2 className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30]" />
                 </button>
               )}
 
@@ -327,7 +327,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
 
       {/* Empty state */}
       {files.length === 0 && (
-        <div className="flex items-center justify-center py-8 text-gray-400 text-[14px]">
+        <div className="flex items-center justify-center py-8 text-gray-500 dark:text-gray-400 text-[14px]">
           {t('batch_job_import.empty')}
         </div>
       )}

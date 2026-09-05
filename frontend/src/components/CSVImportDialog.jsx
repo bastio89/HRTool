@@ -198,7 +198,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
         <div className="flex items-center justify-between gap-4 w-full">
       <div>
         {step > 1 && step < 4 && (
-          <button onClick={() => setStep(s => s - 1)} className="flex items-center gap-2 text-[14px] font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
+          <button onClick={() => setStep(s => s - 1)} className="flex items-center gap-2 text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors cursor-pointer">
             <ArrowLeft className="w-4 h-4" /> {t('common.back')}
           </button>
         )}
@@ -255,10 +255,10 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
             className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-16 text-center cursor-pointer hover:border-[#0071e3] hover:bg-[#0071e3]/5 transition-all"
             onClick={() => fileRef.current?.click()}
           >
-            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <Upload className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-4" />
             <p className="text-[18px] font-semibold text-black dark:text-white mb-2">{t('csv.upload_title')}</p>
             <p className="text-[14px] text-gray-500 dark:text-gray-400">{t('csv.upload_hint')}</p>
-            <p className="text-[13px] text-gray-400 mt-3">{t('csv.upload_supported')}</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3">{t('csv.upload_supported')}</p>
             <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
           </div>
         )}
@@ -273,11 +273,12 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
               <div key={header} className="flex items-center gap-4 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                 <div className="flex-1 min-w-0">
                   <span className="text-[14px] font-medium text-black dark:text-white truncate block">{header}</span>
-                  <span className="text-[12px] text-gray-400 truncate block">{csvRows[0]?.[header] || '—'}</span>
+                  <span className="text-[12px] text-gray-500 dark:text-gray-400 truncate block">{csvRows[0]?.[header] || '—'}</span>
                 </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <ArrowRight className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
                 <div className="relative flex-1">
                   <select
+                    aria-label={`${t('csv.step_mapping')}: ${header}`}
                     value={mapping[header] || ''}
                     onChange={e => setMapping(m => ({ ...m, [header]: e.target.value || undefined }))}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#1c1c1e] text-[14px] text-black dark:text-white outline-none appearance-none cursor-pointer"
@@ -289,7 +290,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
             ))}
@@ -328,7 +329,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
                 <tbody>
                   {mappedRows().slice(0, 5).map((row, idx) => (
                     <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                      <td className="px-4 py-3 text-gray-400">{idx + 1}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{idx + 1}</td>
                       {CANDIDATE_FIELDS.filter(f => Object.values(mapping).includes(f.key)).map(f => (
                         <td key={f.key} className="px-4 py-3 text-black dark:text-white max-w-[200px] truncate">{row[f.key] || '—'}</td>
                       ))}
@@ -338,7 +339,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
               </table>
             </div>
             {mappedRows().length > 5 && (
-              <p className="text-[13px] text-gray-400 mt-3 text-center">{t('csv.more_rows').replace('{count}', mappedRows().length - 5)}</p>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 text-center">{t('csv.more_rows').replace('{count}', mappedRows().length - 5)}</p>
             )}
           </div>
         )}
@@ -349,7 +350,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-center">
                 <div className="text-[32px] font-bold text-black dark:text-white">{result.total}</div>
-                <div className="text-[13px] text-gray-500 mt-1">{t('csv.result_total')}</div>
+                <div className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('csv.result_total')}</div>
               </div>
               <div className="p-5 rounded-2xl bg-[#34c759]/10 text-center">
                 <div className="text-[32px] font-bold text-[#34c759]">{result.imported}</div>
@@ -390,7 +391,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
                 <p className="text-[14px] font-semibold text-[#ff3b30] mb-2">{t('csv.error_rows_title')}</p>
                 <div className="space-y-1 max-h-[150px] overflow-y-auto">
                   {result.errorDetails.map((e, i) => (
-                    <div key={i} className="text-[13px] text-gray-500">
+                    <div key={i} className="text-[13px] text-gray-500 dark:text-gray-400">
                       {t('csv.row_label')} {e.row}: {e.reason}
                     </div>
                   ))}

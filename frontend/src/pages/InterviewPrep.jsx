@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useI18n } from '../I18nContext'
 import useRevealOnOpen from '../hooks/useRevealOnOpen'
@@ -12,6 +12,7 @@ import {
 import { jobsApi, candidatesApi, pipelineApi, scorecardsApi, interviewsApi, activitiesApi, candidateDetailsApi } from '../api'
 import { Button, LoadingSpinner, PageContainer } from '../components/UI'
 import { KiBadge, KiDisclaimer } from '../components/KiBadge'
+import { localeTag } from '../utils/format'
 
 const CATEGORIES = ['Fachkompetenz', 'Soft Skills', 'Motivation', 'Erfahrung']
 const CATEGORY_COLORS = {
@@ -23,9 +24,10 @@ const CATEGORY_COLORS = {
 }
 
 export default function InterviewPrep() {
+  const fieldIdPrefix = useId()
   const { jobId, entryId } = useParams()
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { user } = useAuth()
 
   // Core data
@@ -258,7 +260,7 @@ export default function InterviewPrep() {
         <div className="text-center">
           <CheckCircle2 className="w-16 h-16 text-[#34c759] mx-auto mb-4" />
           <h2 className="text-[22px] font-bold text-black dark:text-white mb-2">{t('interview_prep.saved')}</h2>
-          <p className="text-[15px] text-gray-500">{t('interview_prep.redirecting')}</p>
+          <p className="text-[15px] text-gray-500 dark:text-gray-400">{t('interview_prep.redirecting')}</p>
         </div>
       </div>
     )
@@ -281,7 +283,7 @@ export default function InterviewPrep() {
           <div className="flex items-center gap-2 bg-white dark:bg-[#1c1c1e] px-5 py-3 rounded-2xl shadow-sm">
             <Star className="w-5 h-5 text-[#ff9f0a] fill-[#ff9f0a]" />
             <span className="text-[20px] font-bold text-[#ff9f0a]">{avgScore}</span>
-            <span className="text-[14px] text-gray-400 font-medium">/ 5</span>
+            <span className="text-[14px] text-gray-500 dark:text-gray-400 font-medium">/ 5</span>
           </div>
         )}
       </div>
@@ -302,7 +304,7 @@ export default function InterviewPrep() {
                   <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 truncate">{candidate.current_position}</p>
                 )}
                 {candidate?.current_employer && (
-                  <p className="text-[12px] text-gray-400 truncate flex items-center gap-1"><Building2 className="w-3 h-3" />{candidate.current_employer}</p>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-1"><Building2 className="w-3 h-3" />{candidate.current_employer}</p>
                 )}
               </div>
             </div>
@@ -310,13 +312,13 @@ export default function InterviewPrep() {
             {/* Skills */}
             {candidate?.skills && (
               <div className="mb-4">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">{t('form.skills')}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">{t('form.skills')}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {candidate.skills.split(',').slice(0, 8).map((skill, i) => (
                     <span key={i} className="px-2.5 py-1 rounded-full bg-[#0071e3]/8 text-[#0071e3] text-[11px] font-semibold">{skill.trim()}</span>
                   ))}
                   {candidate.skills.split(',').length > 8 && (
-                    <span className="px-2.5 py-1 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-gray-500 text-[11px] font-semibold">+{candidate.skills.split(',').length - 8}</span>
+                    <span className="px-2.5 py-1 rounded-full bg-gray-100 dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400 text-[11px] font-semibold">+{candidate.skills.split(',').length - 8}</span>
                   )}
                 </div>
               </div>
@@ -325,7 +327,7 @@ export default function InterviewPrep() {
             {/* Experience summary */}
             {candidate?.experience && (
               <div className="mb-4">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">{t('form.experience')}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">{t('form.experience')}</p>
                 <p className="text-[13px] text-gray-600 dark:text-gray-300 leading-relaxed line-clamp-3">{candidate.experience}</p>
               </div>
             )}
@@ -333,7 +335,7 @@ export default function InterviewPrep() {
             {/* Languages */}
             {candidate?.languages && (
               <div className="mb-4">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">{t('form.languages')}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">{t('form.languages')}</p>
                 <p className="text-[13px] text-gray-600 dark:text-gray-300">{candidate.languages}</p>
               </div>
             )}
@@ -341,14 +343,14 @@ export default function InterviewPrep() {
             {/* Work history compact */}
             {workHistory.length > 0 && (
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">{t('interview_prep.career')}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">{t('interview_prep.career')}</p>
                 <div className="space-y-2">
                   {workHistory.slice(0, 3).map((wh, i) => (
                     <div key={i} className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-[#0071e3] mt-1.5 flex-shrink-0" />
                       <div className="min-w-0">
                         <p className="text-[12px] font-semibold text-black dark:text-white truncate">{wh.position}</p>
-                        <p className="text-[11px] text-gray-400 truncate">{wh.employer} · {wh.from_date?.slice(0, 4)}{wh.is_current ? ` – ${t('interview_prep.present')}` : wh.to_date ? ` – ${wh.to_date.slice(0, 4)}` : ''}</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{wh.employer} · {wh.from_date?.slice(0, 4)}{wh.is_current ? ` – ${t('interview_prep.present')}` : wh.to_date ? ` – ${wh.to_date.slice(0, 4)}` : ''}</p>
                       </div>
                     </div>
                   ))}
@@ -374,10 +376,10 @@ export default function InterviewPrep() {
                 <h3 className="text-[15px] font-bold text-black dark:text-white">{t('interview_prep.job_info')}</h3>
               </div>
               <p className="text-[15px] font-semibold text-black dark:text-white mb-1">{job.title}</p>
-              {job.location && <p className="text-[13px] text-gray-500 flex items-center gap-1 mb-3"><MapPin className="w-3 h-3" />{job.location}</p>}
+              {job.location && <p className="text-[13px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mb-3"><MapPin className="w-3 h-3" />{job.location}</p>}
               {job.requirements && (
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">{t('interview_prep.requirements')}</p>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">{t('interview_prep.requirements')}</p>
                   <p className="text-[13px] text-gray-600 dark:text-gray-300 leading-relaxed line-clamp-4">{job.requirements}</p>
                 </div>
               )}
@@ -394,16 +396,16 @@ export default function InterviewPrep() {
               <div className="space-y-3">
                 {interviews.map(iv => {
                   const TypeIcon = iv.interview_type === 'Video' ? Video : iv.interview_type === 'Telefon' ? Phone : Building2
-                  const statusColor = { geplant: 'text-[#0071e3] bg-[#0071e3]/10', bestätigt: 'text-[#34c759] bg-[#34c759]/10', abgeschlossen: 'text-gray-500 bg-gray-100', abgesagt: 'text-[#ff3b30] bg-[#ff3b30]/10' }[iv.status] || 'text-gray-500 bg-gray-100'
+                  const statusColor = { geplant: 'text-[#0071e3] bg-[#0071e3]/10', bestätigt: 'text-[#34c759] bg-[#34c759]/10', abgeschlossen: 'text-gray-500 dark:text-gray-400 bg-gray-100', abgesagt: 'text-[#ff3b30] bg-[#ff3b30]/10' }[iv.status] || 'text-gray-500 dark:text-gray-400 bg-gray-100'
                   return (
                     <div key={iv.id} className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                       <TypeIcon className="w-4 h-4 text-[#ff9f0a] flex-shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="text-[13px] font-semibold text-black dark:text-white">
-                          {new Date(iv.interview_date + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: 'short' })}
+                          {new Date(iv.interview_date + 'T00:00:00').toLocaleDateString(localeTag(locale), { weekday: 'short', day: '2-digit', month: 'short' })}
                           {iv.interview_time && ` · ${iv.interview_time}`}
                         </p>
-                        <p className="text-[11px] text-gray-400">{iv.interview_type} · {iv.duration_minutes} min</p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400">{iv.interview_type} · {iv.duration_minutes} min</p>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}`}>{iv.status}</span>
                     </div>
@@ -425,7 +427,7 @@ export default function InterviewPrep() {
                   <div key={r.id} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
                     <div>
                       <p className="text-[13px] font-semibold text-black dark:text-white">{r.evaluator_name}</p>
-                      <p className="text-[11px] text-gray-400">{new Date(r.created_at).toLocaleDateString('de-DE')}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{new Date(r.created_at).toLocaleDateString(localeTag(locale))}</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <Star className="w-3.5 h-3.5 text-[#ff9f0a] fill-[#ff9f0a]" />
@@ -450,7 +452,7 @@ export default function InterviewPrep() {
                 </div>
                 <div>
                   <h2 className="text-[18px] font-bold text-black dark:text-white">{t('interview_prep.questions_title')}</h2>
-                  <p className="text-[13px] text-gray-500">{t('interview_prep.questions_subtitle')}</p>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('interview_prep.questions_subtitle')}</p>
                 </div>
               </div>
               <KiBadge />
@@ -471,6 +473,7 @@ export default function InterviewPrep() {
               <div className="flex items-center gap-2 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full px-4 py-2">
                 <span className="text-[13px] font-medium text-gray-600 dark:text-gray-400">{t('interview_prep.count')}:</span>
                 <input
+                  aria-label={t('interview_prep.question_count', 'Anzahl Fragen')}
                   type="number" min={3} max={15} value={questionCount}
                   onChange={e => setQuestionCount(Math.max(3, Math.min(15, parseInt(e.target.value) || 8)))}
                   className="w-12 text-center text-[14px] font-bold text-black dark:text-white bg-transparent outline-none"
@@ -499,7 +502,7 @@ export default function InterviewPrep() {
                           className="flex-1 text-left cursor-pointer min-w-0"
                         >
                           <p className="text-[14px] font-semibold text-black dark:text-white truncate">{tpl.title}</p>
-                          <p className="text-[12px] text-gray-400">{(typeof tpl.questions === 'string' ? JSON.parse(tpl.questions) : tpl.questions).length} {t('scorecard.questions')} {tpl.ai_generated ? '· KI' : ''}</p>
+                          <p className="text-[12px] text-gray-500 dark:text-gray-400">{(typeof tpl.questions === 'string' ? JSON.parse(tpl.questions) : tpl.questions).length} {t('scorecard.questions')} {tpl.ai_generated ? '· KI' : ''}</p>
                         </button>
                         <button
                           onClick={(e) => handleDeleteTemplate(e, tpl.id)}
@@ -518,14 +521,14 @@ export default function InterviewPrep() {
             {questions.length === 0 && !generating && (
               <div className="mt-6 text-center py-10 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-2xl">
                 <Lightbulb className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-[15px] font-medium text-gray-400">{t('interview_prep.no_questions')}</p>
+                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">{t('interview_prep.no_questions')}</p>
               </div>
             )}
 
             {generating && (
               <div className="mt-6 text-center py-10 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-2xl">
                 <Loader2 className="w-8 h-8 text-[#5e5ce6] animate-spin mx-auto mb-3" />
-                <p className="text-[15px] font-medium text-gray-500">{t('scorecard.generating')}</p>
+                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">{t('scorecard.generating')}</p>
                 <KiDisclaimer className="mt-4 mx-auto max-w-md" />
               </div>
             )}
@@ -555,7 +558,7 @@ export default function InterviewPrep() {
               })}
 
               {/* Progress */}
-              <div className="ml-auto flex items-center gap-2 text-[13px] font-medium text-gray-500">
+              <div className="ml-auto flex items-center gap-2 text-[13px] font-medium text-gray-500 dark:text-gray-400">
                 <CheckCircle2 className="w-4 h-4 text-[#34c759]" />
                 {t('interview_prep.rated').replace('{done}', ratedCount).replace('{total}', questions.length)}
               </div>
@@ -581,7 +584,7 @@ export default function InterviewPrep() {
                       onClick={() => toggleExpand(idx)}
                       className="flex items-start gap-3 p-5 cursor-pointer"
                     >
-                      <span className="text-[14px] font-bold text-gray-300 mt-0.5 flex-shrink-0 w-6 text-right">{displayIdx + 1}</span>
+                      <span className="text-[14px] font-bold text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0 w-6 text-right">{displayIdx + 1}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <p className="text-[15px] font-semibold text-black dark:text-white leading-snug">{q.text}</p>
@@ -593,7 +596,7 @@ export default function InterviewPrep() {
                                 <span className="text-[13px] font-bold text-[#ff9f0a]">{answer.score}</span>
                               </span>
                             )}
-                            {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                            {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-500 dark:text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
                           </div>
                         </div>
                       </div>
@@ -623,24 +626,25 @@ export default function InterviewPrep() {
                             </button>
                           ))}
                           {answer?.score > 0 && (
-                            <span className="ml-2 text-[13px] font-semibold text-gray-500">{t(`rating.${answer.score}`)}</span>
+                            <span className="ml-2 text-[13px] font-semibold text-gray-500 dark:text-gray-400">{t(`rating.${answer.score}`)}</span>
                           )}
                         </div>
 
                         {/* Comment textarea */}
                         <textarea
+                          aria-label={t('interview_prep.note_placeholder')}
                           value={answer?.comment || ''}
                           onChange={e => updateAnswer(idx, 'comment', e.target.value)}
                           placeholder={t('interview_prep.note_placeholder')}
                           rows={3}
-                          className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition-all placeholder:text-gray-400"
+                          className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                         />
 
                         {/* Remove question */}
                         <div className="flex justify-end mt-2">
                           <button
                             onClick={() => removeQuestion(idx)}
-                            className="flex items-center gap-1.5 text-[12px] font-medium text-gray-400 hover:text-[#ff3b30] transition-colors cursor-pointer"
+                            className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />{t('interview_prep.remove_question')}
                           </button>
@@ -663,8 +667,8 @@ export default function InterviewPrep() {
 
               {/* Evaluator Name */}
               <div className="mb-4">
-                <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-2 block">{t('interview_prep.interviewer')}</label>
-                <input
+                <label htmlFor={`${fieldIdPrefix}-interviewer`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-2 block">{t('interview_prep.interviewer')}</label>
+                <input id={`${fieldIdPrefix}-interviewer`}
                   value={evaluatorName}
                   onChange={e => setEvaluatorName(e.target.value)}
                   placeholder={t('interview_prep.interviewer_placeholder')}
@@ -674,13 +678,13 @@ export default function InterviewPrep() {
 
               {/* General Notes */}
               <div className="mb-6">
-                <label className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-2 block">{t('interview_prep.general_notes')}</label>
-                <textarea
+                <label htmlFor={`${fieldIdPrefix}-general-notes`} className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 mb-2 block">{t('interview_prep.general_notes')}</label>
+                <textarea id={`${fieldIdPrefix}-general-notes`}
                   value={generalNotes}
                   onChange={e => setGeneralNotes(e.target.value)}
                   placeholder={t('interview_prep.general_notes_placeholder')}
                   rows={5}
-                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition-all placeholder:text-gray-400"
+                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
 
@@ -690,7 +694,7 @@ export default function InterviewPrep() {
                   <div className="flex items-center gap-2">
                     <Star className="w-6 h-6 text-[#ff9f0a] fill-[#ff9f0a]" />
                     <span className="text-[24px] font-bold text-[#ff9f0a]">{avgScore}</span>
-                    <span className="text-[15px] text-gray-500 font-medium">/ 5</span>
+                    <span className="text-[15px] text-gray-500 dark:text-gray-400 font-medium">/ 5</span>
                   </div>
                   <div className="h-8 w-px bg-gray-200 dark:bg-gray-700" />
                   <span className="text-[14px] font-medium text-gray-600 dark:text-gray-400">

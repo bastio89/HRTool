@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useId } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Sparkles, Loader2, Upload, FileText } from 'lucide-react'
 import { jobsApi } from '../api'
@@ -25,6 +25,7 @@ function filenameToJobTitle(filename) {
 }
 
 export default function JobForm() {
+  const fieldIdPrefix = useId()
   const { id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
@@ -223,8 +224,8 @@ export default function JobForm() {
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col gap-3">
-                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">Anstellungsart</label>
-                <select
+                <label htmlFor={`${fieldIdPrefix}-job-type`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">Anstellungsart</label>
+                <select id={`${fieldIdPrefix}-job-type`}
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                   className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
@@ -234,8 +235,8 @@ export default function JobForm() {
                 </select>
               </div>
               <div className="flex flex-col gap-3">
-                <label className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">{t('form.status')}</label>
-                <select
+                <label htmlFor={`${fieldIdPrefix}-job-status`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">{t('form.status')}</label>
+                <select id={`${fieldIdPrefix}-job-status`}
                   value={form.status}
                   onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
                   className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
@@ -254,7 +255,7 @@ export default function JobForm() {
             {aiModel && (
               <div className="flex items-center gap-3">
                 <KiBadge label="KI-generiert" tooltip="Beschreibung und Anforderungen wurden von einer KI generiert. Bitte prüfe den Text." />
-                <span className="text-[12px] font-medium text-gray-400 dark:text-gray-500">Modell: {aiModel}</span>
+                <span className="text-[12px] font-medium text-gray-500 dark:text-gray-500">Modell: {aiModel}</span>
               </div>
             )}
           </div>
@@ -274,11 +275,12 @@ export default function JobForm() {
               </div>
             </div>
             <textarea
+              aria-label={t('form.skills')}
               placeholder="z.B. React, 3+ Jahre Erfahrung, agiles Team, Remote möglich, CI/CD, Code-Reviews, Mentoring ..."
               value={aiKeywords}
               onChange={e => setAiKeywords(e.target.value)}
               rows={3}
-              className="w-full px-5 py-4 bg-white/80 dark:bg-[#1c1c1e]/80 rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#5e5ce6]/10 border border-transparent focus:border-[#5e5ce6]/30 transition-all resize-none"
+              className="w-full px-5 py-4 bg-white/80 dark:bg-[#1c1c1e]/80 rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#5e5ce6]/10 border border-transparent focus:border-[#5e5ce6]/30 transition-all resize-none"
             />
             <button
               type="button"
@@ -337,11 +339,11 @@ export default function JobForm() {
               >
                 <div className="flex flex-col items-center text-center">
                   <div className={`w-14 h-14 rounded-[18px] flex items-center justify-center mb-4 ${dragOver ? 'bg-[#0071e3]/10' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e]'}`}>
-                    {uploadingDescription ? <Loader2 className="w-6 h-6 text-[#0071e3] animate-spin" /> : <Upload className={`w-6 h-6 ${dragOver ? 'text-[#0071e3]' : 'text-gray-400'}`} />}
+                    {uploadingDescription ? <Loader2 className="w-6 h-6 text-[#0071e3] animate-spin" /> : <Upload className={`w-6 h-6 ${dragOver ? 'text-[#0071e3]' : 'text-gray-500 dark:text-gray-400'}`} />}
                   </div>
                   <p className="text-[15px] font-semibold text-black dark:text-white">{uploadingDescription ? t('jobs.uploading') : t('jobs.upload_title')}</p>
                   <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('jobs.upload_hint')}</p>
-                  <p className="text-[12px] text-gray-400 mt-2">{t('jobs.upload_supported')}</p>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-2">{t('jobs.upload_supported')}</p>
                   {uploadedFilename && !uploadingDescription && (
                     <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#34c759]/10 text-[#248a3d] text-[13px] font-medium">
                       <FileText className="w-4 h-4" />
@@ -380,7 +382,7 @@ export default function JobForm() {
               rows={5}
             />
             <Textarea
-              label="Was wir bieten"
+              label={t('form.benefits')}
               placeholder="Welche Benefits, Vorteile und Angebote haben wir für unsere Mitarbeiter?"
               value={form.benefits}
               onChange={e => setForm(f => ({ ...f, benefits: e.target.value }))}

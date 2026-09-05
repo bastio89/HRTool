@@ -304,19 +304,20 @@ export default function Candidates() {
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-5">
           <div className="relative flex-1">
-            <Search className="absolute left-5 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-gray-400 dark:text-gray-500" />
+            <Search className="absolute left-5 sm:left-6 top-1/2 -translate-y-1/2 w-5 h-5 sm:w-6 sm:h-6 text-gray-500 dark:text-gray-500" />
             <input
               type="text"
+              aria-label={t('candidates.search')}
               placeholder={t('candidates.search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-13 sm:pl-16 pr-8 py-4 sm:py-5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px] sm:rounded-[24px]
-                text-black dark:text-white text-[15px] sm:text-[18px] placeholder:text-gray-400 dark:placeholder:text-gray-500
+                text-black dark:text-white text-[15px] sm:text-[18px] placeholder:text-gray-500 dark:placeholder:text-gray-400
                 focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 shadow-sm"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition-colors">
-                <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <X className="w-4 h-4 text-gray-500 dark:text-gray-500" />
               </button>
             )}
           </div>
@@ -337,13 +338,14 @@ export default function Candidates() {
             </button>
             <div className="relative">
               <select
+                aria-label={t('candidates.sort_by')}
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
                 className="appearance-none pl-10 sm:pl-12 pr-4 sm:pr-6 py-3 sm:py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer border border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] focus:outline-none transition-all"
               >
                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
               </select>
-              <ArrowUpDown className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
+              <ArrowUpDown className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 dark:text-gray-500 pointer-events-none" />
             </div>
           </div>
         </div>
@@ -353,7 +355,7 @@ export default function Candidates() {
           <div className="bg-white dark:bg-[#1c1c1e] rounded-[28px] border border-gray-100/80 dark:border-gray-700 shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-8 space-y-7">
             {/* Skills filter with AND logic */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.skills')} <span className="normal-case font-medium">({t('filter.skills_and')})</span></p>
+              <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">{t('filter.skills')} <span className="normal-case font-medium">({t('filter.skills_and')})</span></p>
               <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] min-h-[56px]">
                 {filterSkills.map(skill => (
                   <span key={skill} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#0071e3] text-white text-[14px] font-semibold">
@@ -365,20 +367,21 @@ export default function Candidates() {
                 ))}
                 <input
                   type="text"
+                  aria-label={t('filter.skills')}
                   placeholder={filterSkills.length > 0 ? t('filter.skill_more') : t('filter.skill_placeholder')}
                   value={skillInput}
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={handleSkillKeyDown}
-                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none"
+                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none"
                 />
               </div>
               {filterSkills.length >= 2 && (
-                <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-2 ml-1">{t('filter.skills_hint')}</p>
+                <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 ml-1">{t('filter.skills_hint')}</p>
               )}
             </div>
             {/* Status filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.status')}</p>
+              <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">{t('filter.status')}</p>
               <div className="flex flex-wrap gap-3">
                 {STATUS_OPTIONS.map(s => (
                   <button
@@ -397,9 +400,10 @@ export default function Candidates() {
             </div>
             {/* Availability filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.availability')}</p>
+              <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">{t('filter.availability')}</p>
               <input
                 type="text"
+                aria-label={t('filter.availability_placeholder')}
                 placeholder={t('filter.availability_placeholder')}
                 value={filterAvail}
                 onChange={e => setFilterAvail(e.target.value)}
@@ -409,9 +413,10 @@ export default function Candidates() {
             </div>
             {/* Location filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.location')}</p>
+              <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">{t('filter.location')}</p>
               <input
                 type="text"
+                aria-label={t('filter.location_placeholder')}
                 placeholder={t('filter.location_placeholder')}
                 value={filterLocation}
                 onChange={e => setFilterLocation(e.target.value)}
@@ -421,7 +426,7 @@ export default function Candidates() {
             </div>
             {/* Tags filter */}
             <div>
-              <p className="text-[13px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-4">{t('filter.tags')} <span className="normal-case font-medium">({t('filter.skills_and')})</span></p>
+              <p className="text-[13px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">{t('filter.tags')} <span className="normal-case font-medium">({t('filter.skills_and')})</span></p>
               <div className="flex flex-wrap items-center gap-2 p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] min-h-[56px] max-w-2xl">
                 {filterTags.map(tag => (
                   <span key={tag} className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5e5ce6] text-white text-[14px] font-semibold">
@@ -434,11 +439,12 @@ export default function Candidates() {
                 ))}
                 <input
                   type="text"
+                  aria-label={t('form.tags')}
                   placeholder={filterTags.length > 0 ? t('filter.tag_more') : t('filter.tag_placeholder')}
                   value={tagInput}
                   onChange={e => setTagInput(e.target.value)}
                   onKeyDown={handleTagKeyDown}
-                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none"
+                  className="flex-1 min-w-[180px] px-3 py-2 bg-transparent text-[16px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none"
                 />
               </div>
               {availableTags.length > 0 && (
@@ -513,7 +519,7 @@ export default function Candidates() {
           {/* Select All */}
           {filtered.length > 0 && (
             <div className="flex items-center gap-3 px-2">
-              <button onClick={toggleSelectAll} className="cursor-pointer text-gray-400 dark:text-gray-500 hover:text-black dark:hover:text-white transition-colors">
+              <button onClick={toggleSelectAll} className="cursor-pointer text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors">
                 {selectedIds.size === filtered.length ? (
                   <CheckSquare className="w-5 h-5 text-[#0071e3]" />
                 ) : selectedIds.size > 0 ? (
@@ -522,7 +528,7 @@ export default function Candidates() {
                   <Square className="w-5 h-5" />
                 )}
               </button>
-              <span className="text-[14px] text-gray-400 dark:text-gray-500 font-medium">
+              <span className="text-[14px] text-gray-500 dark:text-gray-500 font-medium">
                 {selectedIds.size > 0 ? `${selectedIds.size} ${t('candidates.selected')}` : t('candidates.select_all')}
               </span>
             </div>
@@ -596,7 +602,7 @@ export default function Candidates() {
                           </span>
                         ))}
                         {candidate.skills.split(',').length > 4 && (
-                          <span className="text-[12px] sm:text-[14px] font-medium text-gray-400 dark:text-gray-500 px-2">
+                          <span className="text-[12px] sm:text-[14px] font-medium text-gray-500 dark:text-gray-500 px-2">
                             +{candidate.skills.split(',').length - 4}
                           </span>
                         )}
@@ -641,7 +647,7 @@ export default function Candidates() {
                     <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
                   <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors ml-1 sm:ml-2">
-                    <ChevronDown className={`w-5 h-5 sm:w-6 sm:h-6 text-gray-400 dark:text-gray-500 transition-transform duration-400 ${expandedId === candidate.id ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-5 h-5 sm:w-6 sm:h-6 text-gray-500 dark:text-gray-400 transition-transform duration-400 ${expandedId === candidate.id ? 'rotate-180' : ''}`} />
                   </div>
                 </div>
               </div>
@@ -662,7 +668,7 @@ export default function Candidates() {
                   </div>
                   {candidate.experience && (
                     <div className="mt-12">
-                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">{t('candidates.experience')}</p>
+                      <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-4">{t('candidates.experience')}</p>
                       <p className="text-[16px] text-gray-700 dark:text-gray-300 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
                         {candidate.experience}
                       </p>
@@ -670,7 +676,7 @@ export default function Candidates() {
                   )}
                   {candidate.notes && (
                     <div className="mt-8">
-                      <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-4">{t('form.notes')}</p>
+                      <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-4">{t('form.notes')}</p>
                       <p className="text-[16px] text-gray-700 dark:text-gray-300 bg-[#ff9f0a]/10 rounded-[24px] p-8 whitespace-pre-wrap leading-relaxed">
                         {candidate.notes}
                       </p>
@@ -701,7 +707,7 @@ export default function Candidates() {
                 }, [])
                 .map((p, i) =>
                   p === '...' ? (
-                    <span key={`dots-${i}`} className="px-2 text-gray-400 dark:text-gray-500 text-[15px]">...</span>
+                    <span key={`dots-${i}`} className="px-2 text-gray-500 dark:text-gray-400 text-[15px]">...</span>
                   ) : (
                     <button
                       key={p}
@@ -753,9 +759,9 @@ export default function Candidates() {
 function DetailItem({ label, value, icon: Icon }) {
   return (
     <div className="flex items-start gap-4">
-      {Icon && <Icon className="w-5 h-5 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />}
+      {Icon && <Icon className="w-5 h-5 text-gray-500 dark:text-gray-500 mt-0.5 flex-shrink-0" />}
       <div>
-        <p className="text-[13px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">{label}</p>
+        <p className="text-[13px] font-semibold text-gray-500 dark:text-gray-500 uppercase tracking-widest">{label}</p>
         <p className="text-[16px] font-medium text-black dark:text-white mt-1.5">{value}</p>
       </div>
     </div>

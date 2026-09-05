@@ -5,10 +5,11 @@ import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, EmptyState, LoadingSpinner, PageContainer } from '../components/UI'
 import { useToast } from '../components/Toast'
 import { useI18n } from '../I18nContext'
+import { localeTag } from '../utils/format'
 
 export default function History() {
   const toast = useToast()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -70,13 +71,14 @@ export default function History() {
       {results.length > 0 && (
         <div className="flex items-center gap-3 mb-6">
           <div className="flex-1 relative">
-            <Search className="w-[18px] h-[18px] text-gray-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-[18px] h-[18px] text-gray-500 dark:text-gray-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
+              aria-label={t('history.search_placeholder')}
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={t('history.search_placeholder')}
-              className="w-full pl-11 pr-10 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white text-[14px] font-medium border-none outline-none focus:ring-2 focus:ring-[#0071e3]/30 transition-all placeholder:text-gray-400"
+              className="w-full pl-11 pr-10 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white text-[14px] font-medium border-none outline-none focus:ring-2 focus:ring-[#0071e3]/30 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-300/50 dark:bg-gray-600/50 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors cursor-pointer">
@@ -85,8 +87,9 @@ export default function History() {
             )}
           </div>
           <div className="flex items-center gap-1 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl p-1">
-            <SortDesc className="w-4 h-4 text-gray-400 ml-2" />
+            <SortDesc className="w-4 h-4 text-gray-500 dark:text-gray-400 ml-2" />
             <select
+              aria-label={t('history.filter', 'Filter')}
               value={sort}
               onChange={e => setSort(e.target.value)}
               className="px-3 py-2.5 bg-transparent text-[13px] font-medium text-black dark:text-white border-none outline-none cursor-pointer appearance-none pr-6"
@@ -102,7 +105,7 @@ export default function History() {
       )}
 
       {search && (
-        <p className="text-[13px] text-gray-400 mb-4">
+        <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-4">
           {t('history.search_results').replace('{count}', filtered.length).replace('{total}', results.length)}
         </p>
       )}
@@ -124,7 +127,7 @@ export default function History() {
         <Card className="p-16 text-center">
           <Search className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <p className="text-[16px] font-semibold text-black dark:text-white">{t('history.no_search_results')}</p>
-          <p className="text-[14px] text-gray-500 mt-1">{t('history.no_search_results_desc')}</p>
+          <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('history.no_search_results_desc')}</p>
           <button onClick={() => setSearch('')} className="mt-4 px-5 py-2.5 rounded-xl bg-[#0071e3] text-white text-[14px] font-semibold hover:bg-[#005bb5] transition-colors cursor-pointer">
             {t('history.clear_search')}
           </button>
@@ -152,7 +155,7 @@ export default function History() {
                     <div className="flex items-center gap-4 sm:gap-8 mt-1 sm:mt-3 flex-wrap">
                       <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        {new Date(result.created_at).toLocaleString('de-DE')}
+                        {new Date(result.created_at).toLocaleString(localeTag(locale))}
                       </span>
                       <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

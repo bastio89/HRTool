@@ -34,7 +34,7 @@ export default function PasswordStrength({ password = '' }) {
       <div className="flex items-center gap-3">
         <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-500"
+            className="h-full rounded-full transition duration-500"
             style={{ width: `${strength}%`, backgroundColor: barColor }}
           />
         </div>

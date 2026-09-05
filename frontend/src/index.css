@@ -11,8 +11,14 @@
 :root {
   --apple-bg: #f5f5f7;
   --apple-text: #1d1d1f;
-  --apple-text-muted: #86868b;
+  /* Muted text: measured against the surfaces it actually sits on.
+     gray-500 (#6b7280) is 4.83:1 on white but only 4.44:1 on #f5f5f7, so the
+     token is a shade darker to clear 4.5:1 on both. */
+  --apple-text-muted: #5c6270;
   --apple-blue: #0071e3;
+  /* Accent for text on tinted or coloured backgrounds, where the brand blue
+     alone drops to ~4.1:1. */
+  --apple-blue-text: #0060c0;
   --apple-blue-hover: #0077ed;
   --apple-card: #ffffff;
   --apple-surface: #f5f5f7;
@@ -38,8 +44,9 @@
 .dark {
   --apple-bg: #000000;
   --apple-text: #f5f5f7;
-  --apple-text-muted: #98989d;
+  --apple-text-muted: #a1a1a8;
   --apple-blue: #0a84ff;
+  --apple-blue-text: #6cb8ff;
   --apple-blue-hover: #339dff;
   --apple-card: #1c1c1e;
   --apple-surface: #2c2c2e;
@@ -64,6 +71,12 @@
 /* Expose the tokens to Tailwind so `bg-card`, `text-muted`, `border-app` … work
    in both themes without needing a `dark:` twin on every single utility. */
 @theme inline {
+  /* Retune the two greys the app uses for muted text so they clear 4.5:1 on
+     every surface they actually appear on - gray-500 was 4.44:1 on #f5f5f7. */
+  --color-gray-500: var(--apple-text-muted);
+  --color-gray-400: var(--apple-text-muted);
+  --color-gray-300: var(--apple-text-muted);
+
   --color-app: var(--apple-bg);
   --color-card: var(--apple-card);
   --color-surface: var(--apple-surface);
@@ -71,6 +84,7 @@
   --color-app-text: var(--apple-text);
   --color-muted: var(--apple-text-muted);
   --color-accent: var(--apple-blue);
+  --color-accent-text: var(--apple-blue-text);
   --color-accent-hover: var(--apple-blue-hover);
   --color-app-border: var(--apple-border);
   --color-card-border: var(--apple-border-card);
@@ -91,6 +105,42 @@
 .layer-popover { z-index: 300; }
 .layer-modal { z-index: 500; }
 .layer-toast { z-index: 900; }
+
+/* ---------------------------------------------------------------------------
+   Press feedback
+
+   Feedback belongs on pointer-down, not on release: the moment a press shows
+   nothing, directness "falls off a cliff". The app had a press state on 3 of
+   ~200 interactive elements, so almost every control felt dead under the
+   finger. This is the app-wide floor; components can still override.
+
+   Only transform is animated (compositor-friendly), and the scale is small
+   enough to read as pressure rather than as a bounce.
+--------------------------------------------------------------------------- */
+@media (hover: hover) and (pointer: fine) {
+  :where(button, [role="button"], a[href], summary):not(:disabled):not([aria-disabled="true"]):active {
+    transform: scale(0.972);
+  }
+}
+@media not all and (pointer: fine) {
+  /* Touch: a slightly deeper press, since there is no hover state to lean on */
+  :where(button, [role="button"], a[href], summary):not(:disabled):not([aria-disabled="true"]):active {
+    transform: scale(0.96);
+  }
+}
+:where(button, [role="button"], a[href], summary) {
+  /* The release settles; the press itself is immediate. */
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+:where(button, [role="button"], a[href], summary):active {
+  transition-duration: 60ms;
+}
+
+/* Full-width bars and rows should not shrink visibly; they dim instead. */
+:where(.press-dim):active {
+  transform: none;
+  opacity: 0.7;
+}
 
 /* ---------------------------------------------------------------------------
    Focus visibility
@@ -126,7 +176,7 @@ summary:focus-visible:focus-visible,
   z-index: 1000;
   padding: 0.625rem 1.25rem;
   border-radius: 9999px;
-  background: var(--apple-blue);
+  background: #005bb5;
   color: #fff;
   font-size: 15px;
   font-weight: 600;
@@ -142,8 +192,31 @@ body {
   color: var(--apple-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   Typography: tracking follows size
+
+   A single letter-spacing cannot be right across an 8px-to-36px range. Large
+   text reads too loose and wants negative tracking; small text reads too tight
+   and wants slightly positive. The app previously applied -0.01em to
+   everything, which squeezed the 10-13px labels that make up most of the UI.
+
+   These rules key off the explicit text-[Npx] utilities the app uses, so the
+   scale applies without touching 1000+ call sites.
+--------------------------------------------------------------------------- */
+/* Display sizes: the larger the type, the tighter it wants to be set. */
+:where([class*="text-[56px]"], [class*="text-[52px]"], [class*="text-[48px]"]) { letter-spacing: -0.028em; line-height: 1.05; }
+:where([class*="text-[40px]"], [class*="text-[36px]"], [class*="text-[34px]"], [class*="text-[32px]"]) { letter-spacing: -0.024em; line-height: 1.1; }
+:where([class*="text-[28px]"], [class*="text-[26px]"], [class*="text-[24px]"]) { letter-spacing: -0.019em; line-height: 1.16; }
+:where([class*="text-[22px]"], [class*="text-[20px]"]) { letter-spacing: -0.015em; line-height: 1.22; }
+:where([class*="text-[19px]"], [class*="text-[18px]"], [class*="text-[17px]"]) { letter-spacing: -0.011em; }
+:where([class*="text-[16px]"], [class*="text-[15px]"]) { letter-spacing: -0.005em; }
+:where([class*="text-[14px]"], [class*="text-[13px]"]) { letter-spacing: 0; }
+/* Small labels are the bulk of this UI; they need air, not tightening. */
+:where([class*="text-[12px]"], [class*="text-[11px]"], [class*="text-[10px]"],
+       [class*="text-[9px]"], [class*="text-[8px]"]) { letter-spacing: 0.008em; }
 
 /* ---------------------------------------------------------------------------
    Page entry animation
@@ -174,10 +247,23 @@ body {
   to { opacity: 1; transform: none; }
 }
 
-/* Modal entry animations – applied by the shared <Modal> component. */
+/* ---------------------------------------------------------------------------
+   Modal enter and exit
+
+   A surface has to leave the way it arrived: the dialog used to animate in and
+   then vanish on the same frame it unmounted, which reads as a glitch rather
+   than a dismissal. Enter and exit mirror each other, and the scrim's blur is
+   animated together with the panel's scale, so the glass reads as a material
+   arriving and leaving rather than a plain opacity fade.
+--------------------------------------------------------------------------- */
 @keyframes overlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; backdrop-filter: blur(0px); }
+  to { opacity: 1; backdrop-filter: blur(4px); }
+}
+
+@keyframes overlayOut {
+  from { opacity: 1; backdrop-filter: blur(4px); }
+  to { opacity: 0; backdrop-filter: blur(0px); }
 }
 
 @keyframes modalIn {
@@ -185,13 +271,18 @@ body {
   to { opacity: 1; transform: none; }
 }
 
-.animate-overlay-in {
-  animation: overlayIn 0.2s ease-out;
+@keyframes modalOut {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(12px) scale(0.97); }
 }
 
-.animate-modal-in {
-  animation: modalIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-}
+.animate-overlay-in { animation: overlayIn 0.22s ease-out; }
+.animate-modal-in { animation: modalIn 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Leaving is quicker than arriving and mirrors the curve, so the return path
+   matches the outbound one. */
+.animate-overlay-out { animation: overlayOut 0.18s ease-in forwards; }
+.animate-modal-out { animation: modalOut 0.2s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
 
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(80px) scale(0.95); }
@@ -215,14 +306,63 @@ body {
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
+/* ---------------------------------------------------------------------------
+   Material and contrast preferences
+
+   The app leans on translucent, blurred chrome (header, sidebar overlay, modal
+   scrim). Reduced motion alone does not cover that: some people need the
+   translucency gone, others need more contrast. Both are their own signal.
+--------------------------------------------------------------------------- */
+@media (prefers-reduced-transparency: reduce) {
+  /* Frost over to solid: raise opacity and drop the blur entirely. */
+  /* Only the standard property: declaring the -webkit- alias alongside it made
+     the minifier keep the alias and drop this one, so the blur stayed. */
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+  }
+  .layer-sticky,
+  header.layer-sticky {
+    background-color: var(--apple-card) !important;
+  }
+  .layer-modal > [aria-hidden="true"] {
+    background-color: rgba(0, 0, 0, 0.65) !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --apple-text-muted: #3d4250;
+    --apple-border: rgba(0, 0, 0, 0.35);
+    --apple-border-card: rgba(0, 0, 0, 0.25);
+  }
+  .dark {
+    --apple-text-muted: #d4d4d8;
+    --apple-border: rgba(255, 255, 255, 0.45);
+    --apple-border-card: rgba(255, 255, 255, 0.3);
+  }
+  /* Surfaces need a defined edge rather than a near-invisible tint. */
+  [class*="rounded-"][class*="border"] {
+    border-color: var(--apple-border) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fade-in,
   .animate-overlay-in,
   .animate-modal-in,
+  .animate-modal-out,
+  .animate-overlay-out,
   .skeleton {
     animation: none !important;
   }
   .fade-in { opacity: 1; transform: none; }
+  /* Reduced motion means gentler feedback, not none: keep the press readable
+     without the scale change. */
+  :where(button, [role="button"], a[href], summary):active {
+    transform: none;
+    opacity: 0.75;
+  }
+  :where(button, [role="button"], a[href], summary) { transition: none; }
 }
 
 .scrollbar-none {

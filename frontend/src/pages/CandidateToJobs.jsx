@@ -124,7 +124,7 @@ export default function CandidateToJobs() {
               <button
                 type="button"
                 onClick={() => setVectorEngine('python')}
-                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-[16px] text-[14px] font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-[16px] text-[14px] font-semibold transition cursor-pointer ${
                   vectorEngine === 'python' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
@@ -133,7 +133,7 @@ export default function CandidateToJobs() {
               <button
                 type="button"
                 onClick={() => setVectorEngine('neo4j')}
-                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-[16px] text-[14px] font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-[16px] text-[14px] font-semibold transition cursor-pointer ${
                   vectorEngine === 'neo4j' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >

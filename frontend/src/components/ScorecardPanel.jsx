@@ -145,10 +145,9 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
     ? (answers.filter(a => a.score > 0).reduce((s, a) => s + a.score, 0) / answers.filter(a => a.score > 0).length).toFixed(1)
     : null
 
-  if (!open) return null
-
   return (
     <Modal
+      open={open}
       onClose={onClose}
       size="lg"
       icon={ClipboardList}
@@ -165,7 +164,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
           <button
             key={tb.key}
             onClick={() => setTab(tb.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[13px] font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[13px] font-semibold transition cursor-pointer ${
               tab === tb.key
                 ? 'bg-black dark:bg-white text-white dark:text-black'
                 : 'text-gray-500 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e]'
@@ -188,7 +187,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
             <button
               onClick={handleGenerateQuestions}
               disabled={generating}
-              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#5e5ce6] to-[#0071e3] text-white text-[14px] font-semibold hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#5e5ce6] to-[#0071e3] text-white text-[14px] font-semibold hover:opacity-90 transition cursor-pointer disabled:opacity-50"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {generating ? t('scorecard.generating') : t('scorecard.generate_ai')}
@@ -212,7 +211,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                     <button
                       key={tpl.id}
                       onClick={() => selectTemplate(tpl)}
-                      className="w-full text-left p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition-all cursor-pointer"
+                      className="w-full text-left p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] transition cursor-pointer"
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -245,7 +244,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                 placeholder={t('scorecard.evaluator')}
                 value={evaluatorName}
                 onChange={e => setEvaluatorName(e.target.value)}
-                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition"
               />
 
               {/* Questions & Ratings */}
@@ -281,7 +280,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                     placeholder={t('scorecard.comment')}
                     value={answers[idx]?.comment || ''}
                     onChange={e => updateAnswer(idx, 'comment', e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
+                    className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition"
                   />
                 </div>
               ))}
@@ -293,7 +292,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                 value={evalNotes}
                 onChange={e => setEvalNotes(e.target.value)}
                 rows={3}
-                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all resize-none"
+                className="w-full px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition resize-none"
               />
 
               {/* Summary & Submit */}
@@ -309,7 +308,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                 <button
                   onClick={handleSubmit}
                   disabled={saving || !evaluatorName.trim() || answers.filter(a => a.score > 0).length === 0}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#0071e3] text-white text-[14px] font-semibold hover:bg-[#0077ed] disabled:opacity-50 transition-all cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#0071e3] text-white text-[14px] font-semibold hover:bg-[#0077ed] disabled:opacity-50 transition cursor-pointer"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   {t('scorecard.save')}
@@ -347,7 +346,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
             <p className="text-[15px] font-semibold text-black dark:text-white">{t('scorecard.templates')}</p>
             <button
               onClick={() => setShowNewTemplate(!showNewTemplate)}
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black dark:bg-white text-white dark:text-black text-[13px] font-semibold hover:opacity-80 transition-all cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-black dark:bg-white text-white dark:text-black text-[13px] font-semibold hover:opacity-80 transition cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" /> {t('scorecard.new_template')}
             </button>
@@ -361,7 +360,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                 placeholder={t('scorecard.template_name')}
                 value={newTemplateName}
                 onChange={e => setNewTemplateName(e.target.value)}
-                className="w-full px-4 py-3 bg-white dark:bg-[#1c1c1e] rounded-xl text-[15px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
+                className="w-full px-4 py-3 bg-white dark:bg-[#1c1c1e] rounded-xl text-[15px] font-medium text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition"
               />
               {newQuestions.map((q, idx) => (
                 <div key={idx} className="flex items-start gap-3">
@@ -373,7 +372,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                       placeholder={t('scorecard.question_label')}
                       value={q.text}
                       onChange={e => setNewQuestions(prev => prev.map((x, i) => i === idx ? { ...x, text: e.target.value } : x))}
-                      className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition-all"
+                      className="w-full px-4 py-2.5 bg-white dark:bg-[#1c1c1e] rounded-xl text-[14px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 focus:border-[#0071e3]/30 transition"
                     />
                     <div className="flex gap-2">
                       <select
@@ -392,7 +391,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                         placeholder={t('scorecard.hint_optional')}
                         value={q.hint}
                         onChange={e => setNewQuestions(prev => prev.map((x, i) => i === idx ? { ...x, hint: e.target.value } : x))}
-                        className="flex-1 px-3 py-2 bg-white dark:bg-[#1c1c1e] rounded-xl text-[13px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 transition-all"
+                        className="flex-1 px-3 py-2 bg-white dark:bg-[#1c1c1e] rounded-xl text-[13px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none border border-gray-200 dark:border-gray-700 transition"
                       />
                     </div>
                   </div>
@@ -411,11 +410,11 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                   + {t('scorecard.add_question')}
                 </button>
                 <div className="flex-1" />
-                <button onClick={() => setShowNewTemplate(false)} className="px-4 py-2 rounded-xl text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer transition-all">{t('common.cancel')}</button>
+                <button onClick={() => setShowNewTemplate(false)} className="px-4 py-2 rounded-xl text-[13px] font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer transition">{t('common.cancel')}</button>
                 <button
                   onClick={handleCreateTemplate}
                   disabled={saving || !newTemplateName.trim()}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0071e3] text-white text-[13px] font-semibold hover:bg-[#0077ed] disabled:opacity-50 cursor-pointer transition-all"
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl bg-[#0071e3] text-white text-[13px] font-semibold hover:bg-[#0077ed] disabled:opacity-50 cursor-pointer transition"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   {t('common.save')}
@@ -494,7 +493,7 @@ export default function ScorecardPanel({ open, onClose, entry, jobId, onSaved })
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <div className="w-20 h-2 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
                             <div
-                              className="h-full rounded-full bg-[#ff9f0a] transition-all"
+                              className="h-full rounded-full bg-[#ff9f0a] transition"
                               style={{ width: `${(a.avgScore / 5) * 100}%` }}
                             />
                           </div>

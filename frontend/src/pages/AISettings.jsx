@@ -281,7 +281,7 @@ export default function AISettings() {
   const embeddingStatusClasses = {
     checking: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-300 dark:border-gray-700',
     success: 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25',
-    error: 'bg-[#ff3b30]/10 text-[#d92d20] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25',
+    error: 'bg-[#ff3b30]/10 text-[#b91c1c] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25',
     idle: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-400 dark:border-gray-700',
   }
 
@@ -314,7 +314,7 @@ export default function AISettings() {
 
       {/* Info banner */}
       <div className="flex items-start gap-3 p-4 rounded-2xl bg-[#0071e3]/5 border border-[#0071e3]/10">
-        <Info className="w-5 h-5 text-[#0071e3] flex-shrink-0 mt-0.5" />
+        <Info className="w-5 h-5 text-[var(--apple-blue-text)] flex-shrink-0 mt-0.5" />
         <p className="text-[14px] text-gray-600 dark:text-gray-300 leading-relaxed">
           {t('ai_settings.info')}
         </p>
@@ -334,9 +334,9 @@ export default function AISettings() {
             <button
               key={opt.value}
               onClick={() => selectProvider(opt.value)}
-              className={`text-left px-4 py-3 rounded-2xl border transition-all duration-200 cursor-pointer ${
+              className={`text-left px-4 py-3 rounded-2xl border transition duration-200 cursor-pointer ${
                 provider === opt.value
-                  ? 'bg-[#0071e3]/10 border-[#0071e3]/40 text-[#0071e3]'
+                  ? 'bg-[#0071e3]/10 border-[#0071e3]/40 text-[var(--apple-blue-text)]'
                   : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] border-transparent text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
               }`}
             >
@@ -377,7 +377,7 @@ export default function AISettings() {
               <button
                 key={p.url}
                 onClick={() => applyPreset(p.url, p.provider)}
-                className={`px-4 py-2 rounded-full text-[13px] font-medium transition-all duration-200 cursor-pointer border ${
+                className={`px-4 py-2 rounded-full text-[13px] font-medium transition duration-200 cursor-pointer border ${
                   baseUrl === p.url
                     ? 'bg-[#0071e3] text-white border-[#0071e3]'
                     : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-300 border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -455,7 +455,7 @@ export default function AISettings() {
                 onChange={(e) => { setModel(e.target.value); setLlmTestResult(null) }}
                 className="w-full appearance-none px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
                   text-black dark:text-white text-[16px] focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c]
-                  focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 cursor-pointer pr-12"
+                  focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition duration-300 cursor-pointer pr-12"
               >
                 {models.map((m) => (
                   <option key={m} value={m}>{m}</option>
@@ -465,7 +465,7 @@ export default function AISettings() {
             </div>
             <button
               onClick={() => setManualModel(true)}
-              className="text-[13px] text-[#0071e3] hover:underline ml-2 cursor-pointer"
+              className="text-[13px] text-[var(--apple-blue-text)] hover:underline ml-2 cursor-pointer"
             >
               {t('ai_settings.enter_manually')}
             </button>
@@ -484,7 +484,7 @@ export default function AISettings() {
             {models.length > 0 && (
               <button
                 onClick={() => setManualModel(false)}
-                className="text-[13px] text-[#0071e3] hover:underline ml-2 cursor-pointer"
+                className="text-[13px] text-[var(--apple-blue-text)] hover:underline ml-2 cursor-pointer"
               >
                 {t('ai_settings.choose_from_list')}
               </button>
@@ -527,9 +527,9 @@ export default function AISettings() {
               key={level.value}
               type="button"
               onClick={() => { setReasoningLevel(level.value); setLlmTestResult(null) }}
-              className={`text-left px-3 py-3 rounded-2xl border transition-all duration-200 cursor-pointer ${
+              className={`text-left px-3 py-3 rounded-2xl border transition duration-200 cursor-pointer ${
                 reasoningLevel === level.value
-                  ? 'bg-[#0071e3]/10 border-[#0071e3]/40 text-[#0071e3]'
+                  ? 'bg-[#0071e3]/10 border-[#0071e3]/40 text-[var(--apple-blue-text)]'
                   : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] border-transparent text-gray-600 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
               }`}
             >
@@ -566,7 +566,7 @@ export default function AISettings() {
                 onChange={(e) => { setEmbeddingModel(e.target.value); setEmbeddingTestResult(null) }}
                 className="w-full appearance-none px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
                   text-black dark:text-white text-[16px] focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c]
-                  focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 cursor-pointer pr-12"
+                  focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition duration-300 cursor-pointer pr-12"
               >
                 {embeddingModels.map((m) => (
                   <option key={m} value={m}>{m}</option>
@@ -576,7 +576,7 @@ export default function AISettings() {
             </div>
             <button
               onClick={() => setManualEmbeddingModel(true)}
-              className="text-[13px] text-[#0071e3] hover:underline ml-2 cursor-pointer"
+              className="text-[13px] text-[var(--apple-blue-text)] hover:underline ml-2 cursor-pointer"
             >
               {t('ai_settings.enter_manually')}
             </button>
@@ -595,7 +595,7 @@ export default function AISettings() {
             {embeddingModels.length > 0 && (
               <button
                 onClick={() => setManualEmbeddingModel(false)}
-                className="text-[13px] text-[#0071e3] hover:underline ml-2 cursor-pointer"
+                className="text-[13px] text-[var(--apple-blue-text)] hover:underline ml-2 cursor-pointer"
               >
                 {t('ai_settings.choose_from_list')}
               </button>

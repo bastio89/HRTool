@@ -60,7 +60,7 @@ export default function CandidatePicker({
           value={searchTerm}
           onChange={(e) => onSearch(e.target.value)}
           className="w-full pl-14 pr-5 py-4 text-[15px] bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
-            text-black dark:text-white font-medium focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+            text-black dark:text-white font-medium focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition"
         />
       </div>
 

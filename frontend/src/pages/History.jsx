@@ -78,7 +78,7 @@ export default function History() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={t('history.search_placeholder')}
-              className="w-full pl-11 pr-10 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white text-[14px] font-medium border-none outline-none focus:ring-2 focus:ring-[#0071e3]/30 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
+              className="w-full pl-11 pr-10 py-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white text-[14px] font-medium border-none outline-none focus:ring-2 focus:ring-[#0071e3]/30 transition placeholder:text-gray-500 dark:placeholder:text-gray-400"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-300/50 dark:bg-gray-600/50 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors cursor-pointer">

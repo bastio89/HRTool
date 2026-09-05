@@ -61,7 +61,7 @@ function WeightSlider({ label, icon, value, onChange, t }) {
       </div>
       <div className="relative h-[6px] rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] overflow-hidden">
         <div
-          className="absolute top-0 h-full rounded-full transition-all duration-150"
+          className="absolute top-0 h-full rounded-full transition duration-150"
           style={{
             left: value >= 0 ? '50%' : `${percentage}%`,
             width: value >= 0 ? `${(value / 10) * 50}%` : `${50 - percentage}%`,
@@ -178,7 +178,7 @@ export default function MatchingWeights({ weights, onChange }) {
   }
 
   return (
-    <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] border border-[#e5e5ea] dark:border-[#38383a] overflow-hidden transition-all">
+    <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] border border-[#e5e5ea] dark:border-[#38383a] overflow-hidden transition">
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
@@ -231,7 +231,7 @@ export default function MatchingWeights({ weights, onChange }) {
                   <div key={profile.id} className="flex items-center">
                     <button
                       onClick={() => handleProfileSelect(profile)}
-                      className={`px-4 py-2 rounded-l-full text-[13px] font-semibold transition-all cursor-pointer ${
+                      className={`px-4 py-2 rounded-l-full text-[13px] font-semibold transition cursor-pointer ${
                         selectedProfileId === profile.id
                           ? 'bg-[#af52de] text-white'
                           : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-300 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -243,7 +243,7 @@ export default function MatchingWeights({ weights, onChange }) {
                     {!profile.is_default && (
                       <button
                         onClick={() => handleDeleteProfile(profile.id)}
-                        className={`px-2 py-2 rounded-r-full text-[13px] transition-all cursor-pointer border-l ${
+                        className={`px-2 py-2 rounded-r-full text-[13px] transition cursor-pointer border-l ${
                           selectedProfileId === profile.id
                             ? 'bg-[#af52de]/80 text-white/80 hover:text-white border-white/20'
                             : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] border-gray-200 dark:border-gray-600'

@@ -117,7 +117,7 @@ export default function CommentSection({ entityType, entityId }) {
                   <p className="text-[13px] text-gray-700 dark:text-gray-300 mt-0.5 break-words" dangerouslySetInnerHTML={{ __html: formatContent(c.content) }} />
                 </div>
                 {(c.user_id === user?.id || user?.role === 'admin') && (
-                  <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] transition-all cursor-pointer">
+                  <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] transition cursor-pointer">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}

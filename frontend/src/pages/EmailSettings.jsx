@@ -210,7 +210,7 @@ export default function EmailSettings() {
           <button
             key={key}
             onClick={() => { setTab(key); if (key === 'log') loadLog(); }}
-            className={`flex items-center gap-2 px-4 py-3 text-[14px] font-medium border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-3 text-[14px] font-medium border-b-2 transition cursor-pointer ${
               tab === key
                 ? 'border-[#0071e3] text-[#0071e3] dark:border-[#0a84ff] dark:text-[#0a84ff]'
                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
@@ -460,7 +460,7 @@ export default function EmailSettings() {
                   <select id={`${fieldIdPrefix}-trigger-stage`}
                     value={editTpl.trigger_stage || ''}
                     onChange={e => setEditTpl({ ...editTpl, trigger_stage: e.target.value || null })}
-                    className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition-all"
+                    className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition"
                   >
                     <option value="">{t('email.no_trigger')}</option>
                     {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -479,7 +479,7 @@ export default function EmailSettings() {
                   rows={8}
                   value={editTpl.body}
                   onChange={e => setEditTpl({ ...editTpl, body: e.target.value })}
-                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition-all resize-y"
+                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition resize-y"
                   placeholder={t('email.body_placeholder')}
                 />
               </div>
@@ -511,14 +511,14 @@ export default function EmailSettings() {
                     value={aiPurpose}
                     onChange={e => setAiPurpose(e.target.value)}
                     placeholder={t('email.ai_purpose_placeholder')}
-                    className="w-full px-3 py-2.5 bg-white dark:bg-[#1c1c1e] border border-purple-200 dark:border-purple-700/50 rounded-lg text-[14px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-[#1c1c1e] border border-purple-200 dark:border-purple-700/50 rounded-lg text-[14px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
                   />
                   <div className="flex gap-2">
                     <select
                       aria-label={t('email.ai_tone', 'Tonalität')}
                       value={aiTone}
                       onChange={e => setAiTone(e.target.value)}
-                      className="flex-1 px-3 py-2.5 bg-white dark:bg-[#1c1c1e] border border-purple-200 dark:border-purple-700/50 rounded-lg text-[14px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+                      className="flex-1 px-3 py-2.5 bg-white dark:bg-[#1c1c1e] border border-purple-200 dark:border-purple-700/50 rounded-lg text-[14px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
                     >
                       <option value="">{t('email.ai_tone_default')}</option>
                       <option value="professionell und formell">{t('email.ai_tone_formal')}</option>
@@ -529,7 +529,7 @@ export default function EmailSettings() {
                     <button
                       onClick={handleAiGenerate}
                       disabled={aiGenerating || !aiPurpose.trim()}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold transition-all cursor-pointer ${
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-[14px] font-semibold transition cursor-pointer ${
                         aiGenerating || !aiPurpose.trim()
                           ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                           : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow-md'
@@ -594,14 +594,14 @@ export default function EmailSettings() {
                 <div className="flex items-center gap-2 ml-4">
                   <button
                     onClick={() => setEditTpl({ ...tpl })}
-                    className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#0071e3] hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all cursor-pointer"
+                    className="p-2 text-gray-500 dark:text-gray-400 hover:text-[#0071e3] hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition cursor-pointer"
                     title={t('email.edit_template')}
                   >
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => deleteTemplate(tpl.id)}
-                    className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all cursor-pointer"
+                    className="p-2 text-gray-500 dark:text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition cursor-pointer"
                     title={t('common.delete')}
                   >
                     <Trash2 className="w-4 h-4" />

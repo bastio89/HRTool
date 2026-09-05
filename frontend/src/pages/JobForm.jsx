@@ -230,7 +230,7 @@ export default function JobForm() {
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                   className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
-                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition"
                 >
                   {JOB_TYPES.map(type => <option key={type}>{type}</option>)}
                 </select>
@@ -241,7 +241,7 @@ export default function JobForm() {
                   value={form.status}
                   onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
                   className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer
-                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition"
                 >
                   {JOB_STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>
@@ -281,13 +281,13 @@ export default function JobForm() {
               value={aiKeywords}
               onChange={e => setAiKeywords(e.target.value)}
               rows={3}
-              className="w-full px-5 py-4 bg-white/80 dark:bg-[#1c1c1e]/80 rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#5e5ce6]/10 border border-transparent focus:border-[#5e5ce6]/30 transition-all resize-none"
+              className="w-full px-5 py-4 bg-white/80 dark:bg-[#1c1c1e]/80 rounded-[16px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#5e5ce6]/10 border border-transparent focus:border-[#5e5ce6]/30 transition resize-none"
             />
             <button
               type="button"
               onClick={handleGenerate}
               disabled={generating || (!form.title.trim() && !aiKeywords.trim())}
-              className="mt-4 flex items-center gap-2.5 px-6 py-3 rounded-full bg-[#5e5ce6] text-white text-[15px] font-semibold hover:bg-[#4b49b6] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+              className="mt-4 flex items-center gap-2.5 px-6 py-3 rounded-full bg-[#5e5ce6] text-white text-[15px] font-semibold hover:bg-[#4b49b6] disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
             >
               {generating ? (
                 <>
@@ -336,7 +336,7 @@ export default function JobForm() {
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
                 onClick={() => !uploadingDescription && fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-[24px] p-6 sm:p-8 transition-all cursor-pointer ${dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'}`}
+                className={`border-2 border-dashed rounded-[24px] p-6 sm:p-8 transition cursor-pointer ${dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'}`}
               >
                 <div className="flex flex-col items-center text-center">
                   <div className={`w-14 h-14 rounded-[18px] flex items-center justify-center mb-4 ${dragOver ? 'bg-[#0071e3]/10' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e]'}`}>

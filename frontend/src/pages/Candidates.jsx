@@ -313,7 +313,7 @@ export default function Candidates() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-13 sm:pl-16 pr-8 py-4 sm:py-5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px] sm:rounded-[24px]
                 text-black dark:text-white text-[15px] sm:text-[18px] placeholder:text-gray-500 dark:placeholder:text-gray-400
-                focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all duration-300 shadow-sm"
+                focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition duration-300 shadow-sm"
             />
             {search && (
               <button onClick={() => setSearch('')} className="absolute right-5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center cursor-pointer transition-colors">
@@ -324,7 +324,7 @@ export default function Candidates() {
           <div className="flex gap-3 sm:gap-4">
             <button
               onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-2 sm:gap-3 px-5 sm:px-7 py-3 sm:py-4 rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer border ${
+              className={`flex items-center gap-2 sm:gap-3 px-5 sm:px-7 py-3 sm:py-4 rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold transition cursor-pointer border ${
                 showFilters || activeFilterCount > 0
                   ? 'bg-black text-white border-black'
                   : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-300 border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -341,7 +341,7 @@ export default function Candidates() {
                 aria-label={t('candidates.sort_by')}
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
-                className="appearance-none pl-10 sm:pl-12 pr-4 sm:pr-6 py-3 sm:py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer border border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] focus:outline-none transition-all"
+                className="appearance-none pl-10 sm:pl-12 pr-4 sm:pr-6 py-3 sm:py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] sm:rounded-[24px] text-[15px] sm:text-[17px] font-semibold text-gray-700 dark:text-gray-300 cursor-pointer border border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] focus:outline-none transition"
               >
                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
               </select>
@@ -387,7 +387,7 @@ export default function Candidates() {
                   <button
                     key={s}
                     onClick={() => toggleStatus(s)}
-                    className={`px-5 py-2.5 rounded-full text-[15px] font-semibold transition-all cursor-pointer border ${
+                    className={`px-5 py-2.5 rounded-full text-[15px] font-semibold transition cursor-pointer border ${
                       filterStatus.includes(s)
                         ? `${STATUS_STYLE[s]} border-current`
                         : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 border-transparent hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -408,7 +408,7 @@ export default function Candidates() {
                 value={filterAvail}
                 onChange={e => setFilterAvail(e.target.value)}
                 className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white border border-transparent
-                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition"
               />
             </div>
             {/* Location filter */}
@@ -421,7 +421,7 @@ export default function Candidates() {
                 value={filterLocation}
                 onChange={e => setFilterLocation(e.target.value)}
                 className="w-full max-w-md px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white border border-transparent
-                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+                  focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition"
               />
             </div>
             {/* Tags filter */}
@@ -451,7 +451,7 @@ export default function Candidates() {
                 <div className="flex flex-wrap gap-2 mt-3">
                   {availableTags.filter(t => !filterTags.includes(t.tag)).slice(0, 10).map(t => (
                     <button key={t.tag} onClick={() => addTag(t.tag)}
-                      className="px-3 py-1.5 rounded-full bg-[#5e5ce6]/5 text-[13px] font-medium text-[#5e5ce6] hover:bg-[#5e5ce6]/10 transition-all cursor-pointer border border-[#5e5ce6]/10">
+                      className="px-3 py-1.5 rounded-full bg-[#5e5ce6]/5 text-[13px] font-medium text-[#5e5ce6] hover:bg-[#5e5ce6]/10 transition cursor-pointer border border-[#5e5ce6]/10">
                       {t.tag} <span className="text-[11px] opacity-60">({t.count})</span>
                     </button>
                   ))}
@@ -483,14 +483,14 @@ export default function Candidates() {
               <button
                 key={s}
                 onClick={() => handleBatchStatus(s)}
-                className={`px-4 py-2 rounded-full text-[13px] sm:text-[14px] font-semibold cursor-pointer transition-all ${STATUS_STYLE[s]} hover:opacity-80`}
+                className={`px-4 py-2 rounded-full text-[13px] sm:text-[14px] font-semibold cursor-pointer transition ${STATUS_STYLE[s]} hover:opacity-80`}
               >
                 → {s}
               </button>
             ))}
             <button
               onClick={handleBatchDelete}
-              className="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition flex items-center gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" /> {t('candidates.delete')}
             </button>
@@ -554,7 +554,7 @@ export default function Candidates() {
                   </button>
                   {/* Avatar */}
                   <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center flex-shrink-0 border border-gray-200/50 dark:border-gray-700">
-                    <span className="text-[16px] sm:text-[22px] font-semibold text-gray-600 dark:text-gray-400 tracking-tight">
+                    <span className="text-[16px] sm:text-[22px] font-semibold text-gray-600 dark:text-gray-400">
                       {candidate.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                     </span>
                   </div>
@@ -653,7 +653,7 @@ export default function Candidates() {
               </div>
 
               {/* Expanded details */}
-              <div className={`overflow-hidden transition-all duration-500 ease-in-out ${expandedId === candidate.id ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+              <div className={`overflow-hidden transition-[max-height,opacity] duration-500 ease-in-out ${expandedId === candidate.id ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                 <div className="px-10 pb-10 pt-4 border-t border-gray-100/80 dark:border-gray-700">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pt-8">
                     {candidate.email && <DetailItem label={t('form.email')} value={candidate.email} />}
@@ -694,7 +694,7 @@ export default function Candidates() {
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
@@ -712,7 +712,7 @@ export default function Candidates() {
                     <button
                       key={p}
                       onClick={() => setCurrentPage(p)}
-                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer ${
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-[15px] sm:text-[17px] font-semibold transition cursor-pointer ${
                         p === currentPage
                           ? 'bg-black text-white'
                           : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -725,7 +725,7 @@ export default function Candidates() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
@@ -740,12 +740,11 @@ export default function Candidates() {
         onImported={loadCandidates}
       />
 
-      {showBatchImport && (
-        <BatchCVImportDialog
-          onClose={() => { setShowBatchImport(false); loadCandidates() }}
-          onImported={loadCandidates}
-        />
-      )}
+      <BatchCVImportDialog
+        open={showBatchImport}
+        onClose={() => { setShowBatchImport(false); loadCandidates() }}
+        onImported={loadCandidates}
+      />
 
       <CandidatePrintProfile
         candidate={printCandidate}

@@ -5,7 +5,7 @@ import { Button } from './UI'
 import Modal from './Modal'
 import { useI18n } from '../I18nContext'
 
-export default function SendEmailModal({ candidate, jobTitle, onClose, onSent }) {
+export default function SendEmailModal({ open = true, candidate, jobTitle, onClose, onSent }) {
   const fieldIdPrefix = useId()
   const { t } = useI18n()
   const [templates, setTemplates] = useState([])
@@ -17,10 +17,11 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
   const [result, setResult] = useState(null)
 
   useEffect(() => {
+    if (!open) return
     emailApi.getTemplates().then(res => {
       setTemplates(res.data || [])
     }).catch(console.error)
-  }, [])
+  }, [open])
 
   const handleTemplateChange = async (templateId) => {
     setSelectedTemplate(templateId)
@@ -72,6 +73,7 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
 
   return (
     <Modal
+      open={open}
       onClose={onClose}
       size="lg"
       icon={Mail}
@@ -98,7 +100,7 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
             value={selectedTemplate}
             onChange={e => handleTemplateChange(e.target.value)}
             data-autofocus
-            className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition-all"
+            className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition"
           >
             <option value="">{t('email.custom_email')}</option>
             {templates.map(tpl => (
@@ -122,7 +124,7 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
                 type="text"
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition-all"
+                className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition"
                 placeholder={t('email.subject_placeholder')}
               />
             </div>
@@ -136,7 +138,7 @@ export default function SendEmailModal({ candidate, jobTitle, onClose, onSent })
                 rows={10}
                 value={body}
                 onChange={e => setBody(e.target.value)}
-                className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition-all resize-y"
+                className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200 dark:border-gray-700 rounded-xl text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3] transition resize-y"
                 placeholder={t('email.body_placeholder')}
               />
             </div>

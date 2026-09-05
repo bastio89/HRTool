@@ -27,6 +27,7 @@ const TONES = {
 export function ConfirmProvider({ children }) {
   const { t } = useI18n()
   const [state, setState] = useState(null)
+  const [lastState, setLastState] = useState(null)
   const resolverRef = useRef(null)
   const confirmButtonRef = useRef(null)
 
@@ -34,42 +35,50 @@ export function ConfirmProvider({ children }) {
     const opts = typeof options === 'string' ? { message: options } : options || {}
     return new Promise((resolve) => {
       resolverRef.current = resolve
-      setState({ tone: 'danger', ...opts })
+      const next = { tone: 'danger', ...opts }
+      setState(next)
+      setLastState(next)
     })
   }, [])
 
   const settle = useCallback((result) => {
     setState(null)
+    // Let the dialog finish leaving before its content is dropped.
+    setTimeout(() => setLastState(null), 250)
     const resolve = resolverRef.current
     resolverRef.current = null
     if (resolve) resolve(result)
   }, [])
 
-  const tone = TONES[state?.tone] || TONES.danger
+  const tone = TONES[lastState?.tone] || TONES.danger
   const ToneIcon = tone.icon
 
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
-      {state && (
+      {/* The Modal stays mounted for its exit animation, so `open` toggles
+          rather than the whole element appearing and disappearing. The last
+          options are kept while it leaves, otherwise the dialog would blank out
+          its own text mid-dismissal. */}
+      {lastState && (
         <Modal
-          open
+          open={Boolean(state)}
           onClose={() => settle(false)}
           size="sm"
           showClose={false}
           initialFocusRef={confirmButtonRef}
-          title={state.title || t('common.confirm_title', 'Sind Sie sicher?')}
+          title={lastState.title || t('common.confirm_title', 'Sind Sie sicher?')}
           footer={
             <>
               <Button variant="secondary" onClick={() => settle(false)}>
-                {state.cancelLabel || t('common.cancel')}
+                {lastState.cancelLabel || t('common.cancel')}
               </Button>
               <Button
                 ref={confirmButtonRef}
-                variant={state.confirmVariant || tone.variant}
+                variant={lastState.confirmVariant || tone.variant}
                 onClick={() => settle(true)}
               >
-                {state.confirmLabel || t('common.delete')}
+                {lastState.confirmLabel || t('common.delete')}
               </Button>
             </>
           }
@@ -79,7 +88,7 @@ export function ConfirmProvider({ children }) {
               <ToneIcon className={`w-5 h-5 ${tone.color}`} />
             </div>
             <p className="text-[16px] leading-relaxed text-gray-600 dark:text-gray-300 pt-2">
-              {state.message}
+              {lastState.message}
             </p>
           </div>
         </Modal>

@@ -27,7 +27,7 @@ export default function MatchingHub() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
         {MODES.map(({ to, icon: Icon, titleKey, descKey, color }) => (
           <button key={to} type="button" onClick={() => navigate(to)} className="text-left group cursor-pointer">
-            <Card className="p-8 sm:p-10 h-full flex flex-col transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1">
+            <Card className="p-8 sm:p-10 h-full flex flex-col transition duration-300 group-hover:shadow-lg group-hover:-translate-y-1">
               <div
                 className="w-16 h-16 rounded-2xl flex items-center justify-center mb-8"
                 style={{ backgroundColor: `${color}1a` }}

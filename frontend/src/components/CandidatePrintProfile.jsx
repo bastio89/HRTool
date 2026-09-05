@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Printer, EyeOff, Eye, MapPin, Briefcase, GraduationCap, Globe, Award, Car, Clock, Mail, Phone, DollarSign } from 'lucide-react'
 import { useI18n } from '../I18nContext'
+import useLastDefined from '../hooks/useLastDefined'
 import Modal from './Modal'
 import { Button } from './UI'
 import { localeTag } from '../utils/format'
@@ -31,12 +32,15 @@ function anonymizePhone(phone) {
   return phone.slice(0, 4) + '****' + phone.slice(-2)
 }
 
-export default function CandidatePrintProfile({ candidate, open, onClose }) {
+export default function CandidatePrintProfile({ candidate: candidateProp, open, onClose }) {
+  // Retain the data while the dialog animates out.
+  const candidate = useLastDefined(candidateProp)
   const { t, locale } = useI18n()
   const [anonymized, setAnonymized] = useState(false)
   const printRef = useRef(null)
 
-  if (!open || !candidate) return null
+  // Nothing to show before the dialog has ever been opened.
+  if (!candidate) return null
 
   const status = candidate.status || 'Aktiv'
   const tags = candidate.tags ? candidate.tags.split(',').map(tag => tag.trim()).filter(Boolean) : []
@@ -115,7 +119,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
 
   return (
     <Modal
-      open={open}
+      open={open && Boolean(candidateProp)}
       onClose={onClose}
       size="xl"
       icon={Printer}
@@ -125,7 +129,7 @@ export default function CandidatePrintProfile({ candidate, open, onClose }) {
         <>
           <button
             onClick={() => setAnonymized(!anonymized)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-[14px] font-medium transition-all cursor-pointer mr-auto ${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-[14px] font-medium transition cursor-pointer mr-auto ${
               anonymized
                 ? 'bg-[#ff9f0a]/10 text-[#ff9f0a]'
                 : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'

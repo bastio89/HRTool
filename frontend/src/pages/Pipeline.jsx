@@ -285,7 +285,7 @@ export default function Pipeline() {
               <button
                 key={stage}
                 onClick={() => setActiveStage(idx)}
-                className={`snap-center flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition-all cursor-pointer
+                className={`snap-center flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition cursor-pointer
                   ${idx === activeStage
                     ? `${style.col} ${style.header} ring-2 ring-current`
                     : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 dark:text-gray-400'}`}
@@ -341,7 +341,7 @@ export default function Pipeline() {
               {/* Stage dots indicator */}
               <div className="flex items-center justify-center gap-1.5 mb-4">
                 {STAGES.map((_, i) => (
-                  <span key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === activeStage ? 'bg-gray-600 dark:bg-gray-300 w-4' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                  <span key={i} className={`w-1.5 h-1.5 rounded-full transition ${i === activeStage ? 'bg-gray-600 dark:bg-gray-300 w-4' : 'bg-gray-300 dark:bg-gray-600'}`} />
                 ))}
               </div>
               <div className="flex flex-col gap-3">
@@ -383,7 +383,7 @@ export default function Pipeline() {
           return (
             <div
               key={stage}
-              className={`flex-1 min-w-0 rounded-[24px] p-4 flex flex-col gap-3 transition-all duration-200
+              className={`flex-1 min-w-0 rounded-[24px] p-4 flex flex-col gap-3 transition duration-200
                 ${isOver ? 'ring-2 ring-[#0071e3] ring-offset-2 scale-[1.01]' : ''}
                 ${style.col}`}
               onDragOver={e => handleDragOver(e, stage)}
@@ -453,7 +453,7 @@ export default function Pipeline() {
                   value={addSearch}
                   onChange={e => setAddSearch(e.target.value)}
                   className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] text-black dark:text-white font-medium
-                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                    focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition"
                   data-autofocus
                 />
               </div>
@@ -519,7 +519,7 @@ export default function Pipeline() {
               placeholder={t('pipeline.note_optional')}
               rows={3}
               className="w-full px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] text-black dark:text-white font-medium resize-none
-                focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition"
               data-autofocus
             />
         </>)}
@@ -543,7 +543,7 @@ export default function Pipeline() {
               placeholder={t('pipeline.notes_write')}
               aria-label={t('pipeline.notes_write')}
               className="flex-1 px-5 py-3.5 bg-white dark:bg-[#1c1c1e] rounded-[16px] text-[15px] text-black dark:text-white font-medium
-                focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-gray-200/60 dark:border-gray-700/60 focus:border-[#0071e3]/30 transition-all"
+                focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-gray-200/60 dark:border-gray-700/60 focus:border-[#0071e3]/30 transition"
             />
             <IconButton
               icon={Send}
@@ -587,14 +587,12 @@ export default function Pipeline() {
       </Modal>
 
       {/* Interview Scheduler Modal */}
-      {interviewModal && (
-        <InterviewScheduler
-          open={!!interviewModal}
-          onClose={() => setInterviewModal(null)}
-          entry={interviewModal.entry}
-          onSaved={() => loadInterviews(board)}
-        />
-      )}
+      <InterviewScheduler
+        open={!!interviewModal}
+        onClose={() => setInterviewModal(null)}
+        entry={interviewModal?.entry}
+        onSaved={() => loadInterviews(board)}
+      />
 
 
     </PageContainer>
@@ -617,7 +615,7 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, prevStage, next
       aria-label={`${entry.candidate_name}, ${entry.stage}`}
       aria-keyshortcuts="ArrowLeft ArrowRight"
       onKeyDown={handleKeyDown}
-      className="bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/80 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-all duration-200 group"
+      className="bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/80 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition duration-200 group"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -641,7 +639,7 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, prevStage, next
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onRemove() }}
-          className="w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 cursor-pointer"
+          className="w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition flex-shrink-0 cursor-pointer"
         >
           <X className="w-3.5 h-3.5 text-[#ff3b30]" />
         </button>

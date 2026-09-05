@@ -45,7 +45,7 @@ function formatGraphRagStatus(graphRag, t) {
   return { label: t('batch_job_import.graph_rag_ok').replace('{message}', ''), tone: 'success' }
 }
 
-export default function BatchJobImportDialog({ onClose, onImported }) {
+export default function BatchJobImportDialog({ open = true, onClose, onImported }) {
   const { t } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([])
@@ -198,6 +198,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
 
   return (
     <Modal
+      open={open}
       onClose={onClose}
       size="lg"
       icon={Briefcase}
@@ -216,7 +217,7 @@ export default function BatchJobImportDialog({ onClose, onImported }) {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileInputRef.current?.click()}
-            className={`flex flex-col items-center justify-center py-10 gap-3 rounded-[20px] border-2 border-dashed cursor-pointer transition-all ${
+            className={`flex flex-col items-center justify-center py-10 gap-3 rounded-[20px] border-2 border-dashed cursor-pointer transition ${
               isDragging
                 ? 'border-[#5e5ce6] bg-[#5e5ce6]/8 scale-[1.01]'
                 : 'border-gray-200 dark:border-gray-700 hover:border-[#5e5ce6]/50 hover:bg-[#5e5ce6]/4'

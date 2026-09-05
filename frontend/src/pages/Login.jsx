@@ -53,7 +53,7 @@ export default function Login() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700 text-[16px] dark:text-white outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700 text-[16px] dark:text-white outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 placeholder={t('auth.enter_username')}
                 autoFocus
                 required
@@ -66,7 +66,7 @@ export default function Login() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700 text-[16px] dark:text-white outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700 text-[16px] dark:text-white outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 placeholder={t('auth.enter_password')}
                 required
               />
@@ -75,7 +75,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading || !username || !password}
-              className="flex items-center justify-center gap-2 w-full py-4 bg-[#0071e3] hover:bg-[#0077ED] disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white rounded-2xl text-[16px] font-semibold transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 disabled:hover:translate-y-0 disabled:hover:shadow-md duration-300 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 w-full py-4 bg-[#0071e3] hover:bg-[#0077ED] disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white rounded-2xl text-[16px] font-semibold transition shadow-md hover:shadow-lg hover:-translate-y-0.5 disabled:hover:translate-y-0 disabled:hover:shadow-md duration-300 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

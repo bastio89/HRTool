@@ -85,7 +85,7 @@ export default function NotificationBell() {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={toggleOpen} className="relative p-2 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] rounded-xl transition-all cursor-pointer">
+      <button onClick={toggleOpen} className="relative p-2 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] rounded-xl transition cursor-pointer">
         <Bell className="w-5 h-5" />
         {count > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#ff3b30] text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">{count > 9 ? '9+' : count}</span>

@@ -22,7 +22,7 @@ export default function MatchingTabs() {
           key={to}
           to={to}
           className={({ isActive }) =>
-            `flex items-center gap-2.5 px-5 py-3 rounded-[16px] text-[15px] font-semibold transition-all cursor-pointer ${
+            `flex items-center gap-2.5 px-5 py-3 rounded-[16px] text-[15px] font-semibold transition cursor-pointer ${
               isActive
                 ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'

@@ -29,7 +29,7 @@ const ENTITY_ICONS = {
 const FIELD_CLASS =
   'px-4 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700/60 ' +
   'text-[14px] text-black dark:text-white cursor-pointer ' +
-  'focus:outline-none focus:ring-4 focus:ring-[#0071e3]/15 focus:border-[#0071e3]/30 transition-all'
+  'focus:outline-none focus:ring-4 focus:ring-[#0071e3]/15 focus:border-[#0071e3]/30 transition'
 
 const TH_CLASS = 'px-4 py-3 text-left font-semibold text-[12px] uppercase tracking-wider text-gray-500 dark:text-gray-400 whitespace-nowrap'
 const TD_CLASS = 'px-4 py-3 text-black dark:text-white align-middle'

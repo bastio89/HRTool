@@ -19,7 +19,7 @@ const ICONS = {
 // The old translucent version was close to unreadable on a white page.
 const COLORS = {
   success: { border: 'border-[#34c759]/40', text: 'text-[#1f9d55] dark:text-[#7dffaf]', rail: 'bg-[#34c759]' },
-  error: { border: 'border-[#ff3b30]/40', text: 'text-[#d92d20] dark:text-[#ff8a80]', rail: 'bg-[#ff3b30]' },
+  error: { border: 'border-[#ff3b30]/40', text: 'text-[#b91c1c] dark:text-[#ff8a80]', rail: 'bg-[#ff3b30]' },
   warning: { border: 'border-[#ff9f0a]/40', text: 'text-[#b26a00] dark:text-[#ffc46b]', rail: 'bg-[#ff9f0a]' },
   info: { border: 'border-[#0071e3]/40', text: 'text-[#0071e3] dark:text-[#0a84ff]', rail: 'bg-[#0071e3]' },
 }

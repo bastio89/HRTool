@@ -506,7 +506,7 @@ export default function InterviewPrep() {
                         </button>
                         <button
                           onClick={(e) => handleDeleteTemplate(e, tpl.id)}
-                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-[#ff3b30]/10 transition-all cursor-pointer flex-shrink-0"
+                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-[#ff3b30]/10 transition cursor-pointer flex-shrink-0"
                           title={t('common.delete')}
                         >
                           <Trash2 className="w-3.5 h-3.5 text-[#ff3b30]" />
@@ -539,7 +539,7 @@ export default function InterviewPrep() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setFilterCategory(null)}
-                className={`px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all cursor-pointer ${!filterCategory ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}
+                className={`px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition cursor-pointer ${!filterCategory ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}
               >
                 {t('interview_prep.all')} ({questions.length})
               </button>
@@ -550,7 +550,7 @@ export default function InterviewPrep() {
                   <button
                     key={cat}
                     onClick={() => setFilterCategory(filterCategory === cat ? null : cat)}
-                    className={`px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition-all cursor-pointer ${filterCategory === cat ? `${colors.bg} ${colors.text}` : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}
+                    className={`px-3.5 py-1.5 rounded-full text-[13px] font-semibold transition cursor-pointer ${filterCategory === cat ? `${colors.bg} ${colors.text}` : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-gray-200'}`}
                   >
                     {cat} ({count})
                   </button>
@@ -577,7 +577,7 @@ export default function InterviewPrep() {
                 return (
                   <div
                     key={idx}
-                    className={`bg-white dark:bg-[#1c1c1e] rounded-[16px] shadow-sm border transition-all ${answer?.score > 0 ? 'border-[#34c759]/30' : 'border-gray-100/80 dark:border-gray-700/80'}`}
+                    className={`bg-white dark:bg-[#1c1c1e] rounded-[16px] shadow-sm border transition ${answer?.score > 0 ? 'border-[#34c759]/30' : 'border-gray-100/80 dark:border-gray-700/80'}`}
                   >
                     {/* Question header */}
                     <div
@@ -637,7 +637,7 @@ export default function InterviewPrep() {
                           onChange={e => updateAnswer(idx, 'comment', e.target.value)}
                           placeholder={t('interview_prep.note_placeholder')}
                           rows={3}
-                          className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                          className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition placeholder:text-gray-500 dark:placeholder:text-gray-400"
                         />
 
                         {/* Remove question */}
@@ -672,7 +672,7 @@ export default function InterviewPrep() {
                   value={evaluatorName}
                   onChange={e => setEvaluatorName(e.target.value)}
                   placeholder={t('interview_prep.interviewer_placeholder')}
-                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[15px] font-medium text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[15px] font-medium text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition"
                 />
               </div>
 
@@ -684,7 +684,7 @@ export default function InterviewPrep() {
                   onChange={e => setGeneralNotes(e.target.value)}
                   placeholder={t('interview_prep.general_notes_placeholder')}
                   rows={5}
-                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                  className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl text-[14px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20 border border-transparent focus:border-[#0071e3]/30 transition placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
 

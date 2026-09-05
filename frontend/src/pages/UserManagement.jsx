@@ -194,21 +194,21 @@ export default function UserManagement() {
           <button
             onClick={handleBackup}
             disabled={backupLoading}
-            className="flex items-center gap-2 px-6 py-3.5 bg-[#34c759]/10 hover:bg-[#34c759]/20 text-[#34c759] rounded-2xl text-[15px] font-semibold transition-all duration-300 cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-3.5 bg-[#34c759]/10 hover:bg-[#34c759]/20 text-[#34c759] rounded-2xl text-[15px] font-semibold transition duration-300 cursor-pointer disabled:opacity-50"
           >
             <Database className="w-4 h-4" />
             {backupLoading ? t('users.backup_creating') : t('users.backup')}
           </button>
           <button
             onClick={() => { setShowChangePassword(!showChangePassword); setShowForm(false); setResetUserId(null); setError(''); setSuccess('') }}
-            className="flex items-center gap-2 px-6 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-700 dark:text-gray-300 rounded-2xl text-[15px] font-semibold transition-all duration-300 cursor-pointer"
+            className="flex items-center gap-2 px-6 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-700 dark:text-gray-300 rounded-2xl text-[15px] font-semibold transition duration-300 cursor-pointer"
           >
             <Lock className="w-4 h-4" />
             {t('users.my_password')}
           </button>
           <button
             onClick={() => { setShowForm(!showForm); setShowChangePassword(false); setResetUserId(null); setError(''); setSuccess('') }}
-            className="flex items-center gap-2 px-6 py-3.5 bg-[#0071e3] hover:bg-[#0077ED] text-white rounded-2xl text-[15px] font-semibold transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 duration-300 cursor-pointer"
+            className="flex items-center gap-2 px-6 py-3.5 bg-[#0071e3] hover:bg-[#0077ED] text-white rounded-2xl text-[15px] font-semibold transition shadow-md hover:shadow-lg hover:-translate-y-0.5 duration-300 cursor-pointer"
           >
             <UserPlus className="w-5 h-5" />
             {t('users.new_user')}
@@ -241,7 +241,7 @@ export default function UserManagement() {
                 type="text"
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 placeholder={t('users.username_placeholder')}
                 required
               />
@@ -252,7 +252,7 @@ export default function UserManagement() {
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 placeholder={t('users.password_hint')}
                 required
                 minLength={8}
@@ -265,7 +265,7 @@ export default function UserManagement() {
                 type="text"
                 value={form.display_name}
                 onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 placeholder={t('users.display_name_placeholder')}
                 required
               />
@@ -275,7 +275,7 @@ export default function UserManagement() {
               <select id={`${fieldIdPrefix}-role`}
                 value={form.role}
                 onChange={(e) => { setForm({ ...form, role: e.target.value }); setSelectedJobIds([]) }}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all appearance-none"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition appearance-none"
               >
                 <option value="recruiter">Recruiter</option>
                 <option value="admin">Admin</option>
@@ -321,7 +321,7 @@ export default function UserManagement() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-6 py-3 bg-[#0071e3] hover:bg-[#0077ED] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition-all duration-300 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-[#0071e3] hover:bg-[#0077ED] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition duration-300 disabled:cursor-not-allowed"
               >
                 {saving ? t('users.creating') : t('users.create')}
               </button>
@@ -344,7 +344,7 @@ export default function UserManagement() {
                 type="password"
                 value={changeForm.currentPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, currentPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 required
               />
             </div>
@@ -354,7 +354,7 @@ export default function UserManagement() {
                 type="password"
                 value={changeForm.newPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, newPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 placeholder={t('users.min_password')}
                 required
                 minLength={8}
@@ -367,7 +367,7 @@ export default function UserManagement() {
                 type="password"
                 value={changeForm.confirmPassword}
                 onChange={(e) => setChangeForm({ ...changeForm, confirmPassword: e.target.value })}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition"
                 required
                 minLength={8}
               />
@@ -383,7 +383,7 @@ export default function UserManagement() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-6 py-3 bg-[#0071e3] hover:bg-[#0077ED] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition-all duration-300 disabled:cursor-not-allowed cursor-pointer"
+                className="px-6 py-3 bg-[#0071e3] hover:bg-[#0077ED] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition duration-300 disabled:cursor-not-allowed cursor-pointer"
               >
                 {saving ? t('users.changing') : t('users.change')}
               </button>
@@ -406,7 +406,7 @@ export default function UserManagement() {
                 type="password"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
-                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition-all"
+                className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#ff9f0a]/30 focus:border-[#ff9f0a] transition"
                 placeholder={t('users.password_hint')}
                 required
                 minLength={8}
@@ -424,7 +424,7 @@ export default function UserManagement() {
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-3.5 bg-[#ff9f0a] hover:bg-[#e8900a] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition-all duration-300 disabled:cursor-not-allowed cursor-pointer"
+              className="px-6 py-3.5 bg-[#ff9f0a] hover:bg-[#e8900a] disabled:bg-gray-300 text-white rounded-2xl text-[15px] font-semibold transition duration-300 disabled:cursor-not-allowed cursor-pointer"
             >
               {saving ? t('users.resetting') : t('users.reset')}
             </button>
@@ -476,14 +476,14 @@ export default function UserManagement() {
                   <>
                     <button
                       onClick={() => { setResetUserId(u.id); setResetPassword(''); setShowForm(false); setShowChangePassword(false); setError(''); setSuccess('') }}
-                      className="p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] hover:bg-orange-50 rounded-xl transition-all cursor-pointer"
+                      className="p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff9f0a] hover:bg-orange-50 rounded-xl transition cursor-pointer"
                       title={t('users.reset_password')}
                     >
                       <Key className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(u.id, u.username)}
-                    className="p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all"
+                    className="p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition"
                     title={t('users.delete_user')}
                   >
                     <Trash2 className="w-4 h-4" />

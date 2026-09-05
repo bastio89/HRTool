@@ -96,7 +96,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
       {/* Fortschrittsbalken */}
       <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mb-5">
         <div
-          className="h-full rounded-full transition-all duration-1000"
+          className="h-full rounded-full transition duration-1000"
           style={{
             width: `${progress}%`,
             background: running

@@ -36,7 +36,7 @@ export default function Reports() {
           const Icon = item.icon
           return (
             <button key={item.id} onClick={() => setTab(item.id)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-[14px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-[14px] font-semibold transition cursor-pointer whitespace-nowrap ${
                 tab === item.id ? 'bg-white dark:bg-[#3a3a3c] text-[#0071e3] dark:text-[#0a84ff] shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
               }`}>
               <Icon className="w-4 h-4" />{t(item.labelKey)}
@@ -123,7 +123,7 @@ function OverviewTab({ t }) {
               <div key={i} className="flex items-center gap-4">
                 <span className="text-[13px] font-medium text-gray-600 dark:text-gray-400 w-24">{s.stage}</span>
                 <div className="flex-1 h-8 bg-[#f5f5f7] dark:bg-[#1c1c1e] rounded-lg overflow-hidden">
-                  <div className="h-full rounded-lg flex items-center px-3 transition-all" style={{ width: `${Math.max(pct, 5)}%`, backgroundColor: colors[s.stage] || '#0071e3' }}>
+                  <div className="h-full rounded-lg flex items-center px-3 transition" style={{ width: `${Math.max(pct, 5)}%`, backgroundColor: colors[s.stage] || '#0071e3' }}>
                     <span className="text-[12px] font-bold text-white">{s.count}</span>
                   </div>
                 </div>
@@ -180,7 +180,7 @@ function FunnelTab({ t }) {
             const funnelColors = ['#0071e3', '#5e5ce6', '#ff9f0a', '#34c759', '#30d158', '#ff3b30']
             return (
               <div key={i} className="text-center">
-                <div className="h-14 mx-auto rounded-xl flex items-center justify-center transition-all relative" style={{ width: `${pct}%`, backgroundColor: funnelColors[i] || '#0071e3', minWidth: '120px' }}>
+                <div className="h-14 mx-auto rounded-xl flex items-center justify-center transition relative" style={{ width: `${pct}%`, backgroundColor: funnelColors[i] || '#0071e3', minWidth: '120px' }}>
                   <span className="text-white font-bold text-[14px]">{step.stage}</span>
                   <span className="absolute right-3 text-white/80 text-[13px] font-semibold">{step.count}</span>
                 </div>

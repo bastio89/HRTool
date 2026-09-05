@@ -3,6 +3,7 @@ import { X, Calendar, Clock, MapPin, Video, Phone, Users, Link2, Save, Loader2, 
 import { interviewsApi } from '../api'
 import Modal from './Modal'
 import { useI18n } from '../I18nContext'
+import useLastDefined from '../hooks/useLastDefined'
 import { localeTag } from '../utils/format'
 
 const INTERVIEW_TYPES = [
@@ -24,7 +25,9 @@ const STATUS_LABEL_KEYS = {
   'abgesagt': 'interview.status_cancelled',
 }
 
-export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
+export default function InterviewScheduler({ open, onClose, entry: entryProp, onSaved }) {
+  // Retain the data while the dialog animates out.
+  const entry = useLastDefined(entryProp)
   const fieldIdPrefix = useId()
   const { t, locale } = useI18n()
   const [interviews, setInterviews] = useState([])
@@ -105,12 +108,13 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
     }
   }
 
-  if (!open || !entry) return null
-
   const formatDate = (d) => {
     if (!d) return '—'
     return new Date(d + 'T00:00:00').toLocaleDateString(localeTag(locale), { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
   }
+
+  // Nothing to show before the dialog has ever been opened.
+  if (!entry) return null
 
   const statusColors = {
     geplant: 'bg-[#0071e3]/10 text-[#0071e3]',
@@ -121,6 +125,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
 
   return (
     <Modal
+      open={open && Boolean(entryProp)}
       onClose={onClose}
       size="md"
       icon={Calendar}
@@ -200,7 +205,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                           <button
                             key={s.value}
                             onClick={() => handleStatusChange(iv.id, s.value)}
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer ${
                               iv.status === s.value
                                 ? statusColors[s.value]
                                 : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
@@ -226,7 +231,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                         value={form.interview_date}
                         onChange={e => setForm(f => ({ ...f, interview_date: e.target.value }))}
                         required
-                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition"
                       />
                     </div>
                     <div>
@@ -235,7 +240,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                         type="time"
                         value={form.interview_time}
                         onChange={e => setForm(f => ({ ...f, interview_time: e.target.value }))}
-                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition"
                       />
                     </div>
                   </div>
@@ -249,7 +254,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                             key={value}
                             type="button"
                             onClick={() => setForm(f => ({ ...f, interview_type: value }))}
-                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-[12px] text-[13px] font-medium transition-all cursor-pointer ${
+                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-[12px] text-[13px] font-medium transition cursor-pointer ${
                               form.interview_type === value
                                 ? 'bg-[#0071e3] text-white'
                                 : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -266,7 +271,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                       <select id={`${fieldIdPrefix}-duration`}
                         value={form.duration_minutes}
                         onChange={e => setForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))}
-                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition"
                       >
                         <option value={30}>{t('interview.duration_30')}</option>
                         <option value={45}>{t('interview.duration_45')}</option>
@@ -284,7 +289,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                         value={form.location}
                         onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                         placeholder={t('interview.location_placeholder')}
-                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition"
                       />
                     </div>
                   )}
@@ -297,7 +302,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                         onChange={e => setForm(f => ({ ...f, meeting_link: e.target.value }))}
                         placeholder="https://meet.google.com/... oder https://zoom.us/..."
                         type="url"
-                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                        className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition"
                       />
                     </div>
                   )}
@@ -308,7 +313,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                       value={form.participants}
                       onChange={e => setForm(f => ({ ...f, participants: e.target.value }))}
                       placeholder={t('interview.participants_placeholder')}
-                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all"
+                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition"
                     />
                   </div>
 
@@ -319,7 +324,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                       onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                       placeholder={t('interview.notes_placeholder')}
                       rows={2}
-                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition-all resize-none"
+                      className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition resize-none"
                     />
                   </div>
 
@@ -327,7 +332,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                     <button
                       type="submit"
                       disabled={saving || !form.interview_date}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[14px] font-semibold hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[14px] font-semibold hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
                     >
                       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                       {saving ? t('interview.saving') : t('interview.create')}
@@ -335,7 +340,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
                     <button
                       type="button"
                       onClick={() => setShowForm(false)}
-                      className="px-4 py-2.5 rounded-full text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-all cursor-pointer"
+                      className="px-4 py-2.5 rounded-full text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition cursor-pointer"
                     >
                       {t('common.cancel')}
                     </button>
@@ -344,7 +349,7 @@ export default function InterviewScheduler({ open, onClose, entry, onSaved }) {
               ) : (
                 <button
                   onClick={() => setShowForm(true)}
-                  className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-[16px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:border-[#0071e3] hover:text-[#0071e3] transition-all cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-[16px] border-2 border-dashed border-gray-200 dark:border-gray-700 text-[14px] font-medium text-gray-500 dark:text-gray-400 hover:border-[#0071e3] hover:text-[#0071e3] transition cursor-pointer"
                 >
                   <Calendar className="w-4 h-4" />
                   {t('interview.plan')}

@@ -441,14 +441,14 @@ export default function CandidateDetail() {
           <div className="flex flex-col gap-4">
             <div className="flex gap-2 flex-wrap">
               {RATING_CATEGORIES.map(({ key, labelKey, color }) => (
-                <button key={key} type="button" onClick={() => setNewRating(prev => ({ ...prev, category: key }))} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${newRating.category === key ? 'text-white shadow-md' : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'}`} style={newRating.category === key ? { backgroundColor: color } : {}}>{t(labelKey)}</button>
+                <button key={key} type="button" onClick={() => setNewRating(prev => ({ ...prev, category: key }))} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[14px] font-semibold transition cursor-pointer ${newRating.category === key ? 'text-white shadow-md' : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'}`} style={newRating.category === key ? { backgroundColor: color } : {}}>{t(labelKey)}</button>
               ))}
             </div>
             <div className="flex items-center gap-1">
               {[1,2,3,4,5].map(s => (<button key={s} type="button" onMouseEnter={() => setHoverRating(s)} onMouseLeave={() => setHoverRating(0)} onClick={() => setNewRating(prev => ({ ...prev, rating: s }))} className="p-1 cursor-pointer transition-transform hover:scale-110"><Star className={`w-8 h-8 transition-colors ${s <= (hoverRating || newRating.rating) ? 'text-[#ff9f0a] fill-[#ff9f0a]' : 'text-gray-300 dark:text-gray-600'}`} /></button>))}
               {newRating.rating > 0 && <span className="ml-3 text-[16px] font-bold text-black dark:text-white">{newRating.rating}/5</span>}
             </div>
-            <textarea aria-label={t('detail.comment_placeholder')} value={newRating.comment} onChange={e => setNewRating(prev => ({ ...prev, comment: e.target.value }))} placeholder={t('detail.comment_placeholder')} rows={2} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all" />
+            <textarea aria-label={t('detail.comment_placeholder')} value={newRating.comment} onChange={e => setNewRating(prev => ({ ...prev, comment: e.target.value }))} placeholder={t('detail.comment_placeholder')} rows={2} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition" />
             <div className="flex justify-end"><Button variant="dark" size="md" disabled={ratingSubmitting || newRating.rating < 1}><Star className="w-5 h-5" /> {t('detail.rate')}</Button></div>
           </div>
         </form>
@@ -460,7 +460,7 @@ export default function CandidateDetail() {
               <div key={r.id} className="flex items-start gap-4 p-4 rounded-[16px] bg-[#f5f5f7] dark:bg-[#2c2c2e] group">
                 <div className="flex-shrink-0"><div className="flex">{[1,2,3,4,5].map(s => <Star key={s} className={`w-4 h-4 ${s <= r.rating ? 'fill-[#ff9f0a] text-[#ff9f0a]' : 'text-gray-300 dark:text-gray-600'}`} />)}</div></div>
                 <div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><span className="px-2.5 py-0.5 rounded-full text-[12px] font-semibold" style={{ background: `${cat?.color||'#999'}20`, color: cat?.color||'#999' }}>{cat ? t(cat.labelKey) : r.category}</span><span className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{r.created_by}</span><span className="text-[13px] font-medium text-gray-500 dark:text-gray-400">{formatDate(r.created_at, locale)}</span></div>{r.comment && <p className="text-[15px] font-medium text-gray-700 dark:text-gray-300 mt-2">{r.comment}</p>}</div>
-                <button onClick={() => handleDeleteRating(r.id)} className="w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all flex-shrink-0 cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-[#ff3b30]" /></button>
+                <button onClick={() => handleDeleteRating(r.id)} className="w-7 h-7 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition flex-shrink-0 cursor-pointer"><Trash2 className="w-3.5 h-3.5 text-[#ff3b30]" /></button>
               </div>
             )})}
           </div>
@@ -470,7 +470,7 @@ export default function CandidateDetail() {
       {/* Files Section */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-gray-100/80 dark:border-gray-700/80 p-5 sm:p-10 mb-6 sm:mb-8">
         <h2 className="text-[22px] font-semibold text-black dark:text-white mb-6">{t('detail.documents')}</h2>
-        <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); handleFileUpload(e.dataTransfer.files) }} className={`border-2 border-dashed rounded-[24px] p-8 text-center transition-all cursor-pointer mb-6 ${dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png'; input.onchange = (e) => handleFileUpload(e.target.files); input.click() }}>
+        <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); handleFileUpload(e.dataTransfer.files) }} className={`border-2 border-dashed rounded-[24px] p-8 text-center transition cursor-pointer mb-6 ${dragOver ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.multiple = true; input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png'; input.onchange = (e) => handleFileUpload(e.target.files); input.click() }}>
           <Upload className={`w-8 h-8 mx-auto mb-3 ${dragOver ? 'text-[#0071e3]' : 'text-gray-300'}`} />
           <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400">{uploading ? t('detail.uploading') : t('detail.drop_files')}</p>
           <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('detail.file_format_hint')}</p>
@@ -499,10 +499,10 @@ export default function CandidateDetail() {
           <div className="flex flex-col gap-4">
             <div className="flex gap-3 flex-wrap">
               {ACTIVITY_TYPES.map((type, idx) => { const { Icon, color, bg } = activityIcon[type]; const typeLabels = t('detail.activity_types'); const displayLabel = Array.isArray(typeLabels) ? typeLabels[idx] : type; return (
-                <button key={type} type="button" onClick={() => setNewType(type)} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[14px] font-semibold transition-all cursor-pointer ${newType === type ? 'bg-black text-white shadow-md' : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{displayLabel}</button>
+                <button key={type} type="button" onClick={() => setNewType(type)} className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full text-[14px] font-semibold transition cursor-pointer ${newType === type ? 'bg-black text-white shadow-md' : 'bg-white dark:bg-[#1c1c1e] text-gray-600 dark:text-gray-400 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{displayLabel}</button>
               )})}
             </div>
-            <textarea aria-label={t('detail.activity_placeholder')} value={newText} onChange={e => setNewText(e.target.value)} placeholder={t('detail.activity_placeholder')} rows={3} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all" />
+            <textarea aria-label={t('detail.activity_placeholder')} value={newText} onChange={e => setNewText(e.target.value)} placeholder={t('detail.activity_placeholder')} rows={3} className="w-full px-5 py-4 bg-white dark:bg-[#1c1c1e] rounded-[20px] text-[16px] font-medium text-black dark:text-white resize-none focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition" />
             <div className="flex justify-end"><Button variant="dark" size="md" disabled={submitting || !newText.trim()}><Plus className="w-5 h-5" /> {t('detail.add')}</Button></div>
           </div>
         </form>
@@ -618,7 +618,7 @@ export default function CandidateDetail() {
       </div>
 
       <CandidatePrintProfile candidate={candidate} open={showPrint} onClose={() => setShowPrint(false)} />
-      {showEmailModal && <SendEmailModal candidate={candidate} onClose={() => setShowEmailModal(false)} onSent={() => { activitiesApi.getByCandidate(id).then(r => setActivities(r.data || [])).catch(() => {}) }} />}
+      <SendEmailModal open={showEmailModal} candidate={candidate} onClose={() => setShowEmailModal(false)} onSent={() => { activitiesApi.getByCandidate(id).then(r => setActivities(r.data || [])).catch(() => {}) }} />
       <Modal
         open={!!previewFile}
         onClose={() => setPreviewFile(null)}

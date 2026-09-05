@@ -36,7 +36,7 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 text-[14px] font-medium transition-all duration-300 cursor-pointer"
+        className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 text-[14px] font-medium transition duration-300 cursor-pointer"
       >
         <Settings className="w-4 h-4" />
         {t('widget.title')}
@@ -80,7 +80,7 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
                 onDragEnter={() => handleDragEnter(index)}
                 onDragEnd={handleDragEnd}
                 onDragOver={e => e.preventDefault()}
-                className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-200 select-none
+                className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl transition duration-200 select-none
                   ${isDragging 
                     ? 'opacity-50 scale-[0.97] bg-[#0071e3]/10 border border-[#0071e3]/30' 
                     : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent hover:border-gray-200 dark:hover:border-gray-600'
@@ -107,7 +107,7 @@ export default function WidgetConfigurator({ widgets, onToggle, onReorder, onRes
 
                 <button
                   onClick={(e) => { e.stopPropagation(); onToggle(widget.id) }}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition cursor-pointer ${
                     widget.visible 
                       ? 'bg-[#34c759]/10 hover:bg-[#34c759]/20' 
                       : 'bg-[#ff3b30]/10 hover:bg-[#ff3b30]/20'

@@ -203,7 +203,7 @@ export default function CandidateForm() {
 
   if (loading) return <LoadingSpinner text={t('candidates.candidate_loading')} />
 
-  const selectClass = "w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition-all"
+  const selectClass = "w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition"
 
   return (
     <PageContainer width="narrow">
@@ -238,7 +238,7 @@ export default function CandidateForm() {
       <form onSubmit={handleSubmit} className="space-y-10">
         {/* AI CV Upload Zone */}
         {!isEdit && (
-          <Card className="p-12 border-2 border-dashed border-[#0071e3]/20 bg-gradient-to-br from-blue-50/50 to-purple-50/30 relative overflow-hidden">
+          <Card className="p-12 border-2 border-dashed border-[#0071e3]/20 bg-gradient-to-br from-blue-50/50 to-purple-50/30 dark:from-[#0071e3]/10 dark:to-[#5e5ce6]/10 relative overflow-hidden">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-[#0071e3]/10 rounded-2xl flex items-center justify-center"><Sparkles className="w-5 h-5 text-[#0071e3]" /></div>
               <div><h2 className="text-[20px] font-semibold tracking-tight text-black dark:text-white">{t('cv.title')}</h2><p className="text-[14px] text-gray-500 dark:text-gray-400">{t('cv.desc')}</p></div>
@@ -247,7 +247,7 @@ export default function CandidateForm() {
               <div className="py-8 px-4 space-y-5">
                 {/* Progress bar */}
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-[#0071e3] to-[#5856d6] rounded-full transition-all duration-700 ease-out" style={{ width: `${parseProgress.progress}%` }} />
+                  <div className="h-full bg-gradient-to-r from-[#0071e3] to-[#5856d6] rounded-full transition duration-700 ease-out" style={{ width: `${parseProgress.progress}%` }} />
                 </div>
                 {/* Step indicators */}
                 <div className="flex items-center justify-between gap-2">
@@ -267,7 +267,7 @@ export default function CandidateForm() {
                       <div key={s.key} className={`flex flex-col items-center gap-1.5 flex-1 ${
                         isDone ? 'opacity-60' : isActive ? 'opacity-100' : 'opacity-30'
                       }`}>
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[16px] transition-all ${
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[16px] transition ${
                           isActive ? 'bg-[#0071e3]/10 ring-2 ring-[#0071e3]/30 scale-110' : isDone ? 'bg-[#34c759]/10' : 'bg-gray-100 dark:bg-gray-800'
                         }`}>
                           {s.icon}
@@ -289,7 +289,7 @@ export default function CandidateForm() {
                 </div>
               </div>
             ) : (
-              <div onDrop={handleFileDrop} onDragOver={(e) => e.preventDefault()} onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center py-10 gap-4 cursor-pointer rounded-[20px] border-2 border-dashed border-gray-300 hover:border-[#0071e3]/40 hover:bg-[#0071e3]/5 transition-all">
+              <div onDrop={handleFileDrop} onDragOver={(e) => e.preventDefault()} onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center py-10 gap-4 cursor-pointer rounded-[20px] border-2 border-dashed border-gray-300 hover:border-[#0071e3]/40 hover:bg-[#0071e3]/5 transition">
                 <div className="w-16 h-16 bg-white dark:bg-[#1c1c1e] rounded-[20px] shadow-sm flex items-center justify-center border border-gray-200 dark:border-gray-700"><Upload className="w-7 h-7 text-[#0071e3]" /></div>
                 <div className="text-center"><p className="text-[16px] font-semibold text-black dark:text-white">{t('cv.drop_hint')}</p><p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('cv.click_hint')}</p></div>
                 <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileSelect} className="hidden" />
@@ -373,7 +373,7 @@ export default function CandidateForm() {
             <div className="space-y-6">
               {workHistory.map((w, idx) => (
                 <div key={idx} className="p-6 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e] relative group">
-                  <button type="button" onClick={() => removeWorkEntry(idx)} className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer"><Trash2 className="w-4 h-4 text-[#ff3b30]" /></button>
+                  <button type="button" onClick={() => removeWorkEntry(idx)} className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"><Trash2 className="w-4 h-4 text-[#ff3b30]" /></button>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Input label={t('form.employer')} placeholder="Firma GmbH" value={w.employer} onChange={(e) => updateWorkEntry(idx, 'employer', e.target.value)} />
                     <Input label={t('form.position')} placeholder="Senior Developer" value={w.position} onChange={(e) => updateWorkEntry(idx, 'position', e.target.value)} />
@@ -406,7 +406,7 @@ export default function CandidateForm() {
             <div className="space-y-6">
               {educationList.map((e, idx) => (
                 <div key={idx} className="p-6 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e] relative group">
-                  <button type="button" onClick={() => removeEduEntry(idx)} className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer"><Trash2 className="w-4 h-4 text-[#ff3b30]" /></button>
+                  <button type="button" onClick={() => removeEduEntry(idx)} className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"><Trash2 className="w-4 h-4 text-[#ff3b30]" /></button>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Input label={t('form.institution')} placeholder="Universität Berlin" value={e.institution} onChange={(ev) => updateEduEntry(idx, 'institution', ev.target.value)} />
                     <Input label={t('form.degree')} placeholder="B.Sc. Informatik" value={e.degree} onChange={(ev) => updateEduEntry(idx, 'degree', ev.target.value)} />
@@ -593,13 +593,13 @@ export default function CandidateForm() {
                         value={tagInput}
                         onChange={e => setTagInput(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
-                        className="flex-1 px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#5e5ce6]/40 focus:ring-4 focus:ring-[#5e5ce6]/10 transition-all"
+                        className="flex-1 px-5 py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[16px] text-[15px] font-medium text-black dark:text-white border border-transparent focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#5e5ce6]/40 focus:ring-4 focus:ring-[#5e5ce6]/10 transition"
                       />
                       <button
                         type="button"
                         onClick={addCustomTag}
                         disabled={!tagInput.trim()}
-                        className="w-12 h-12 rounded-2xl bg-[#5e5ce6] hover:bg-[#4e4cd2] disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-default flex-shrink-0"
+                        className="w-12 h-12 rounded-2xl bg-[#5e5ce6] hover:bg-[#4e4cd2] disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white flex items-center justify-center transition cursor-pointer disabled:cursor-default flex-shrink-0"
                       >
                         <Plus className="w-5 h-5" />
                       </button>
@@ -618,7 +618,7 @@ export default function CandidateForm() {
                   {availableSuggestions.length > 0 && (
                     <div><p className="text-[12px] font-medium text-gray-500 dark:text-gray-500 mb-2">{t('form.tags_suggestions')}</p>
                       <div className="flex flex-wrap gap-2">
-                        {availableSuggestions.map(tag => (<button key={tag} type="button" onClick={() => addTag(tag)} className="px-3 py-1.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:bg-[#5e5ce6]/10 hover:text-[#5e5ce6] transition-all cursor-pointer border border-transparent hover:border-[#5e5ce6]/20">+ {tag}</button>))}
+                        {availableSuggestions.map(tag => (<button key={tag} type="button" onClick={() => addTag(tag)} className="px-3 py-1.5 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] text-[13px] font-medium text-gray-600 dark:text-gray-400 hover:bg-[#5e5ce6]/10 hover:text-[#5e5ce6] transition cursor-pointer border border-transparent hover:border-[#5e5ce6]/20">+ {tag}</button>))}
                       </div>
                     </div>
                   )}

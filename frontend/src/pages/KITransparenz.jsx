@@ -52,7 +52,7 @@ function WhyTooltip({ text }) {
 // Info toggle button (place inside header flex row)
 function InfoButton({ show, onToggle, color, t }) {
   return (
-    <button onClick={onToggle} className="w-9 h-9 rounded-full flex items-center justify-center transition-all flex-shrink-0 cursor-pointer"
+    <button onClick={onToggle} className="w-9 h-9 rounded-full flex items-center justify-center transition flex-shrink-0 cursor-pointer"
       style={show ? { backgroundColor: color, color: '#fff', boxShadow: `0 8px 16px ${color}40` } : { color, backgroundColor: 'rgba(255,255,255,0.6)' }}
       title={t('ki.info_show')}>
       <Info className="w-[18px] h-[18px]" />
@@ -63,7 +63,7 @@ function InfoButton({ show, onToggle, color, t }) {
 // Collapsible info content (place AFTER the header flex row, still inside the Card)
 function InfoContent({ show, color, items, legalText }) {
   return (
-    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${show ? 'max-h-[800px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
+    <div className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${show ? 'max-h-[800px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
       <div className="p-5 rounded-xl bg-white/70 dark:bg-black/20 border border-gray-200/50 dark:border-gray-700/50 space-y-4">
         {items.map((item, i) => (
           <div key={i}>
@@ -148,7 +148,7 @@ export default function KITransparenz() {
           const active = group === item.id
           return (
             <button key={item.id} onClick={() => selectGroup(item.id)}
-              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-[14px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex items-center gap-2 px-5 py-3 rounded-xl text-[14px] font-semibold transition cursor-pointer whitespace-nowrap ${
                 active ? 'bg-white dark:bg-[#3a3a3c] text-[#0071e3] dark:text-[#0a84ff] shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
               }`}>
               <Icon className="w-4 h-4" />{t(item.labelKey)}
@@ -165,7 +165,7 @@ export default function KITransparenz() {
             const active = sub === s.id
             return (
               <button key={s.id} onClick={() => setSub(s.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-semibold transition cursor-pointer whitespace-nowrap ${
                   active ? 'bg-[#0071e3]/10 text-[#0071e3] dark:text-[#0a84ff]' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}>
                 <Icon className="w-4 h-4" />{t(s.labelKey)}
@@ -267,7 +267,7 @@ function OverviewTab({ t, goTo }) {
       {/* Key numbers */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         <Card className="p-6 text-center">
-          <div className={`text-[40px] font-bold tracking-tight ${score >= 80 ? 'text-[#34c759]' : score >= 50 ? 'text-[#ff9f0a]' : 'text-[#ff3b30]'}`}>{score}%</div>
+          <div className={`text-[40px] font-bold tracking-tight ${score >= 80 ? 'text-[#1f9d55] dark:text-[#34c759]' : score >= 50 ? 'text-[#a86a00] dark:text-[#ff9f0a]' : 'text-[#b91c1c] dark:text-[#ff453a]'}`}>{score}%</div>
           <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.compliance_score')}</p>
         </Card>
         <Card className="p-6 text-center">
@@ -275,11 +275,11 @@ function OverviewTab({ t, goTo }) {
           <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.total_calls')}</p>
         </Card>
         <Card className="p-6 text-center">
-          <div className={`text-[40px] font-bold tracking-tight ${openActions > 0 ? 'text-[#ff9f0a]' : 'text-[#34c759]'}`}>{openActions}</div>
+          <div className={`text-[40px] font-bold tracking-tight ${openActions > 0 ? 'text-[#a86a00] dark:text-[#ff9f0a]' : 'text-[#1f9d55] dark:text-[#34c759]'}`}>{openActions}</div>
           <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.overview_open_actions')}</p>
         </Card>
         <Card className="p-6 text-center">
-          <div className={`text-[40px] font-bold tracking-tight ${criticalAlerts > 0 ? 'text-[#ff3b30]' : 'text-[#34c759]'}`}>{criticalAlerts}</div>
+          <div className={`text-[40px] font-bold tracking-tight ${criticalAlerts > 0 ? 'text-[#b91c1c] dark:text-[#ff453a]' : 'text-[#1f9d55] dark:text-[#34c759]'}`}>{criticalAlerts}</div>
           <p className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-1">{t('ki.overview_critical_warnings')}</p>
         </Card>
       </div>
@@ -317,7 +317,7 @@ function OverviewTab({ t, goTo }) {
       {/* Area shortcuts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <button onClick={() => goTo('audit')} className="text-left group cursor-pointer">
-          <Card className="p-8 h-full transition-all group-hover:shadow-lg group-hover:-translate-y-0.5">
+          <Card className="p-8 h-full transition group-hover:shadow-lg group-hover:-translate-y-0.5">
             <div className="w-14 h-14 rounded-2xl bg-[#0071e3]/10 flex items-center justify-center mb-6">
               <Shield className="w-7 h-7 text-[#0071e3]" />
             </div>
@@ -329,7 +329,7 @@ function OverviewTab({ t, goTo }) {
           </Card>
         </button>
         <button onClick={() => goTo('fairness')} className="text-left group cursor-pointer">
-          <Card className="p-8 h-full transition-all group-hover:shadow-lg group-hover:-translate-y-0.5">
+          <Card className="p-8 h-full transition group-hover:shadow-lg group-hover:-translate-y-0.5">
             <div className="w-14 h-14 rounded-2xl bg-[#34c759]/10 flex items-center justify-center mb-6">
               <Scale className="w-7 h-7 text-[#34c759]" />
             </div>
@@ -900,7 +900,7 @@ function BiasTab({ t }) {
                   <span className="text-[13px] font-semibold" style={{ color: distColors[range] }}>{count}</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-600">
-                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.max((count / maxDist) * 100, 2)}%`, backgroundColor: distColors[range] }} />
+                  <div className="h-full rounded-full transition duration-500" style={{ width: `${Math.max((count / maxDist) * 100, 2)}%`, backgroundColor: distColors[range] }} />
                 </div>
               </div>
             ))}
@@ -925,7 +925,7 @@ function BiasTab({ t }) {
               </div>
               <p className="text-[12px] text-gray-500 dark:text-gray-400">{t('ki.anon_of').replace('{done}', data.anonymization.anonymizedMatchings).replace('{total}', data.anonymization.totalMatchings)}</p>
               <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-600 mt-2">
-                <div className="h-full rounded-full bg-[#0071e3] transition-all" style={{ width: `${data.anonymization.rate}%` }} />
+                <div className="h-full rounded-full bg-[#0071e3] transition" style={{ width: `${data.anonymization.rate}%` }} />
               </div>
             </div>
             <div className="p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
@@ -937,7 +937,7 @@ function BiasTab({ t }) {
               </div>
               <p className="text-[12px] text-gray-500 dark:text-gray-400">{t('ki.review_of').replace('{done}', data.humanReview.reviewed).replace('{total}', data.humanReview.total)}</p>
               <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-600 mt-2">
-                <div className="h-full rounded-full bg-[#ff9f0a] transition-all" style={{ width: `${data.humanReview.rate}%` }} />
+                <div className="h-full rounded-full bg-[#ff9f0a] transition" style={{ width: `${data.humanReview.rate}%` }} />
               </div>
             </div>
           </div>
@@ -1391,7 +1391,7 @@ function RiskRegisterTab({ t }) {
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   {['active', 'partially-mitigated', 'mitigated'].map(s => (
                     <button key={s} onClick={() => setOverrideStatus(s)}
-                      className={`px-3 py-1.5 rounded-full text-[12px] font-bold transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-bold transition cursor-pointer ${
                         overrideStatus === s ? statusColors[s] + ' ring-2 ring-offset-1 ring-current' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500'
                       }`}>
                       {statusLabels[s]}
@@ -1654,7 +1654,7 @@ function BiasTestsetTab({ t }) {
                   <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                     <span className="text-[13px] font-bold text-black dark:text-white w-24 flex-shrink-0">{r.name}</span>
                     <div className="flex-1 h-6 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                      <div className="h-full rounded-full transition" style={{ width: `${pct}%`, backgroundColor: barColor }} />
                     </div>
                     <span className="text-[13px] font-bold w-12 text-right" style={{ color: barColor }}>{pct}%</span>
                     <span className="text-[11px] text-gray-500 dark:text-gray-400 w-24 truncate hidden sm:block">{r.location}</span>

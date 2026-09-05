@@ -79,12 +79,12 @@ function AiStatusPill() {
 
   return (
     <div className="group relative" title={statusHint} aria-label={statusHint}>
-      <div className={`flex flex-col gap-0.5 px-3 py-2 rounded-full border text-[12px] font-semibold transition-all duration-300 ${
+      <div className={`flex flex-col gap-0.5 px-3 py-2 rounded-full border text-[12px] font-semibold transition duration-300 ${
         isChecking
           ? 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 border-gray-200/80 dark:border-gray-700/80'
           : isOnline
             ? 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25'
-            : 'bg-[#ff3b30]/10 text-[#d92d20] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25'
+            : 'bg-[#ff3b30]/10 text-[#b91c1c] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25'
       }`}>
         <div className="flex items-center gap-2">
           {isChecking ? (
@@ -150,12 +150,12 @@ function GraphragStatusPill() {
 
   return (
     <div className="group relative" title={statusHint} aria-label={statusHint}>
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[12px] font-semibold transition-all duration-300 ${
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[12px] font-semibold transition duration-300 ${
         isChecking
           ? 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-500 border-gray-200/80 dark:border-gray-700/80'
           : isOnline
             ? 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25'
-            : 'bg-[#ff3b30]/10 text-[#d92d20] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25'
+            : 'bg-[#ff3b30]/10 text-[#b91c1c] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25'
       }`}>
         {isChecking ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -231,7 +231,7 @@ export default function Layout() {
                 end
                 onClick={closeSidebar}
                 className={({ isActive }) =>
-                  `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
+                  `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition duration-300 ${
                     isActive
                       ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
                       : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
@@ -251,7 +251,7 @@ export default function Layout() {
                   end={to === '/'}
                   onClick={closeSidebar}
                   className={({ isActive }) =>
-                    `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
+                    `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition duration-300 ${
                       isActive
                         ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
                         : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
@@ -276,7 +276,7 @@ export default function Layout() {
                       to={to}
                       onClick={closeSidebar}
                       className={({ isActive }) =>
-                        `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 ${
+                        `flex items-center gap-4 px-5 py-3.5 rounded-2xl text-[16px] font-medium transition duration-300 ${
                           isActive
                             ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
                             : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
@@ -293,7 +293,7 @@ export default function Layout() {
                 <div className="mt-2">
                   <button
                     onClick={() => setAdminOpen(!adminOpen)}
-                    className={`flex items-center justify-between w-full px-5 py-3.5 rounded-2xl text-[16px] font-medium transition-all duration-300 cursor-pointer ${
+                    className={`flex items-center justify-between w-full px-5 py-3.5 rounded-2xl text-[16px] font-medium transition duration-300 cursor-pointer ${
                       isAdminRoute && !adminOpen
                         ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
                         : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
@@ -305,7 +305,7 @@ export default function Layout() {
                     </span>
                     <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${adminOpen ? 'rotate-180' : ''}`} />
                   </button>
-                  <div className={`overflow-hidden transition-all duration-300 ease-in-out ${adminOpen ? 'max-h-[360px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                  <div className={`overflow-hidden transition duration-300 ease-in-out ${adminOpen ? 'max-h-[360px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                     <div className="space-y-1 pl-4">
                       {adminItems.map(({ to, icon: Icon, labelKey }) => (
                         <NavLink
@@ -313,7 +313,7 @@ export default function Layout() {
                           to={to}
                           onClick={closeSidebar}
                           className={({ isActive }) =>
-                            `flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-300 ${
+                            `flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition duration-300 ${
                               isActive
                                 ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
                                 : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
@@ -336,22 +336,22 @@ export default function Layout() {
           {/* Language Switcher */}
           <button
             onClick={() => changeLocale(locale === 'de' ? 'en' : 'de')}
-            className="flex items-center justify-center gap-1.5 w-full py-2.5 text-gray-500 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-xl text-[13px] transition-all duration-300 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 w-full py-2.5 text-gray-500 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-xl text-[13px] transition duration-300 cursor-pointer"
             title={locale === 'de' ? 'Switch to English' : 'Auf Deutsch wechseln'}
           >
             <Globe className="w-4 h-4" />
             <span className={locale === 'de' ? 'font-semibold' : 'opacity-60'}>DE</span>
-            <span className="text-gray-300 dark:text-gray-600">/</span>
+            <span aria-hidden="true" className="text-gray-500 dark:text-gray-400">/</span>
             <span className={locale === 'en' ? 'font-semibold' : 'opacity-60'}>EN</span>
           </button>
           <button
             onClick={toggleTheme}
-            className="flex items-center justify-center gap-2 w-full py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 rounded-2xl text-[15px] font-medium transition-all duration-300 cursor-pointer"
+            className="flex items-center justify-center gap-2 w-full py-3.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-gray-600 dark:text-gray-300 rounded-2xl text-[15px] font-medium transition duration-300 cursor-pointer"
           >
             {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             {isDark ? t('nav.light_mode') : t('nav.dark_mode')}
           </button>
-          <Link to="/candidates/new" onClick={closeSidebar} className="flex items-center justify-center gap-2 w-full py-4 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-2xl text-[16px] font-medium transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 duration-300">
+          <Link to="/candidates/new" onClick={closeSidebar} className="flex items-center justify-center gap-2 w-full py-4 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-2xl text-[16px] font-medium transition shadow-md hover:shadow-lg hover:-translate-y-0.5 duration-300">
             <Plus className="w-5 h-5" />
             {t('nav.new_entry')}
           </Link>
@@ -377,7 +377,7 @@ export default function Layout() {
             </div>
             <NotificationBell />
             <div className="text-right hidden sm:block">
-              <p className="text-[14px] sm:text-[16px] font-semibold text-black dark:text-white tracking-tight">{user?.display_name || user?.username}</p>
+              <p className="text-[14px] sm:text-[16px] font-semibold text-black dark:text-white">{user?.display_name || user?.username}</p>
               <p className="text-[12px] sm:text-[14px] text-gray-500 dark:text-gray-400 font-medium">{
                 user?.role === 'admin' ? t('auth.administrator')
                 : user?.role === 'revisor' ? 'Revisor'
@@ -386,7 +386,7 @@ export default function Layout() {
               }</p>
             </div>
             <Avatar name={user?.display_name || user?.username || ''} size={44} className="w-10 h-10 sm:w-11 sm:h-11 text-[15px]" />
-            <button onClick={logout} className="p-2 sm:p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition-all" title={t('auth.logout')}>
+            <button onClick={logout} className="p-2 sm:p-2.5 text-gray-500 dark:text-gray-400 hover:text-[#ff3b30] hover:bg-red-50 rounded-xl transition" title={t('auth.logout')}>
               <LogOut className="w-5 h-5" />
             </button>
           </div>

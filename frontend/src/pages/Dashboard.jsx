@@ -72,7 +72,7 @@ export default function Dashboard() {
               <button
                 key={opt.value}
                 onClick={() => setPeriodDays(opt.value)}
-                className={`px-4 py-2 rounded-full text-[13px] font-semibold transition-all duration-300 cursor-pointer ${
+                className={`px-4 py-2 rounded-full text-[13px] font-semibold transition duration-300 cursor-pointer ${
                   periodDays === opt.value
                     ? 'bg-white dark:bg-[#3a3a3c] text-[#0071e3] dark:text-[#0a84ff] shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
@@ -103,7 +103,7 @@ export default function Dashboard() {
                 }, 100)
               })
             }}
-            className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-all cursor-pointer"
+            className="w-10 h-10 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition cursor-pointer"
             title={t('dashboard.pdf_export')}
             aria-label={t('dashboard.pdf_export')}
           >
@@ -319,7 +319,7 @@ function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
               const topScore = rawScore > 1 ? rawScore / 100 : rawScore
               return (
                 <Link key={match.id} to={`/matching/results/${match.id}`} className="block">
-                  <div className="flex items-center justify-between p-6 rounded-[24px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-all duration-300 border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50">
+                  <div className="flex items-center justify-between p-6 rounded-[24px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition duration-300 border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50">
                     <div className="flex items-center gap-8">
                       <div className="w-16 h-16 rounded-full bg-white dark:bg-[#1c1c1e] shadow-sm border border-gray-100 dark:border-gray-700 flex items-center justify-center">
                         <GitCompare className="w-7 h-7 text-black dark:text-white" />
@@ -373,7 +373,7 @@ function SourcesWidget({ sourceStats, t }) {
                 <span className="px-3 py-1 rounded-full text-[13px] font-bold" style={{ backgroundColor: `${color}15`, color }}>{s.percentage}%</span>
               </div>
               <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-600 mb-5">
-                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${s.percentage}%`, backgroundColor: color }} />
+                <div className="h-full rounded-full transition duration-700" style={{ width: `${s.percentage}%`, backgroundColor: color }} />
               </div>
               <div className="flex items-center justify-between text-[14px]">
                 <span className="text-gray-500 dark:text-gray-400"><span className="font-semibold text-black dark:text-white">{s.count}</span> {t('dashboard.candidates_label')}</span>
@@ -477,7 +477,7 @@ function TimeToHireWidget({ data, t }) {
                   <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-600">
                     {s.avgDays != null && (
                       <div
-                        className="h-full rounded-full transition-all duration-700"
+                        className="h-full rounded-full transition duration-700"
                         style={{ width: `${widthPct}%`, backgroundColor: color }}
                       />
                     )}
@@ -513,7 +513,7 @@ function TimeToHireWidget({ data, t }) {
                   <div className="w-full h-2.5 rounded-full bg-gray-200 dark:bg-gray-600">
                     {m.avgDays != null && (
                       <div
-                        className="h-full rounded-full transition-all duration-700"
+                        className="h-full rounded-full transition duration-700"
                         style={{ width: `${widthPct}%`, backgroundColor: isImproved ? '#34c759' : isWorse ? '#ff3b30' : '#ff9500' }}
                       />
                     )}

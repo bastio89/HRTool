@@ -177,8 +177,6 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
 
   const hasNameMapping = Object.values(mapping).includes('name')
 
-  if (!open) return null
-
   const stepLabel =
     step === 1 ? t('csv.step_upload')
     : step === 2 ? t('csv.step_mapping')
@@ -189,6 +187,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
 
   return (
     <Modal
+      open={open}
       onClose={handleDismiss}
       size="xl"
       icon={FileSpreadsheet}
@@ -238,7 +237,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
       {/* Step indicators */}
       <div className="flex items-center gap-1.5 mb-6" role="progressbar" aria-valuemin={1} aria-valuemax={4} aria-valuenow={step} aria-label={stepLabel}>
         {[1, 2, 3, 4].map(s => (
-          <div key={s} className={`h-2 rounded-full transition-all ${s === step ? 'w-6 bg-[#0071e3]' : s < step ? 'w-2 bg-[#34c759]' : 'w-2 bg-gray-300 dark:bg-gray-600'}`} />
+          <div key={s} className={`h-2 rounded-full transition ${s === step ? 'w-6 bg-[#0071e3]' : s < step ? 'w-2 bg-[#34c759]' : 'w-2 bg-gray-300 dark:bg-gray-600'}`} />
         ))}
       </div>
 
@@ -252,7 +251,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
         {/* Step 1: Upload */}
         {step === 1 && (
           <div
-            className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-16 text-center cursor-pointer hover:border-[#0071e3] hover:bg-[#0071e3]/5 transition-all"
+            className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-16 text-center cursor-pointer hover:border-[#0071e3] hover:bg-[#0071e3]/5 transition"
             onClick={() => fileRef.current?.click()}
           >
             <Upload className="w-12 h-12 text-gray-500 dark:text-gray-400 mx-auto mb-4" />

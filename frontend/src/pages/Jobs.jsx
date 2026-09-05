@@ -97,7 +97,7 @@ export default function Jobs() {
           <button
             key={s.val}
             onClick={() => setFilterStatus(s.val)}
-            className={`px-5 py-2.5 rounded-full text-[15px] font-medium transition-all cursor-pointer ${
+            className={`px-5 py-2.5 rounded-full text-[15px] font-medium transition cursor-pointer ${
               filterStatus === s.val
                 ? 'bg-black text-white'
                 : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -205,7 +205,7 @@ export default function Jobs() {
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
@@ -223,7 +223,7 @@ export default function Jobs() {
                     <button
                       key={p}
                       onClick={() => setCurrentPage(p)}
-                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-[15px] sm:text-[17px] font-semibold transition-all cursor-pointer ${
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full text-[15px] sm:text-[17px] font-semibold transition cursor-pointer ${
                         p === currentPage
                           ? 'bg-black text-white'
                           : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-600 dark:text-gray-400 hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c]'
@@ -236,7 +236,7 @@ export default function Jobs() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
               >
                 <ChevronRightIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
@@ -246,12 +246,11 @@ export default function Jobs() {
       )}
     </PageContainer>
 
-      {showBatchImport && (
-        <BatchJobImportDialog
-          onClose={() => { setShowBatchImport(false); loadJobs() }}
-          onImported={loadJobs}
-        />
-      )}
+      <BatchJobImportDialog
+        open={showBatchImport}
+        onClose={() => { setShowBatchImport(false); loadJobs() }}
+        onImported={loadJobs}
+      />
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useId } from 'react'
+import { useEffect, useRef, useCallback, useId, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useI18n } from '../I18nContext'
@@ -37,6 +37,9 @@ const FOCUSABLE = [
   'textarea:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
+
+/** Must match .animate-modal-out in index.css. */
+const EXIT_MS = 200
 
 /** Number of modals currently mounted – the scroll lock is released by the last one. */
 let openModalCount = 0
@@ -91,6 +94,11 @@ export default function Modal({
   const { t } = useI18n()
   const panelRef = useRef(null)
   const triggerRef = useRef(null)
+  // `open` is the caller's intent; `present` is what is actually on screen.
+  // They differ only while the dialog is playing its exit animation - without
+  // that gap the panel disappeared on the same frame it unmounted.
+  const [present, setPresent] = useState(open)
+  const [leaving, setLeaving] = useState(false)
   const generatedId = useId()
   const titleId = labelledBy || `${generatedId}-title`
 
@@ -98,12 +106,28 @@ export default function Modal({
     if (onClose) onClose()
   }, [onClose])
 
-  // Scroll lock for as long as the dialog is open.
   useEffect(() => {
-    if (!open) return undefined
+    if (open) {
+      setPresent(true)
+      setLeaving(false)
+      return undefined
+    }
+    if (!present) return undefined
+    // Play the exit, then unmount. A re-open during the exit cancels it
+    // (the effect above runs first), so the dialog can be grabbed back
+    // mid-dismissal instead of having to finish leaving first.
+    setLeaving(true)
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const t = setTimeout(() => { setPresent(false); setLeaving(false) }, reduced ? 0 : EXIT_MS)
+    return () => clearTimeout(t)
+  }, [open, present])
+
+  // Scroll lock for as long as anything is on screen.
+  useEffect(() => {
+    if (!present) return undefined
     lockScroll()
     return unlockScroll
-  }, [open])
+  }, [present])
 
   // Remember the trigger, move focus in, restore focus on close.
   useEffect(() => {
@@ -166,14 +190,18 @@ export default function Modal({
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [open, closeOnEscape, handleClose])
 
-  if (!open) return null
+  if (!present) return null
 
   const hasHeader = Boolean(title || showClose)
 
   return createPortal(
-    <div className="fixed inset-0 layer-modal flex items-center justify-center p-4 sm:p-6">
+    <div
+      className="fixed inset-0 layer-modal flex items-center justify-center p-4 sm:p-6"
+      aria-hidden={leaving ? 'true' : undefined}
+      style={leaving ? { pointerEvents: 'none' } : undefined}
+    >
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-overlay-in"
+        className={`absolute inset-0 bg-black/40 ${leaving ? 'animate-overlay-out' : 'backdrop-blur-sm animate-overlay-in'}`}
         onClick={closeOnBackdrop ? handleClose : undefined}
         aria-hidden="true"
       />
@@ -187,7 +215,7 @@ export default function Modal({
         className={`relative w-full ${SIZES[size] || SIZES.md} max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)]
           bg-white dark:bg-[#1c1c1e] rounded-[24px]
           shadow-[var(--shadow-overlay)] border border-gray-200/60 dark:border-gray-700/60
-          flex flex-col overflow-hidden outline-none animate-modal-in ${contentClassName}`}
+          flex flex-col overflow-hidden outline-none ${leaving ? 'animate-modal-out' : 'animate-modal-in'} ${contentClassName}`}
       >
         {hasHeader && (
           <div className="flex items-start justify-between gap-4 px-6 sm:px-8 pt-6 sm:pt-7 pb-5 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">

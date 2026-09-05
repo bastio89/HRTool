@@ -1,10 +1,13 @@
+// White initials sit on these, so every stop has to clear 4.5:1 against white.
+// The brand tints (#34c759, #ff9f0a, #ff3b30) only reach 2.1-3.6:1, so this
+// palette uses deeper shades of the same families.
 const PALETTE = [
-  ['#0071e3', '#34c759'],
-  ['#8b5cf6', '#0071e3'],
-  ['#ff9f0a', '#ff3b30'],
-  ['#34c759', '#0a84ff'],
-  ['#ff3b30', '#8b5cf6'],
-  ['#0a84ff', '#ff9f0a'],
+  ['#1d4ed8', '#15803d'],
+  ['#6d28d9', '#1d4ed8'],
+  ['#b45309', '#b91c1c'],
+  ['#15803d', '#0369a1'],
+  ['#b91c1c', '#6d28d9'],
+  ['#0369a1', '#b45309'],
 ]
 
 function hash(str) {

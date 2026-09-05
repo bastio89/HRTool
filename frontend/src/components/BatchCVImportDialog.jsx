@@ -24,7 +24,7 @@ const STATUS = {
   SKIPPED: 'skipped',
 }
 
-export default function BatchCVImportDialog({ onClose, onImported }) {
+export default function BatchCVImportDialog({ open = true, onClose, onImported }) {
   const { t, locale } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([]) // { file, id, status, progress, candidate, error }
@@ -39,6 +39,9 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
   }, [])
 
   useEffect(() => {
+    // The dialog stays mounted while closed (for its exit animation), so the
+    // health poll must not keep running in the background.
+    if (!open) return undefined
     let isMounted = true
 
     const loadAiHealth = async () => {
@@ -66,7 +69,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
       isMounted = false
       clearInterval(intervalId)
     }
-  }, [])
+  }, [open])
 
   const addFiles = useCallback((newFiles) => {
     const valid = Array.from(newFiles).filter(f => ALLOWED_TYPES.includes(f.type))
@@ -234,6 +237,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
 
   return (
     <Modal
+      open={open}
       onClose={onClose}
       size="lg"
       icon={Users}
@@ -252,7 +256,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileInputRef.current?.click()}
-            className={`flex flex-col items-center justify-center py-10 gap-3 rounded-[20px] border-2 border-dashed cursor-pointer transition-all ${
+            className={`flex flex-col items-center justify-center py-10 gap-3 rounded-[20px] border-2 border-dashed cursor-pointer transition ${
               isDragging
                 ? 'border-[#0071e3] bg-[#0071e3]/8 scale-[1.01]'
                 : 'border-gray-200 dark:border-gray-700 hover:border-[#0071e3]/50 hover:bg-[#0071e3]/4'
@@ -307,7 +311,7 @@ export default function BatchCVImportDialog({ onClose, onImported }) {
                 {item.status === STATUS.PROCESSING && (
                   <div className="mt-1.5 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-[#0071e3] to-[#5856d6] rounded-full transition-all duration-500"
+                      className="h-full bg-gradient-to-r from-[#0071e3] to-[#5856d6] rounded-full transition duration-500"
                       style={{ width: `${item.progress}%` }}
                     />
                   </div>

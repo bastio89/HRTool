@@ -627,7 +627,7 @@ export default function MatchingResults() {
                 </div>
               </div>
 
-              <div className={`overflow-hidden transition-all duration-500 ease-in-out ${expandedIdx === idx ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+              <div className={`overflow-hidden transition-[max-height,opacity] duration-500 ease-in-out ${expandedIdx === idx ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}>
                 <div className="px-10 pb-10 border-t border-gray-100/80 dark:border-gray-700/80">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-10">
                     {result.strengths?.length > 0 && (

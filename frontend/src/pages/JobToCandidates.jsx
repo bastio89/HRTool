@@ -175,7 +175,7 @@ export default function JobToCandidates() {
               <button
                 type="button"
                 onClick={() => handleModeSwitch('manual')}
-                className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition cursor-pointer ${
                   jobMode === 'manual' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
@@ -184,7 +184,7 @@ export default function JobToCandidates() {
               <button
                 type="button"
                 onClick={() => handleModeSwitch('existing')}
-                className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition-all cursor-pointer ${
+                className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition cursor-pointer ${
                   jobMode === 'existing' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}
               >
@@ -225,7 +225,7 @@ export default function JobToCandidates() {
                   <button
                     type="button"
                     onClick={() => setVectorEngine('python')}
-                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition-all ${
+                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition ${
                       vectorEngine === 'python'
                         ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
@@ -236,7 +236,7 @@ export default function JobToCandidates() {
                   <button
                     type="button"
                     onClick={() => setVectorEngine('neo4j')}
-                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition-all ${
+                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition ${
                       vectorEngine === 'neo4j'
                         ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'

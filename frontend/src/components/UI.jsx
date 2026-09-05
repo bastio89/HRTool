@@ -3,7 +3,7 @@ import { useId } from 'react'
 export function Card({ children, className = '', hover = false, ...props }) {
   return (
     <div
-      className={`bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[var(--shadow-card)] border border-gray-100/80 dark:border-gray-700/60 p-5 sm:p-10 ${hover ? 'hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition-all duration-500' : ''} ${className}`}
+      className={`bg-white dark:bg-[#1c1c1e] rounded-[20px] sm:rounded-[32px] shadow-[var(--shadow-card)] border border-gray-100/80 dark:border-gray-700/60 p-5 sm:p-10 ${hover ? 'hover:shadow-[var(--shadow-card-hover)] hover:-translate-y-1 transition duration-500' : ''} ${className}`}
       {...props}
     >
       {children}
@@ -52,7 +52,7 @@ const BUTTON_SIZES = {
 export function Button({ children, variant = 'primary', size = 'md', className = '', disabled, ...props }) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2.5 font-medium transition-all duration-300
+      className={`inline-flex items-center justify-center gap-2.5 font-medium transition duration-300
         ${BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.primary} ${BUTTON_SIZES[size] || BUTTON_SIZES.md}
         ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}
         ${className}`}
@@ -88,7 +88,7 @@ export function IconButton({ icon: Icon, label, variant = 'secondary', size = 'm
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex items-center justify-center rounded-full transition-all duration-300
+      className={`inline-flex items-center justify-center rounded-full transition duration-300
         ${BUTTON_VARIANTS[variant] || BUTTON_VARIANTS.secondary} ${ICON_BUTTON_SIZES[size] || ICON_BUTTON_SIZES.md}
         ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}
         ${className}`}
@@ -117,7 +117,7 @@ export function Input({ label, className = '', id, ...props }) {
         className={`w-full px-6 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[20px]
 text-black dark:text-white text-[16px] placeholder:text-gray-500 dark:placeholder:text-gray-400
           focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
-          transition-all duration-300 ${className}`}
+          transition duration-300 ${className}`}
         {...props}
       />
     </div>
@@ -139,7 +139,7 @@ export function Textarea({ label, className = '', id, ...props }) {
         className={`w-full px-6 py-5 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[24px]
 text-black dark:text-white text-[16px] placeholder:text-gray-500 dark:placeholder:text-gray-400
           focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10
-          transition-all duration-300 resize-y min-h-[180px] leading-relaxed ${className}`}
+          transition duration-300 resize-y min-h-[180px] leading-relaxed ${className}`}
         {...props}
       />
     </div>

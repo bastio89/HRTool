@@ -48,7 +48,7 @@ export default function JobPicker({ jobs, selectedJobId, onSelect, search, onSea
           value={search}
           onChange={e => onSearch(e.target.value)}
           className="w-full pl-14 pr-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[15px] font-medium text-black dark:text-white border border-transparent
-            focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition-all"
+            focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10 transition"
         />
       </div>
       <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
@@ -57,7 +57,7 @@ export default function JobPicker({ jobs, selectedJobId, onSelect, search, onSea
             key={job.id}
             type="button"
             onClick={() => onSelect(job)}
-            className={`w-full flex items-center gap-5 p-5 rounded-[20px] text-left transition-all cursor-pointer ${
+            className={`w-full flex items-center gap-5 p-5 rounded-[20px] text-left transition cursor-pointer ${
               selectedJobId === job.id
                 ? 'bg-[#0071e3] text-white shadow-md'
                 : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] text-black dark:text-white'

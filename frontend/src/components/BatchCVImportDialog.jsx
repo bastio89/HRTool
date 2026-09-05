@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Users, Wifi, WifiOff } from 'lucide-react'
-import { cvParserApi, uploadsApi, healthApi } from '../api'
+import { cvParserApi, uploadsApi } from '../api'
 import { Button } from './UI'
 import Modal from './Modal'
 import { useI18n } from '../I18nContext'
+import { useSystemStatus } from './SystemStatus'
 import { localeTag } from '../utils/format'
 
 const ALLOWED_TYPES = [
@@ -30,46 +31,20 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
   const [files, setFiles] = useState([]) // { file, id, status, progress, candidate, error }
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
-  const [aiHealth, setAiHealth] = useState({ isOnline: false, calls: 0, totalTokens: 0, isChecking: true })
+  // Reads the shared system status instead of polling on its own.
+  const { services, usage, checking: statusChecking } = useSystemStatus()
+  const aiHealth = {
+    isOnline: services.ai === 'ok',
+    isChecking: statusChecking,
+    calls: usage.calls,
+    totalTokens: usage.total_tokens,
+  }
   const fileInputRef = useRef(null)
   const abortRef = useRef(false)
 
   const formatCompactNumber = useCallback((value) => {
     return new Intl.NumberFormat(localeTag(locale), { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0)
   }, [])
-
-  useEffect(() => {
-    // The dialog stays mounted while closed (for its exit animation), so the
-    // health poll must not keep running in the background.
-    if (!open) return undefined
-    let isMounted = true
-
-    const loadAiHealth = async () => {
-      if (!isMounted) return
-      setAiHealth((prev) => ({ ...prev, isChecking: true }))
-      try {
-        const health = await healthApi.check()
-        if (!isMounted) return
-        setAiHealth({
-          isOnline: Boolean(health?.aiUsage || health?.services?.graphrag === 'ok'),
-          calls: Number(health?.aiUsage?.calls) || 0,
-          totalTokens: Number(health?.aiUsage?.total_tokens) || 0,
-          isChecking: false,
-        })
-      } catch {
-        if (!isMounted) return
-        setAiHealth((prev) => ({ ...prev, isOnline: false, isChecking: false }))
-      }
-    }
-
-    loadAiHealth()
-    const intervalId = setInterval(loadAiHealth, 60000)
-
-    return () => {
-      isMounted = false
-      clearInterval(intervalId)
-    }
-  }, [open])
 
   const addFiles = useCallback((newFiles) => {
     const valid = Array.from(newFiles).filter(f => ALLOWED_TYPES.includes(f.type))

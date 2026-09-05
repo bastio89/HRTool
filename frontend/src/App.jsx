@@ -4,6 +4,7 @@ import { ThemeProvider } from './ThemeContext'
 import { I18nProvider } from './I18nContext'
 import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/ConfirmDialog'
+import { SystemStatusProvider } from './components/SystemStatus'
 import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -116,7 +117,9 @@ export default function App() {
         <AuthProvider>
           <ToastProvider>
             <ConfirmProvider>
-              <RouterProvider router={router} />
+              <SystemStatusProvider>
+                <RouterProvider router={router} />
+              </SystemStatusProvider>
             </ConfirmProvider>
           </ToastProvider>
         </AuthProvider>

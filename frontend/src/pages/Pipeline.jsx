@@ -10,6 +10,7 @@ import { Button, IconButton, LoadingSpinner, PageContainer, EmptyState } from '.
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import { localeTag } from '../utils/format'
+import useBoardDrag from '../hooks/useBoardDrag'
 
 const STAGES = ['Beworben', 'Vorauswahl', 'Interview', 'Angebot', 'Hired', 'Abgesagt']
 
@@ -33,8 +34,6 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(true)
   const [addPanelOpen, setAddPanelOpen] = useState(false)
   const [addSearch, setAddSearch] = useState('')
-  const [dragEntry, setDragEntry] = useState(null)
-  const [dragOverStage, setDragOverStage] = useState(null)
   const [saving, setSaving] = useState(false)
   const [stageChangeModal, setStageChangeModal] = useState(null) // { entry, targetStage }
   const [stageNote, setStageNote] = useState('')
@@ -88,23 +87,6 @@ export default function Pipeline() {
     if (Object.keys(board).length > 0) loadInterviews(board)
   }, [board])
 
-  // Drag & Drop handlers
-  const handleDragStart = (entry) => setDragEntry(entry)
-  const handleDragOver = (e, stage) => {
-    e.preventDefault()
-    setDragOverStage(stage)
-  }
-  const handleDrop = async (e, targetStage) => {
-    e.preventDefault()
-    setDragOverStage(null)
-    if (!dragEntry || dragEntry.stage === targetStage) { setDragEntry(null); return }
-
-    // Open note modal for stage change
-    setStageChangeModal({ entry: dragEntry, targetStage })
-    setStageNote('')
-    setDragEntry(null)
-  }
-
   // The desktop board could only be operated by dragging, which no keyboard
   // user can do. This routes a keyboard move through the very same modal the
   // drop handler opens, so both paths behave identically.
@@ -113,6 +95,23 @@ export default function Pipeline() {
     setStageChangeModal({ entry, targetStage })
     setStageNote('')
   }
+
+  // Pointer-driven dragging. Both the gesture and the keyboard shortcuts end up
+  // in requestStageChange, so a dragged card and an arrow-key move behave
+  // identically - including the note prompt.
+  const columnRefs = useRef({})
+  const { activeId: draggingId, hoverStage, registerCard, registerColumns, cardProps } = useBoardDrag({
+    onDrop: (entry, targetStage) => requestStageChange(entry, targetStage),
+  })
+
+  // Column geometry is read once per gesture rather than per frame; the board
+  // does not reflow while a card is in the air.
+  useEffect(() => {
+    registerColumns(() => STAGES.map(stage => {
+      const el = columnRefs.current[stage]
+      return el ? { stage, rect: el.getBoundingClientRect() } : null
+    }).filter(Boolean))
+  }, [registerColumns])
 
   const confirmStageChange = async () => {
     if (!stageChangeModal) return
@@ -226,7 +225,9 @@ export default function Pipeline() {
     touchRef.current = null
   }
 
-  // Mobile stage move (no drag & drop on touch)
+  // Mobile stage move. The board itself is draggable by touch now, but the
+  // mobile layout shows one stage at a time, so there is nothing to drag
+  // between - explicit buttons are the right control here.
   const handleMobileMove = async (entry, targetStage) => {
     setBoard(prev => {
       const newBoard = { ...prev }
@@ -376,19 +377,17 @@ export default function Pipeline() {
         {STAGES.map((stage, stageIdx) => {
           const style = stageStyle[stage]
           const cards = board[stage] || []
-          const isOver = dragOverStage === stage
+          const isOver = hoverStage === stage
           const prevStageName = STAGES[stageIdx - 1] || null
           const nextStageName = STAGES[stageIdx + 1] || null
 
           return (
             <div
               key={stage}
+              ref={el => { columnRefs.current[stage] = el }}
               className={`flex-1 min-w-0 rounded-[24px] p-4 flex flex-col gap-3 transition duration-200
                 ${isOver ? 'ring-2 ring-[#0071e3] ring-offset-2 scale-[1.01]' : ''}
                 ${style.col}`}
-              onDragOver={e => handleDragOver(e, stage)}
-              onDrop={e => handleDrop(e, stage)}
-              onDragLeave={() => setDragOverStage(null)}
             >
               {/* Column header */}
               <div className="flex items-center justify-between px-0.5">
@@ -418,7 +417,9 @@ export default function Pipeline() {
                     t={t}
                     interviews={entryInterviews[entry.id] || []}
                     rating={candidateRatings[entry.candidate_id]}
-                    onDragStart={() => handleDragStart(entry)}
+                    dragProps={cardProps(entry)}
+                    registerCard={registerCard}
+                    isDragging={draggingId === entry.id}
                     prevStage={prevStageName}
                     nextStage={nextStageName}
                     onMoveStage={(target) => requestStageChange(entry, target)}
@@ -599,7 +600,7 @@ export default function Pipeline() {
   )
 }
 
-function KanbanCard({ entry, t, interviews, rating, onDragStart, prevStage, nextStage, onMoveStage, onRemove, onOpenNotes, onOpenInterview, jobId }) {
+function KanbanCard({ entry, t, interviews, rating, dragProps, registerCard, isDragging, prevStage, nextStage, onMoveStage, onRemove, onOpenNotes, onOpenInterview, jobId }) {
   const { locale } = useI18n()
   const handleKeyDown = (e) => {
     if (e.target !== e.currentTarget) return          // let controls inside the card keep their keys
@@ -608,14 +609,20 @@ function KanbanCard({ entry, t, interviews, rating, onDragStart, prevStage, next
   }
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
+      ref={el => registerCard?.(entry.id, el)}
+      {...dragProps}
       tabIndex={0}
       role="group"
       aria-label={`${entry.candidate_name}, ${entry.stage}`}
       aria-keyshortcuts="ArrowLeft ArrowRight"
       onKeyDown={handleKeyDown}
-      className="bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-grab active:cursor-grabbing border border-gray-100/80 dark:border-gray-700/80 hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition duration-200 group"
+      className={`bg-white dark:bg-[#1c1c1e] rounded-[16px] p-3.5 border border-gray-100/80 dark:border-gray-700/80 group
+        ${isDragging
+          // While airborne the card must not animate its own transform - the
+          // gesture writes it every frame - and it carries a deeper shadow so
+          // it reads as lifted off the board.
+          ? 'shadow-[0_18px_40px_rgba(0,0,0,0.18)] cursor-grabbing select-none'
+          : 'shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] cursor-grab transition-shadow duration-200'}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">

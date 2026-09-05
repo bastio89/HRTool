@@ -20,12 +20,15 @@ from models import (
 	JobIngestRequest,
 	JobIngestResponse,
 	JobProfileExtraction,
+	LinkedInProfileRequest,
+	LinkedInProfileResponse,
 	MatchCandidateResponse,
 	MatchResponse,
 	WorkHistoryExtraction,
 )
 from services.candidate_privacy import CandidatePrivacyService
 from services.db import Neo4jService
+from services.linkedin_mcp import LinkedInMCPError, LinkedInMCPService
 from matching_api import create_matching_router
 from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
@@ -57,6 +60,7 @@ db_service = Neo4jService(
 	password=settings.neo4j_password,
 	postgres_store=postgres_store,
 )
+linkedin_mcp_service = LinkedInMCPService.from_settings(settings)
 logger = logging.getLogger(__name__)
 
 
@@ -237,6 +241,20 @@ async def health() -> HealthResponse:
 @app.get("/health/live")
 async def health_live() -> dict[str, str]:
 	return {"status": "ok"}
+
+
+@app.post("/linkedin/profile", response_model=LinkedInProfileResponse, tags=["LinkedIn"])
+async def linkedin_profile(request: LinkedInProfileRequest) -> LinkedInProfileResponse:
+	if not linkedin_mcp_service.is_configured:
+		raise HTTPException(
+			status_code=503,
+			detail="APIFY_LINKEDIN_MCP_COMMAND is not configured.",
+		)
+	try:
+		profile = await linkedin_mcp_service.extract_profile(request.url)
+	except LinkedInMCPError as exc:
+		raise HTTPException(status_code=502, detail=f"LinkedIn MCP extraction failed: {exc}") from exc
+	return LinkedInProfileResponse(source_url=request.url, tool_name="extract_profile", profile=profile)
 
 
 @app.post("/candidates/anon", response_model=CandidatePrivacyResponse)

@@ -386,6 +386,16 @@ class JobIngestResponse(IngestResponse):
     persisted: bool = True
 
 
+class LinkedInProfileRequest(BaseModel):
+    url: str = Field(..., min_length=1)
+
+
+class LinkedInProfileResponse(BaseModel):
+    source_url: str
+    tool_name: str
+    profile: CandidateProfileExtraction
+
+
 class MatchingCandidateInput(BaseModel):
     id: str | int
     name: str | None = None

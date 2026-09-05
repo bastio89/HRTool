@@ -154,6 +154,10 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3.6:35b}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:4b}
+      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      APIFY_LINKEDIN_MCP_COMMAND: ${APIFY_LINKEDIN_MCP_COMMAND:-"npx -y @apify/actors-mcp-server --actors curious_coder/linkedin-profile-scraper"}
+      APIFY_LINKEDIN_MCP_PROFILE_TOOL_NAME: ${APIFY_LINKEDIN_MCP_PROFILE_TOOL_NAME:-extract_profile}
+      APIFY_LINKEDIN_MCP_SEARCH_TOOL_NAME: ${APIFY_LINKEDIN_MCP_SEARCH_TOOL_NAME:-search_profiles}
     ports:
       - "${GRAPHRAG_PORT:-8002}:8000"
     extra_hosts:

@@ -13,6 +13,8 @@ from models import (
     LLMRerankItem,
     LLMRerankResponse,
     Stage1Candidate,
+    LinkedInProfileRequest,
+    LinkedInProfileResponse,
     Stage2Candidate,
 )
 
@@ -316,6 +318,33 @@ async def test_ingest_job_accepts_file_upload(app_module, api_client, monkeypatc
     assert all(payload["entity"] == "skill" for payload in skill_payloads)
     postgres_mock.assert_awaited_once()
     upsert_mock.assert_awaited_once()
+
+@pytest.mark.anyio
+async def test_linkedin_profile_endpoint_uses_mcp_service(app_module, api_client, monkeypatch):
+    fake_profile = CandidateProfileExtraction(
+        name="Ada Lovelace",
+        location="London",
+        skills=[],
+        work_history=[],
+        education_history=[],
+    )
+
+    fake_service = AsyncMock()
+    fake_service.is_configured = True
+    fake_service.extract_profile = AsyncMock(return_value=fake_profile)
+    monkeypatch.setattr(app_module, "linkedin_mcp_service", fake_service)
+
+    response = await api_client.post(
+        "/linkedin/profile",
+        json={"url": "https://www.linkedin.com/in/ada-lovelace/"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source_url"] == "https://www.linkedin.com/in/ada-lovelace/"
+    assert payload["tool_name"] == "extract_profile"
+    assert payload["profile"]["name"] == "Ada Lovelace"
+    fake_service.extract_profile.assert_awaited_once_with("https://www.linkedin.com/in/ada-lovelace/")
 
 
 @pytest.mark.anyio

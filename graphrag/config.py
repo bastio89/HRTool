@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     parse_latency_window_size: int = 200
     parse_latency_log_every: int = 20
 
+    apify_linkedin_mcp_command: str | None = None
+    apify_linkedin_mcp_profile_tool_name: str = "extract_profile"
+    apify_linkedin_mcp_search_tool_name: str = "search_profiles"
+
     # Embedding dimensions persisted in Neo4j vector index.
     embedding_dimensions: int = 1536
 

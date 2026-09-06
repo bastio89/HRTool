@@ -540,7 +540,12 @@ def _run_batch(links_file: Path) -> int:
                         selected_item = candidate
                         break
             if selected_item is None:
-                raise RuntimeError("Apify lieferte keinen passenden Treffer für diesen Link.")
+                profile = fetch_profile(link)
+                output = _output_for_profile(profile)
+                write_pdf(profile, output)
+                print(f"PDF erstellt: {output}")
+                print(f"Name: {profile.name}")
+                continue
 
             profile = _extract_profile(selected_item, link)
             output = _output_for_profile(profile)

@@ -16,6 +16,7 @@ from models import (
     LinkedInProfileRequest,
     LinkedInProfileResponse,
     Stage2Candidate,
+    LinkedInPeopleSearchRequest,
 )
 
 
@@ -345,6 +346,30 @@ async def test_linkedin_profile_endpoint_uses_mcp_service(app_module, api_client
     assert payload["tool_name"] == "extract_profile"
     assert payload["profile"]["name"] == "Ada Lovelace"
     fake_service.extract_profile.assert_awaited_once_with("https://www.linkedin.com/in/ada-lovelace/")
+
+
+@pytest.mark.anyio
+async def test_linkedin_people_search_csv_endpoint_uses_service(app_module, api_client, monkeypatch):
+    fake_service = type("FakeService", (), {})()
+    fake_service.is_configured = True
+    fake_service.export_csv = lambda payload: ("linkedin_search-010126_01.csv", "name,location\nAda,London\n")
+    monkeypatch.setattr(app_module, "linkedin_people_search_service", fake_service)
+
+    response = await api_client.post(
+        "/linkedin/people-search.csv",
+        json={
+            "enrichEmails": True,
+            "keywords": "treasury",
+            "location": "Zürich",
+            "maxResults": 5,
+            "mode": "public",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "linkedin_search-010126_01.csv" in response.headers["content-disposition"]
+    assert response.text == "name,location\nAda,London\n"
 
 
 @pytest.mark.anyio

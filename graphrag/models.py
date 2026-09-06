@@ -396,6 +396,16 @@ class LinkedInProfileResponse(BaseModel):
     profile: CandidateProfileExtraction
 
 
+class LinkedInPeopleSearchRequest(BaseModel):
+    enrichEmails: bool = Field(default=True)
+    keywords: str = Field(..., min_length=1)
+    location: str = Field(..., min_length=1)
+    maxResults: int = Field(default=5, ge=1, le=100)
+    mode: str = Field(default="public")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class MatchingCandidateInput(BaseModel):
     id: str | int
     name: str | None = None

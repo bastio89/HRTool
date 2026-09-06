@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 
 from config import settings
 from models import (
@@ -20,6 +20,7 @@ from models import (
 	JobIngestRequest,
 	JobIngestResponse,
 	JobProfileExtraction,
+	LinkedInPeopleSearchRequest,
 	LinkedInProfileRequest,
 	LinkedInProfileResponse,
 	MatchCandidateResponse,
@@ -28,6 +29,7 @@ from models import (
 )
 from services.candidate_privacy import CandidatePrivacyService
 from services.db import Neo4jService
+from services.linkedin_people_search import LinkedInPeopleSearchService
 from services.linkedin_mcp import LinkedInMCPError, LinkedInMCPService
 from matching_api import create_matching_router
 from services.llm import LLMService
@@ -61,6 +63,7 @@ db_service = Neo4jService(
 	postgres_store=postgres_store,
 )
 linkedin_mcp_service = LinkedInMCPService.from_settings(settings)
+linkedin_people_search_service = LinkedInPeopleSearchService()
 logger = logging.getLogger(__name__)
 
 
@@ -255,6 +258,21 @@ async def linkedin_profile(request: LinkedInProfileRequest) -> LinkedInProfileRe
 	except LinkedInMCPError as exc:
 		raise HTTPException(status_code=502, detail=f"LinkedIn MCP extraction failed: {exc}") from exc
 	return LinkedInProfileResponse(source_url=request.url, tool_name="extract_profile", profile=profile)
+
+
+@app.post("/linkedin/people-search.csv", tags=["LinkedIn"])
+async def linkedin_people_search_csv(request: LinkedInPeopleSearchRequest):
+	if not linkedin_people_search_service.is_configured:
+		raise HTTPException(status_code=503, detail="APIFY_TOKEN is not configured.")
+	try:
+		filename, csv_text = linkedin_people_search_service.export_csv(request.model_dump(by_alias=True, exclude_none=True))
+	except RuntimeError as exc:
+		raise HTTPException(status_code=502, detail=f"LinkedIn people search failed: {exc}") from exc
+	return Response(
+		content=csv_text,
+		media_type="text/csv; charset=utf-8",
+		headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+	)
 
 
 @app.post("/candidates/anon", response_model=CandidatePrivacyResponse)

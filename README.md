@@ -93,7 +93,7 @@
 ### 📥 Import & Export
 - **CSV-Export** — Bewerberlisten und Matching-Ergebnisse als CSV herunterladen
 - **CSV-Import** — Massenhafter Bewerber-Upload mit automatischer Duplikat-Erkennung
-- **Datenbank-Backup** — Komplettes SQLite-Backup als Download (Admin)
+- **Datenbank-Backup** — JSON-Backup der PostgreSQL-Daten als Download (Admin)
 
 ### 🔐 Sicherheit & Compliance
 - **JWT-Authentifizierung** — Sichere Token-basierte Anmeldung
@@ -310,8 +310,6 @@ JWT_SECRET=ihr-sicherer-schlüssel
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2
 EXTERNAL_API_KEY=ihr-externer-api-key
-N8N_BASE_URL=http://localhost:5678
-N8N_API_KEY=ihr-n8n-api-key
 ```
 
 ---
@@ -323,7 +321,7 @@ N8N_API_KEY=ihr-n8n-api-key
 | Technologie | Zweck |
 |-------------|-------|
 | **Node.js + Express 5** | REST-API-Server |
-| **better-sqlite3** | Embedded Datenbank (WAL-Modus für Performance) |
+| **PostgreSQL** | Zentrale relationale Datenbank für Bewerber, Jobs und Systemdaten |
 | **jsonwebtoken** | JWT-basierte Authentifizierung |
 | **bcryptjs** | Sichere Passwort-Verschlüsselung |
 | **multer** | Datei-Upload-Handling |
@@ -346,13 +344,14 @@ N8N_API_KEY=ihr-n8n-api-key
 | Technologie | Zweck |
 |-------------|-------|
 | **Ollama** | Lokales LLM (llama3.2) für alle KI-Features |
-| **n8n** | Workflow-Automation (optional, für CV-Parser & Matching) |
 | **Tesseract OCR** | Texterkennung in gescannten PDFs |
 | **Poppler** | PDF-zu-Bild-Konvertierung |
 
 ### Datenbank
 
-**SQLite** mit **12 Tabellen** und **24 Indizes**:
+**PostgreSQL** als zentrale relationale Datenbank. Neo4j ergänzt die Anwendung für Graphdaten und Vektorsuche.
+
+Die wichtigsten relationalen Bereiche sind:
 
 ```
 candidates          — Bewerberprofile (17+ Felder)
@@ -479,7 +478,7 @@ HRTool/
 │   │   │   └── auth.js        # JWT-Middleware
 │   │   └── swagger.js         # API-Dokumentation
 │   ├── uploads/               # Hochgeladene Dateien
-│   └── hrtool.db              # SQLite-Datenbank
+│   └── backups/               # JSON-Datenbank-Backups
 ├── frontend/
 │   ├── Dockerfile             # Frontend-Build & Nginx-Auslieferung
 │   ├── nginx.conf             # SPA-Routing & API-Proxy

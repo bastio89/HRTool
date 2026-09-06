@@ -42,7 +42,7 @@ export default function UserManagement() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `hrtool-backup-${new Date().toISOString().slice(0, 10)}.db`
+      a.download = `hrtool-backup-${new Date().toISOString().slice(0, 10)}.json`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)

@@ -554,8 +554,8 @@ async def ingest_job(
 		try:
 			await postgres_store.upsert_job(job_id=job_id, raw_text=text or "", profile=profile)
 		except Exception as exc:
-			logger.exception("Job SQLite persistence failed")
-			raise HTTPException(status_code=503, detail=f"Job SQLite persistence failed: {exc}") from exc
+			logger.exception("Job PostgreSQL persistence failed")
+			raise HTTPException(status_code=503, detail=f"Job PostgreSQL persistence failed: {exc}") from exc
 
 	if persist_neo4j:
 		try:

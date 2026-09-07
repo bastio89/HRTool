@@ -485,7 +485,7 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
  *     responses:
  *       200: { description: Matching-Ergebnis mit Scores }
  *       400: { description: Keine Beschreibung oder keine Bewerber }
- *       502: { description: KI-Dienst nicht erreichbar }
+ *       502: { description: Externes Matching fehlgeschlagen }
  */
 router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
   try {

@@ -74,7 +74,7 @@ app.use('/api/add/job', addJobRouter);
  * @swagger
  * /health:
  *   get:
- *     summary: System-Status aller Services
+ *     summary: System-Status
  *     tags: [System]
  *     security: []
  *     responses:

@@ -102,7 +102,7 @@ function InfoContent({ show, color, items, legalText }) {
   )
 }
 
-function parseSqliteTimestamp(value) {
+function parseDatabaseTimestamp(value) {
   if (!value) return null
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(value)) {
     return new Date(`${value.replace(' ', 'T')}Z`)
@@ -773,8 +773,8 @@ function LogsTab({ t }) {
                       </span>
                       {log.model && <span className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[10px] font-bold">{log.model}</span>}
                     </div>
-                    <div className="flex items-center gap-4 text-[12px] text-gray-500 dark:text-gray-400">
-                      <span><Clock className="w-3 h-3 inline mr-1" />{parseSqliteTimestamp(log.created_at)?.toLocaleString(localeTag(locale))}</span>
+                    <div className="flex items-center gap-4 text-[12px] text-gray-400">
+                      <span><Clock className="w-3 h-3 inline mr-1" />{parseDatabaseTimestamp(log.created_at)?.toLocaleString('de-DE')}</span>
                       {log.user_name && <span>{t('ki.by_user').replace('{name}', log.user_name)}</span>}
                       {log.duration_ms && <span>{(log.duration_ms / 1000).toFixed(1)}s</span>}
                       {log.input_tokens && <span>{log.input_tokens} in / {log.output_tokens} out</span>}

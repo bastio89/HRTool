@@ -93,7 +93,7 @@
 ### 📥 Import & Export
 - **CSV-Export** — Bewerberlisten und Matching-Ergebnisse als CSV herunterladen
 - **CSV-Import** — Massenhafter Bewerber-Upload mit automatischer Duplikat-Erkennung
-- **Datenbank-Backup** — Komplettes SQLite-Backup als Download (Admin)
+- **Datenbank-Backup** — JSON-Backup der PostgreSQL-Daten als Download (Admin)
 
 ### 🔐 Sicherheit & Compliance
 - **JWT-Authentifizierung** — Sichere Token-basierte Anmeldung
@@ -321,7 +321,7 @@ EXTERNAL_API_KEY=ihr-externer-api-key
 | Technologie | Zweck |
 |-------------|-------|
 | **Node.js + Express 5** | REST-API-Server |
-| **better-sqlite3** | Embedded Datenbank (WAL-Modus für Performance) |
+| **PostgreSQL** | Zentrale relationale Datenbank für Bewerber, Jobs und Systemdaten |
 | **jsonwebtoken** | JWT-basierte Authentifizierung |
 | **bcryptjs** | Sichere Passwort-Verschlüsselung |
 | **multer** | Datei-Upload-Handling |
@@ -349,7 +349,9 @@ EXTERNAL_API_KEY=ihr-externer-api-key
 
 ### Datenbank
 
-**SQLite** mit **12 Tabellen** und **24 Indizes**:
+**PostgreSQL** als zentrale relationale Datenbank. Neo4j ergänzt die Anwendung für Graphdaten und Vektorsuche.
+
+Die wichtigsten relationalen Bereiche sind:
 
 ```
 candidates          — Bewerberprofile (17+ Felder)
@@ -476,7 +478,7 @@ HRTool/
 │   │   │   └── auth.js        # JWT-Middleware
 │   │   └── swagger.js         # API-Dokumentation
 │   ├── uploads/               # Hochgeladene Dateien
-│   └── hrtool.db              # SQLite-Datenbank
+│   └── backups/               # JSON-Datenbank-Backups
 ├── frontend/
 │   ├── Dockerfile             # Frontend-Build & Nginx-Auslieferung
 │   ├── nginx.conf             # SPA-Routing & API-Proxy

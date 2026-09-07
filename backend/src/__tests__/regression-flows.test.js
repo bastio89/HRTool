@@ -857,7 +857,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.description).toMatch(/Sopra Steria ist einer der führenden europäischen IT-Dienstleister/i);
   });
 
-  test('Jobs description upload parses real PDF Java Developer Software+.pdf and persists to SQLite and GraphRAG', async () => {
+  test('Jobs description upload parses real PDF Java Developer Software+.pdf and persists to PostgreSQL and GraphRAG', async () => {
     const mockDb = createMockDb();
 
     jest.doMock('../database', () => mockDb);

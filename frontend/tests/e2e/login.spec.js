@@ -8,7 +8,7 @@ test('shows the login screen and key form controls', async ({ page }) => {
   await expect(page.locator('input[type="text"]')).toBeVisible()
   await expect(page.locator('input[type="password"]')).toBeVisible()
   await expect(page.locator('button[type="submit"]')).toBeDisabled()
-  await expect(page.getByText('Standardzugang: admin / admin123')).toBeVisible()
+  await expect(page.getByText(/Version\s+.+\s+·\s+Branch\s+.+/)).toBeVisible()
 })
 
 test('logs in and opens the dashboard', async ({ page }) => {

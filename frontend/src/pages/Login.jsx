@@ -3,6 +3,9 @@ import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
 import { Command, LogIn, AlertCircle } from 'lucide-react'
 
+const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+const gitBranch = typeof __GIT_BRANCH__ !== 'undefined' ? __GIT_BRANCH__ : 'unknown'
+
 export default function Login() {
   const { login } = useAuth()
   const { t } = useI18n()
@@ -88,8 +91,8 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-[13px] text-gray-400 dark:text-gray-500 mt-6">
-          Standardzugang: admin / admin123
+        <p className="text-center text-[12px] text-gray-400 dark:text-gray-500 mt-6 tracking-wide">
+          Version {appVersion} · Branch {gitBranch}
         </p>
       </div>
     </div>

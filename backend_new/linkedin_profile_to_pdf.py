@@ -7,6 +7,9 @@ import os
 import re
 import ssl
 import sys
+import subprocess
+import time
+import shlex
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +32,8 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
 LINKEDIN_HOSTS = {"linkedin.com", "www.linkedin.com"}
 APIFY_ACTOR_ID = "harvestapi/linkedin-profile-search"
 APIFY_API_URL = f"https://api.apify.com/v2/acts/{APIFY_ACTOR_ID.replace('/', '~')}/run-sync-get-dataset-items"
+APIFY_ENRICHMENT_ACTOR_ID = "harvestapi/linkedin-profile-scraper"
+APIFY_ENRICHMENT_RUN_URL = f"https://api.apify.com/v2/actors/{APIFY_ENRICHMENT_ACTOR_ID.replace('/', '~')}/runs"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -113,6 +118,131 @@ def _resolve_apify_token() -> str | None:
     return None
 
 
+def _resolve_apify_enrichment_token() -> str | None:
+    token = os.environ.get("APIFY_HARVESTAPI_TOKEN") or os.environ.get("APIFY_TOKEN")
+    if token:
+        return token
+
+    candidate_files = [
+        Path.cwd() / ".env",
+        Path(__file__).resolve().parents[1] / ".env",
+        Path(__file__).resolve().parents[2] / ".env",
+    ]
+    for candidate in candidate_files:
+        values = _read_env_file(candidate)
+        token = values.get("APIFY_HARVESTAPI_TOKEN") or values.get("APIFY_TOKEN")
+        if token:
+            os.environ.setdefault("APIFY_HARVESTAPI_TOKEN", token)
+            return token
+    return None
+
+
+def _resolve_graphrag_base_url() -> str:
+    base_url = os.environ.get("GRAPHRAG_BASE_URL") or "http://localhost:8000"
+    return base_url.rstrip("/")
+
+
+def _load_apify_dataset_items(dataset_id: str, token: str | None = None) -> list[dict[str, object]]:
+    token = token or _resolve_apify_token()
+    if not token:
+        raise RuntimeError("APIFY_TOKEN ist nicht gesetzt.")
+
+    request = Request(
+        f"https://api.apify.com/v2/datasets/{dataset_id}/items?clean=true&format=json&token={token}",
+        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+    )
+    try:
+        with urlopen(request, timeout=120, context=_ssl_context()) as response:
+            raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Apify Dataset konnte nicht gelesen werden: {exc}") from exc
+
+    data = json.loads(raw)
+    if not isinstance(data, list):
+        raise RuntimeError("Unerwartetes Apify-Dataset-Format.")
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _load_apify_run_dataset_items(run_id: str, token: str) -> list[dict[str, object]]:
+    deadline = time.monotonic() + 300
+    while True:
+        if time.monotonic() > deadline:
+            raise TimeoutError("Apify Run konnte nicht rechtzeitig abgeschlossen werden.")
+
+        request = Request(
+            f"https://api.apify.com/v2/actor-runs/{run_id}?token={token}",
+            headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+        )
+        try:
+            with urlopen(request, timeout=120, context=_ssl_context()) as response:
+                raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+        except (HTTPError, URLError, TimeoutError) as exc:
+            raise RuntimeError(f"Apify Run konnte nicht gelesen werden: {exc}") from exc
+
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise RuntimeError("Unerwartetes Apify-Run-Format.")
+
+        run = data.get("data") if isinstance(data.get("data"), dict) else data
+        if not isinstance(run, dict):
+            raise RuntimeError("Unerwartetes Apify-Run-Format.")
+
+        status = _as_text(run.get("status"))
+        dataset_id = _as_text(run.get("defaultDatasetId") or run.get("datasetId"))
+        if status == "SUCCEEDED":
+            if dataset_id:
+                return _load_apify_dataset_items(dataset_id, token=token)
+            raise RuntimeError("Apify Run wurde abgeschlossen, aber es wurde kein Dataset bereitgestellt.")
+
+        if status in {"FAILED", "ABORTED", "TIMED-OUT"}:
+            raise RuntimeError(f"Apify Run wurde mit Status {status} beendet.")
+
+        time.sleep(2)
+
+
+def _load_linkedin_actor_items(urls: list[str]) -> list[dict[str, object]]:
+    token = _resolve_apify_enrichment_token()
+    if not token:
+        raise RuntimeError("APIFY_TOKEN ist nicht gesetzt. Lege ihn in der Shell oder in der lokalen .env-Datei ab.")
+
+    tool_arguments: dict[str, object] = {
+        "urls": urls,
+        "queries": urls,
+        "profileScraperMode": "Profile details no email ($4 per 1k)",
+        "userAgent": USER_AGENT,
+        "scrapeCompany": True,
+        "proxy": {"useApifyProxy": True, "apifyProxyCountry": "US"},
+        "minDelay": 10,
+        "maxDelay": 20,
+    }
+
+    request = Request(
+        f"{APIFY_ENRICHMENT_RUN_URL}?token={token}&waitForFinish=120",
+        data=json.dumps(tool_arguments).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT},
+    )
+    try:
+        with urlopen(request, timeout=120, context=_ssl_context()) as response:
+            raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Apify Run konnte nicht gestartet werden: {exc}") from exc
+
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise RuntimeError("Unerwartetes Apify-Run-Format.")
+
+    run = data.get("data") if isinstance(data.get("data"), dict) else data
+    if not isinstance(run, dict):
+        raise RuntimeError("Unerwartetes Apify-Run-Format.")
+
+    status = _as_text(run.get("status"))
+    dataset_id = _as_text(run.get("defaultDatasetId") or run.get("datasetId"))
+    run_id = _as_text(run.get("id"))
+    if status == "SUCCEEDED" and dataset_id:
+        return _load_apify_dataset_items(dataset_id, token=token)
+    if run_id:
+        return _load_apify_run_dataset_items(run_id, token)
+    raise RuntimeError("Apify Run lieferte kein Dataset.")
 def normalize_linkedin_url(url: str) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or parsed.hostname not in LINKEDIN_HOSTS:
@@ -166,6 +296,25 @@ def _load_apify_items(input_data: dict[str, object]) -> list[dict[str, object]]:
     if not isinstance(data, list):
         raise RuntimeError("Unerwartetes Apify-Ergebnisformat.")
     return [item for item in data if isinstance(item, dict)]
+
+
+def _load_graphrag_profile(url: str) -> dict[str, object]:
+    base_url = _resolve_graphrag_base_url()
+    request = Request(
+        f"{base_url}/linkedin/profile",
+        data=json.dumps({"url": url}).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT},
+    )
+    try:
+        with urlopen(request, timeout=120, context=_ssl_context()) as response:
+            raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Graphrag LinkedIn-API konnte nicht ausgeführt werden: {exc}") from exc
+
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise RuntimeError("Unerwartetes Graphrag-Ergebnisformat.")
+    return data
 
 
 def _build_search_query_from_links(links: list[str]) -> str:
@@ -251,6 +400,258 @@ def _dedupe_text_items(items: list[str]) -> list[str]:
             seen.add(lowered)
             result.append(normalized)
     return result
+
+
+def _maybe_json(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    trimmed = value.strip()
+    if not trimmed:
+        return value
+    if not ((trimmed.startswith("{") and trimmed.endswith("}")) or (trimmed.startswith("[") and trimmed.endswith("]"))):
+        return value
+    try:
+        return json.loads(trimmed)
+    except json.JSONDecodeError:
+        return value
+
+
+def _split_text_list(value: object) -> list[str]:
+    parsed = _maybe_json(value)
+    if isinstance(parsed, list):
+        parts: list[str] = []
+        for entry in parsed:
+            text = _as_text(entry)
+            if text:
+                parts.append(text)
+        return parts
+    if isinstance(parsed, str):
+        cleaned = re.split(r"[,;|\n]+", parsed)
+        return [item.strip() for item in cleaned if item.strip()]
+    return []
+
+
+def _profile_from_payload(item: dict[str, object], source_url: str | None = None) -> LinkedInProfile:
+    name = _as_text(item.get("name"))
+    if not name:
+        first_name = _as_text(item.get("firstName") or item.get("first_name"))
+        last_name = _as_text(item.get("lastName") or item.get("last_name"))
+        name = " ".join(part for part in [first_name, last_name] if part).strip()
+    if not name:
+        name = _as_text(item.get("publicIdentifier") or item.get("public_identifier")) or "profile"
+
+    raw_location = _maybe_json(item.get("location") or item.get("location_text"))
+    location: str | None = None
+    if isinstance(raw_location, dict):
+        parsed_location = raw_location.get("parsed")
+        if isinstance(parsed_location, dict):
+            location = _as_text(parsed_location.get("text"))
+        location = location or _as_text(raw_location.get("linkedinText")) or _as_text(raw_location.get("text"))
+    else:
+        location = _as_text(raw_location)
+
+    current_employer = _as_text(item.get("current_employer") or item.get("currentEmployer"))
+    current_position = _as_text(item.get("current_position") or item.get("currentPositionText"))
+
+    current_positions = _maybe_json(item.get("currentPosition") or item.get("current_position_list"))
+    if isinstance(current_positions, list) and current_positions:
+        first_position = current_positions[0]
+        if isinstance(first_position, dict):
+            current_employer = current_employer or _as_text(first_position.get("companyName") or first_position.get("company"))
+            current_position = current_position or _as_text(first_position.get("position") or first_position.get("title"))
+
+    headline = _as_text(item.get("headline"))
+    summary = _as_text(item.get("about") or item.get("summary"))
+
+    skills: list[str] = []
+    for skill in _split_text_list(item.get("topSkills") or item.get("top_skills") or item.get("skills")):
+        skills.append(skill)
+
+    experience: list[str] = []
+    experience_value = _maybe_json(item.get("experience") or item.get("work_history") or item.get("workHistory") or item.get("positions"))
+    if isinstance(experience_value, list):
+        for entry in experience_value:
+            if isinstance(entry, dict):
+                formatted = _format_position(entry)
+                if formatted:
+                    experience.append(formatted)
+            else:
+                text = _as_text(entry)
+                if text:
+                    experience.append(text)
+    elif isinstance(experience_value, str) and experience_value.strip():
+        experience.append(experience_value.strip())
+
+    if not experience and current_positions and isinstance(current_positions, list):
+        for entry in current_positions:
+            formatted = _format_position(entry)
+            if formatted:
+                experience.append(formatted)
+
+    education: list[str] = []
+    education_value = _maybe_json(item.get("education") or item.get("educations") or item.get("profileTopEducation"))
+    if isinstance(education_value, list):
+        for entry in education_value:
+            if isinstance(entry, dict):
+                school = _as_text(entry.get("schoolName") or entry.get("school") or entry.get("institution") or entry.get("name"))
+                degree = _as_text(entry.get("degree") or entry.get("level"))
+                field = _as_text(entry.get("fieldOfStudy") or entry.get("field_of_study") or entry.get("major"))
+                parts = [part for part in [school, degree, field] if part]
+                if parts:
+                    education.append(" · ".join(parts))
+            else:
+                text = _as_text(entry)
+                if text:
+                    education.append(text)
+    elif isinstance(education_value, str) and education_value.strip():
+        education.append(education_value.strip())
+
+    return LinkedInProfile(
+        name=name,
+        headline=headline,
+        summary=summary,
+        skills=_dedupe_text_items(skills) or None,
+        experience=_dedupe_text_items(experience) or None,
+        education=_dedupe_text_items(education) or None,
+        location=location,
+        source_url=_as_text(item.get("linkedinUrl") or item.get("linkedin_url")) or source_url,
+        current_employer=current_employer,
+    )
+
+
+def _profile_from_graphrag_payload(payload: dict[str, object], source_url: str | None = None) -> LinkedInProfile:
+    profile_data = payload.get("profile") if isinstance(payload.get("profile"), dict) else payload
+    if not isinstance(profile_data, dict):
+        profile_data = {}
+
+    name = _as_text(
+        profile_data.get("name")
+        or profile_data.get("full_name")
+        or profile_data.get("displayName")
+        or profile_data.get("headline")
+        or profile_data.get("current_position")
+        or profile_data.get("currentPosition")
+    ) or "Unknown LinkedIn Profile"
+
+    current_employer = _as_text(profile_data.get("current_employer") or profile_data.get("currentEmployer") or profile_data.get("company"))
+    current_position = _as_text(profile_data.get("current_position") or profile_data.get("currentPosition") or profile_data.get("title"))
+    location = _as_text(profile_data.get("location") or profile_data.get("geo") or profile_data.get("city"))
+    headline = _as_text(profile_data.get("headline") or current_position or current_employer)
+    summary = _as_text(profile_data.get("notes") or profile_data.get("experience") or profile_data.get("summary"))
+
+    skills: list[str] = []
+    skills_value = profile_data.get("skills")
+    if isinstance(skills_value, list):
+        for skill in skills_value:
+            if isinstance(skill, dict):
+                skill_name = _as_text(skill.get("name") or skill.get("title") or skill.get("label"))
+            else:
+                skill_name = _as_text(skill)
+            if skill_name:
+                skills.append(skill_name)
+
+    experience: list[str] = []
+    work_history = profile_data.get("work_history") or profile_data.get("experience") or profile_data.get("positions")
+    if isinstance(work_history, list):
+        for entry in work_history:
+            formatted = _format_position(entry)
+            if formatted:
+                experience.append(formatted)
+
+    education: list[str] = []
+    educations = profile_data.get("educations") or profile_data.get("education_history") or profile_data.get("education")
+    if isinstance(educations, list):
+        for entry in educations:
+            if isinstance(entry, dict):
+                school = _as_text(entry.get("institution") or entry.get("school") or entry.get("name"))
+                degree = _as_text(entry.get("degree") or entry.get("level") or entry.get("title"))
+                field = _as_text(entry.get("field_of_study") or entry.get("fieldOfStudy") or entry.get("major"))
+                parts = [part for part in [school, degree, field] if part]
+                if parts:
+                    education.append(" · ".join(parts))
+
+    return LinkedInProfile(
+        name=name,
+        headline=headline,
+        summary=summary,
+        skills=_dedupe_text_items(skills) or None,
+        experience=_dedupe_text_items(experience) or None,
+        education=_dedupe_text_items(education) or None,
+        location=location,
+        source_url=_as_text(profile_data.get("linkedin_url") or profile_data.get("url")) or source_url,
+        current_employer=current_employer,
+    )
+
+
+def _merge_profiles(base: LinkedInProfile, enriched: LinkedInProfile) -> LinkedInProfile:
+    return LinkedInProfile(
+        name=enriched.name or base.name,
+        headline=enriched.headline or base.headline,
+        summary=enriched.summary or base.summary,
+        skills=enriched.skills or base.skills,
+        experience=enriched.experience or base.experience,
+        education=enriched.education or base.education,
+        location=enriched.location or base.location,
+        source_url=enriched.source_url or base.source_url,
+        current_employer=enriched.current_employer or base.current_employer,
+    )
+
+
+def _normalize_profile_identity(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https"}:
+        slug = parsed.path.rstrip("/").split("/")[-1]
+        slug = re.sub(r"-\d+$", "", slug)
+        return slug.lower() or None
+    return value.strip().lower() or None
+
+
+def _index_enriched_profiles(items: list[dict[str, object]]) -> dict[str, LinkedInProfile]:
+    indexed: dict[str, LinkedInProfile] = {}
+    for item in items:
+        source_url = _as_text(item.get("linkedinUrl") or item.get("linkedin_url") or item.get("url") or item.get("profileUrl") or item.get("profile_url"))
+        profile = _profile_from_graphrag_payload(item, source_url)
+        candidate_keys = {
+            _normalize_profile_identity(source_url),
+            _normalize_profile_identity(_as_text(item.get("publicIdentifier") or item.get("public_identifier"))),
+            _normalize_profile_identity(profile.name),
+        }
+        for key in candidate_keys:
+            if key:
+                indexed[key] = profile
+    return indexed
+
+
+def _write_profiles(profiles: list[LinkedInProfile]) -> list[Path]:
+    outputs: list[Path] = []
+    for profile in profiles:
+        output = _output_for_profile(profile)
+        write_pdf(profile, output)
+        print(f"PDF erstellt: {output}")
+        print(f"Name: {profile.name}")
+        outputs.append(output)
+    return outputs
+
+
+def _enrich_profile_from_payload(item: dict[str, object]) -> LinkedInProfile:
+    source_url = _as_text(item.get("linkedinUrl") or item.get("linkedin_url") or item.get("profileUrl") or item.get("profile_url") or item.get("url"))
+    base_profile = _profile_from_payload(item, source_url)
+
+    if source_url:
+        try:
+            graphrag_payload = _load_graphrag_profile(source_url)
+            fetched_profile = _profile_from_graphrag_payload(graphrag_payload, source_url)
+            return _merge_profiles(base_profile, fetched_profile)
+        except (ValueError, RuntimeError, OSError):
+            try:
+                fetched_profile = fetch_profile(source_url)
+                return _merge_profiles(base_profile, fetched_profile)
+            except (ValueError, RuntimeError, OSError):
+                return base_profile
+
+    return base_profile
 
 
 def _extract_profile(item: dict[str, object], source_url: str) -> LinkedInProfile:
@@ -518,6 +919,7 @@ def _run_batch(links_file: Path) -> int:
         return 1
 
     indexed_items: dict[str, dict[str, object]] = {}
+    successes = 0
     for item in items:
         candidate_slug = _normalize_profile_slug(_as_text(item.get("linkedinUrl")))
         candidate_identifier = _as_text(item.get("publicIdentifier"))
@@ -552,12 +954,68 @@ def _run_batch(links_file: Path) -> int:
             write_pdf(profile, output)
             print(f"PDF erstellt: {output}")
             print(f"Name: {profile.name}")
+            successes += 1
         except (ValueError, RuntimeError, OSError) as exc:
             failures += 1
             print(f"Fehler bei Link {index}: {exc}", file=sys.stderr)
-    if failures:
+    if successes == 0:
         print(f"Fertig mit {failures} Fehler(n).", file=sys.stderr)
         return 1
+    if failures:
+        print(f"Fertig mit {failures} Fehler(n).", file=sys.stderr)
+    return 0
+
+
+def _run_profiles_json(payload_file: Path) -> int:
+    if not payload_file.exists():
+        print(f"Fehler: Profil-JSON-Datei nicht gefunden: {payload_file}", file=sys.stderr)
+        return 1
+
+    try:
+        raw = payload_file.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Fehler: {exc}", file=sys.stderr)
+        return 1
+
+    if not isinstance(data, list) or not data:
+        print("Fehler: Profil-JSON muss eine nicht-leere Liste enthalten.", file=sys.stderr)
+        return 1
+
+    profile_records: list[tuple[LinkedInProfile, str | None]] = []
+    failures = 0
+    for index, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            failures += 1
+            print(f"Fehler bei Profil {index}: Ungültiges Datenformat.", file=sys.stderr)
+            continue
+        try:
+            source_url = _as_text(item.get("linkedinUrl") or item.get("linkedin_url") or item.get("profileUrl") or item.get("profile_url") or item.get("url"))
+            profile_records.append((_profile_from_payload(item, source_url), source_url))
+        except (ValueError, RuntimeError, OSError) as exc:
+            failures += 1
+            print(f"Fehler bei Profil {index}: {exc}", file=sys.stderr)
+
+    if not profile_records:
+        print(f"Fertig mit {failures} Fehler(n).", file=sys.stderr)
+        return 1
+
+    merged_profiles = [profile for profile, _ in profile_records]
+    source_urls = [source_url for _, source_url in profile_records if source_url]
+    if source_urls:
+        try:
+            enriched_items = _load_linkedin_actor_items(source_urls)
+            enriched_by_key = _index_enriched_profiles(enriched_items)
+            merged_profiles = []
+            for base_profile, source_url in profile_records:
+                enriched_profile = enriched_by_key.get(_normalize_profile_identity(source_url)) if source_url else None
+                merged_profiles.append(_merge_profiles(base_profile, enriched_profile) if enriched_profile else base_profile)
+        except (ValueError, RuntimeError, OSError) as exc:
+            print(f"Warnung: LinkedIn-Anreicherung nicht verfügbar: {exc}", file=sys.stderr)
+
+    _write_profiles(merged_profiles)
+    if failures:
+        print(f"Fertig mit {failures} Fehler(n).", file=sys.stderr)
     return 0
 
 
@@ -565,10 +1023,16 @@ def main() -> int:
     argument_parser = argparse.ArgumentParser(description="Extrahiert LinkedIn-Profile via Apify und speichert sie als PDF.")
     argument_parser.add_argument("url", nargs="?", help="LinkedIn-Profil-URL")
     argument_parser.add_argument("-i", "--links-file", type=Path, help="Textdatei mit LinkedIn-Links, ein Link pro Zeile")
+    argument_parser.add_argument("--profiles-json", type=Path, help="JSON-Datei mit bereits geladenen Profilen für den direkten PDF-Export")
     argument_parser.add_argument("-o", "--output", type=Path, help="Zielpfad der PDF-Datei")
     args = argument_parser.parse_args()
 
     try:
+        if args.profiles_json:
+            if args.output:
+                raise ValueError("--output kann im Direktmodus nicht verwendet werden.")
+            return _run_profiles_json(args.profiles_json)
+
         default_links_file = _default_links_file()
         if args.links_file or (args.url is None and default_links_file is not None):
             links_file = args.links_file or default_links_file

@@ -3,15 +3,17 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng poppler-utils \
+  && apt-get install -y --no-install-recommends python3 python3-reportlab python3-certifi make g++ tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng poppler-utils \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package*.json ./
+COPY backend/package*.json ./
 RUN npm ci --omit=dev || npm install --omit=dev
 
-COPY server.js ./
-COPY src ./src
-COPY scripts ./scripts
+COPY backend/server.js ./server.js
+COPY backend/src ./src
+COPY backend/scripts ./scripts
+COPY batch_tools ./batch_tools
+COPY backend_new ./backend_new
 
 RUN mkdir -p data/uploads data/tmp
 

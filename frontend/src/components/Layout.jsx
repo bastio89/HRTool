@@ -18,7 +18,7 @@ const navItems = [
 ]
 
 const toolsItems = [
-  { to: '/tools', icon: Wrench, labelKey: 'nav.tools' },
+  { to: '/tools', icon: Wrench, labelKey: 'nav.jobs_ch' },
   { to: '/tools/linkedin', icon: Bot, labelKey: 'nav.linkedin' },
 ]
 

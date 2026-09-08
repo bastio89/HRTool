@@ -24,6 +24,7 @@ const candidateDetailsRouter = require('./src/routes/candidate-details');
 const matchingWeightsRouter = require('./src/routes/matching-weights');
 const complianceActionsRouter = require('./src/routes/compliance-actions');
 const addJobRouter = require('./src/routes/add-job');
+const linkedinRouter = require('./src/routes/linkedin');
 const authMiddleware = require('./src/middleware/auth');
 const db = require('./src/database');
 
@@ -69,6 +70,7 @@ app.use('/api/candidate-details', candidateDetailsRouter);
 app.use('/api/matching-weights', matchingWeightsRouter);
 app.use('/api/compliance-actions', complianceActionsRouter);
 app.use('/api/add/job', addJobRouter);
+app.use('/api/linkedin', linkedinRouter);
 
 /**
  * @swagger

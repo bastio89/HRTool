@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shlex
+import ssl
+import time
 from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from models import CandidateProfileExtraction
 
@@ -17,7 +22,7 @@ class LinkedInMCPError(RuntimeError):
 @dataclass(frozen=True)
 class LinkedInMCPSettings:
     command: str | None = None
-    profile_tool_name: str = "extract_profile"
+    profile_tool_name: str = "harvestapi--linkedin-profile-scraper"
     search_tool_name: str = "search_profiles"
 
 
@@ -82,30 +87,67 @@ class _MCPStdioClient:
         if self._stdin is None:
             raise LinkedInMCPError("MCP client is not connected.")
         payload = json.dumps(message, ensure_ascii=False).encode("utf-8")
-        headers = f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii")
-        self._stdin.write(headers + payload)
+        self._stdin.write(payload + b"\n")
         await self._stdin.drain()
 
     async def _read_message(self) -> dict[str, Any]:
         if self._stdout is None:
             raise LinkedInMCPError("MCP client is not connected.")
-        header_block = await self._stdout.readuntil(b"\r\n\r\n")
-        headers = header_block.decode("ascii", errors="ignore").split("\r\n")
-        content_length: int | None = None
-        for header in headers:
-            if header.lower().startswith("content-length:"):
-                content_length = int(header.split(":", 1)[1].strip())
-                break
-        if content_length is None:
-            raise LinkedInMCPError("Missing Content-Length header in MCP response.")
-        payload = await self._stdout.readexactly(content_length)
-        try:
-            return json.loads(payload.decode("utf-8"))
-        except json.JSONDecodeError as exc:
-            raise LinkedInMCPError(f"Invalid MCP JSON payload: {exc}") from exc
+        while True:
+            line = await self._stdout.readline()
+            if not line:
+                raise LinkedInMCPError("MCP process ended before a response was received.")
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if isinstance(message, dict) and message.get("method") == "notifications/message":
+                params = message.get("params")
+                if isinstance(params, dict):
+                    data = params.get("data")
+                    if isinstance(data, dict) and data.get("level") == "error":
+                        raise LinkedInMCPError(_as_text(data.get("text")) or json.dumps(data, ensure_ascii=False))
+                continue
+
+            if isinstance(message, dict):
+                return message
 
     async def call_tool(self, tool_name: str, arguments: Mapping[str, Any]) -> Any:
         return await self._request("tools/call", {"name": tool_name, "arguments": dict(arguments)})
+
+
+def _ssl_context() -> ssl.SSLContext:
+    return ssl.create_default_context()
+
+
+def _resolve_apify_token() -> str | None:
+    token = os.environ.get("APIFY_TOKEN")
+    if token:
+        return token
+    return None
+
+
+def _load_apify_items(input_data: dict[str, object]) -> list[dict[str, object]]:
+    token = _resolve_apify_token()
+    if not token:
+        raise LinkedInMCPError("APIFY_TOKEN is not configured.")
+
+    request = Request(
+        f"https://api.apify.com/v2/acts/harvestapi~linkedin-profile-scraper/run-sync-get-dataset-items?token={token}",
+        data=json.dumps(input_data).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=120, context=_ssl_context()) as response:
+            raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise LinkedInMCPError(f"Apify actor request failed: {exc}") from exc
+
+    data = json.loads(raw)
+    if not isinstance(data, list):
+        raise LinkedInMCPError("Unexpected Apify response format.")
+    return [item for item in data if isinstance(item, dict)]
 
 
 def _as_text(value: Any) -> str | None:
@@ -321,14 +363,14 @@ class LinkedInMCPService:
         return cls(
             LinkedInMCPSettings(
                 command=getattr(settings, "apify_linkedin_mcp_command", None),
-                profile_tool_name=getattr(settings, "apify_linkedin_mcp_profile_tool_name", "extract_profile"),
+                profile_tool_name=getattr(settings, "apify_linkedin_mcp_profile_tool_name", "harvestapi--linkedin-profile-scraper"),
                 search_tool_name=getattr(settings, "apify_linkedin_mcp_search_tool_name", "search_profiles"),
             )
         )
 
     @property
     def is_configured(self) -> bool:
-        return bool(self._settings.command and self._settings.command.strip())
+        return bool(_resolve_apify_token() or (self._settings.command and self._settings.command.strip()))
 
     def _split_command(self) -> list[str]:
         if not self._settings.command:
@@ -340,11 +382,16 @@ class LinkedInMCPService:
 
     async def extract_profile(self, url: str) -> CandidateProfileExtraction:
         if not self.is_configured:
-            raise LinkedInMCPError("APIFY LinkedIn MCP command is not configured.")
-        async with _MCPStdioClient(self._split_command()) as client:
-            result = await client.call_tool(self._profile_tool_name, {"url": url})
-            payload = _extract_text_content(result)
-            return normalize_linkedin_profile(payload, source_url=url)
+            raise LinkedInMCPError("APIFY_TOKEN is not configured.")
+        items = _load_apify_items(
+            {
+                "queries": [url],
+                "profileScraperMode": "Profile details no email ($4 per 1k)",
+            }
+        )
+        if not items:
+            raise LinkedInMCPError("Apify actor returned no profile items.")
+        return normalize_linkedin_profile(items[0], source_url=url)
 
     async def search_profiles(self, query: str) -> list[CandidateProfileExtraction]:
         if not self.is_configured:

@@ -6,6 +6,7 @@ export default {
   'nav.matching': 'Matching',
   'nav.history': 'Historie',
   'nav.tools': 'Tools',
+  'nav.jobs_ch': 'Jobs.ch',
   'nav.linkedin': 'LinkedIn',
   'nav.admin': 'Administration',
   'nav.review': 'Prüfung',

@@ -6,6 +6,84 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+function parseCsvText(text) {
+  const source = String(text || '').replace(/^\uFEFF/, '')
+  if (!source.trim()) return []
+
+  const rows = []
+  let currentRow = []
+  let currentCell = ''
+  let inQuotes = false
+
+  const pushCell = () => {
+    currentRow.push(currentCell)
+    currentCell = ''
+  }
+
+  const pushRow = () => {
+    if (currentRow.length === 0 && !currentCell) return
+    pushCell()
+    if (currentRow.some(cell => String(cell).trim() !== '')) {
+      rows.push(currentRow)
+    }
+    currentRow = []
+  }
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index]
+    if (char === '"') {
+      if (inQuotes && source[index + 1] === '"') {
+        currentCell += '"'
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+
+    if (!inQuotes && (char === ',' || char === ';')) {
+      pushCell()
+      continue
+    }
+
+    if (!inQuotes && (char === '\n' || char === '\r')) {
+      if (char === '\r' && source[index + 1] === '\n') {
+        index += 1
+      }
+      pushRow()
+      continue
+    }
+
+    currentCell += char
+  }
+
+  pushRow()
+
+  if (rows.length === 0) return []
+  const headers = rows.shift().map(header => header.trim())
+  return rows.map(row => {
+    const record = {}
+    headers.forEach((header, index) => {
+      record[header] = row[index] ?? ''
+    })
+    return record
+  })
+}
+
+function parseFilenameFromDisposition(disposition) {
+  if (!disposition) return null
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch {
+      return utf8Match[1]
+    }
+  }
+  const quotedMatch = disposition.match(/filename="?([^";]+)"?/i)
+  return quotedMatch?.[1] || null
+}
+
 async function request(url, options = {}) {
   const { timeout, ...fetchOptions } = options;
   let controller, timeoutId;
@@ -352,6 +430,54 @@ export const cvParserApi = {
     return jsonResult;
   },
 };
+
+export const linkedinApi = {
+  searchProfiles: async (payload) => {
+    const response = await fetch(`${GRAPHRAG_API_BASE}/linkedin/people-search.csv`, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json',
+        Accept: 'text/csv',
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      let detail = errorText || `HTTP ${response.status}`
+      try {
+        const parsed = JSON.parse(errorText)
+        detail = parsed.detail || parsed.error || detail
+      } catch (_) {}
+      throw new Error(detail)
+    }
+
+    const csvText = await response.text()
+    return {
+      filename: response.headers.get('Content-Disposition') || null,
+      rows: parseCsvText(csvText),
+    }
+  },
+  exportProfilesAsPdf: async (profiles) => {
+    const response = await fetch(`${API_BASE}/linkedin/export-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ profiles }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }))
+      throw new Error(error.error || error.details || `HTTP ${response.status}`)
+    }
+
+    return {
+      blob: await response.blob(),
+      filename: parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'linkedin-profiles.zip',
+      warning: response.headers.get('X-HRTool-LinkedIn-Warning') || null,
+    }
+  },
+}
 
 // AI-Logs API (EU AI Act Compliance)
 export const aiLogsApi = {

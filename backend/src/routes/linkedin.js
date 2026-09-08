@@ -11,11 +11,22 @@ const pythonScript = path.join(repoRoot, 'batch_tools', 'linkedin_profile_to_pdf
 
 function normalizeLinks(body) {
   if (Array.isArray(body?.profiles)) {
-    return body.profiles.filter((profile) => profile && typeof profile === 'object')
+    return body.profiles
+      .filter((profile) => profile && typeof profile === 'object')
+      .map((profile) => {
+        if (profile.linkedinUrl || profile.linkedin_url || profile.profileUrl || profile.profile_url || profile.url) {
+          return profile
+        }
+
+        return profile
+      })
   }
 
   if (Array.isArray(body?.links)) {
-    return body.links.map((link) => (typeof link === 'string' ? link.trim() : '')).filter(Boolean)
+    return body.links
+      .map((link) => (typeof link === 'string' ? link.trim() : ''))
+      .filter(Boolean)
+      .map((link) => ({ linkedinUrl: link }))
   }
 
   return []

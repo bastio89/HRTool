@@ -29,11 +29,15 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
     certifi = None
 
 
-LINKEDIN_HOSTS = {"linkedin.com", "www.linkedin.com"}
+def _is_linkedin_host(hostname: str | None) -> bool:
+    if not hostname:
+        return False
+    hostname = hostname.lower()
+    return hostname == "linkedin.com" or hostname.endswith(".linkedin.com")
 APIFY_ACTOR_ID = "harvestapi/linkedin-profile-search"
 APIFY_API_URL = f"https://api.apify.com/v2/acts/{APIFY_ACTOR_ID.replace('/', '~')}/run-sync-get-dataset-items"
-APIFY_ENRICHMENT_ACTOR_ID = "harvestapi/linkedin-profile-scraper"
-APIFY_ENRICHMENT_RUN_URL = f"https://api.apify.com/v2/actors/{APIFY_ENRICHMENT_ACTOR_ID.replace('/', '~')}/runs"
+APIFY_FULL_SECTIONS_ACTOR_ID = "apimaestro/linkedin-profile-full-sections-scraper"
+APIFY_FULL_SECTIONS_API_URL = f"https://api.apify.com/v2/acts/{APIFY_FULL_SECTIONS_ACTOR_ID.replace('/', '~')}/run-sync-get-dataset-items"
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -54,6 +58,9 @@ class LinkedInProfile:
     skills: list[str] | None = None
     experience: list[str] | None = None
     education: list[str] | None = None
+    certifications: list[str] | None = None
+    projects: list[str] | None = None
+    languages: list[str] | None = None
     location: str | None = None
     source_url: str | None = None
     current_employer: str | None = None
@@ -114,25 +121,6 @@ def _resolve_apify_token() -> str | None:
         token = values.get("APIFY_TOKEN")
         if token:
             os.environ.setdefault("APIFY_TOKEN", token)
-            return token
-    return None
-
-
-def _resolve_apify_enrichment_token() -> str | None:
-    token = os.environ.get("APIFY_HARVESTAPI_TOKEN") or os.environ.get("APIFY_TOKEN")
-    if token:
-        return token
-
-    candidate_files = [
-        Path.cwd() / ".env",
-        Path(__file__).resolve().parents[1] / ".env",
-        Path(__file__).resolve().parents[2] / ".env",
-    ]
-    for candidate in candidate_files:
-        values = _read_env_file(candidate)
-        token = values.get("APIFY_HARVESTAPI_TOKEN") or values.get("APIFY_TOKEN")
-        if token:
-            os.environ.setdefault("APIFY_HARVESTAPI_TOKEN", token)
             return token
     return None
 
@@ -201,51 +189,32 @@ def _load_apify_run_dataset_items(run_id: str, token: str) -> list[dict[str, obj
 
 
 def _load_linkedin_actor_items(urls: list[str]) -> list[dict[str, object]]:
-    token = _resolve_apify_enrichment_token()
+    token = _resolve_apify_token()
     if not token:
         raise RuntimeError("APIFY_TOKEN ist nicht gesetzt. Lege ihn in der Shell oder in der lokalen .env-Datei ab.")
 
-    tool_arguments: dict[str, object] = {
-        "urls": urls,
-        "queries": urls,
-        "profileScraperMode": "Profile details no email ($4 per 1k)",
-        "userAgent": USER_AGENT,
-        "scrapeCompany": True,
-        "proxy": {"useApifyProxy": True, "apifyProxyCountry": "US"},
-        "minDelay": 10,
-        "maxDelay": 20,
-    }
+    profile_urls: list[str] = []
+    for url in urls:
+        normalized_url = normalize_linkedin_url(url)
+        if normalized_url not in profile_urls:
+            profile_urls.append(normalized_url)
+    if not profile_urls:
+        raise ValueError("Keine gültigen LinkedIn-Profile-URLs aus den Links ableitbar.")
 
-    request = Request(
-        f"{APIFY_ENRICHMENT_RUN_URL}?token={token}&waitForFinish=120",
-        data=json.dumps(tool_arguments).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT},
+    return _load_apify_actor_items(
+        APIFY_FULL_SECTIONS_API_URL,
+        {
+            "usernames": profile_urls,
+            "includeEmail": False,
+            "locale": "",
+        },
+        token=token,
     )
-    try:
-        with urlopen(request, timeout=120, context=_ssl_context()) as response:
-            raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise RuntimeError(f"Apify Run konnte nicht gestartet werden: {exc}") from exc
 
-    data = json.loads(raw)
-    if not isinstance(data, dict):
-        raise RuntimeError("Unerwartetes Apify-Run-Format.")
 
-    run = data.get("data") if isinstance(data.get("data"), dict) else data
-    if not isinstance(run, dict):
-        raise RuntimeError("Unerwartetes Apify-Run-Format.")
-
-    status = _as_text(run.get("status"))
-    dataset_id = _as_text(run.get("defaultDatasetId") or run.get("datasetId"))
-    run_id = _as_text(run.get("id"))
-    if status == "SUCCEEDED" and dataset_id:
-        return _load_apify_dataset_items(dataset_id, token=token)
-    if run_id:
-        return _load_apify_run_dataset_items(run_id, token)
-    raise RuntimeError("Apify Run lieferte kein Dataset.")
 def normalize_linkedin_url(url: str) -> str:
     parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or parsed.hostname not in LINKEDIN_HOSTS:
+    if parsed.scheme not in {"http", "https"} or not _is_linkedin_host(parsed.hostname):
         raise ValueError("Es sind nur http(s)-Links von linkedin.com erlaubt.")
     if not parsed.path.startswith("/in/"):
         raise ValueError("Es werden LinkedIn-Profil-URLs im Format https://www.linkedin.com/in/... erwartet.")
@@ -283,6 +252,29 @@ def _load_apify_items(input_data: dict[str, object]) -> list[dict[str, object]]:
     payload = dict(input_data)
     request = Request(
         f"{APIFY_API_URL}?token={token}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT},
+    )
+    try:
+        with urlopen(request, timeout=120, context=_ssl_context()) as response:
+            raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise RuntimeError(f"Apify Actor konnte nicht ausgeführt werden: {exc}") from exc
+
+    data = json.loads(raw)
+    if not isinstance(data, list):
+        raise RuntimeError("Unerwartetes Apify-Ergebnisformat.")
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _load_apify_actor_items(actor_url: str, input_data: dict[str, object], token: str | None = None) -> list[dict[str, object]]:
+    token = token or _resolve_apify_token()
+    if not token:
+        raise RuntimeError("APIFY_TOKEN ist nicht gesetzt. Lege ihn in der Shell oder in der lokalen .env-Datei ab.")
+
+    payload = dict(input_data)
+    request = Request(
+        f"{actor_url}?token={token}",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT},
     )
@@ -431,6 +423,29 @@ def _split_text_list(value: object) -> list[str]:
     return []
 
 
+def _format_label_value(item: object, *, label_keys: tuple[str, ...], value_keys: tuple[str, ...]) -> str | None:
+    if isinstance(item, str):
+        text = item.strip()
+        return text or None
+    if not isinstance(item, dict):
+        return None
+
+    label = None
+    for key in label_keys:
+        label = _as_text(item.get(key))
+        if label:
+            break
+
+    value = None
+    for key in value_keys:
+        value = _as_text(item.get(key))
+        if value:
+            break
+
+    parts = [part for part in [label, value] if part]
+    return " · ".join(parts) if parts else None
+
+
 def _profile_from_payload(item: dict[str, object], source_url: str | None = None) -> LinkedInProfile:
     name = _as_text(item.get("name"))
     if not name:
@@ -570,6 +585,42 @@ def _profile_from_graphrag_payload(payload: dict[str, object], source_url: str |
                 if parts:
                     education.append(" · ".join(parts))
 
+    certifications: list[str] = []
+    certifications_value = profile_data.get("certifications") or profile_data.get("certificates")
+    if isinstance(certifications_value, list):
+        for entry in certifications_value:
+            formatted = _format_label_value(
+                entry,
+                label_keys=("title", "name"),
+                value_keys=("issuedBy", "issued_by", "issuedAt", "issued_at"),
+            )
+            if formatted:
+                certifications.append(formatted)
+
+    projects: list[str] = []
+    projects_value = profile_data.get("projects")
+    if isinstance(projects_value, list):
+        for entry in projects_value:
+            formatted = _format_label_value(
+                entry,
+                label_keys=("title", "name"),
+                value_keys=("description", "duration", "associatedWith", "associated_with"),
+            )
+            if formatted:
+                projects.append(formatted)
+
+    languages: list[str] = []
+    languages_value = profile_data.get("languages")
+    if isinstance(languages_value, list):
+        for entry in languages_value:
+            formatted = _format_label_value(
+                entry,
+                label_keys=("name", "language"),
+                value_keys=("proficiency", "level", "description"),
+            )
+            if formatted:
+                languages.append(formatted)
+
     return LinkedInProfile(
         name=name,
         headline=headline,
@@ -577,9 +628,147 @@ def _profile_from_graphrag_payload(payload: dict[str, object], source_url: str |
         skills=_dedupe_text_items(skills) or None,
         experience=_dedupe_text_items(experience) or None,
         education=_dedupe_text_items(education) or None,
+        certifications=_dedupe_text_items(certifications) or None,
+        projects=_dedupe_text_items(projects) or None,
+        languages=_dedupe_text_items(languages) or None,
         location=location,
         source_url=_as_text(profile_data.get("linkedin_url") or profile_data.get("url")) or source_url,
         current_employer=current_employer,
+    )
+
+
+def _profile_from_full_sections_payload(payload: dict[str, object], source_url: str | None = None) -> LinkedInProfile:
+    profile_data = payload.get("basic_info") if isinstance(payload.get("basic_info"), dict) else payload
+    if not isinstance(profile_data, dict):
+        profile_data = {}
+
+    location_value = profile_data.get("location")
+    location: str | None = None
+    if isinstance(location_value, dict):
+        location = _as_text(location_value.get("full") or location_value.get("linkedinText"))
+        if not location and isinstance(location_value.get("parsed"), dict):
+            parsed_location = location_value["parsed"]
+            if isinstance(parsed_location, dict):
+                location = _as_text(parsed_location.get("text"))
+    else:
+        location = _as_text(location_value)
+
+    first_name = _as_text(profile_data.get("first_name") or profile_data.get("firstName"))
+    last_name = _as_text(profile_data.get("last_name") or profile_data.get("lastName"))
+    name = _as_text(profile_data.get("fullname") or profile_data.get("name"))
+    if not name:
+        name = " ".join(part for part in [first_name, last_name] if part).strip()
+    if not name:
+        name = _as_text(profile_data.get("public_identifier") or profile_data.get("publicIdentifier")) or "Unknown LinkedIn Profile"
+
+    current_employer = _as_text(profile_data.get("current_company") or profile_data.get("currentCompany") or profile_data.get("current_employer") or profile_data.get("company"))
+    if not current_employer:
+        experience_items = payload.get("experience")
+        if isinstance(experience_items, list):
+            for entry in experience_items:
+                if isinstance(entry, dict) and entry.get("is_current"):
+                    current_employer = _as_text(entry.get("company") or entry.get("companyName"))
+                    if current_employer:
+                        break
+
+    headline = _as_text(profile_data.get("headline") or profile_data.get("position") or current_employer)
+    summary = _as_text(profile_data.get("about") or payload.get("about") or payload.get("summary"))
+
+    skills: list[str] = []
+    skills_value = payload.get("skills")
+    if isinstance(skills_value, list):
+        for skill in skills_value:
+            if isinstance(skill, dict):
+                skill_name = _as_text(skill.get("name") or skill.get("title") or skill.get("label"))
+            else:
+                skill_name = _as_text(skill)
+            if skill_name:
+                skills.append(skill_name)
+    for skill in _split_text_list(profile_data.get("top_skills") or profile_data.get("topSkills")):
+        skills.append(skill)
+
+    experience: list[str] = []
+    experience_items = payload.get("experience")
+    if isinstance(experience_items, list):
+        for entry in experience_items:
+            formatted = _format_position(entry)
+            if formatted:
+                experience.append(formatted)
+
+    education: list[str] = []
+    education_items = payload.get("education")
+    if isinstance(education_items, list):
+        for entry in education_items:
+            if isinstance(entry, dict):
+                school = _as_text(entry.get("school_name") or entry.get("schoolName") or entry.get("institution") or entry.get("name"))
+                degree = _as_text(entry.get("degree") or entry.get("level") or entry.get("title"))
+                field = _as_text(entry.get("field_of_study") or entry.get("fieldOfStudy") or entry.get("major"))
+                parts = [part for part in [school, degree, field] if part]
+                if parts:
+                    education.append(" · ".join(parts))
+
+    certifications: list[str] = []
+    certifications_items = payload.get("certifications")
+    if isinstance(certifications_items, list):
+        for entry in certifications_items:
+            formatted = _format_label_value(
+                entry,
+                label_keys=("title", "name"),
+                value_keys=("issuedBy", "issued_by", "issuedAt", "issued_at"),
+            )
+            if formatted:
+                certifications.append(formatted)
+
+    projects: list[str] = []
+    projects_items = payload.get("projects")
+    if isinstance(projects_items, list):
+        for entry in projects_items:
+            formatted = _format_label_value(
+                entry,
+                label_keys=("title", "name"),
+                value_keys=("description", "duration", "associatedWith", "associated_with"),
+            )
+            if formatted:
+                projects.append(formatted)
+
+    languages: list[str] = []
+    languages_items = payload.get("languages")
+    if isinstance(languages_items, list):
+        for entry in languages_items:
+            formatted = _format_label_value(
+                entry,
+                label_keys=("name", "language"),
+                value_keys=("proficiency", "level", "description"),
+            )
+            if formatted:
+                languages.append(formatted)
+
+    return LinkedInProfile(
+        name=name,
+        headline=headline,
+        summary=summary,
+        skills=_dedupe_text_items(skills) or None,
+        experience=_dedupe_text_items(experience) or None,
+        education=_dedupe_text_items(education) or None,
+        certifications=_dedupe_text_items(certifications) or None,
+        projects=_dedupe_text_items(projects) or None,
+        languages=_dedupe_text_items(languages) or None,
+        location=location,
+        source_url=_as_text(payload.get("profileUrl") or profile_data.get("profile_url") or profile_data.get("linkedin_url")) or source_url,
+        current_employer=current_employer,
+    )
+
+
+def _is_useful_full_sections_item(item: dict[str, object]) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if item.get("errorDetails") or item.get("message"):
+        return False
+    if isinstance(item.get("basic_info"), dict):
+        return True
+    return any(
+        isinstance(item.get(key), list) and item.get(key)
+        for key in ("experience", "education", "certifications", "projects", "languages", "skills")
     )
 
 
@@ -591,6 +780,9 @@ def _merge_profiles(base: LinkedInProfile, enriched: LinkedInProfile) -> LinkedI
         skills=enriched.skills or base.skills,
         experience=enriched.experience or base.experience,
         education=enriched.education or base.education,
+        certifications=enriched.certifications or base.certifications,
+        projects=enriched.projects or base.projects,
+        languages=enriched.languages or base.languages,
         location=enriched.location or base.location,
         source_url=enriched.source_url or base.source_url,
         current_employer=enriched.current_employer or base.current_employer,
@@ -611,11 +803,15 @@ def _normalize_profile_identity(value: str | None) -> str | None:
 def _index_enriched_profiles(items: list[dict[str, object]]) -> dict[str, LinkedInProfile]:
     indexed: dict[str, LinkedInProfile] = {}
     for item in items:
+        if not _is_useful_full_sections_item(item):
+            continue
         source_url = _as_text(item.get("linkedinUrl") or item.get("linkedin_url") or item.get("url") or item.get("profileUrl") or item.get("profile_url"))
-        profile = _profile_from_graphrag_payload(item, source_url)
+        profile = _profile_from_full_sections_payload(item, source_url)
+        if profile.name == "Unknown LinkedIn Profile" and not any([profile.headline, profile.summary, profile.skills, profile.experience, profile.education, profile.certifications, profile.projects, profile.languages, profile.location, profile.current_employer]):
+            continue
         candidate_keys = {
             _normalize_profile_identity(source_url),
-            _normalize_profile_identity(_as_text(item.get("publicIdentifier") or item.get("public_identifier"))),
+            _normalize_profile_identity(_as_text(item.get("publicIdentifier") or item.get("public_identifier") or item.get("basic_info", {}).get("public_identifier") if isinstance(item.get("basic_info"), dict) else None)),
             _normalize_profile_identity(profile.name),
         }
         for key in candidate_keys:
@@ -846,7 +1042,11 @@ def write_pdf(profile: LinkedInProfile, output: Path) -> None:
         author="HRTool",
     )
 
-    story: list[object] = [_paragraph(profile.name, title_style)]
+    title_text = profile.name
+    if profile.headline:
+        title_text = f"{profile.name} – {profile.headline}"
+
+    story: list[object] = [_paragraph(title_text, title_style)]
     metadata = [item for item in [profile.headline, profile.location] if item]
     story.extend(_paragraph(item, meta_style) for item in metadata)
     story.append(Spacer(1, 8))
@@ -871,6 +1071,21 @@ def write_pdf(profile: LinkedInProfile, output: Path) -> None:
     if profile.education:
         story.append(_paragraph("Ausbildung", heading_style))
         for entry in profile.education:
+            story.append(_paragraph(entry, entry_meta_style))
+
+    if profile.certifications:
+        story.append(_paragraph("Zertifikate", heading_style))
+        for entry in profile.certifications:
+            story.append(_paragraph(entry, entry_meta_style))
+
+    if profile.projects:
+        story.append(_paragraph("Projekte", heading_style))
+        for entry in profile.projects:
+            story.append(_paragraph(entry, entry_meta_style))
+
+    if profile.languages:
+        story.append(_paragraph("Sprachen", heading_style))
+        for entry in profile.languages:
             story.append(_paragraph(entry, entry_meta_style))
 
     story.extend([Spacer(1, 12), _paragraph(f"Quelle: {profile.source_url}", meta_style)])
@@ -899,7 +1114,7 @@ def _output_for_profile(profile: LinkedInProfile) -> Path:
     first_name, last_name = (profile.name.split(" ", 1) + [None])[:2]
     first_name = first_name.title() if first_name else "profile"
     last_name = last_name.title() if last_name else "profile"
-    employer = profile.current_employer or "unbekannt"
+    employer = profile.current_employer or profile.headline or "unbekannt"
     filename = " - ".join(
         [
             f"{_shorten_component(_filename_component(first_name, 'profile'))}.{_shorten_component(_filename_component(last_name, 'profile'))}",
@@ -908,7 +1123,6 @@ def _output_for_profile(profile: LinkedInProfile) -> Path:
         ]
     )
     return Path.cwd() / f"{filename}.pdf"
-
 
 def _run_batch(links_file: Path) -> int:
     links = _load_links_file(links_file)

@@ -459,11 +459,11 @@ export const linkedinApi = {
       rows: parseCsvText(csvText),
     }
   },
-  exportProfilesAsPdf: async (profiles) => {
+  exportProfilesAsPdf: async (links) => {
     const response = await fetch(`${API_BASE}/linkedin/export-pdf`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ profiles }),
+      body: JSON.stringify({ links }),
     })
 
     if (!response.ok) {

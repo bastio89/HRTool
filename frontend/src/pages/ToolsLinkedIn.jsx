@@ -138,15 +138,15 @@ export default function ToolsLinkedIn() {
   }
 
   const exportSelectedAsPdf = async () => {
-    const profiles = selectedRows.filter((row) => getProfileLink(row))
-    if (!profiles.length) {
+    const links = selectedRows.map((row) => getProfileLink(row)).filter(Boolean)
+    if (!links.length) {
       toast.warning('Bitte zuerst mindestens ein Profil auswählen.')
       return
     }
 
     setExporting(true)
     try {
-      const result = await linkedinApi.exportProfilesAsPdf(profiles)
+      const result = await linkedinApi.exportProfilesAsPdf(links)
       const downloadUrl = URL.createObjectURL(result.blob)
       const downloadLink = document.createElement('a')
       downloadLink.href = downloadUrl

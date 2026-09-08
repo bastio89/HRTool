@@ -3,11 +3,18 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const db = require('../database')
 
 const router = express.Router()
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const pythonScript = path.join(repoRoot, 'batch_tools', 'linkedin_profile_to_pdf.py')
+
+function readApifyToken() {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('apify_token')
+  const stored = typeof row?.value === 'string' ? row.value.trim() : ''
+  return stored || (typeof process.env.APIFY_TOKEN === 'string' ? process.env.APIFY_TOKEN.trim() : '') || ''
+}
 
 function normalizeLinks(body) {
   if (Array.isArray(body?.profiles)) {
@@ -41,12 +48,16 @@ router.post('/export-pdf', (req, res) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hrtool-linkedin-'))
   const profilesFile = path.join(tempDir, 'linkedin-profiles.json')
   fs.writeFileSync(profilesFile, `${JSON.stringify(profiles, null, 2)}\n`, 'utf8')
+  const apifyToken = readApifyToken()
 
   try {
     const result = spawnSync('python3', [pythonScript, '--profiles-json', profilesFile], {
       cwd: tempDir,
       encoding: 'utf8',
-      env: process.env,
+      env: {
+        ...process.env,
+        ...(apifyToken ? { APIFY_TOKEN: apifyToken } : {}),
+      },
       maxBuffer: 10 * 1024 * 1024,
     })
 

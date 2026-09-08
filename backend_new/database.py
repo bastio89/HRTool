@@ -12,6 +12,20 @@ def get_connection() -> psycopg.Connection:
     return psycopg.connect(settings.DATABASE_URL, row_factory=dict_row)
 
 
+def get_setting(key: str) -> str | None:
+    with get_connection() as connection:
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute('SELECT value FROM settings WHERE key = %s', (key,))
+            row = cursor.fetchone()
+    if not row:
+        return None
+    value = row.get('value') if isinstance(row, dict) else None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return None
+
+
 def init_db() -> None:
     with get_connection() as connection:
         with connection.cursor() as cursor:

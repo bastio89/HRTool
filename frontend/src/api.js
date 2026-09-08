@@ -566,6 +566,8 @@ export const settingsApi = {
   update: (key, value) => request(`/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   getExpired: () => request('/settings/dsgvo/expired'),
   deleteExpired: () => request('/settings/dsgvo/delete-expired', { method: 'DELETE' }),
+  getApifyStatus: () => request('/settings/apify/status'),
+  saveApifyConfig: (apiToken) => request('/settings/apify/config', { method: 'PUT', body: JSON.stringify({ apiToken }) }),
   // KI-Konfiguration (Host & Modell)
   getAiConfig: () => request('/settings/ai/config'),
   saveAiConfig: (data) => request('/settings/ai/config', { method: 'PUT', body: JSON.stringify(data) }),

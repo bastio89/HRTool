@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Linkedin, Search, Square, CheckSquare, ExternalLink, Download, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '../components/UI'
 import { useToast } from '../components/Toast'
-import { linkedinApi } from '../api'
+import { linkedinApi, settingsApi } from '../api'
 
 function parseMaybeJson(value) {
   if (typeof value !== 'string') return value
@@ -76,6 +76,13 @@ function getSkills(row) {
   return toText(row.skills)
 }
 
+function formatUsd(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '—'
+  }
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'USD' }).format(Number(value))
+}
+
 export default function ToolsLinkedIn() {
   const toast = useToast()
   const [keywords, setKeywords] = useState('treasury')
@@ -87,6 +94,27 @@ export default function ToolsLinkedIn() {
   const [error, setError] = useState('')
   const [rows, setRows] = useState([])
   const [selectedLinks, setSelectedLinks] = useState(() => new Set())
+  const [apifyToken, setApifyToken] = useState('')
+  const [apifySaving, setApifySaving] = useState(false)
+  const [apifyLoading, setApifyLoading] = useState(false)
+  const [apifyStatus, setApifyStatus] = useState(null)
+
+  const loadApifyStatus = async () => {
+    setApifyLoading(true)
+    try {
+      const status = await settingsApi.getApifyStatus()
+      setApifyStatus(status)
+    } catch (err) {
+      const message = err.message || 'Apify-Status konnte nicht geladen werden'
+      setApifyStatus({ reachable: false, tokenConfigured: false, error: message })
+    } finally {
+      setApifyLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadApifyStatus()
+  }, [])
 
   const selectedRows = useMemo(() => rows.filter((row) => selectedLinks.has(getProfileLink(row))), [rows, selectedLinks])
   const allSelectableSelected = rows.length > 0 && rows.every((row) => {
@@ -168,6 +196,27 @@ export default function ToolsLinkedIn() {
     }
   }
 
+  const saveApifyToken = async () => {
+    const token = apifyToken.trim()
+    if (!token) {
+      toast.warning('Bitte zuerst einen APIFY_TOKEN eintragen.')
+      return
+    }
+
+    setApifySaving(true)
+    try {
+      await settingsApi.saveApifyConfig(token)
+      setApifyToken('')
+      await loadApifyStatus()
+      toast.success('APIFY_TOKEN gespeichert')
+    } catch (err) {
+      const message = err.message || 'APIFY_TOKEN konnte nicht gespeichert werden'
+      toast.error(message)
+    } finally {
+      setApifySaving(false)
+    }
+  }
+
   return (
     <div className="max-w-[1200px] mx-auto fade-in">
       <div className="mb-8 sm:mb-12">
@@ -189,6 +238,65 @@ export default function ToolsLinkedIn() {
       </div>
 
       <div className="grid gap-6">
+        <section className="rounded-[28px] border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-[#1c1c1e] p-6 sm:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
+            <div>
+              <h2 className="text-[18px] font-semibold text-black dark:text-white">APIFY</h2>
+              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">Token wird in Postgres gespeichert und für LinkedIn-Exports verwendet.</p>
+            </div>
+            <Button type="button" variant="secondary" size="md" onClick={() => void loadApifyStatus()} disabled={apifyLoading}>
+              {apifyLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+              Status aktualisieren
+            </Button>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <label className="space-y-2">
+              <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">APIFY_TOKEN</span>
+              <input
+                type="password"
+                value={apifyToken}
+                onChange={(e) => setApifyToken(e.target.value)}
+                placeholder="apify_api_..."
+                className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-transparent focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 focus:border-[#0071e3]/30"
+              />
+            </label>
+            <Button type="button" variant="dark" size="md" onClick={saveApifyToken} disabled={apifySaving}>
+              {apifySaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+              Speichern
+            </Button>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] px-4 py-3">
+              <div className="text-[12px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Token</div>
+              <div className="mt-1 text-[15px] font-semibold text-black dark:text-white">
+                {apifyStatus?.tokenConfigured ? 'Konfiguriert' : 'Nicht konfiguriert'}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] px-4 py-3">
+              <div className="text-[12px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Verbraucht</div>
+              <div className="mt-1 text-[15px] font-semibold text-black dark:text-white">{formatUsd(apifyStatus?.monthlyUsageUsd)}</div>
+            </div>
+            <div className="rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] px-4 py-3">
+              <div className="text-[12px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Verfügbar</div>
+              <div className="mt-1 text-[15px] font-semibold text-black dark:text-white">{formatUsd(apifyStatus?.remainingMonthlyUsageUsd)}</div>
+            </div>
+          </div>
+
+          {apifyStatus?.usageCycle?.startAt && apifyStatus?.usageCycle?.endAt && (
+            <p className="mt-4 text-[13px] text-gray-500 dark:text-gray-400">
+              Zeitraum: {new Date(apifyStatus.usageCycle.startAt).toLocaleDateString('de-DE')} bis {new Date(apifyStatus.usageCycle.endAt).toLocaleDateString('de-DE')}
+            </p>
+          )}
+
+          {apifyStatus?.error && (
+            <div className="mt-4 rounded-2xl border border-[#ff3b30]/20 bg-[#ff3b30]/10 px-5 py-4 text-[14px] text-[#b91c1c] dark:text-[#ff8a80]">
+              {apifyStatus.error}
+            </div>
+          )}
+        </section>
+
         <section className="rounded-[28px] border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-[#1c1c1e] p-8 shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
           <form onSubmit={runSearch} className="space-y-5">
             <div className="flex items-center gap-3 mb-1">

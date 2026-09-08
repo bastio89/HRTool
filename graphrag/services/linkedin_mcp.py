@@ -12,6 +12,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from config import settings
 from models import CandidateProfileExtraction
 
 
@@ -22,7 +23,6 @@ class LinkedInMCPError(RuntimeError):
 @dataclass(frozen=True)
 class LinkedInMCPSettings:
     command: str | None = None
-    profile_tool_name: str = "harvestapi--linkedin-profile-scraper"
     search_tool_name: str = "search_profiles"
 
 
@@ -125,7 +125,7 @@ def _resolve_apify_token() -> str | None:
     token = os.environ.get("APIFY_TOKEN")
     if token:
         return token
-    return None
+    return settings.resolved_apify_token
 
 
 def _load_apify_items(input_data: dict[str, object]) -> list[dict[str, object]]:
@@ -351,11 +351,9 @@ class LinkedInMCPService:
         self,
         settings: LinkedInMCPSettings,
         *,
-        profile_tool_name: str | None = None,
         search_tool_name: str | None = None,
     ) -> None:
         self._settings = settings
-        self._profile_tool_name = profile_tool_name or settings.profile_tool_name
         self._search_tool_name = search_tool_name or settings.search_tool_name
 
     @classmethod
@@ -363,7 +361,6 @@ class LinkedInMCPService:
         return cls(
             LinkedInMCPSettings(
                 command=getattr(settings, "apify_linkedin_mcp_command", None),
-                profile_tool_name=getattr(settings, "apify_linkedin_mcp_profile_tool_name", "harvestapi--linkedin-profile-scraper"),
                 search_tool_name=getattr(settings, "apify_linkedin_mcp_search_tool_name", "search_profiles"),
             )
         )

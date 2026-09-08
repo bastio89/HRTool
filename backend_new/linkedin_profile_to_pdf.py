@@ -8,7 +8,6 @@ import re
 import ssl
 import sys
 import subprocess
-import time
 import shlex
 from dataclasses import dataclass
 from datetime import datetime
@@ -128,64 +127,6 @@ def _resolve_apify_token() -> str | None:
 def _resolve_graphrag_base_url() -> str:
     base_url = os.environ.get("GRAPHRAG_BASE_URL") or "http://localhost:8000"
     return base_url.rstrip("/")
-
-
-def _load_apify_dataset_items(dataset_id: str, token: str | None = None) -> list[dict[str, object]]:
-    token = token or _resolve_apify_token()
-    if not token:
-        raise RuntimeError("APIFY_TOKEN ist nicht gesetzt.")
-
-    request = Request(
-        f"https://api.apify.com/v2/datasets/{dataset_id}/items?clean=true&format=json&token={token}",
-        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
-    )
-    try:
-        with urlopen(request, timeout=120, context=_ssl_context()) as response:
-            raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise RuntimeError(f"Apify Dataset konnte nicht gelesen werden: {exc}") from exc
-
-    data = json.loads(raw)
-    if not isinstance(data, list):
-        raise RuntimeError("Unerwartetes Apify-Dataset-Format.")
-    return [item for item in data if isinstance(item, dict)]
-
-
-def _load_apify_run_dataset_items(run_id: str, token: str) -> list[dict[str, object]]:
-    deadline = time.monotonic() + 300
-    while True:
-        if time.monotonic() > deadline:
-            raise TimeoutError("Apify Run konnte nicht rechtzeitig abgeschlossen werden.")
-
-        request = Request(
-            f"https://api.apify.com/v2/actor-runs/{run_id}?token={token}",
-            headers={"Accept": "application/json", "User-Agent": USER_AGENT},
-        )
-        try:
-            with urlopen(request, timeout=120, context=_ssl_context()) as response:
-                raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
-        except (HTTPError, URLError, TimeoutError) as exc:
-            raise RuntimeError(f"Apify Run konnte nicht gelesen werden: {exc}") from exc
-
-        data = json.loads(raw)
-        if not isinstance(data, dict):
-            raise RuntimeError("Unerwartetes Apify-Run-Format.")
-
-        run = data.get("data") if isinstance(data.get("data"), dict) else data
-        if not isinstance(run, dict):
-            raise RuntimeError("Unerwartetes Apify-Run-Format.")
-
-        status = _as_text(run.get("status"))
-        dataset_id = _as_text(run.get("defaultDatasetId") or run.get("datasetId"))
-        if status == "SUCCEEDED":
-            if dataset_id:
-                return _load_apify_dataset_items(dataset_id, token=token)
-            raise RuntimeError("Apify Run wurde abgeschlossen, aber es wurde kein Dataset bereitgestellt.")
-
-        if status in {"FAILED", "ABORTED", "TIMED-OUT"}:
-            raise RuntimeError(f"Apify Run wurde mit Status {status} beendet.")
-
-        time.sleep(2)
 
 
 def _load_linkedin_actor_items(urls: list[str]) -> list[dict[str, object]]:

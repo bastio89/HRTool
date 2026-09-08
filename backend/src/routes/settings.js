@@ -6,6 +6,44 @@ const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, fetchAiModels, filte
 const router = express.Router();
 
 const isAdmin = (req) => req.user?.role === 'admin';
+const APIFY_TOKEN_SETTING_KEY = 'apify_token';
+
+function readApifyToken() {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(APIFY_TOKEN_SETTING_KEY);
+  const stored = typeof row?.value === 'string' ? row.value.trim() : '';
+  return stored || (typeof process.env.APIFY_TOKEN === 'string' ? process.env.APIFY_TOKEN.trim() : '') || '';
+}
+
+async function fetchApifyStatus(token) {
+  const response = await fetch('https://api.apify.com/v2/users/me/limits', {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = payload?.error?.message || payload?.message || `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  const data = payload?.data || payload;
+  const limits = data?.limits || {};
+  const current = data?.current || {};
+  const maxMonthlyUsageUsd = Number(limits.maxMonthlyUsageUsd ?? 0);
+  const monthlyUsageUsd = Number(current.monthlyUsageUsd ?? 0);
+  const remainingMonthlyUsageUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
+
+  return {
+    reachable: true,
+    usageCycle: data?.monthlyUsageCycle || null,
+    maxMonthlyUsageUsd,
+    monthlyUsageUsd,
+    remainingMonthlyUsageUsd,
+  };
+}
 
 /**
  * @swagger
@@ -21,13 +59,73 @@ router.get('/', (req, res) => {
     const rows = db.prepare('SELECT key, value FROM settings').all();
     const settings = {};
     for (const row of rows) {
-      if (row.key === 'ai_api_key') continue;
+      if (row.key === 'ai_api_key' || row.key === APIFY_TOKEN_SETTING_KEY) continue;
       settings[row.key] = row.value;
     }
     res.json(settings);
   } catch (error) {
     console.error('Error fetching settings:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Einstellungen' });
+  }
+});
+
+router.get('/apify/status', async (req, res) => {
+  try {
+    const token = readApifyToken();
+    if (!token) {
+      return res.json({
+        tokenConfigured: false,
+        reachable: false,
+        usageCycle: null,
+        maxMonthlyUsageUsd: null,
+        monthlyUsageUsd: null,
+        remainingMonthlyUsageUsd: null,
+      });
+    }
+
+    try {
+      const status = await fetchApifyStatus(token);
+      return res.json({ tokenConfigured: true, ...status });
+    } catch (error) {
+      return res.json({
+        tokenConfigured: true,
+        reachable: false,
+        usageCycle: null,
+        maxMonthlyUsageUsd: null,
+        monthlyUsageUsd: null,
+        remainingMonthlyUsageUsd: null,
+        error: error.message || 'Apify-Status konnte nicht geladen werden',
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching Apify status:', error);
+    res.status(500).json({ error: 'Fehler beim Laden des Apify-Status' });
+  }
+});
+
+router.put('/apify/config', (req, res) => {
+  try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({ error: 'Nur Administratoren dürfen die Apify-Konfiguration ändern' });
+    }
+
+    const apiToken = typeof req.body?.apiToken === 'string' ? req.body.apiToken.trim() : '';
+    const deleteToken = !apiToken;
+
+    if (deleteToken) {
+      db.prepare('DELETE FROM settings WHERE key = ?').run(APIFY_TOKEN_SETTING_KEY);
+    } else {
+      db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`).run(APIFY_TOKEN_SETTING_KEY, apiToken);
+    }
+
+    logAudit(req, 'apify-konfiguration-geändert', 'Setting', null, APIFY_TOKEN_SETTING_KEY, {
+      configured: !deleteToken,
+    });
+
+    res.json({ success: true, tokenConfigured: !deleteToken });
+  } catch (error) {
+    console.error('Error saving Apify config:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern der Apify-Konfiguration' });
   }
 });
 

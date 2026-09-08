@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     parse_latency_log_every: int = 20
 
     apify_linkedin_mcp_command: str | None = None
-    apify_linkedin_mcp_profile_tool_name: str = "curious_coder--linkedin-profile-scraper"
     apify_linkedin_mcp_search_tool_name: str = "search_profiles"
 
     # Embedding dimensions persisted in Neo4j vector index.
@@ -60,6 +59,10 @@ class Settings(BaseSettings):
     @property
     def resolved_api_key(self) -> str | None:
         return self.openrouter_api_key or self._backend_setting("ai_api_key")
+
+    @property
+    def resolved_apify_token(self) -> str | None:
+        return os.environ.get("APIFY_TOKEN") or self._backend_setting("apify_token")
 
     @property
     def resolved_chat_model(self) -> str:

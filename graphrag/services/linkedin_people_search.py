@@ -12,6 +12,8 @@ from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from config import settings
+
 try:
     import certifi
 except ImportError:  # pragma: no cover - fallback for minimal environments
@@ -46,7 +48,10 @@ class LinkedInPeopleSearchService:
     @staticmethod
     def _resolve_token() -> str | None:
         token = os.environ.get("APIFY_TOKEN")
-        return token.strip() if isinstance(token, str) and token.strip() else None
+        if isinstance(token, str) and token.strip():
+            return token.strip()
+        resolved = settings.resolved_apify_token
+        return resolved.strip() if isinstance(resolved, str) and resolved.strip() else None
 
     @property
     def is_configured(self) -> bool:

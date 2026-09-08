@@ -20,6 +20,8 @@ import MatrixMatching from './pages/MatrixMatching'
 import SelectedMatchingResults from './pages/SelectedMatchingResults'
 import MatchingResults from './pages/MatchingResults'
 import History from './pages/History'
+import Tools from './pages/Tools'
+import ToolsLinkedIn from './pages/ToolsLinkedIn'
 import Jobs from './pages/Jobs'
 import JobForm from './pages/JobForm'
 import Pipeline from './pages/Pipeline'
@@ -95,6 +97,8 @@ const router = createBrowserRouter(
           <Route path="matching/results/selected" element={<SelectedMatchingResults />} />
           <Route path="matching/results/:id" element={<MatchingResults />} />
           <Route path="history" element={<History />} />
+          <Route path="tools" element={<Tools />} />
+          <Route path="tools/linkedin" element={<ToolsLinkedIn />} />
           <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
           <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
           <Route path="admin/audit" element={<RevisorRoute><AuditLog /></RevisorRoute>} />

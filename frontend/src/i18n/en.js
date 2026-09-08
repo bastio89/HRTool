@@ -5,6 +5,8 @@ export default {
   'nav.jobs': 'Jobs',
   'nav.matching': 'Matching',
   'nav.history': 'History',
+  'nav.tools': 'Tools',
+  'nav.linkedin': 'LinkedIn',
   'nav.admin': 'Administration',
   'nav.review': 'Review',
   'nav.users': 'Users',

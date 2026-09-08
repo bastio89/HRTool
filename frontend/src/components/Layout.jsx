@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Avatar from './Avatar'
 import SystemStatusChip from './SystemStatus'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Wrench } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
@@ -15,6 +15,11 @@ const navItems = [
   { to: '/jobs', icon: Briefcase, labelKey: 'nav.jobs' },
   { to: '/matching', icon: GitCompare, labelKey: 'nav.matching' },
   { to: '/history', icon: History, labelKey: 'nav.history' },
+]
+
+const toolsItems = [
+  { to: '/tools', icon: Wrench, labelKey: 'nav.tools' },
+  { to: '/tools/linkedin', icon: Bot, labelKey: 'nav.linkedin' },
 ]
 
 const adminItems = [
@@ -35,12 +40,18 @@ export default function Layout() {
   const { locale, changeLocale, t } = useI18n()
   const location = useLocation()
   const isAdminRoute = location.pathname.startsWith('/admin')
+  const isToolsRoute = location.pathname.startsWith('/tools')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(isAdminRoute)
+  const [toolsOpen, setToolsOpen] = useState(isToolsRoute)
 
   useEffect(() => {
     if (isAdminRoute) setAdminOpen(true)
   }, [isAdminRoute])
+
+  useEffect(() => {
+    if (isToolsRoute) setToolsOpen(true)
+  }, [isToolsRoute])
 
   const closeSidebar = () => setSidebarOpen(false)
 
@@ -121,6 +132,45 @@ export default function Layout() {
                   {t(labelKey)}
                 </NavLink>
               ))}
+
+              <div className="mt-2">
+                <button
+                  onClick={() => setToolsOpen(!toolsOpen)}
+                  className={`flex items-center justify-between w-full px-5 py-3.5 rounded-2xl text-[16px] font-medium transition duration-300 cursor-pointer ${
+                    isToolsRoute && !toolsOpen
+                      ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                      : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                  }`}
+                >
+                  <span className="flex items-center gap-4">
+                    <Wrench className="w-5 h-5" />
+                    {t('nav.tools')}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${toolsOpen ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`overflow-hidden transition duration-300 ease-in-out ${toolsOpen ? 'max-h-[220px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                  <div className="space-y-1 pl-4">
+                    {toolsItems.map(({ to, icon: Icon, labelKey }) => (
+                      <NavLink
+                        key={to}
+                        to={to}
+                        onClick={closeSidebar}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition duration-300 ${
+                            isActive
+                              ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                              : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                          }`
+                        }
+                      >
+                        <Icon className="w-4 h-4" />
+                        {t(labelKey)}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* Revisor: show audit/reports/ki section */}
               {isRevisor && (
                 <div className="mt-2">

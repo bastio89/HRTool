@@ -537,7 +537,7 @@ HRTool ist ideal für:
 
 ## 📝 Lizenz
 
-Proprietär — © 2025 Sebastian Oczachowski. Alle Rechte vorbehalten.
+Proprietär — © 2025 HRTool. Alle Rechte vorbehalten.
 
 ---
 

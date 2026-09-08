@@ -341,7 +341,7 @@ router.post('/admin/reset-default', (req, res) => {
   try {
     const username = 'admin';
     const password = 'admin123';
-    const displayName = 'Sebastian Oczachowski';
+    const displayName = 'HRTool Admin';
     const role = 'admin';
 
     const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);

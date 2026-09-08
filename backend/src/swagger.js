@@ -8,7 +8,7 @@ const options = {
       title: 'HR-Tool API',
       version: '1.0.0',
       description: 'REST API für das HR-Tool – Bewerberverwaltung, Matching, Pipeline & mehr',
-      contact: { name: 'Sebastian Oczachowski' },
+      contact: { name: 'HRTool Team' },
     },
     servers: [{ url: '/api', description: 'API Server' }],
     components: {

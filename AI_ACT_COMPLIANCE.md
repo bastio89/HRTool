@@ -3,7 +3,7 @@
 **Dokument-Version:** 1.0  
 **Erstellt:** 25. Februar 2026  
 **Letzte Aktualisierung:** 25. Februar 2026  
-**Verantwortlich:** Sebastian Oczachowski  
+**Verantwortlich:** HRTool Team  
 **Deadline vollständige Anwendbarkeit:** 2. August 2026
 
 ---

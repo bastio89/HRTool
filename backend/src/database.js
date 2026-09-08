@@ -387,7 +387,7 @@ const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
 if (userCount.count === 0) {
   const hash = bcrypt.hashSync('admin123', 10);
   db.prepare('INSERT INTO users (username, password_hash, display_name, role) VALUES (?, ?, ?, ?)').run(
-    'admin', hash, 'Sebastian Oczachowski', 'admin'
+    'admin', hash, 'HRTool Admin', 'admin'
   );
   console.log('📋 Default Admin erstellt: admin / admin123');
 }

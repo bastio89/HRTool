@@ -5,7 +5,7 @@ const db = require('../src/database');
 
 const username = process.env.ADMIN_USERNAME || process.argv[2] || 'admin';
 const password = process.env.ADMIN_PASSWORD || process.argv[3] || 'admin123';
-const displayName = process.env.ADMIN_DISPLAY_NAME || process.argv[4] || 'Sebastian Oczachowski';
+const displayName = process.env.ADMIN_DISPLAY_NAME || process.argv[4] || 'HRTool Admin';
 const role = process.env.ADMIN_ROLE || 'admin';
 
 const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);

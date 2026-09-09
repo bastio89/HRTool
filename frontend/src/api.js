@@ -256,6 +256,28 @@ export const jobsApi = {
     }
     return response.json();
   },
+  exportJobsChPdfs: async (links) => {
+    const response = await fetch(`${API_BASE}/jobs/export-pdf`, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json',
+        Accept: 'application/zip',
+      },
+      body: JSON.stringify({ links }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Export fehlgeschlagen' }))
+      throw new Error(error.error || error.details || `HTTP ${response.status}`)
+    }
+
+    return {
+      blob: await response.blob(),
+      filename: parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'jobs-ch-pdfs.zip',
+      warning: response.headers.get('X-HRTool-JobsCh-Warning') || null,
+    }
+  },
   generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data), timeout: 200000 }),
 };
 

@@ -87,7 +87,7 @@ export default function ToolsLinkedIn() {
   const toast = useToast()
   const [keywords, setKeywords] = useState('treasury')
   const [location, setLocation] = useState('Zürich')
-  const [maxResults, setMaxResults] = useState('10')
+  const fixedMaxResults = '5'
   const [enrichEmails, setEnrichEmails] = useState(true)
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -150,7 +150,7 @@ export default function ToolsLinkedIn() {
         enrichEmails,
         keywords: keywords.trim(),
         location: location.trim(),
-        maxResults: Number(maxResults) || 10,
+        maxResults: Number(fixedMaxResults) || 5,
         mode: 'public',
       })
       setRows(result.rows || [])
@@ -330,14 +330,15 @@ export default function ToolsLinkedIn() {
               <label className="space-y-2">
                 <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Max. Ergebnisse</span>
                 <select
-                  value={maxResults}
-                  onChange={(e) => setMaxResults(e.target.value)}
+                  value={fixedMaxResults}
+                  onChange={() => {}}
                   className="w-full px-5 py-3.5 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-transparent focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 focus:border-[#0071e3]/30"
                 >
                   {[5, 10, 20, 50].map((value) => (
                     <option key={value} value={value}>{value}</option>
                   ))}
                 </select>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400">Fest auf 5 gesetzt. Weitere Werte sind nur zur Orientierung sichtbar.</p>
               </label>
               <label className="flex items-center gap-3 mt-8 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] px-5 py-3.5 text-[15px] text-black dark:text-white">
                 <input

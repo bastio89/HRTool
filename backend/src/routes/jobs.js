@@ -1,7 +1,9 @@
 const express = require('express');
 const fs = require('fs');
+const os = require('os');
 const multer = require('multer');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const db = require('../database');
 const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
@@ -11,6 +13,8 @@ const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extr
 const { tmpDir, extractText } = require('../utils/documentText');
 
 const router = express.Router();
+const repoRoot = path.resolve(__dirname, '..', '..');
+const jobsChExportScript = path.join(repoRoot, 'batch_tools', 'import_jobs_from_pdfs.py');
 
 const uploadStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, tmpDir),
@@ -189,6 +193,23 @@ async function ingestIntoGraphRag(rawText, persist = true) {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function normalizeJobsChLinks(body) {
+  if (Array.isArray(body?.links)) {
+    return body.links
+      .map((link) => (typeof link === 'string' ? link.trim() : ''))
+      .filter(Boolean)
+  }
+
+  if (typeof body?.linksText === 'string') {
+    return body.linksText
+      .split(/\r?\n/)
+      .map((link) => link.trim())
+      .filter(Boolean)
+  }
+
+  return []
 }
 
 /**
@@ -447,6 +468,68 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
     });
   } finally {
     try { fs.unlinkSync(req.file.path); } catch {}
+  }
+});
+
+router.post('/export-pdf', (req, res) => {
+  const links = normalizeJobsChLinks(req.body)
+  if (links.length === 0) {
+    return res.status(400).json({ error: 'Mindestens ein jobs.ch-Link ist erforderlich.' })
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hrtool-jobs-ch-'))
+  const linksFile = path.join(tempDir, 'jobs-ch-links.txt')
+  const zipName = `jobs-ch-pdfs-${Date.now()}.zip`
+  const zipPath = path.join(tempDir, zipName)
+
+  fs.writeFileSync(linksFile, `${links.join('\n')}\n`, 'utf8')
+
+  try {
+    const result = spawnSync('python3', [
+      jobsChExportScript,
+      '--jobs-ch-links-file', linksFile,
+      '--jobs-ch-zip-output', zipPath,
+    ], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: process.env,
+      maxBuffer: 10 * 1024 * 1024,
+    })
+
+    const stdout = (result.stdout || '').trim()
+    const stderr = (result.stderr || '').trim()
+
+    if (result.error) {
+      return res.status(502).json({ error: `jobs.ch-Export fehlgeschlagen: ${result.error.message}` })
+    }
+    if (result.status !== 0) {
+      return res.status(502).json({
+        error: 'jobs.ch-Export fehlgeschlagen.',
+        details: stderr || stdout || `Exit code ${result.status}`,
+      })
+    }
+
+    if (!fs.existsSync(zipPath)) {
+      return res.status(502).json({
+        error: 'jobs.ch-Export fehlgeschlagen.',
+        details: stdout || 'Keine ZIP-Datei wurde erzeugt.',
+      })
+    }
+
+    const skippedCount = (stderr.match(/Warnung: jobs\.ch-Link übersprungen:/g) || []).length
+    if (skippedCount > 0) {
+      res.setHeader('X-HRTool-JobsCh-Warning', `${skippedCount} jobs.ch-Link${skippedCount === 1 ? '' : 'e'} wurden übersprungen.`)
+    }
+
+    return res.download(zipPath, zipName, (downloadError) => {
+      if (downloadError && !res.headersSent) {
+        res.status(502).json({ error: `Download fehlgeschlagen: ${downloadError.message}` })
+      }
+    })
+  } finally {
+    setTimeout(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }, 30_000)
   }
 });
 

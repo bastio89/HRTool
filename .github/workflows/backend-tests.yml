@@ -1,19 +1,24 @@
-name: Backend Regression Tests
+name: CI
 
 on:
   push:
     paths:
       - backend/**
+      - backend_new/**
+      - frontend/**
+      - graphrag/**
       - .github/workflows/backend-tests.yml
   pull_request:
     paths:
       - backend/**
+      - backend_new/**
+      - frontend/**
+      - graphrag/**
       - .github/workflows/backend-tests.yml
 
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: backend
@@ -34,3 +39,75 @@ jobs:
 
       - name: Run regression tests
         run: npm test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+  backend-new:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend_new
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend_new/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Import check
+        run: python -m compileall .
+
+  graphrag:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: graphrag
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: graphrag/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run GraphRAG tests
+        run: pytest

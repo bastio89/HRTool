@@ -4,13 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import tempfile
 import json
 import os
 import shutil
 import sys
 import uuid
+import zipfile
 from pathlib import Path
 from urllib import error, request
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from backend_new import jobs_ch_to_pdf
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,6 +28,18 @@ def parse_args() -> argparse.Namespace:
             "Read all PDF job descriptions from job_input, generate structured "
             "job text via API, create jobs via API, then move successful files to done/."
         )
+    )
+    parser.add_argument(
+        "--jobs-ch-links-file",
+        type=Path,
+        default=None,
+        help="Text file with jobs.ch links, one link per line (exports PDFs to a ZIP)",
+    )
+    parser.add_argument(
+        "--jobs-ch-zip-output",
+        type=Path,
+        default=None,
+        help="Target ZIP file for jobs.ch PDF export",
     )
     parser.add_argument(
         "--api-base",
@@ -84,6 +105,24 @@ def title_from_filename(pdf_path: Path) -> str:
     stem = stem.replace("_", " ").replace("-", " ")
     stem = " ".join(stem.split())
     return stem or "Unbenannte Stelle"
+
+
+def _jobs_ch_filename_component(value: str | None, fallback: str) -> str:
+    cleaned = "".join(char if char.isalnum() or char in "._-" else "_" for char in (value or "")).strip("_")
+    return cleaned or fallback
+
+
+def _jobs_ch_date_component(value: str | None) -> str:
+    if not value:
+        return "unknown-date"
+    normalized = value.strip()
+    for parser in (jobs_ch_to_pdf.date.fromisoformat, jobs_ch_to_pdf.datetime.fromisoformat):
+        try:
+            parsed = parser(normalized)
+            return parsed.strftime("%d-%m-%Y")
+        except ValueError:
+            continue
+    return _jobs_ch_filename_component(normalized, "unknown-date")
 
 
 def post_json(
@@ -163,6 +202,63 @@ def ensure_unique_destination(done_dir: Path, file_name: str) -> Path:
         if not candidate.exists():
             return candidate
         counter += 1
+
+
+def load_jobs_ch_links(path: Path) -> list[str]:
+    if not path.exists():
+        raise FileNotFoundError(f"Job-Link-Datei nicht gefunden: {path}")
+
+    links: list[str] = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        link = raw_line.strip()
+        if link and link not in links:
+            links.append(link)
+
+    if not links:
+        raise ValueError(f"Job-Link-Datei ist leer: {path}")
+    return links
+
+
+def export_jobs_ch_pdfs(links_file: Path, zip_output: Path) -> tuple[int, str]:
+    links = load_jobs_ch_links(links_file)
+    pdf_outputs: list[Path] = []
+    failures: list[str] = []
+
+    with tempfile.TemporaryDirectory(prefix="hrtool-jobs-ch-") as temp_dir:
+        temp_path = Path(temp_dir)
+        for index, link in enumerate(links, start=1):
+            print(f"[{index}/{len(links)}] {link}")
+            try:
+                job = jobs_ch_to_pdf.fetch_job(link)
+                filename = "_".join(
+                    [
+                        _jobs_ch_filename_component(job.title, "job"),
+                        _jobs_ch_filename_component(job.company, "company"),
+                        _jobs_ch_date_component(job.date_posted),
+                    ]
+                )
+                output = temp_path / f"{filename}.pdf"
+                jobs_ch_to_pdf.write_pdf(job, output)
+                pdf_outputs.append(output)
+                print(f"PDF erstellt: {output}")
+                print(f"Titel: {job.title}")
+            except (ValueError, RuntimeError, OSError) as exc:
+                failure_message = f"{link} -> {exc}"
+                failures.append(failure_message)
+                print(f"Warnung: jobs.ch-Link übersprungen: {failure_message}", file=sys.stderr)
+
+        if not pdf_outputs:
+            raise RuntimeError("Kein jobs.ch-Link konnte erfolgreich in ein PDF umgewandelt werden.")
+
+        zip_output.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(zip_output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for pdf_path in pdf_outputs:
+                archive.write(pdf_path, arcname=pdf_path.name)
+
+    print(f"ZIP erstellt: {zip_output}")
+    if failures:
+        print(f"Warnung: {len(failures)} jobs.ch-Link(s) wurden übersprungen.", file=sys.stderr)
+    return 0, f"created {len(pdf_outputs)} PDFs"
 
 
 def resolve_auth_token(args: argparse.Namespace) -> str:
@@ -257,6 +353,16 @@ def process_file(
 
 def main() -> int:
     args = parse_args()
+
+    if args.jobs_ch_links_file:
+        zip_output = args.jobs_ch_zip_output or (Path.cwd() / "jobs-ch-pdfs.zip")
+        try:
+            exit_code, _ = export_jobs_ch_pdfs(args.jobs_ch_links_file, zip_output)
+            return exit_code
+        except (ValueError, RuntimeError, OSError) as exc:
+            print(f"Fehler: {exc}", file=sys.stderr)
+            return 1
+
     token = resolve_auth_token(args)
 
     input_dir = Path(args.input_dir)

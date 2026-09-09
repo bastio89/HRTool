@@ -1,0 +1,51 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: false
+        default: main
+      image_tag:
+        description: GHCR image tag to deploy
+        required: false
+        default: latest
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git fetch --all --prune
+            git checkout "${{ inputs.ref }}"
+            git pull --ff-only origin "${{ inputs.ref }}"
+
+            export BACKEND_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-backend:${{ inputs.image_tag }}"
+            export BACKEND_NEW_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-backend-new:${{ inputs.image_tag }}"
+            export FRONTEND_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-frontend:${{ inputs.image_tag }}"
+            export GRAPHRAG_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-graphrag:${{ inputs.image_tag }}"
+
+            printf '%s' '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+            docker compose pull backend backend_new frontend graphrag
+            docker compose up -d --no-build

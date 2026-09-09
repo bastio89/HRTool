@@ -212,12 +212,18 @@ ollama pull llama3.2
 
 ### Schnellstart mit Docker Compose
 
-Der empfohlene Start auf einer neuen Maschine läuft vollständig über Docker Compose. Der Start prüft Docker und Compose, legt bei Bedarf eine `.env` an, prüft die Secret-Platzhalter, validiert die Konfiguration, baut alle Images und wartet über Healthchecks auf PostgreSQL, Neo4j, GraphRAG und das Backend. Daten bleiben in Docker-Volumes erhalten. Ältere `.env`-Dateien ohne die zusätzlichen PostgreSQL- und pgAdmin-Variablen bleiben kompatibel und verwenden dafür die dokumentierten Compose-Defaults.
+Der empfohlene Start auf einer neuen Maschine läuft vollständig über Docker Compose. Der Start prüft Docker und Compose, legt bei Bedarf eine `.env` an, prüft die Secret-Platzhalter, validiert die Konfiguration, baut die Images und startet standardmäßig die App-Dienste ohne Caddy. Daten bleiben in Docker-Volumes erhalten. Ältere `.env`-Dateien ohne die zusätzlichen PostgreSQL- und pgAdmin-Variablen bleiben kompatibel und verwenden dafür die dokumentierten Compose-Defaults.
 
 ```bash
 cp .env.docker.example .env
 # Alle Platzhalter für Secrets in .env ersetzen
 ./start.sh
+```
+
+Wenn du Caddy direkt mitstarten willst, setze `START_CADDY=1`:
+
+```bash
+START_CADDY=1 ./start.sh
 ```
 
 Alternativ kann Compose direkt gestartet werden:
@@ -266,7 +272,7 @@ Danach ist HRTool erreichbar unter:
 
 ### HTTPS mit Caddy
 
-Caddy ist im Docker-Compose-Stack enthalten und übernimmt TLS sowie das Reverse-Proxying zum Frontend. Das Frontend leitet `/api` und `/graphrag-api` intern an die jeweiligen Dienste weiter.
+Caddy ist im Docker-Compose-Stack enthalten und übernimmt TLS sowie das Reverse-Proxying zum Frontend. Er wird aber nicht mehr automatisch von `./start.sh` gestartet. Das Frontend leitet `/api` und `/graphrag-api` intern an die jeweiligen Dienste weiter.
 
 Für eine öffentliche Installation:
 

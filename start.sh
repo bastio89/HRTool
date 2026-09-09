@@ -28,7 +28,15 @@ if grep -Eq 'bitte-durch|your_.*_password|change-me' .env; then
 fi
 
 docker compose config --quiet
-docker compose up -d --build
+
+services=(postgres backend backend_new pgadmin frontend neo4j graphrag)
+if [ "${START_CADDY:-0}" = "1" ]; then
+  services+=(caddy)
+else
+  echo "Caddy wird nicht automatisch gestartet. Setze START_CADDY=1, wenn du Reverse Proxy und HTTPS mitstarten willst."
+fi
+
+docker compose up -d --build "${services[@]}"
 
 published_url() {
   local service="$1"

@@ -13,13 +13,6 @@ const HOST_PRESETS = [
   { label: 'Text Generation WebUI', url: 'http://localhost:5000' },
 ]
 
-const EMBEDDING_MODEL_PRESETS = [
-  'bge-m3',
-  'nomic-embed-text',
-  'openai/text-embedding-3-small',
-  'qwen3-embedding:4b',
-]
-
 const PROVIDER_OPTIONS = [
   { value: 'auto', label: 'Auto-Erkennung', desc: 'Erkennt Ollama oder OpenAI-kompatible API automatisch' },
   { value: 'ollama', label: 'Ollama', desc: 'Ollama-API (/api/generate)' },
@@ -127,12 +120,7 @@ export default function AISettings() {
     setEmbeddingModelsError('')
     try {
       const res = await settingsApi.getAiEmbeddingModels(url, apiKey, requestedProvider)
-      const names = sortModelNames([
-        ...new Set([
-          ...EMBEDDING_MODEL_PRESETS,
-          ...(res.models || []).map((m) => m.name).filter(Boolean),
-        ]),
-      ])
+      const names = sortModelNames((res.models || []).map((m) => m.name).filter(Boolean))
       setEmbeddingModels(names)
       const activeEmbedding = currentEmbeddingModel ?? embeddingModel
       if (names.length > 0) {

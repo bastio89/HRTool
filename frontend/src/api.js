@@ -84,6 +84,22 @@ function parseFilenameFromDisposition(disposition) {
   return quotedMatch?.[1] || null
 }
 
+function normalizeErrorMessage(error, fallback) {
+  if (typeof error === 'string' && error.trim()) return error.trim()
+  if (error && typeof error === 'object') {
+    if (typeof error.message === 'string' && error.message.trim()) return error.message.trim()
+    if (typeof error.error === 'string' && error.error.trim()) return error.error.trim()
+    if (error.error && typeof error.error === 'object' && typeof error.error.message === 'string' && error.error.message.trim()) {
+      return error.error.message.trim()
+    }
+    if (typeof error.details === 'string' && error.details.trim()) return error.details.trim()
+    if (error.details && typeof error.details === 'object' && typeof error.details.message === 'string' && error.details.message.trim()) {
+      return error.details.message.trim()
+    }
+  }
+  return fallback
+}
+
 async function request(url, options = {}) {
   const { timeout, ...fetchOptions } = options;
   let controller, timeoutId;
@@ -111,7 +127,7 @@ async function request(url, options = {}) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }));
-    throw new Error(error.error || error.details || `HTTP ${response.status}`);
+    throw new Error(normalizeErrorMessage(error, `HTTP ${response.status ?? 'unknown'}`));
   }
 
   return response.json();

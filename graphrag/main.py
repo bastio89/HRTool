@@ -70,6 +70,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
 	await postgres_store.ensure_schema()
+	await postgres_store.ensure_setting("ai_embedding_model", settings.resolved_embedding_model)
 	yield
 	await db_service.close()
 	await llm_service.close()

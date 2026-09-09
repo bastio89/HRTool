@@ -715,6 +715,8 @@ class Neo4jService:
             UNWIND candidate_skills AS candidateSkill
             WITH jobSkill, candidateSkill,
                  vector.similarity.cosine(jobSkill.embedding, candidateSkill.embedding) AS similarity
+            WHERE toLower(coalesce(jobSkill.category, 'HardSkill')) = toLower(coalesce(candidateSkill.category, 'HardSkill'))
+                AND similarity >= 0.6
             RETURN collect({
                 jobSkill: jobSkill.name,
                 jobSkillCategory: jobSkill.category,
@@ -724,29 +726,29 @@ class Neo4jService:
                 priority: jobSkill.priority
             }) AS matched_skills
         }
-        WITH j,
-             c,
-             matched_skills,
-             reduce(weighted_sum = 0.0, pair IN matched_skills |
-                 weighted_sum + coalesce(pair.similarity, 0.0) * CASE WHEN toLower(coalesce(pair.priority, 'mandatory')) = 'mandatory' THEN 2.0 ELSE 1.0 END
-             ) AS weighted_sum,
-             reduce(total_weight = 0.0, pair IN matched_skills |
-                 total_weight + CASE WHEN toLower(coalesce(pair.priority, 'mandatory')) = 'mandatory' THEN 2.0 ELSE 1.0 END
-             ) AS total_weight
+           WITH j,
+               c,
+               matched_skills
         RETURN j.id AS jobId,
                j.title AS jobTitle,
                c.id AS candidateId,
                c.name AS candidateName,
-               matched_skills AS matchedSkills,
-               CASE
-                   WHEN total_weight = 0 THEN 0
-                   ELSE round((weighted_sum / total_weight) * 100)
-               END AS score
-        ORDER BY score DESC, jobTitle ASC, candidateName ASC
+               matched_skills AS matchedSkills
+        ORDER BY jobTitle ASC, candidateName ASC
         """
         async with self.driver.session() as session:
             result = await session.run(query, job_ids=normalized_job_ids, candidate_ids=normalized_candidate_ids)
-            return await result.data()
+            rows = await result.data()
+
+        for row in rows:
+            matched_skills = row.get("matchedSkills") or []
+            row["score"] = self._score_from_matched_skills(matched_skills)
+            row["vectorScore"] = row["score"] / 100 if row["score"] else 0.0
+            row["hardSkillScore"] = self._score_from_matched_skills(matched_skills, "HardSkill") / 100
+            row["softSkillScore"] = self._score_from_matched_skills(matched_skills, "SoftSkill") / 100
+
+        rows.sort(key=lambda item: item["score"], reverse=True)
+        return rows
 
     async def get_job_profile(self, job_id: str) -> dict[str, Any] | None:
         query = """
@@ -896,7 +898,7 @@ class Neo4jService:
             skills = [skill for skill in detail["skills"] if skill]
             jaccard = self._jaccard_similarity(job_skills, skills)
             vector_score = scores_by_id[candidate_id]
-            combined_score = 0.7 * vector_score + 0.3 * jaccard
+            combined_score = (vector_score + jaccard) / 2
             ranked.append(
                 Stage2Candidate(
                     id=candidate_id,
@@ -922,3 +924,17 @@ class Neo4jService:
         if not union:
             return 0.0
         return float(len(left & right) / len(union))
+
+    @staticmethod
+    def _score_from_matched_skills(matched_skills: list[dict[str, Any]], category: str | None = None) -> int:
+        relevant = [
+            pair
+            for pair in matched_skills
+            if category is None or (
+                pair.get("jobSkillCategory") == category and pair.get("candidateSkillCategory") == category
+            )
+        ]
+        if not relevant:
+            return 0
+        total_similarity = sum(float(pair.get("similarity") or 0.0) for pair in relevant)
+        return max(0, min(100, round((total_similarity / len(relevant)) * 100)))

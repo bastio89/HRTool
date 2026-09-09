@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     def resolved_embedding_model(self) -> str:
         if self.ai_embedding_model:
             return self.ai_embedding_model
+        backend_embedding_model = self._backend_setting("ai_embedding_model")
+        if backend_embedding_model:
+            return backend_embedding_model
         if self.resolved_provider == "openrouter":
             return "openai/text-embedding-3-small"
         return self.ollama_embedding_model

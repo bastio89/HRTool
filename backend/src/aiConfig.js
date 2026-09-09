@@ -256,11 +256,13 @@ function normalizeModelName(model) {
 function isEmbeddingModelName(modelName) {
   const normalized = normalizeModelName(modelName);
   if (!normalized) return false;
+  const searchable = normalized.replace(/[\s_\/-]+/g, ' ');
 
   const embeddingHints = [
     'embed',
     'embedding',
     'text-embedding',
+    'text embedding',
     'all-minilm',
     'bge-',
     'e5-',
@@ -273,9 +275,11 @@ function isEmbeddingModelName(modelName) {
     'voyage-embedding',
     'multilingual-e5',
     'text2vec',
+    'qwen3 embedding',
+    'qwen embedding',
   ];
 
-  return embeddingHints.some((hint) => normalized.includes(hint));
+  return embeddingHints.some((hint) => normalized.includes(hint) || searchable.includes(hint));
 }
 
 function filterModelsByKind(models, kind = 'chat') {

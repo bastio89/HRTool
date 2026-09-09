@@ -13,6 +13,18 @@ class PostgresStore:
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
 
+    async def ensure_setting(self, key: str, value: str) -> bool:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            result = await connection.execute(
+                """
+                INSERT INTO settings (key, value)
+                VALUES (%s, %s)
+                ON CONFLICT (key) DO NOTHING
+                """,
+                (key, value),
+            )
+        return getattr(result, "rowcount", 0) == 1
+
     async def ensure_schema(self) -> None:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor() as cursor:

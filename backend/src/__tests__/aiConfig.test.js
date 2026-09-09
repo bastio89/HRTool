@@ -83,6 +83,7 @@ describe('aiConfig', () => {
         [
           { name: 'llama3.2' },
           { name: 'qwen3.6:35b' },
+          { name: 'Qwen/Qwen3 Embedding 4B' },
           { name: 'qwen3-embedding:4b' },
           { name: 'nomic-embed-text' },
           { name: 'bge-m3' },
@@ -92,6 +93,7 @@ describe('aiConfig', () => {
       ).map((model) => model.name);
 
       expect(models).toEqual([
+        'Qwen/Qwen3 Embedding 4B',
         'qwen3-embedding:4b',
         'nomic-embed-text',
         'bge-m3',

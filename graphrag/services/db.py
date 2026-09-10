@@ -348,12 +348,12 @@ class Neo4jService:
         query = """
         MATCH (j:Job)
         WHERE toString(j.id) IN $job_ids
-        OPTIONAL MATCH (j)-[:REQUIRES_SKILL]->(s:Skill)
+           OPTIONAL MATCH (j)-[req:REQUIRES_SKILL|NEED_SKILL]->(s:Skill)
         RETURN j.id AS id,
                j.title AS title,
                j.location AS location,
                j.employmentType AS employment_type,
-             collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), priority: 'Mandatory', embedding: s.embedding}) AS required_skills
+               collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), priority: coalesce(req.priority, 'Mandatory'), embedding: s.embedding}) AS required_skills
         ORDER BY toLower(coalesce(j.title, '')), j.id
         """
         async with self.driver.session() as session:
@@ -753,7 +753,7 @@ class Neo4jService:
     async def get_job_profile(self, job_id: str) -> dict[str, Any] | None:
         query = """
         MATCH (j:Job {id: $job_id})
-        OPTIONAL MATCH (j)-[req:REQUIRES_SKILL]->(s:Skill)
+        OPTIONAL MATCH (j)-[req:REQUIRES_SKILL|NEED_SKILL]->(s:Skill)
          OPTIONAL MATCH (j)-[rql:REQUIRES_LANGUAGE|HAS_LANGUAGE]->(l:Language)
          OPTIONAL MATCH (j)-[:REQUIRES_DEGREE|HAS_EDUCATION]->(d:Education)
          OPTIONAL MATCH (j)-[:IN_INDUSTRY]->(i:Industry)

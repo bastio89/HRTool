@@ -444,6 +444,7 @@ class MatchingMatrixRequest(BaseModel):
     candidates: list[MatchingCandidateInput] = Field(default_factory=list)
     weights: dict[str, int] | None = None
     options: dict[str, Any] = Field(default_factory=dict)
+    engine: Literal["python", "neo4j"] = Field(default="python")
 
 
 class MatchingResultItem(BaseModel):
@@ -489,6 +490,7 @@ class VectorMatchRequest(BaseModel):
     job_titles: list[str] = Field(default_factory=list, validation_alias=AliasChoices("job_titles", "jobTitles"))
     cv_ids: list[str | int] = Field(default_factory=list, validation_alias=AliasChoices("cv_ids", "cvIds", "candidate_ids", "candidateIds"))
     candidate_names: list[str] = Field(default_factory=list, validation_alias=AliasChoices("candidate_names", "candidateNames"))
+    engine: Literal["python", "neo4j"] = Field(default="python")
 
     @model_validator(mode="after")
     def ensure_input(self) -> "VectorMatchRequest":

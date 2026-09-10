@@ -528,8 +528,11 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			'softSkillScore': soft['score'] / 100 if soft['score'] else 0.0,
 		}
 
-	@router.post('/match/vectormatch', response_model=VectorMatchPayload)
-	async def vector_match(request: VectorMatchRequest) -> VectorMatchPayload:
+	@router.post('/match/vectormatch', response_model=VectorMatchPayload | VectorMatchNeo4jPayload)
+	async def vector_match(request: VectorMatchRequest) -> VectorMatchPayload | VectorMatchNeo4jPayload:
+		if request.engine == 'neo4j':
+			return await vector_match_neo4j(request)
+
 		if db_service is None:
 			raise HTTPException(status_code=503, detail='Neo4j service is not available')
 
@@ -578,7 +581,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 
 		return VectorMatchPayload(
 			mode='vectormatch',
-			model='graph-rag-neo4j-skill-vector-match',
+			model='graph-rag-python-skill-vector-match',
 			matchedAt=datetime.now(timezone.utc).isoformat(),
 			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
 			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
@@ -913,6 +916,8 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			raise HTTPException(status_code=400, detail='Mindestens eine Stelle ist erforderlich')
 		if not request.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
+		if request.engine == 'neo4j':
+			return await external_matrix_neo4j(request)
 		return await build_vector_matrix(request.jobs, request.candidates, request.mode, 'graph-rag-vector-matrix')
 
 	@router.post('/match/external/matrix_neo4j', response_model=MatchingMatrixPayload)

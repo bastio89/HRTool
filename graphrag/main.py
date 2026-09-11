@@ -229,7 +229,8 @@ async def _build_skill_embeddings(skill_names: list[str]) -> dict[str, list[floa
 				{
 					"entity": "skill",
 					"name": skill_name,
-				}
+				},
+				allow_fallback=False,
 			)
 			for skill_name in unique_names
 		)
@@ -377,7 +378,7 @@ async def parse_cv(
 	if persist:
 		graph_candidate_id = str(uuid4())
 		try:
-			embedding = await llm_service.create_embedding(profile.model_dump())
+			embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
 			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
 			await db_service.upsert_candidate(
 				candidate_id=graph_candidate_id,
@@ -444,7 +445,7 @@ async def ingest_candidate(
 
 	candidate_id = str(uuid4())
 	try:
-		embedding = await llm_service.create_embedding(profile.model_dump())
+		embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
 		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
 	except Exception as exc:
 		logger.exception("Candidate embedding creation failed")
@@ -545,7 +546,7 @@ async def ingest_job(
 		return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=False)
 
 	try:
-		embedding = await llm_service.create_embedding(profile.model_dump())
+		embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
 		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
 	except Exception as exc:
 		logger.exception("Job embedding creation failed")

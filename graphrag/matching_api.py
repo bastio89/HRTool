@@ -241,30 +241,30 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return normalize_vector_skill_entries(fallback_source, default_priority='Neutral')
 
 	async def build_skill_embedding_cache(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput]) -> dict[str, list[float]]:
-		if llm_service is None or not hasattr(llm_service, 'create_embedding'):
-			raise HTTPException(status_code=503, detail='Embedding service is not available')
+		skill_embeddings: dict[str, list[float]] = {}
+		for job in jobs:
+			for entry in get_required_skills(job):
+				name = entry.get('name')
+				embedding = entry.get('embedding')
+				if not name or not isinstance(embedding, list) or not embedding:
+					continue
+				key = name.strip().lower()
+				if key and key not in skill_embeddings:
+					skill_embeddings[key] = [float(value) for value in embedding]
+		for candidate in candidates:
+			for entry in get_candidate_skills(candidate):
+				name = entry.get('name')
+				embedding = entry.get('embedding')
+				if not name or not isinstance(embedding, list) or not embedding:
+					continue
+				key = name.strip().lower()
+				if key and key not in skill_embeddings:
+					skill_embeddings[key] = [float(value) for value in embedding]
 
-		skill_names = {
-			entry['name'].strip().lower()
-			for job in jobs
-			for entry in get_required_skills(job)
-			if entry.get('name')
-		}
-		skill_names.update(
-			entry['name'].strip().lower()
-			for candidate in candidates
-			for entry in get_candidate_skills(candidate)
-			if entry.get('name')
-		)
-
-		ordered_names = sorted(skill_names)
-		if not ordered_names:
+		if not skill_embeddings:
 			return {}
 
-		vectors = await asyncio.gather(
-			*(llm_service.create_embedding({'entity': 'skill', 'name': skill_name}) for skill_name in ordered_names)
-		)
-		return {name: vector for name, vector in zip(ordered_names, vectors)}
+		return skill_embeddings
 
 	def cosine_similarity(left: list[float] | tuple[float, ...], right: list[float] | tuple[float, ...]) -> float:
 		if not left or not right:
@@ -676,9 +676,21 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			return max(0.0, min(1.0, weighted_sum / total_weight))
 
 		score = max(0, min(100, int(row.get('score') or 0)))
-		vector_score = score / 100 if score else 0.0
-		hard_skill_score = category_score('HardSkill')
-		soft_skill_score = category_score('SoftSkill')
+		vector_score_value = row.get('vectorScore')
+		if vector_score_value is None:
+			vector_score = score / 100 if score else 0.0
+		else:
+			vector_score = max(0.0, min(1.0, float(vector_score_value)))
+		hard_skill_score_value = row.get('hardSkillScore')
+		if hard_skill_score_value is None:
+			hard_skill_score = category_score('HardSkill')
+		else:
+			hard_skill_score = max(0.0, min(1.0, float(hard_skill_score_value)))
+		soft_skill_score_value = row.get('softSkillScore')
+		if soft_skill_score_value is None:
+			soft_skill_score = category_score('SoftSkill')
+		else:
+			soft_skill_score = max(0.0, min(1.0, float(soft_skill_score_value)))
 		job_title = row.get('jobTitle') or 'Unbenannte Stelle'
 		candidate_name = row.get('candidateName') or f'Kandidat {row.get("candidateId")}'
 

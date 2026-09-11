@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import math
+import os
 import re
 from time import perf_counter
 from typing import Any
@@ -21,6 +22,21 @@ from models import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def _configure_logging() -> None:
+    level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    if not root_logger.handlers:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        )
+
+
+_configure_logging()
 
 _CURRENT_DATE_TOKENS = {"heute", "present", "today", "now", "aktuell", "current"}
 _DATE_RANGE_PATTERN = re.compile(r"(\d{4})\s*[\u2013\u2014-]\s*(heute|present|today|now|aktuell|current|\d{4})", re.IGNORECASE)
@@ -911,6 +927,15 @@ class LLMService:
 
     async def create_embedding(self, payload: dict[str, Any], *, allow_fallback: bool = True) -> list[float]:
         payload_text = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+        logger.info(
+            "embedding_call provider=%s model=%s allow_fallback=%s payload_keys=%s entity=%s name=%s",
+            self.provider,
+            self.embedding_model,
+            allow_fallback,
+            sorted(payload.keys()),
+            payload.get("entity"),
+            payload.get("name"),
+        )
         try:
             if self.provider == "openrouter":
                 response = await self.client.post(

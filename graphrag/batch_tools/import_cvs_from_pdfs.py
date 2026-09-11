@@ -243,7 +243,8 @@ async def _build_skill_embeddings(
                 {
                     "entity": "skill",
                     "name": skill_name,
-                }
+                },
+                allow_fallback=False,
             )
             for skill_name in unique_names
         )
@@ -263,7 +264,7 @@ async def _store_candidate_and_fetch_job_matches(
     match_limit: int,
 ) -> list[dict[str, object]]:
     # Create the candidate node first so the database contains the imported CV.
-    embedding = await llm_service.create_embedding(profile.model_dump())
+    embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
     skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills], llm_service)
 
     await db_service.upsert_candidate(
@@ -290,7 +291,7 @@ async def _store_job_and_fetch_candidate_matches(
     llm_service: LLMService,
     match_limit: int,
 ) -> list[dict[str, object]]:
-    embedding = await llm_service.create_embedding(profile.model_dump())
+    embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
     skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills], llm_service)
 
     await db_service.upsert_job(

@@ -293,7 +293,7 @@ function buildMatrixResult({ jobs, candidates, rows, mode, model }) {
 }
 
 async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle, candidateId, candidateName, candidateIds, engine = 'python' }) {
-  const endpoint = engine === 'neo4j' ? '/match/vectormatch_neo4j' : '/match/vectormatch';
+  const endpoint = '/match/vectormatch';
 
   if (direction === 'candidate_to_jobs') {
     const candidateRecord = getCandidates(candidateId ? [candidateId] : candidateIds)?.[0]
@@ -313,6 +313,7 @@ async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle
       jobTitles: jobs.map((job) => job.title).filter(Boolean),
       cvIds: [candidateRecord.id],
       candidateNames: [resolvedCandidateName].filter(Boolean),
+      engine,
     });
 
     return {
@@ -338,6 +339,7 @@ async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle
     jobTitles: [matchedJob.title || `Stelle ${jobId}`],
     cvIds: candidateIds,
     candidateNames: candidateRecords.map((candidate) => candidate.name).filter(Boolean),
+    engine,
   });
 
   return {

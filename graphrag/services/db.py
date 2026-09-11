@@ -692,11 +692,39 @@ class Neo4jService:
         if not normalized_job_ids or not normalized_candidate_ids:
             return []
 
+        def _best_match_list(category: str | None) -> str:
+            if category is None:
+                job_filter = "true"
+                candidate_filter = "true"
+            else:
+                category_key = category.strip().lower()
+                job_filter = f"toLower(coalesce(jobSkill.category, 'HardSkill')) = '{category_key}'"
+                candidate_filter = f"toLower(coalesce(candidateSkill.category, 'HardSkill')) = '{category_key}'"
+
+            return f"""
+            [jobSkill IN job_skills WHERE {job_filter} |
+                reduce(best = null, candidateSkill IN [skill IN candidate_skills WHERE {candidate_filter.replace('candidateSkill', 'skill')}] |
+                    CASE
+                        WHEN jobSkill.embedding IS NULL OR candidateSkill.embedding IS NULL THEN best
+                        WHEN best IS NULL OR vector.similarity.cosine(jobSkill.embedding, candidateSkill.embedding) > best.similarity THEN
+                            {{jobSkill: jobSkill.name, jobSkillCategory: jobSkill.category, candidateSkill: candidateSkill.name, candidateSkillCategory: candidateSkill.category, similarity: vector.similarity.cosine(jobSkill.embedding, candidateSkill.embedding), priority: jobSkill.priority}}
+                        ELSE best
+                    END
+                )
+            ]
+            """
+
+        def _priority_weight_expression(alias: str) -> str:
+            return (
+                f"CASE WHEN toLower(replace(replace(coalesce({alias}.priority, 'Mandatory'), '-', '_'), ' ', '_')) = 'mandatory' "
+                "THEN 2.0 ELSE 1.0 END"
+            )
+
         query = """
         UNWIND $job_ids AS job_id
            MATCH (j:Job)
            WHERE toString(j.id) = job_id
-        OPTIONAL MATCH (j)-[req:REQUIRES_SKILL]->(js:Skill)
+        OPTIONAL MATCH (j)-[req:REQUIRES_SKILL|NEED_SKILL]->(js:Skill)
         WITH j,
                [skill IN collect(DISTINCT {name: toLower(js.name), category: coalesce(js.category, 'HardSkill'), priority: coalesce(req.priority, 'Mandatory'), embedding: js.embedding})
               WHERE skill.name IS NOT NULL AND skill.embedding IS NOT NULL] AS job_skills
@@ -709,43 +737,86 @@ class Neo4jService:
              c,
                [skill IN collect(DISTINCT {name: toLower(cs.name), category: coalesce(cs.category, 'HardSkill'), embedding: cs.embedding})
               WHERE skill.name IS NOT NULL AND skill.embedding IS NOT NULL] AS candidate_skills
-        CALL {
-            WITH job_skills, candidate_skills
-            UNWIND job_skills AS jobSkill
-            UNWIND candidate_skills AS candidateSkill
-            WITH jobSkill, candidateSkill,
-                 vector.similarity.cosine(jobSkill.embedding, candidateSkill.embedding) AS similarity
-            WHERE toLower(coalesce(jobSkill.category, 'HardSkill')) = toLower(coalesce(candidateSkill.category, 'HardSkill'))
-                AND similarity >= 0.6
-            RETURN collect({
-                jobSkill: jobSkill.name,
-                jobSkillCategory: jobSkill.category,
-                candidateSkill: candidateSkill.name,
-                candidateSkillCategory: candidateSkill.category,
-                similarity: similarity,
-                priority: jobSkill.priority
-            }) AS matched_skills
-        }
-           WITH j,
-               c,
-               matched_skills
+        WITH j,
+             c,
+             job_skills,
+             candidate_skills,
+               __OVERALL_MATCHES__ AS overall_raw_matches,
+               __HARD_MATCHES__ AS hard_raw_matches,
+               __SOFT_MATCHES__ AS soft_raw_matches
+        WITH j,
+             c,
+             [match IN overall_raw_matches WHERE match IS NOT NULL] AS matched_skills,
+             [match IN hard_raw_matches WHERE match IS NOT NULL] AS hard_matches,
+             [match IN soft_raw_matches WHERE match IS NOT NULL] AS soft_matches
+        WITH j,
+             c,
+             matched_skills,
+             hard_matches,
+             soft_matches,
+               reduce(totalWeight = 0.0, match IN matched_skills | totalWeight + __OVERALL_WEIGHT__) AS overall_total_weight,
+               reduce(weightedSum = 0.0, match IN matched_skills | weightedSum + (__OVERALL_WEIGHT__) * coalesce(match.similarity, 0.0)) AS overall_weighted_sum,
+               reduce(totalWeight = 0.0, match IN hard_matches | totalWeight + __HARD_WEIGHT__) AS hard_total_weight,
+               reduce(weightedSum = 0.0, match IN hard_matches | weightedSum + (__HARD_WEIGHT__) * coalesce(match.similarity, 0.0)) AS hard_weighted_sum,
+               reduce(totalWeight = 0.0, match IN soft_matches | totalWeight + __SOFT_WEIGHT__) AS soft_total_weight,
+               reduce(weightedSum = 0.0, match IN soft_matches | weightedSum + (__SOFT_WEIGHT__) * coalesce(match.similarity, 0.0)) AS soft_weighted_sum
+        WITH j,
+             c,
+             matched_skills,
+             CASE
+                 WHEN overall_total_weight = 0 THEN 0
+                 ELSE toInteger(round((overall_weighted_sum / overall_total_weight) * 100))
+             END AS raw_score,
+             CASE
+                 WHEN hard_total_weight = 0 THEN 0
+                 ELSE toInteger(round((hard_weighted_sum / hard_total_weight) * 100))
+             END AS raw_hard_skill_score,
+             CASE
+                 WHEN soft_total_weight = 0 THEN 0
+                 ELSE toInteger(round((soft_weighted_sum / soft_total_weight) * 100))
+             END AS raw_soft_skill_score
+        WITH j,
+             c,
+             matched_skills,
+             CASE
+                 WHEN raw_score < 0 THEN 0
+                 WHEN raw_score > 100 THEN 100
+                 ELSE raw_score
+             END AS score,
+             CASE
+                 WHEN raw_hard_skill_score < 0 THEN 0
+                 WHEN raw_hard_skill_score > 100 THEN 100
+                 ELSE raw_hard_skill_score
+             END AS hard_skill_score,
+             CASE
+                 WHEN raw_soft_skill_score < 0 THEN 0
+                 WHEN raw_soft_skill_score > 100 THEN 100
+                 ELSE raw_soft_skill_score
+             END AS soft_skill_score
         RETURN j.id AS jobId,
                j.title AS jobTitle,
                c.id AS candidateId,
                c.name AS candidateName,
-               matched_skills AS matchedSkills
+               matched_skills AS matchedSkills,
+               score AS score,
+               toFloat(score) / 100.0 AS vectorScore,
+               toFloat(hard_skill_score) / 100.0 AS hardSkillScore,
+               toFloat(soft_skill_score) / 100.0 AS softSkillScore
         ORDER BY jobTitle ASC, candidateName ASC
         """
+        query = query.replace("__OVERALL_MATCHES__", _best_match_list(None))
+        query = query.replace("__HARD_MATCHES__", _best_match_list("HardSkill"))
+        query = query.replace("__SOFT_MATCHES__", _best_match_list("SoftSkill"))
+        query = query.replace("__OVERALL_WEIGHT__", _priority_weight_expression("match"))
+        query = query.replace("__HARD_WEIGHT__", _priority_weight_expression("match"))
+        query = query.replace("__SOFT_WEIGHT__", _priority_weight_expression("match"))
         async with self.driver.session() as session:
-            result = await session.run(query, job_ids=normalized_job_ids, candidate_ids=normalized_candidate_ids)
+            result = await session.run(
+                query,
+                job_ids=normalized_job_ids,
+                candidate_ids=normalized_candidate_ids,
+            )
             rows = await result.data()
-
-        for row in rows:
-            matched_skills = row.get("matchedSkills") or []
-            row["score"] = self._score_from_matched_skills(matched_skills)
-            row["vectorScore"] = row["score"] / 100 if row["score"] else 0.0
-            row["hardSkillScore"] = self._score_from_matched_skills(matched_skills, "HardSkill") / 100
-            row["softSkillScore"] = self._score_from_matched_skills(matched_skills, "SoftSkill") / 100
 
         rows.sort(key=lambda item: item["score"], reverse=True)
         return rows

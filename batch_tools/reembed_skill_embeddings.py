@@ -72,7 +72,7 @@ async def _load_skills(db_service: Neo4jService, only_missing: bool) -> list[dic
 
 async def _build_skill_embeddings(llm_service: LLMService, skill_names: list[str]) -> dict[str, list[float]]:
     vectors = await asyncio.gather(
-        *(llm_service.create_embedding({"entity": "skill", "name": skill_name}) for skill_name in skill_names)
+        *(llm_service.create_embedding({"entity": "skill", "name": skill_name}, allow_fallback=False) for skill_name in skill_names)
     )
     return {name: vector for name, vector in zip(skill_names, vectors, strict=True)}
 

@@ -909,7 +909,7 @@ class LLMService:
         self._record_parse_latency("job", elapsed_ms)
         return result
 
-    async def create_embedding(self, payload: dict[str, Any]) -> list[float]:
+    async def create_embedding(self, payload: dict[str, Any], *, allow_fallback: bool = True) -> list[float]:
         payload_text = json.dumps(payload, sort_keys=True, ensure_ascii=True)
         try:
             if self.provider == "openrouter":
@@ -930,8 +930,18 @@ class LLMService:
                 embedding = (data.get("data") or [{}])[0].get("embedding")
             if isinstance(embedding, list) and embedding:
                 return self._normalize_embedding([float(item) for item in embedding])
-        except Exception:
-            pass
+        except Exception as exc:
+            if not allow_fallback:
+                raise RuntimeError(
+                    f"Embedding generation failed for provider={self.provider}, model={self.embedding_model}"
+                ) from exc
+            logger.warning("embedding_fallback provider=%s model=%s: %s", self.provider, self.embedding_model, exc)
+            return self._deterministic_fallback_embedding(payload_text)
+
+        if not allow_fallback:
+            raise RuntimeError(
+                f"Embedding generation returned no vector for provider={self.provider}, model={self.embedding_model}"
+            )
         return self._deterministic_fallback_embedding(payload_text)
 
     async def rerank_candidates(

@@ -475,6 +475,7 @@ class MatchingMatrixPayload(BaseModel):
     type: Literal["matrix"] = "matrix"
     mode: str
     model: str | None = None
+    embeddingModel: str | None = None
     matchedAt: str
     jobs: list[dict[str, Any]] = Field(default_factory=list)
     candidates: list[dict[str, Any]] = Field(default_factory=list)
@@ -520,6 +521,7 @@ class VectorMatchPayload(BaseModel):
     type: Literal["vectormatch"] = "vectormatch"
     mode: str = "job_cv_vector"
     model: str | None = None
+    embeddingModel: str | None = None
     matchedAt: str
     jobs: list[dict[str, Any]] = Field(default_factory=list)
     candidates: list[dict[str, Any]] = Field(default_factory=list)
@@ -532,6 +534,7 @@ class VectorMatchNeo4jPayload(BaseModel):
     type: Literal["vectormatch_neo4j"] = "vectormatch_neo4j"
     mode: str = "job_cv_vector_neo4j"
     model: str | None = None
+    embeddingModel: str | None = None
     matchedAt: str
     jobs: list[dict[str, Any]] = Field(default_factory=list)
     candidates: list[dict[str, Any]] = Field(default_factory=list)

@@ -99,6 +99,7 @@ export default function MatchingResults() {
     const topRows = matrixRows.slice(0, 12)
     const bestScoreMatrix = topRows[0]?.score || 0
     const isVectorMatching = matrixData.type === 'vectormatch' || matrixData.type === 'vectormatch_neo4j'
+    const embeddingModelLabel = matrixData.embeddingModel || 'unbekannt'
     const pairCount = matrixRows.length
     const getPairKey = (row) => `${row.jobId}-${row.candidateId}`
     const selectedPairs = matrixRows.filter((row) => selectedPairKeys.includes(getPairKey(row)))
@@ -225,6 +226,9 @@ export default function MatchingResults() {
               <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{resultModeLabel}</h1>
               <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
                 <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
+                <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#0071e3]/10 text-[#0071e3] text-[12px] sm:text-[14px] font-semibold">
+                  Embedding: {embeddingModelLabel}
+                </span>
                 {matrixData.matchedAt && (
                   <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                     <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />

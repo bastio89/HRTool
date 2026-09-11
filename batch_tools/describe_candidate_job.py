@@ -188,7 +188,7 @@ async def _build_skill_embedding_cache(llm_service: LLMService, skill_names: lis
     if not ordered_names:
         return {}
     vectors = await asyncio.gather(
-        *(llm_service.create_embedding({"entity": "skill", "name": skill_name}) for skill_name in ordered_names)
+        *(llm_service.create_embedding({"entity": "skill", "name": skill_name}, allow_fallback=False) for skill_name in ordered_names)
     )
     return {name: vector for name, vector in zip(ordered_names, vectors, strict=True)}
 

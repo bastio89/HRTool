@@ -302,6 +302,7 @@ async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle
         id: candidateId || candidateIds?.[0] || null,
         name: candidateName || `Bewerber ${candidateId || ''}`.trim(),
       };
+    const resolvedCandidateName = candidateRecord?.name || candidateName || null;
     const jobs = getJobs();
     if (jobs.length === 0) {
       throw Object.assign(new Error('Keine Stellen vorhanden'), { status: 404 });
@@ -311,7 +312,7 @@ async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle
       jobIds: jobs.map((job) => job.id),
       jobTitles: jobs.map((job) => job.title).filter(Boolean),
       cvIds: [candidateRecord.id],
-      candidateNames: [candidateRecord.name].filter(Boolean),
+      candidateNames: [resolvedCandidateName].filter(Boolean),
     });
 
     return {

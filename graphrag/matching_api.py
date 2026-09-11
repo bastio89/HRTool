@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from config import settings
 from models import (
 	MatchingCandidateInput,
 	MatchingJobInput,
@@ -582,6 +583,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return VectorMatchPayload(
 			mode='vectormatch',
 			model='graph-rag-python-skill-vector-match',
+			embeddingModel=settings.resolved_embedding_model,
 			matchedAt=datetime.now(timezone.utc).isoformat(),
 			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
 			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
@@ -625,6 +627,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			type='matrix',
 			mode=mode,
 			model=model_name,
+			embeddingModel=settings.resolved_embedding_model,
 			matchedAt=datetime.now(timezone.utc).isoformat(),
 			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
 			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
@@ -964,6 +967,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 
 		return VectorMatchNeo4jPayload(
 			model='graph-rag-neo4j-vector-matching',
+			embeddingModel=settings.resolved_embedding_model,
 			matchedAt=datetime.now(timezone.utc).isoformat(),
 			jobs=[{'id': row['jobId'], 'title': row['jobTitle']} for row in normalized_rows],
 			candidates=[{'id': row['candidateId'], 'name': row['candidateName']} for row in normalized_rows],

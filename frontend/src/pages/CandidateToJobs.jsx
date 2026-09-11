@@ -51,9 +51,11 @@ export default function CandidateToJobs() {
     setError('')
     setMatching(true)
     try {
+        const selectedCandidate = candidates.find(c => c.id === selectedId)
       const result = await matchingApi.vectorMatch({
         direction: 'candidate_to_jobs',
         candidateId: selectedId,
+          candidateName: selectedCandidate?.name || undefined,
         engine: vectorEngine,
       })
       navigate(`/matching/results/${result.id}`)

@@ -6,3 +6,8 @@
     encode gzip
     reverse_proxy frontend:80
 }
+
+kuna.kasperpa.duckdns.org {
+    encode gzip
+    reverse_proxy 192.168.0.169:3001
+}

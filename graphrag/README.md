@@ -133,7 +133,7 @@ LIMIT 25;
 ```
 
 ## Batch import CV PDFs
-The helper script `batch_tools/import_cvs_from_pdfs.py` extracts text from each PDF locally and ingests CVs directly into Neo4j.
+The helper script `graphrag/batch_tools/import_cvs_from_pdfs.py` extracts text from each PDF locally and ingests CVs directly into Neo4j.
 It uses the resolved AI provider from `config.py`, so with `AI_PROVIDER=openrouter` it will call OpenRouter instead of a local Ollama instance.
 
 - `--mode cv` imports CVs directly into Neo4j and prints the best job matches (default)
@@ -142,7 +142,7 @@ It uses the resolved AI provider from `config.py`, so with `AI_PROVIDER=openrout
 - After each CV import the script prints the 10 best matching jobs based on skill overlap in Neo4j.
 
 ```bash
-/Users/pak/HRGraphRAG/.venv/bin/python batch_tools/import_cvs_from_pdfs.py \
+/Users/pak/HRGraphRAG/.venv/bin/python graphrag/batch_tools/import_cvs_from_pdfs.py \
 	--api-base http://localhost:8000 \
 	--mode cv \
 	--input-dir cv_input
@@ -153,7 +153,7 @@ OpenRouter example:
 ```bash
 export AI_PROVIDER=openrouter
 export OPENROUTER_API_KEY=your_openrouter_api_key
-/Users/pak/HRGraphRAG/.venv/bin/python batch_tools/import_cvs_from_pdfs.py \
+/Users/pak/HRGraphRAG/.venv/bin/python graphrag/batch_tools/import_cvs_from_pdfs.py \
 	--mode cv \
 	--input-dir cv_input
 ```
@@ -161,7 +161,7 @@ export OPENROUTER_API_KEY=your_openrouter_api_key
 Dry-run (only local PDF extraction, no API ingest, no file move):
 
 ```bash
-/Users/pak/HRGraphRAG/.venv/bin/python batch_tools/import_cvs_from_pdfs.py \
+/Users/pak/HRGraphRAG/.venv/bin/python graphrag/batch_tools/import_cvs_from_pdfs.py \
 	--api-base http://localhost:8000 \
 	--mode job \
 	--input-dir job_input \

@@ -26,19 +26,20 @@ from models import (
 	LinkedInProfileResponse,
 	MatchCandidateResponse,
 	MatchResponse,
-	WorkHistoryExtraction,
 )
 from services.candidate_privacy import CandidatePrivacyService
+from services.candidate_extraction import extract_candidate_profile
+from services.candidate_persistence import persist_candidate_profile
 from services.db import Neo4jService
 from services.linkedin_people_search import LinkedInPeopleSearchService
 from services.linkedin_mcp import LinkedInMCPError, LinkedInMCPService
 from matching_api import create_matching_router
+from services.job_persistence import persist_job_profile
 from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
 from services.candidate_text_renderer import render_candidate_fulltext
-from services.work_history_recovery import recover_work_history_from_text
 llm_service = LLMService(
 	provider=settings.resolved_provider,
 	base_url=settings.resolved_ai_base_url,
@@ -145,38 +146,6 @@ async def _extract_candidate_payload_from_request(request: Request) -> tuple[str
 	text = await _extract_raw_text(raw_text=raw_text, file=file, is_candidate=True)
 	validated = CandidateIngestRequest.model_validate({"raw_text": text})
 	return validated.raw_text, None
-
-
-async def _extract_ingest_text_from_request(request: Request, is_candidate: bool) -> str:
-	content_type = request.headers.get("content-type", "").lower()
-
-	raw_text: str | None = None
-	file: UploadFile | None = None
-
-	if "application/json" in content_type:
-		payload_data = await request.json()
-		if is_candidate:
-			payload = CandidateIngestRequest.model_validate(payload_data)
-			raw_text = payload.raw_text
-		else:
-			payload = JobIngestRequest.model_validate(payload_data)
-			raw_text = payload.raw_text
-	elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
-		form = await request.form()
-		form_raw_text = form.get("raw_text")
-		form_file = form.get("file")
-
-		if isinstance(form_raw_text, str):
-			raw_text = form_raw_text
-		if form_file is not None and hasattr(form_file, "read"):
-			file = form_file
-	elif content_type:
-		raise HTTPException(
-			status_code=415,
-			detail="Unsupported content type. Use application/json or multipart/form-data.",
-		)
-
-	return await _extract_raw_text(raw_text=raw_text, file=file, is_candidate=is_candidate)
 
 
 async def _extract_job_payload_from_request(request: Request) -> tuple[str | None, JobProfileExtraction | None]:
@@ -333,12 +302,15 @@ async def parse_cv(
 			raise HTTPException(status_code=400, detail="Datei zu groß (max. 20 MB)")
 		filenames.append(filename)
 		try:
-			text = extract_document_text(data, content_type)
+			if content_type == "application/pdf":
+				text = pdf_service.extract_text(data)
+			else:
+				text = extract_document_text(data, content_type)
 		except ValueError as exc:
 			logger.warning("Could not extract text from %s: %s", filename, exc)
 			continue
 		if len(text.strip()) > 5:
-			text_parts.append(f"=== Datei: {filename} ===\n{text.strip()}")
+			text_parts.append(text.strip())
 
 	combined_text = "\n\n".join(text_parts)
 	if len(combined_text.strip()) < 20:
@@ -348,32 +320,10 @@ async def parse_cv(
 		)
 
 	try:
-		profile = await llm_service.parse_candidate_cv(combined_text)
+		profile = await extract_candidate_profile(llm_service, combined_text)
 	except Exception as exc:
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
-
-	if not profile.work_history:
-		recovered_work_history = recover_work_history_from_text(combined_text)
-		if recovered_work_history:
-			profile.work_history = [WorkHistoryExtraction(**entry) for entry in recovered_work_history]
-			first_entry = recovered_work_history[0]
-			if not profile.current_employer and first_entry.get("employer"):
-				profile.current_employer = first_entry["employer"]
-			if not profile.current_position and first_entry.get("position"):
-				profile.current_position = first_entry["position"]
-			if not profile.experience:
-				profile.experience = "\n".join(
-					filter(
-						None,
-						(
-							", ".join(filter(None, (entry.get("position"), entry.get("employer"))))
-							for entry in recovered_work_history[:3]
-						),
-					)
-				)
-		else:
-			logger.warning("CV-Parser: kein Beruflicher Werdegang beim Parsen gefunden")
 
 	graph_candidate_id: str | None = None
 	postgres_candidate_id: int | None = None
@@ -388,20 +338,18 @@ async def parse_cv(
 				embedding=embedding,
 				skill_embeddings=skill_embeddings,
 			)
-			postgres_candidate_id = await postgres_store.insert_candidate(profile, source="CV-Import")
 			candidate_text = combined_text or render_candidate_fulltext(
 				profile.model_dump(mode="json"),
 				work_history=[item.model_dump(mode="json") for item in profile.work_history],
 				education_history=[item.model_dump(mode="json") for item in profile.education_history],
 			)
-			await postgres_store.store_candidate_text(
-				str(postgres_candidate_id),
-				candidate_text,
-				candidate_name=profile.name,
+			postgres_candidate_id = await persist_candidate_profile(
+				postgres_store=postgres_store,
+				candidate_privacy_service=candidate_privacy_service,
+				profile=profile,
+				candidate_text=candidate_text,
 				source="CV-Import",
-				profile_json=profile.model_dump(mode="json"),
 			)
-			await candidate_privacy_service.anonymize_candidate(str(postgres_candidate_id))
 		except Exception as exc:
 			logger.exception("Candidate persistence failed")
 			raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
@@ -438,7 +386,7 @@ async def ingest_candidate(
 		if provided_profile is None:
 			if text is None:
 				raise HTTPException(status_code=400, detail="Provide either raw_text or profile.")
-			profile = await llm_service.parse_candidate_cv(text)
+			profile = await extract_candidate_profile(llm_service, text)
 		else:
 			profile = provided_profile
 	except Exception as exc:
@@ -465,14 +413,13 @@ async def ingest_candidate(
 			work_history=[item.model_dump(mode="json") for item in profile.work_history],
 			education_history=[item.model_dump(mode="json") for item in profile.education_history],
 		)
-		await postgres_store.store_candidate_text(
-			candidate_id,
-			candidate_text,
-			candidate_name=profile.name,
+		await persist_candidate_profile(
+			postgres_store=postgres_store,
+			candidate_privacy_service=candidate_privacy_service,
+			profile=profile,
+			candidate_text=candidate_text,
 			source="Candidate-Ingest",
-			profile_json=profile.model_dump(mode="json"),
 		)
-		await candidate_privacy_service.anonymize_candidate(candidate_id)
 	except Exception as exc:
 		logger.exception("Candidate persistence failed")
 		raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
@@ -556,7 +503,12 @@ async def ingest_job(
 
 	if persist_postgres:
 		try:
-			await postgres_store.upsert_job(job_id=job_id, raw_text=text or "", profile=profile)
+			await persist_job_profile(
+				postgres_store=postgres_store,
+				job_id=job_id,
+				raw_text=text or "",
+				profile=profile,
+			)
 		except Exception as exc:
 			logger.exception("Job PostgreSQL persistence failed")
 			raise HTTPException(status_code=503, detail=f"Job PostgreSQL persistence failed: {exc}") from exc

@@ -46,12 +46,14 @@ async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch
     parse_mock = AsyncMock(return_value=fake_profile)
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    postgres_mock = AsyncMock(return_value=42)
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -75,8 +77,9 @@ async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
     assert embedding_mock.await_args_list[1].args == ({"entity": "skill", "name": "python"},)
     upsert_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once_with(fake_profile, source="Candidate-Ingest")
     store_text_mock.assert_awaited_once()
-    anonymize_mock.assert_awaited_once_with("cand-123")
+    anonymize_mock.assert_awaited_once_with("42")
 
 
 @pytest.mark.anyio
@@ -104,12 +107,14 @@ async def test_ingest_candidate_uses_structured_profile_payload(app_module, api_
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    postgres_mock = AsyncMock(return_value=43)
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -129,8 +134,9 @@ async def test_ingest_candidate_uses_structured_profile_payload(app_module, api_
     assert embedding_mock.await_count == 2
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
     assert upsert_mock.await_count == 1
+    postgres_mock.assert_awaited_once_with(fake_profile, source="Candidate-Ingest")
     store_text_mock.assert_awaited_once()
-    anonymize_mock.assert_awaited_once_with("cand-structured-123")
+    anonymize_mock.assert_awaited_once_with("43")
 
 
 @pytest.mark.anyio
@@ -139,12 +145,14 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    postgres_mock = AsyncMock(return_value=44)
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -177,8 +185,9 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     assert [language["name"] for language in profile_payload["languages"]] == ["Deutsch (C2)", "Englisch (B2)"]
     assert profile_payload["preferred_roles"] == ["Data Engineer", "Backend Engineer"]
     upsert_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once_with(parse_mock.await_args.args[0] if parse_mock.await_args else profile_payload, source="Candidate-Ingest")
     store_text_mock.assert_awaited_once()
-    anonymize_mock.assert_awaited_once_with("cand-string-123")
+    anonymize_mock.assert_awaited_once_with("44")
 
 
 @pytest.mark.anyio
@@ -187,12 +196,14 @@ async def test_ingest_candidate_forwards_work_history(app_module, api_client, mo
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    postgres_mock = AsyncMock(return_value=45)
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -224,8 +235,9 @@ async def test_ingest_candidate_forwards_work_history(app_module, api_client, mo
     assert profile_payload["work_history"][0]["employer"] == "ACME GmbH"
     assert profile_payload["work_history"][0]["position"] == "Senior Engineer"
     upsert_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once_with(parse_mock.await_args.args[0] if parse_mock.await_args else profile_payload, source="Candidate-Ingest")
     store_text_mock.assert_awaited_once()
-    anonymize_mock.assert_awaited_once_with("cand-history-123")
+    anonymize_mock.assert_awaited_once_with("45")
 
 
 @pytest.mark.anyio
@@ -234,12 +246,14 @@ async def test_ingest_candidate_forwards_education_history(app_module, api_clien
     parse_mock = AsyncMock()
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
+    postgres_mock = AsyncMock(return_value=46)
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -270,8 +284,9 @@ async def test_ingest_candidate_forwards_education_history(app_module, api_clien
     assert profile_payload["education_history"][0]["institution"] == "FHNW"
     assert profile_payload["education_history"][0]["degree"] == "Bachelor of Science"
     upsert_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once_with(parse_mock.await_args.args[0] if parse_mock.await_args else profile_payload, source="Candidate-Ingest")
     store_text_mock.assert_awaited_once()
-    anonymize_mock.assert_awaited_once_with("cand-education-123")
+    anonymize_mock.assert_awaited_once_with("46")
 
 
 @pytest.mark.anyio
@@ -623,8 +638,9 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
     assert embedding_mock.await_args_list[1].args == ({"entity": "skill", "name": "python"},)
     upsert_mock.assert_awaited_once()
+    postgres_mock.assert_awaited_once_with(fake_profile, source="Candidate-Ingest")
     store_text_mock.assert_awaited_once()
-    anonymize_mock.assert_awaited_once_with("cand-pdf-123")
+    anonymize_mock.assert_awaited_once_with("43")
 
 
 @pytest.mark.anyio

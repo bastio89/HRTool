@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlsplit, urlunsplit
 
 import psycopg
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,9 +46,15 @@ class Settings(BaseSettings):
             default_base_url = self.ollama_base_url
         return (self.ai_base_url or self._backend_setting("ai_base_url") or default_base_url).rstrip("/")
 
+    def _backend_database_url(self) -> str:
+        parsed = urlsplit(self.database_url)
+        if parsed.hostname == "postgres":
+            return urlunsplit((parsed.scheme, parsed.netloc.replace("postgres", "localhost", 1), parsed.path, parsed.query, parsed.fragment))
+        return self.database_url
+
     def _backend_setting(self, key: str) -> str | None:
         try:
-            with psycopg.connect(self.database_url) as connection:
+            with psycopg.connect(self._backend_database_url()) as connection:
                 row = connection.execute("SELECT value FROM settings WHERE key = %s", (key,)).fetchone()
             return row[0].strip() if row and isinstance(row[0], str) and row[0].strip() else None
         except psycopg.Error:
@@ -84,7 +91,7 @@ class Settings(BaseSettings):
     @property
     def resolved_reasoning_level(self) -> str:
         try:
-            with psycopg.connect(self.database_url) as connection:
+            with psycopg.connect(self._backend_database_url()) as connection:
                 row = connection.execute("SELECT value FROM settings WHERE key = %s", ("ai_reasoning_level",)).fetchone()
             level = row[0].strip().lower() if row and isinstance(row[0], str) else None
         except psycopg.Error:

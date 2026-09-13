@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib import error, request
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -258,10 +258,11 @@ def export_jobs_ch_pdfs(links_file: Path, zip_output: Path) -> tuple[int, str]:
     print(f"ZIP erstellt: {zip_output}")
     if failures:
         print(f"Warnung: {len(failures)} jobs.ch-Link(s) wurden übersprungen.", file=sys.stderr)
+
     return 0, f"created {len(pdf_outputs)} PDFs"
 
 
-def resolve_auth_token(args: argparse.Namespace) -> str:
+def resolve_auth_token(args: argparse.Namespace) -> str | None:
     token = args.token or os.environ.get("HRTOOL_API_TOKEN")
     if token:
         return token
@@ -279,10 +280,7 @@ def resolve_auth_token(args: argparse.Namespace) -> str:
             raise RuntimeError("Login succeeded but response has no token")
         return login_token
 
-    raise RuntimeError(
-        "Authentication required: use --token or provide --username and --password "
-        "(or env vars HRTOOL_API_TOKEN / HRTOOL_USERNAME / HRTOOL_PASSWORD)."
-    )
+    return None
 
 
 def process_file(
@@ -353,6 +351,11 @@ def process_file(
 
 def main() -> int:
     args = parse_args()
+
+    if args.jobs_ch_links_file is None:
+        default_links_file = REPO_ROOT / "job-links.txt"
+        if default_links_file.exists():
+            args.jobs_ch_links_file = default_links_file
 
     if args.jobs_ch_links_file:
         zip_output = args.jobs_ch_zip_output or (Path.cwd() / "jobs-ch-pdfs.zip")

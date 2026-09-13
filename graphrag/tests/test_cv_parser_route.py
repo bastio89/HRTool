@@ -123,6 +123,34 @@ async def test_cv_parser_parse_recovers_work_history_when_llm_misses_it(app_modu
 
 
 @pytest.mark.anyio
+async def test_cv_parser_parse_recovers_education_history_when_llm_misses_it(app_module, api_client, monkeypatch):
+    profile = CandidateProfileExtraction(name="Alina Moser", skills=[])
+    monkeypatch.setattr(app_module, "extract_document_text", lambda data, content_type: data.decode("utf-8"))
+    monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", AsyncMock(return_value=profile))
+
+    raw_text = (
+        "Alina Moser\n"
+        "Ausbildung\n"
+        "Bachelor of Science in Wirtschaftsinformatik, FHNW, 2017 - 2021\n"
+        "Beruflicher Werdegang\n"
+        "Junior Python Developer, Farmy.ch AG, Zürich\n"
+    )
+
+    response = await api_client.post(
+        "/cv-parser/parse",
+        params={"persist": "false"},
+        files={"file": ("cv.pdf", raw_text.encode("utf-8"), "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["profile"]["education_history"]) == 1
+    assert payload["profile"]["education_history"][0]["institution"] == "FHNW"
+    assert payload["profile"]["education_history"][0]["degree"] == "Bachelor of Science in Wirtschaftsinformatik"
+    assert payload["profile"]["education_history"][0]["field_of_study"] == "Wirtschaftsinformatik"
+
+
+@pytest.mark.anyio
 async def test_cv_parser_parse_logs_warning_when_no_work_history_recoverable(app_module, api_client, monkeypatch, caplog):
     profile = CandidateProfileExtraction(name="No History Person", skills=[])
     monkeypatch.setattr(app_module, "extract_document_text", lambda data, content_type: data.decode("utf-8"))

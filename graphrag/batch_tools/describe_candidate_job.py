@@ -13,7 +13,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import psycopg
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 GRAPHRAG_ROOT = PROJECT_ROOT / "graphrag"
 for path in (GRAPHRAG_ROOT, PROJECT_ROOT):
     if str(path) not in sys.path:
@@ -220,12 +220,13 @@ async def _load_top_cosine_pairs(
              jobSkill.embedding AS job_embedding,
              candidateSkill.embedding AS cv_embedding,
              cosine
-    ORDER BY cosine DESC, job_skill ASC, cv_skill ASC
+    ORDER BY cosine DESC
     LIMIT $limit
     """
     async with db_service.driver.session() as session:
         result = await session.run(query, candidate_id=candidate_id, job_id=job_id, limit=limit)
-        return await result.data()
+        rows = await result.data()
+    return rows
 
 
 async def _load_candidate_text(postgres_store: PostgresStore, candidate_id: str) -> dict[str, Any] | None:

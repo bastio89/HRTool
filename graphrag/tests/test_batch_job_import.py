@@ -46,6 +46,15 @@ class FakeDbService:
         return None
 
 
+class FakePostgresStore:
+    def __init__(self) -> None:
+        self.upsert_kwargs = None
+
+    async def upsert_job(self, job_id: str, raw_text: str, profile):
+        self.upsert_kwargs = {"job_id": job_id, "raw_text": raw_text, "profile": profile}
+        return 99
+
+
 def test_resolve_input_dir_uses_job_input_for_job_mode():
     args = type("Args", (), {"mode": "job", "input_dir": None})()
 
@@ -76,6 +85,7 @@ async def test_process_job_file_parses_profile_and_persists_skills(tmp_path, mon
     )
 
     fake_db = FakeDbService()
+    fake_postgres = FakePostgresStore()
     fake_llm = AsyncMock()
     fake_llm.parse_job_description = AsyncMock(return_value=fake_profile)
     fake_llm.create_embedding = AsyncMock(side_effect=[[0.1, 0.2, 0.3], [0.4], [0.5]])
@@ -89,6 +99,7 @@ async def test_process_job_file_parses_profile_and_persists_skills(tmp_path, mon
         pdf_service=FakePdfService(),
         db_service=fake_db,
         llm_service=fake_llm,
+        postgres_store=fake_postgres,
         match_limit=5,
     )
 
@@ -106,3 +117,6 @@ async def test_process_job_file_parses_profile_and_persists_skills(tmp_path, mon
     assert fake_db.upsert_kwargs["skill_embeddings"]["sql"] == [0.5]
     assert fake_db.upsert_kwargs["source_hash"]
     assert fake_db.upsert_kwargs["profile_hash"]
+    assert fake_postgres.upsert_kwargs is not None
+    assert fake_postgres.upsert_kwargs["job_id"] == "job-123"
+    assert fake_postgres.upsert_kwargs["profile"].title == "Senior Data Engineer"

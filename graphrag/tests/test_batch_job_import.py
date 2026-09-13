@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from batch_tools import import_cvs_from_pdfs as importer
+from HRTool.graphrag.batch_tools import import_cvs_jobs_from_pdfs as importer
 from models import JobCandidateMatch, JobProfileExtraction, JobSkillExtraction, LanguageExtraction, EducationExtraction, IndustryExtraction
 
 

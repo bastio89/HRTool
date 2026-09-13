@@ -311,6 +311,85 @@ class PostgresStore:
 
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO candidates (
+                        name, email, phone, location, experience, skills, education,
+                        desired_salary, availability, languages, certificates,
+                        drivers_license, mobility, notes, status, tags, source, linkedin_url,
+                        xing_url, github_url, portfolio_url, notice_period, nationality,
+                        current_employer, current_position, gender, parsing_method
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, 'Aktiv', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    ) RETURNING id
+                    """,
+                    (
+                        profile.name,
+                        profile.email,
+                        profile.phone,
+                        profile.location,
+                        profile.experience,
+                        skills,
+                        education,
+                        profile.desired_salary,
+                        profile.availability,
+                        languages,
+                        profile.certificates,
+                        profile.drivers_license,
+                        profile.mobility,
+                        profile.notes,
+                        profile.tags,
+                        source,
+                        profile.linkedin_url,
+                        profile.xing_url,
+                        profile.github_url,
+                        profile.portfolio_url,
+                        profile.notice_period,
+                        profile.nationality,
+                        profile.current_employer,
+                        profile.current_position,
+                        profile.gender,
+                        profile.parsing_method,
+                    ),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise RuntimeError("PostgreSQL did not return a candidate id")
+                candidate_id = int(row["id"])
+
+                for item in profile.work_history:
+                    if not item.employer or not item.position:
+                        continue
+                    await cursor.execute(
+                        """
+                        INSERT INTO candidate_work_history (
+                            candidate_id, employer, position, from_date, to_date,
+                            is_current, description, location
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            candidate_id, item.employer, item.position, item.from_date,
+                            item.to_date, 1 if item.is_current else 0, item.description, item.location,
+                        ),
+                    )
+
+                for item in profile.education_history:
+                    if not item.institution:
+                        continue
+                    await cursor.execute(
+                        """
+                        INSERT INTO candidate_education (
+                            candidate_id, institution, degree, field_of_study,
+                            from_date, to_date, description
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            candidate_id, item.institution, item.degree, item.field_of_study,
+                            item.from_date, item.to_date, item.description,
+                        ),
+                    )
+        return candidate_id
 
     async def list_compat_jobs(self) -> list[dict[str, Any]]:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -403,85 +482,6 @@ class PostgresStore:
         if row is None:
             raise RuntimeError("PostgreSQL did not return a candidate id")
         return dict(row)
-                await cursor.execute(
-                    """
-                    INSERT INTO candidates (
-                        name, email, phone, location, experience, skills, education,
-                        desired_salary, availability, languages, certificates,
-                        drivers_license, mobility, notes, status, tags, source, linkedin_url,
-                        xing_url, github_url, portfolio_url, notice_period, nationality,
-                        current_employer, current_position, gender, parsing_method
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, 'Aktiv', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    ) RETURNING id
-                    """,
-                    (
-                        profile.name,
-                        profile.email,
-                        profile.phone,
-                        profile.location,
-                        profile.experience,
-                        skills,
-                        education,
-                        profile.desired_salary,
-                        profile.availability,
-                        languages,
-                        profile.certificates,
-                        profile.drivers_license,
-                        profile.mobility,
-                        profile.notes,
-                        profile.tags,
-                        source,
-                        profile.linkedin_url,
-                        profile.xing_url,
-                        profile.github_url,
-                        profile.portfolio_url,
-                        profile.notice_period,
-                        profile.nationality,
-                        profile.current_employer,
-                        profile.current_position,
-                        profile.gender,
-                        profile.parsing_method,
-                    ),
-                )
-                row = await cursor.fetchone()
-                if row is None:
-                    raise RuntimeError("PostgreSQL did not return a candidate id")
-                candidate_id = int(row["id"])
-
-                for item in profile.work_history:
-                    if not item.employer or not item.position:
-                        continue
-                    await cursor.execute(
-                        """
-                        INSERT INTO candidate_work_history (
-                            candidate_id, employer, position, from_date, to_date,
-                            is_current, description, location
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            candidate_id, item.employer, item.position, item.from_date,
-                            item.to_date, 1 if item.is_current else 0, item.description, item.location,
-                        ),
-                    )
-
-                for item in profile.education_history:
-                    if not item.institution:
-                        continue
-                    await cursor.execute(
-                        """
-                        INSERT INTO candidate_education (
-                            candidate_id, institution, degree, field_of_study,
-                            from_date, to_date, description
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            candidate_id, item.institution, item.degree, item.field_of_study,
-                            item.from_date, item.to_date, item.description,
-                        ),
-                    )
-        return candidate_id
 
     async def upsert_job(self, job_id: str, raw_text: str, profile: JobProfileExtraction) -> int:
         description = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)

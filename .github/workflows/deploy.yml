@@ -42,10 +42,9 @@ jobs:
             git pull --ff-only origin "${{ inputs.ref }}"
 
             export BACKEND_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-backend:${{ inputs.image_tag }}"
-            export BACKEND_NEW_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-backend-new:${{ inputs.image_tag }}"
             export FRONTEND_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-frontend:${{ inputs.image_tag }}"
             export GRAPHRAG_IMAGE="ghcr.io/${{ github.repository_owner }}/hrtool-graphrag:${{ inputs.image_tag }}"
 
             printf '%s' '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
-            docker compose pull backend backend_new frontend graphrag
+            docker compose pull backend frontend graphrag
             docker compose up -d --no-build

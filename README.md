@@ -243,7 +243,7 @@ docker compose down
 
 Die automatisierte Pipeline besteht aus drei Teilen:
 
-1. **CI** läuft bei jedem Push und Pull Request über GitHub Actions und prüft Backend, Frontend, `backend_new` und GraphRAG.
+1. **CI** läuft bei jedem Push und Pull Request über GitHub Actions und prüft Backend, Frontend und GraphRAG.
 2. **Image-Publishing** läuft bei Push auf `main` und bei Versionstags wie `v1.2.3`; dabei werden GHCR-Images mit `latest`, SHA und Versionstag gebaut.
 3. **Deployment** ist manuell per GitHub Actions `workflow_dispatch` und verbindet sich per SSH mit dem Zielserver, zieht die GHCR-Images für einen frei wählbaren Tag und startet den Compose-Stack neu.
 
@@ -256,7 +256,7 @@ Für das Deploy-Workflow werden folgende Secrets benötigt:
 - optional `DEPLOY_SSH_PORT`
 - optional `image_tag` beim Deploy-Workflow, wenn nicht `latest` verwendet werden soll
 
-Die Compose-Datei kann sowohl lokal als auch mit Registry-Images arbeiten. Lokal greifen die Defaults aus [.env.docker.example](.env.docker.example), für Server-Deployments können `BACKEND_IMAGE`, `BACKEND_NEW_IMAGE`, `FRONTEND_IMAGE` und `GRAPHRAG_IMAGE` auf GHCR-Referenzen gesetzt werden.
+Die Compose-Datei kann sowohl lokal als auch mit Registry-Images arbeiten. Lokal greifen die Defaults aus [.env.docker.example](.env.docker.example), für Server-Deployments können `BACKEND_IMAGE`, `FRONTEND_IMAGE` und `GRAPHRAG_IMAGE` auf GHCR-Referenzen gesetzt werden.
 
 Im Compose-Netzwerk verwendet GraphRAG `bolt://neo4j:7687`; die mitgelieferte `.env.docker.example` ist dafür bereits vorbereitet. Ollama läuft standardmäßig auf dem Host und wird aus den Containern über `host.docker.internal` erreicht. Auf Linux muss Docker den Hostnamen unterstützen; alternativ setzen Sie `OLLAMA_BASE_URL` auf einen von den Containern erreichbaren Ollama-Host.
 

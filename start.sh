@@ -29,7 +29,7 @@ fi
 
 docker compose config --quiet
 
-services=(postgres backend backend_new pgadmin frontend neo4j graphrag)
+services=(postgres backend pgadmin frontend neo4j graphrag)
 if [ "${START_CADDY:-0}" = "1" ]; then
   services+=(caddy)
 else

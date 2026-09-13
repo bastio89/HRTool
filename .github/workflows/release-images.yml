@@ -22,10 +22,6 @@ jobs:
             context: .
             dockerfile: backend/Dockerfile
             image: hrtool-backend
-          - name: backend_new
-            context: .
-            dockerfile: backend_new/Dockerfile
-            image: hrtool-backend-new
           - name: frontend
             context: frontend
             dockerfile: Dockerfile

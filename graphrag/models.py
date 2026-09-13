@@ -385,6 +385,31 @@ class JobIngestResponse(IngestResponse):
     profile: JobProfileExtraction
     persisted: bool = True
 
+class LegacyHealthResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    app: str = "HR Graph Matching API"
+    version: str = "1.0.0"
+
+class JobCreate(BaseModel):
+    title: str = Field(..., min_length=2)
+    company: str | None = None
+    location: str | None = None
+    employment_type: str | None = None
+    status: str | None = "open"
+
+class JobRead(JobCreate):
+    id: int
+
+class CandidateCreate(BaseModel):
+    name: str = Field(..., min_length=2)
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    status: str | None = "new"
+
+class CandidateRead(CandidateCreate):
+    id: int
+
 
 class LinkedInProfileRequest(BaseModel):
     url: str = Field(..., min_length=1)

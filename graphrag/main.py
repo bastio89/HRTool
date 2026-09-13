@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 
 from config import settings
+from legacy_api import create_legacy_router
 from models import (
 	CandidateIngestRequest,
 	CandidatePrivacyRequest,
@@ -84,6 +85,7 @@ app = FastAPI(
 )
 
 app.include_router(create_matching_router(llm_service, db_service))
+app.include_router(create_legacy_router(postgres_store))
 
 
 async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_candidate: bool) -> str:

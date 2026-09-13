@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend_new import jobs_ch_to_pdf
+from graphrag import jobs_ch_to_pdf
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,8 +43,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--api-base",
-        default="http://localhost:3001/api",
-        help="Base API URL (default: http://localhost:3001/api)",
+        default=f"{os.environ.get('GRAPHRAG_BASE_URL', 'http://127.0.0.1:8002').rstrip('/')}/api",
+        help="Base API URL (default: GRAPHRAG_BASE_URL/api or http://127.0.0.1:8002/api)",
     )
     parser.add_argument(
         "--input-dir",

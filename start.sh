@@ -4,6 +4,36 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+usage() {
+  cat <<'EOF'
+Usage: ./start.sh [--help|-h]
+
+Starts the HRTool stack with Docker Compose.
+
+Environment variables:
+  START_CADDY=1    Start the Caddy reverse proxy as well
+
+Behavior:
+  - checks that Docker and Docker Compose v2 are available
+  - creates .env from .env.docker.example if needed
+  - validates that secret placeholders in .env have been replaced
+  - builds and starts the application services
+
+Examples:
+  ./start.sh
+  START_CADDY=1 ./start.sh
+EOF
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+  esac
+done
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Fehler: Docker ist nicht installiert oder nicht im PATH." >&2
   exit 1

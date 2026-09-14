@@ -11,3 +11,8 @@ kuna.kasperpa.duckdns.org {
     encode gzip
     reverse_proxy 192.168.0.169:3001
 }
+
+hrtooll.kasperpa.duckdns.org {
+    encode gzip
+    reverse_proxy 192.168.99.73:5173
+}

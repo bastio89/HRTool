@@ -354,9 +354,9 @@ export default function CandidateForm() {
         <Card className="p-12">
           <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.professional')}</h2>
           <div className="space-y-8">
-            <Textarea label={t('form.experience')} placeholder="5 Jahre Software-Entwicklung bei Firma XY, davon 2 Jahre als Teamlead..." value={form.experience} onChange={handleChange('experience')} rows={4} />
+            <Textarea label={t('form.experience')} placeholder={t('form.experience_placeholder')} value={form.experience} onChange={handleChange('experience')} rows={4} />
             <Input label={t('form.skills')} placeholder="JavaScript, React, Node.js, Python (kommagetrennt)" value={form.skills} onChange={handleChange('skills')} />
-            <Input label={t('form.education')} placeholder="B.Sc. Informatik, Universität Berlin" value={form.education} onChange={handleChange('education')} />
+            <Input label={t('form.education')} placeholder={t('form.education_placeholder')} value={form.education} onChange={handleChange('education')} />
             <Input label={t('form.certificates')} placeholder="AWS Solutions Architect, PMP, Scrum Master" value={form.certificates} onChange={handleChange('certificates')} />
           </div>
         </Card>
@@ -408,7 +408,7 @@ export default function CandidateForm() {
                 <div key={idx} className="p-6 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e] relative group">
                   <button type="button" onClick={() => removeEduEntry(idx)} className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-[#ff3b30]/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer"><Trash2 className="w-4 h-4 text-[#ff3b30]" /></button>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Input label={t('form.institution')} placeholder="Universität Berlin" value={e.institution} onChange={(ev) => updateEduEntry(idx, 'institution', ev.target.value)} />
+                    <Input label={t('form.institution')} placeholder={t('form.institution_placeholder')} value={e.institution} onChange={(ev) => updateEduEntry(idx, 'institution', ev.target.value)} />
                     <Input label={t('form.degree')} placeholder="B.Sc. Informatik" value={e.degree} onChange={(ev) => updateEduEntry(idx, 'degree', ev.target.value)} />
                     <Input label={t('form.field_of_study')} placeholder="Informatik" value={e.field_of_study} onChange={(ev) => updateEduEntry(idx, 'field_of_study', ev.target.value)} />
                     <Input label={t('form.from_date')} type="month" value={e.from_date} onChange={(ev) => updateEduEntry(idx, 'from_date', ev.target.value)} />
@@ -559,7 +559,7 @@ export default function CandidateForm() {
             <div className="flex flex-col gap-3">
               <label htmlFor={`${fieldIdPrefix}-status`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.status')}</label>
               <select id={`${fieldIdPrefix}-status`} value={form.status} onChange={handleChange('status')} className={selectClass}>
-                <option value="Aktiv">Aktiv</option><option value="Passiv">Passiv</option><option value="In Prozess">In Prozess</option><option value="Blacklist">Blacklist</option>
+                <option value="Aktiv">{t('form.status_active')}</option><option value="Passiv">{t('form.status_passive')}</option><option value="In Prozess">{t('form.status_in_process')}</option><option value="Blacklist">{t('form.status_blacklist')}</option>
               </select>
             </div>
             <div className="flex flex-col gap-3">

@@ -312,10 +312,10 @@ export default function AISettings() {
       <Card className="space-y-5">
         <div className="flex items-center gap-3">
           <Cpu className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-          <h2 className="text-[19px] font-semibold text-black dark:text-white">API-Dialekt</h2>
+          <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.api_dialect')}</h2>
         </div>
         <p className="text-[14px] text-gray-500 dark:text-gray-400 leading-relaxed">
-          Wähle den API-Dialekt deines KI-Servers. <strong>Auto</strong> erkennt automatisch, ob Ollama oder eine OpenAI-kompatible API (LM Studio, Jan, etc.) verwendet wird.
+          {t('ai_settings.api_dialect_intro')} <strong>Auto</strong> {t('ai_settings.api_dialect_hint')}
         </p>
         <div className="grid sm:grid-cols-3 gap-3">
           {PROVIDER_OPTIONS.map((opt) => (
@@ -399,7 +399,7 @@ export default function AISettings() {
       <Card className="space-y-4">
         <div className="flex items-center gap-3">
           <Server className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-          <h2 className="text-[19px] font-semibold text-black dark:text-white">API-Key</h2>
+          <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.api_key')}</h2>
         </div>
         <Input
           label="OpenRouter API-Key"
@@ -505,8 +505,8 @@ export default function AISettings() {
         <div className="flex items-center gap-3">
           <Cpu className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           <div>
-            <h2 className="text-[19px] font-semibold text-black dark:text-white">Reasoning-Level</h2>
-            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Steuert, wie viel Denkzeit das LLM für Antworten verwendet.</p>
+            <h2 className="text-[19px] font-semibold text-black dark:text-white">{t('ai_settings.reasoning_level')}</h2>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('ai_settings.reasoning_hint')}</p>
           </div>
         </div>
         <div className="grid sm:grid-cols-4 gap-2">

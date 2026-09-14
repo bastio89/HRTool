@@ -277,10 +277,10 @@ export default function UserManagement() {
                 onChange={(e) => { setForm({ ...form, role: e.target.value }); setSelectedJobIds([]) }}
                 className="w-full px-5 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-gray-200/60 dark:border-gray-700/60 text-[15px] outline-none focus:ring-2 focus:ring-[#0071e3]/30 focus:border-[#0071e3] transition appearance-none"
               >
-                <option value="recruiter">Recruiter</option>
-                <option value="admin">Admin</option>
-                <option value="revisor">Revisor</option>
-                <option value="fachbereich">Fachbereich</option>
+                <option value="recruiter">{t('users.role_recruiter')}</option>
+                <option value="admin">{t('users.role_admin')}</option>
+                <option value="revisor">{t('users.role_revisor')}</option>
+                <option value="fachbereich">{t('users.role_fachbereich')}</option>
               </select>
             </div>
             {/* Job assignment for Fachbereich */}
@@ -305,7 +305,7 @@ export default function UserManagement() {
                     </label>
                   ))}
                   {jobs.filter(j => j.status === 'Offen').length === 0 && (
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400 col-span-2 py-2 text-center">Keine offenen Stellen</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 col-span-2 py-2 text-center">{t('users.no_open_jobs')}</p>
                   )}
                 </div>
               </div>

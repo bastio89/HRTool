@@ -171,10 +171,10 @@ export default function SelectedMatchingResults() {
             <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">KI-Matching selektierte</h1>
+            <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('selected_results.title')}</h1>
             <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
               <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">
-                {results.length} Treffer, {failures.length} Fehler
+                {t('selected_results.summary').replace('{hits}', results.length).replace('{errors}', failures.length)}
               </span>
             </div>
           </div>
@@ -182,9 +182,9 @@ export default function SelectedMatchingResults() {
         <div className="flex items-center gap-3 sm:gap-4 ml-14 sm:ml-0">
           <Button size="md" variant="secondary" onClick={exportCSV} disabled={results.length === 0}>
             <Download className="w-5 h-5" />
-            <span className="hidden sm:inline">CSV Export</span>
+            <span className="hidden sm:inline">{t('matching.csv_export')}</span>
           </Button>
-          <Link to="/matching"><Button size="md" variant="dark">Neue Auswahl</Button></Link>
+          <Link to="/matching"><Button size="md" variant="dark">{t('selected_results.new_selection')}</Button></Link>
         </div>
       </div>
 
@@ -205,9 +205,9 @@ export default function SelectedMatchingResults() {
       </div>
 
       <Card className="p-8 sm:p-10 mb-12">
-        <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Ergebnisliste</h2>
+        <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('selected_results.result_list')}</h2>
         {results.length === 0 && failures.length === 0 ? (
-          <p className="text-[15px] text-gray-500 dark:text-gray-400">Keine Ergebnisse vorhanden.</p>
+          <p className="text-[15px] text-gray-500 dark:text-gray-400">{t('selected_results.none')}</p>
         ) : (
           <div className="space-y-4">
             {results.map((result, index) => (
@@ -226,7 +226,7 @@ export default function SelectedMatchingResults() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-[13px]">
                   {result.strengths?.length > 0 && (
                     <div className="rounded-[14px] bg-[#34c759]/5 border border-[#34c759]/10 p-4">
-                      <p className="font-semibold text-[#34c759] mb-2">Stärken</p>
+                      <p className="font-semibold text-[#34c759] mb-2">{t('matching.strengths')}</p>
                       <ul className="list-disc space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
                         {result.strengths.map((item, itemIndex) => (
                           <li key={`${result.id || index}-strength-${itemIndex}`}>{item}</li>
@@ -236,7 +236,7 @@ export default function SelectedMatchingResults() {
                   )}
                   {result.weaknesses?.length > 0 && (
                     <div className="rounded-[14px] bg-[#ff3b30]/5 border border-[#ff3b30]/10 p-4">
-                      <p className="font-semibold text-[#ff3b30] mb-2">Schwächen</p>
+                      <p className="font-semibold text-[#ff3b30] mb-2">{t('matching.weaknesses')}</p>
                       <ul className="list-disc space-y-1.5 pl-5 text-gray-600 dark:text-gray-300">
                         {result.weaknesses.map((item, itemIndex) => (
                           <li key={`${result.id || index}-weakness-${itemIndex}`}>{item}</li>
@@ -250,7 +250,7 @@ export default function SelectedMatchingResults() {
 
             {failures.length > 0 && (
               <div className="pt-4">
-                <h3 className="text-[18px] font-semibold tracking-tight text-black dark:text-white mb-4">Fehler</h3>
+                <h3 className="text-[18px] font-semibold tracking-tight text-black dark:text-white mb-4">{t('selected_results.errors')}</h3>
                 <div className="space-y-3">
                   {failures.map((item, index) => (
                     <div key={`${item.jobId || 'job'}-${item.candidateId || 'candidate'}-${index}`} className="p-5 rounded-[18px] bg-[#ff3b30]/5 border border-[#ff3b30]/10 text-[14px] text-[#ff3b30]">

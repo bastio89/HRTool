@@ -347,9 +347,9 @@ function SourcesTab({ t }) {
             )
           })}
           <div className="flex gap-4 mt-2 text-[11px] text-gray-500 dark:text-gray-400">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#0071e3]" /> Pipeline</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ff9f0a]" /> Interviews</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#34c759]" /> Hires</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#0071e3]" /> {t('reports.pipeline')}</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ff9f0a]" /> {t('reports.interviews')}</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#34c759]" /> {t('reports.hires')}</span>
           </div>
         </div>
       </Card>
@@ -405,9 +405,9 @@ function TimelineTab({ t }) {
         </div>
         <div className="flex gap-4 mt-4 text-[11px] text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#0071e3]" />{t('reports.candidates')}</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#5e5ce6]" />Pipeline</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ff9f0a]" />Interviews</span>
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#34c759]" />E-Mails</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#5e5ce6]" />{t('reports.pipeline')}</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ff9f0a]" />{t('reports.interviews')}</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#34c759]" />{t('reports.emails_sent')}</span>
         </div>
       </Card>
     </div>

@@ -164,7 +164,7 @@ export default function Jobs() {
                           onClick={e => e.stopPropagation()}
                           className="flex items-center gap-1.5 text-[13px] sm:text-[15px] font-medium text-[#0071e3] hover:opacity-70 transition-opacity"
                         >
-                          <ExternalLink className="w-4 h-4" /> Zur Stelle
+                          <ExternalLink className="w-4 h-4" /> {t('jobs.to_job')}
                         </a>
                       )}
                     </div>

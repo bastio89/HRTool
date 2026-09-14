@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Zap, Clock, CheckCircle2, Hourglass, BarChart3 } from 'lucide-react'
+import { useI18n } from '../I18nContext'
 
 /**
  * MatchingProgress – zeigt einen Fortschrittsbalken mit Statistiken während
@@ -11,6 +12,7 @@ import { Zap, Clock, CheckCircle2, Hourglass, BarChart3 } from 'lucide-react'
  *  - color:     string  – Akzentfarbe (hex), default '#8b5cf6'
  */
 export default function MatchingProgress({ running, totalPairs = 1, color = '#8b5cf6' }) {
+  const { t } = useI18n()
   const [elapsed, setElapsed] = useState(0)        // Sekunden seit Start
   const [history, setHistory] = useState([])        // frühere Laufzeiten (s)
   const startRef = useRef(null)
@@ -114,7 +116,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
             <BarChart3 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none">{totalPairs}</p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Paare gesamt</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('matching_progress.total_pairs')}</p>
         </div>
 
         {/* Verstrichene Zeit */}
@@ -123,7 +125,7 @@ export default function MatchingProgress({ running, totalPairs = 1, color = '#8b
             <Clock className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           </div>
           <p className="text-[18px] font-bold text-black dark:text-white leading-none tabular-nums">{fmt(elapsed)}</p>
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Verstrichene Zeit</p>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{t('matching_progress.elapsed')}</p>
         </div>
 
         {/* ETA / Fertig */}

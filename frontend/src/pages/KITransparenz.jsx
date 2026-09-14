@@ -32,12 +32,13 @@ const GROUP_DEFAULT_SUB = { audit: 'compliance', fairness: 'bias' }
 
 // Small "Why?" tooltip to explain thresholds and metrics in plain language.
 function WhyTooltip({ text }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   return (
     <span className="relative inline-flex align-middle">
       <button type="button" onClick={() => setOpen(o => !o)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         className="w-5 h-5 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-[#0071e3] transition-colors cursor-pointer"
-        aria-label="Erklärung">
+        aria-label={t('ki.explanation')}>
         <HelpCircle className="w-[15px] h-[15px]" />
       </button>
       {open && (
@@ -774,7 +775,7 @@ function LogsTab({ t }) {
                       {log.model && <span className="px-2 py-0.5 rounded-full bg-[#5e5ce6]/10 text-[#5e5ce6] text-[10px] font-bold">{log.model}</span>}
                     </div>
                     <div className="flex items-center gap-4 text-[12px] text-gray-400">
-                      <span><Clock className="w-3 h-3 inline mr-1" />{parseDatabaseTimestamp(log.created_at)?.toLocaleString('de-DE')}</span>
+                      <span><Clock className="w-3 h-3 inline mr-1" />{parseDatabaseTimestamp(log.created_at)?.toLocaleString(localeTag(locale))}</span>
                       {log.user_name && <span>{t('ki.by_user').replace('{name}', log.user_name)}</span>}
                       {log.duration_ms && <span>{(log.duration_ms / 1000).toFixed(1)}s</span>}
                       {log.input_tokens && <span>{log.input_tokens} in / {log.output_tokens} out</span>}
@@ -802,7 +803,7 @@ function LogsTab({ t }) {
                     </div>
                     {detail.skills && (
                       <div className="p-4 rounded-xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                        <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Skills</p>
+                        <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">{t('ki.skills')}</p>
                         <p className="text-[13px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{detail.skills}</p>
                       </div>
                     )}
@@ -1629,7 +1630,7 @@ function BiasTestsetTab({ t }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
               <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
                 <p className="text-[24px] font-bold text-[#0071e3]">{Math.round(results.analysis.avgScore * 100)}%</p>
-                <p className="text-[12px] text-gray-500 dark:text-gray-400">⌀ Score</p>
+                <p className="text-[12px] text-gray-500 dark:text-gray-400">{t('ki.avg_score')}</p>
               </div>
               <div className="text-center p-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-xl">
                 <p className="text-[24px] font-bold text-[#5e5ce6]">{Math.round(results.analysis.stdDeviation * 100)}%</p>

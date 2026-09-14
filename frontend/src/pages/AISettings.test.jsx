@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import AISettings from './AISettings'
 import { I18nProvider } from '../I18nContext'
@@ -54,6 +54,43 @@ describe('AISettings', () => {
           model: 'qwen/qwen3.8-27b',
         })
       )
+    })
+  })
+
+  test('switching to ollama reloads embedding models from the local ollama host', async () => {
+    settingsApi.getAiConfig.mockResolvedValue({
+      baseUrl: 'https://openrouter.ai/api/v1',
+      model: 'qwen/qwen3.8-27b',
+      embeddingModel: 'qwen3-embedding:4b',
+      provider: 'openai',
+      apiKeyConfigured: false,
+      loggingEnabled: false,
+      source: { baseUrl: 'env', model: 'env', embeddingModel: 'env' },
+    })
+    settingsApi.getAiModels.mockResolvedValue({ models: [{ name: 'qwen/qwen3.8-27b' }] })
+    settingsApi.getAiEmbeddingModels.mockResolvedValue({ models: [{ name: 'openai/text-embedding-3-small' }] })
+
+    render(
+      <I18nProvider>
+        <AISettings />
+      </I18nProvider>
+    )
+
+    await waitFor(() => {
+      expect(settingsApi.getAiModels).toHaveBeenCalled()
+    })
+
+    const ollamaButton = screen
+      .getAllByRole('button')
+      .find((button) => button.textContent?.includes('Ollama-API'))
+    fireEvent.click(ollamaButton)
+
+    await waitFor(() => {
+      expect(
+        settingsApi.getAiEmbeddingModels.mock.calls.some(
+          ([url, apiKey, provider]) => url === 'http://localhost:11434' && apiKey === '' && provider === 'ollama'
+        )
+      ).toBe(true)
     })
   })
 })

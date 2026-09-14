@@ -1,12 +1,32 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, OPENROUTER_BASE_URL } = require('../aiConfig');
+const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, resolveAiRuntimeBaseUrl, buildAiRequest, extractAiText, stripReasoningTags, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, OPENROUTER_BASE_URL } = require('../aiConfig');
 
 const router = express.Router();
 
 const isAdmin = (req) => req.user?.role === 'admin';
 const APIFY_TOKEN_SETTING_KEY = 'apify_token';
+
+function forceOllamaForKnownLocalHost(baseUrl, provider) {
+  try {
+    const url = new URL(baseUrl);
+    const isKnownOllamaHost = ['localhost', '127.0.0.1', 'host.docker.internal'].includes(url.hostname)
+      && (url.port === '11434' || url.port === '');
+    return isKnownOllamaHost && provider === 'openai' ? 'ollama' : provider;
+  } catch {
+    return provider;
+  }
+}
+
+function looksLikeOpenAiEmbeddingModel(modelName) {
+  const normalized = String(modelName || '').trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.startsWith('openai/')
+    || normalized.includes('text-embedding')
+    || normalized.includes('embedding-3')
+    || normalized.includes('openrouter');
+}
 
 function readApifyToken() {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(APIFY_TOKEN_SETTING_KEY);
@@ -360,10 +380,10 @@ router.post('/ai/llm-test', async (req, res) => {
     const baseUrl = override || cfg.baseUrl;
     const configuredProvider = ['auto', 'ollama', 'openai'].includes(req.body?.provider) ? req.body.provider : cfg.provider;
     const model = typeof req.body?.model === 'string' && req.body.model.trim() ? req.body.model.trim() : cfg.model;
-    const reasoningLevel = ['none', 'low', 'medium', 'high'].includes(req.body?.reasoningLevel) ? req.body.reasoningLevel : cfg.reasoningLevel;
     const prompt = typeof req.body?.prompt === 'string' && req.body.prompt.trim()
       ? req.body.prompt.trim()
       : 'Reply with exactly: OK';
+    const runtimeBaseUrl = resolveAiRuntimeBaseUrl(baseUrl);
 
     let provider;
     try {
@@ -371,31 +391,43 @@ router.post('/ai/llm-test', async (req, res) => {
     } catch {
       provider = configuredProvider === 'ollama' ? 'ollama' : 'openai';
     }
+    provider = forceOllamaForKnownLocalHost(runtimeBaseUrl, provider);
 
     const started = Date.now();
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 30000);
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (requestApiKey) headers.Authorization = `Bearer ${requestApiKey}`;
-      let url;
-      let body;
-      if (provider === 'openai') {
-        if (baseUrl.includes('openrouter.ai')) {
-          headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'http://localhost:5173';
-          headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'HRTool';
-        }
-        url = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
-        body = { model, messages: [{ role: 'user', content: prompt }], max_tokens: 64, stream: false };
-        if (baseUrl.includes('openrouter.ai')) body.reasoning = reasoningLevel === 'none' ? { enabled: false } : { effort: reasoningLevel };
-      } else {
-        url = `${baseUrl}/api/generate`;
-        body = { model, prompt, stream: false, options: { num_predict: 16 } };
+
+    function describeAiPayload(payload) {
+      if (!payload || typeof payload !== 'object') return '';
+      const parts = [];
+      if (typeof payload.response === 'string' && payload.response.trim()) parts.push('response vorhanden');
+      if (typeof payload.thinking === 'string' && payload.thinking.trim()) parts.push('thinking vorhanden');
+      if (Array.isArray(payload.choices) && payload.choices.length > 0) parts.push('choices vorhanden');
+      if (Array.isArray(payload.data) && payload.data.length > 0) parts.push('data vorhanden');
+      return parts.length > 0 ? ` (Payload: ${parts.join(', ')})` : '';
+    }
+
+    function emptyResponseError(payload) {
+      const suffix = describeAiPayload(payload);
+      if (provider === 'ollama') {
+        return `Ollama hat keine verwertbare Modellantwort geliefert${suffix}`;
       }
+      return `OpenAI-kompatible API hat keine verwertbare Modellantwort geliefert${suffix}`;
+    }
+
+    try {
+      const { url, body, headers } = buildAiRequest({
+        baseUrl: runtimeBaseUrl,
+        model,
+        provider,
+        prompt,
+        apiKey: requestApiKey,
+        options: { think: false, num_predict: 16 },
+      });
 
       const response = await fetch(url, { method: 'POST', headers, signal: ctrl.signal, body: JSON.stringify(body) });
       const payload = await response.json().catch(() => ({}));
-      const text = provider === 'openai' ? payload?.choices?.[0]?.message?.content : payload?.response;
+      const text = stripReasoningTags(extractAiText(payload, provider).text);
       if (!response.ok || typeof text !== 'string' || !text.trim()) {
         return res.status(response.ok ? 502 : response.status).json({
           reachable: false,
@@ -403,7 +435,7 @@ router.post('/ai/llm-test', async (req, res) => {
           baseUrl,
           model,
           latencyMs: Date.now() - started,
-          error: payload?.error?.message || payload?.error || payload?.message || (response.ok ? 'Keine Modellantwort erhalten' : `HTTP ${response.status}`),
+          error: payload?.error?.message || payload?.error || payload?.message || (response.ok ? emptyResponseError(payload) : `HTTP ${response.status}`),
         });
       }
 
@@ -441,6 +473,7 @@ router.post('/ai/embedding-test', async (req, res) => {
     const sampleText = typeof req.body?.sampleText === 'string' && req.body.sampleText.trim()
       ? req.body.sampleText.trim()
       : 'Kubernetes';
+    const runtimeBaseUrl = resolveAiRuntimeBaseUrl(baseUrl);
 
     let provider;
     try {
@@ -448,32 +481,43 @@ router.post('/ai/embedding-test', async (req, res) => {
     } catch {
       provider = configuredProvider === 'ollama' ? 'ollama' : 'openai';
     }
+    provider = forceOllamaForKnownLocalHost(runtimeBaseUrl, provider);
 
     const started = Date.now();
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 15000);
     try {
+      let resolvedEmbeddingModel = embeddingModel;
+      if (provider === 'ollama' && looksLikeOpenAiEmbeddingModel(resolvedEmbeddingModel)) {
+        try {
+          const localModels = filterModelsByKind(await fetchAiModels(runtimeBaseUrl, provider, 5000, requestApiKey), 'embedding');
+          resolvedEmbeddingModel = localModels.find((m) => m.name)?.name || 'qwen3-embedding:4b';
+        } catch (_) {
+          resolvedEmbeddingModel = 'qwen3-embedding:4b';
+        }
+      }
+
       let response;
       if (provider === 'openai') {
         const headers = { 'Content-Type': 'application/json' };
         if (requestApiKey) headers.Authorization = `Bearer ${requestApiKey}`;
-        if (baseUrl.includes('openrouter.ai')) {
+        if (runtimeBaseUrl.includes('openrouter.ai')) {
           headers['HTTP-Referer'] = process.env.OPENROUTER_SITE_URL || 'http://localhost:5173';
           headers['X-Title'] = process.env.OPENROUTER_APP_NAME || 'HRTool';
         }
-        const embeddingUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/embeddings` : `${baseUrl}/v1/embeddings`;
+        const embeddingUrl = runtimeBaseUrl.endsWith('/v1') ? `${runtimeBaseUrl}/embeddings` : `${runtimeBaseUrl}/v1/embeddings`;
         response = await fetch(embeddingUrl, {
           method: 'POST',
           headers,
           signal: ctrl.signal,
-          body: JSON.stringify({ model: embeddingModel, input: sampleText }),
+          body: JSON.stringify({ model: resolvedEmbeddingModel, input: sampleText }),
         });
       } else {
-        response = await fetch(`${baseUrl}/api/embeddings`, {
+        response = await fetch(`${runtimeBaseUrl}/api/embeddings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: ctrl.signal,
-          body: JSON.stringify({ model: embeddingModel, prompt: sampleText }),
+          body: JSON.stringify({ model: resolvedEmbeddingModel, prompt: sampleText }),
         });
       }
 
@@ -483,7 +527,7 @@ router.post('/ai/embedding-test', async (req, res) => {
           reachable: false,
           provider,
           baseUrl,
-          embeddingModel,
+          embeddingModel: resolvedEmbeddingModel,
           sampleText,
           latencyMs: Date.now() - started,
           error: payload?.error || payload?.message || `HTTP ${response.status}`,
@@ -491,18 +535,18 @@ router.post('/ai/embedding-test', async (req, res) => {
       }
 
       const embedding = provider === 'openai'
-        ? payload?.data?.[0]?.embedding
-        : payload?.embedding;
+        ? payload?.data?.[0]?.embedding ?? payload?.embedding
+        : payload?.embedding ?? payload?.embeddings ?? payload?.data?.[0]?.embedding;
 
       if (!Array.isArray(embedding) || embedding.length === 0) {
         return res.status(502).json({
           reachable: false,
           provider,
           baseUrl,
-          embeddingModel,
+          embeddingModel: resolvedEmbeddingModel,
           sampleText,
           latencyMs: Date.now() - started,
-          error: 'Keine Embedding-Antwort vom Modell erhalten',
+          error: payload?.error?.message || payload?.error || payload?.message || 'Keine Embedding-Antwort vom Modell erhalten',
         });
       }
 
@@ -510,7 +554,7 @@ router.post('/ai/embedding-test', async (req, res) => {
         reachable: true,
         provider,
         baseUrl,
-        embeddingModel,
+        embeddingModel: resolvedEmbeddingModel,
         sampleText,
         latencyMs: Date.now() - started,
         dims: Array.isArray(embedding) ? embedding.length : 0,

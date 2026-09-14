@@ -13,6 +13,23 @@ const HOST_PRESETS = [
   { label: 'Text Generation WebUI', url: 'http://localhost:5000' },
 ]
 
+const OLLAMA_DEFAULT_BASE_URL = HOST_PRESETS[0].url
+
+function shouldSwitchToOllamaBaseUrl(currentUrl) {
+  const normalized = String(currentUrl || '').trim().toLowerCase()
+  if (!normalized) return true
+  if (normalized.includes('openrouter.ai')) return true
+  if (normalized.includes('/v1')) return true
+  return false
+}
+
+function resolveTestProvider(currentBaseUrl, currentProvider) {
+  const normalized = String(currentBaseUrl || '').trim().toLowerCase()
+  const looksLikeLocalOllama = normalized.includes('localhost:11434') || normalized.includes('127.0.0.1:11434') || normalized.includes('host.docker.internal:11434')
+  if (looksLikeLocalOllama) return 'ollama'
+  return currentProvider || 'auto'
+}
+
 const PROVIDER_OPTIONS = [
   { value: 'auto', label: 'Auto-Erkennung', desc: 'Erkennt Ollama oder OpenAI-kompatible API automatisch' },
   { value: 'ollama', label: 'Ollama', desc: 'Ollama-API (/api/generate)' },
@@ -149,13 +166,14 @@ export default function AISettings() {
     setTestResult(null)
     setError('')
     try {
-      const res = await settingsApi.testAiConnection(baseUrl, apiKey, provider)
+      const testProvider = resolveTestProvider(baseUrl, provider)
+      const res = await settingsApi.testAiConnection(baseUrl, apiKey, testProvider)
       setTestResult(res)
       if (res.reachable) {
         // Refresh model list from the tested host
         await Promise.all([
-          loadModels(baseUrl, model, provider),
-          loadEmbeddingModels(baseUrl, embeddingModel, provider),
+          loadModels(baseUrl, model, testProvider),
+          loadEmbeddingModels(baseUrl, embeddingModel, testProvider),
         ])
       }
     } catch (err) {
@@ -170,10 +188,11 @@ export default function AISettings() {
     setEmbeddingTestResult(null)
     setError('')
     try {
-      const res = await settingsApi.testEmbeddingModel(baseUrl, apiKey, provider, embeddingModel, 'Kubernetes')
+      const testProvider = resolveTestProvider(baseUrl, provider)
+      const res = await settingsApi.testEmbeddingModel(baseUrl, apiKey, testProvider, embeddingModel, 'Kubernetes')
       setEmbeddingTestResult(res)
       if (res.reachable) {
-        await loadEmbeddingModels(baseUrl, embeddingModel, provider)
+        await loadEmbeddingModels(baseUrl, embeddingModel, testProvider)
       }
     } catch (err) {
       setEmbeddingTestResult({ reachable: false, error: err.message })
@@ -187,7 +206,8 @@ export default function AISettings() {
     setLlmTestResult(null)
     setError('')
     try {
-      const res = await settingsApi.testLlmModel(baseUrl, apiKey, provider, model, reasoningLevel)
+      const testProvider = resolveTestProvider(baseUrl, provider)
+      const res = await settingsApi.testLlmModel(baseUrl, apiKey, testProvider, model, reasoningLevel)
       setLlmTestResult(res)
     } catch (err) {
       setLlmTestResult({ reachable: false, error: err.message })
@@ -242,12 +262,16 @@ export default function AISettings() {
   }
 
   const selectProvider = (value) => {
+    const nextBaseUrl = value === 'ollama' && shouldSwitchToOllamaBaseUrl(baseUrl)
+      ? OLLAMA_DEFAULT_BASE_URL
+      : baseUrl
+    if (nextBaseUrl !== baseUrl) setBaseUrl(nextBaseUrl)
     setProvider(value)
     setTestResult(null)
     setEmbeddingTestResult(null)
     setLlmTestResult(null)
-    loadModels(baseUrl, model, value)
-    loadEmbeddingModels(baseUrl, embeddingModel, value)
+    loadModels(nextBaseUrl, model, value)
+    loadEmbeddingModels(nextBaseUrl, embeddingModel, value)
   }
 
   const embeddingStatus = embeddingTesting

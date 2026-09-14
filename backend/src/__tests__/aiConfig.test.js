@@ -45,12 +45,14 @@ describe('aiConfig', () => {
         provider: 'openrouter',
         apiKey: 'env-api-key',
         loggingEnabled: false,
+        reasoningLevel: 'none',
         source: {
           baseUrl: 'env',
           model: 'env',
           embeddingModel: 'env',
           provider: 'env',
           apiKey: 'env',
+          reasoningLevel: 'default',
         },
       });
     });

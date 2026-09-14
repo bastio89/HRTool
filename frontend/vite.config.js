@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { execSync } from 'node:child_process'
@@ -33,6 +34,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.js',
+    // tests/e2e holds Playwright specs. Vitest picks them up by default and
+    // fails on Playwright's test() - run them with `npm run test:e2e` instead.
+    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
   },
   server: {
     host: '0.0.0.0',

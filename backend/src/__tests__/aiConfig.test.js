@@ -101,4 +101,20 @@ describe('aiConfig', () => {
       ]);
     });
   });
+
+  test('rewrites localhost AI URLs to host.docker.internal inside Docker', () => {
+    jest.doMock('fs', () => ({
+      existsSync: (path) => path === '/.dockerenv',
+    }));
+    jest.doMock('../database', () => ({
+      prepare: () => ({ get: () => undefined }),
+    }));
+
+    jest.isolateModules(() => {
+      const { resolveAiRuntimeBaseUrl } = require('../aiConfig');
+      expect(resolveAiRuntimeBaseUrl('http://localhost:11434')).toBe('http://host.docker.internal:11434');
+      expect(resolveAiRuntimeBaseUrl('http://127.0.0.1:11434')).toBe('http://host.docker.internal:11434');
+      expect(resolveAiRuntimeBaseUrl('https://openrouter.ai/api/v1')).toBe('https://openrouter.ai/api/v1');
+    });
+  });
 });

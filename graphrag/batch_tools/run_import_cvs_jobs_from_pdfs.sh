@@ -1,27 +1,21 @@
-.#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -Eeuo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$SCRIPT_DIR"
-PYTHON_SCRIPT="$REPO_ROOT/graphrag/batch_tools/import_cvs_jobs_from_pdfs.py"
-VENV_PYTHON="$REPO_ROOT/.venv/bin/python"
 
 usage() {
   cat <<'EOF'
 Usage: ./run_import_cvs_jobs_from_pdfs.sh [--help|-h] [-- <python-args>]
 
-Runs graphrag/batch_tools/import_cvs_jobs_from_pdfs.py from the repository root.
+Runs import_cvs_jobs_from_pdfs.py inside an already running GraphRAG container.
 
 Examples:
-  ./run_import_cvs_jobs_from_pdfs.sh
-  ./run_import_cvs_jobs_from_pdfs.sh -- --mode job --input-dir ./job_input
-  HRTOOL_API_TOKEN=... ./run_import_cvs_jobs_from_pdfs.sh -- --dry-run
+  ./run_import_cvs_jobs_from_pdfs.sh -- --mode cv --input-dir ./cv_input
+  ./run_import_cvs_jobs_from_pdfs.sh -- --dry-run
 
-Behavior:
-  - uses .venv/bin/python if it exists
-  - falls back to python3 on PATH
-  - creates a local .venv and installs graphrag requirements if no virtualenv exists
-  - forwards all arguments after -- to the Python import script
+Required on the host:
+  - Docker
+  - an already running GraphRAG container from this repository
+
+The script does not start GraphRAG, Neo4j, or Postgres itself.
 EOF
 }
 
@@ -34,41 +28,24 @@ for arg in "$@"; do
   esac
 done
 
-shift_args=()
-if [ "${1:-}" = "--" ]; then
-  shift_args=("${@:2}")
-else
-  shift_args=("$@")
-fi
-
-if [ ! -f "$PYTHON_SCRIPT" ]; then
-  echo "Fehler: Python-Skript nicht gefunden: $PYTHON_SCRIPT" >&2
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Fehler: Docker ist nicht installiert oder nicht im PATH." >&2
   exit 1
 fi
 
-if [ -x "$VENV_PYTHON" ]; then
-  PYTHON_BIN="$VENV_PYTHON"
+python_args=()
+if [ "${1:-}" = "--" ]; then
+  python_args=("${@:2}")
 else
-  if command -v python3 >/dev/null 2>&1; then
-    PYTHON_BIN="$(command -v python3)"
-  elif command -v python >/dev/null 2>&1; then
-    PYTHON_BIN="$(command -v python)"
-  else
-    echo "Fehler: Weder .venv/bin/python noch python3/python im PATH gefunden." >&2
-    exit 1
-  fi
-
-  if [ ! -d "$REPO_ROOT/.venv" ]; then
-    echo "Hinweis: Erstelle lokale .venv und installiere Python-Abhängigkeiten..."
-    "$PYTHON_BIN" -m venv "$REPO_ROOT/.venv"
-    "$VENV_PYTHON" -m pip install --upgrade pip
-    "$VENV_PYTHON" -m pip install -r "$REPO_ROOT/graphrag/requirements.txt"
-  fi
-
-  if [ -x "$VENV_PYTHON" ]; then
-    PYTHON_BIN="$VENV_PYTHON"
-  fi
+  python_args=("$@")
 fi
 
-cd "$REPO_ROOT"
-exec "$PYTHON_BIN" "$PYTHON_SCRIPT" "${shift_args[@]}"
+container_name="${GRAPHRAG_CONTAINER_NAME:-hrtool-graphrag}"
+if [ "$(docker inspect -f '{{.State.Running}}' "$container_name" 2>/dev/null || echo false)" != "true" ]; then
+  echo "Fehler: GraphRAG-Container '$container_name' läuft nicht." >&2
+  echo "Starte zuerst den vorhandenen GraphRAG-Stack und setze ggf. GRAPHRAG_CONTAINER_NAME." >&2
+  exit 1
+fi
+
+exec docker exec -i "$container_name" \
+  python batch_tools/import_cvs_jobs_from_pdfs.py "${python_args[@]}"

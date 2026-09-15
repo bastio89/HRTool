@@ -37,10 +37,9 @@ fi
 
 python_args=()
 if [ "${1:-}" = "--" ]; then
-  python_args=("${@:2}")
-else
-  python_args=("$@")
+  shift
 fi
+python_args=("$@")
 
 container_name="${GRAPHRAG_CONTAINER_NAME:-hrtool-graphrag}"
 if [ "$(docker inspect -f '{{.State.Running}}' "$container_name" 2>/dev/null || echo false)" != "true" ]; then

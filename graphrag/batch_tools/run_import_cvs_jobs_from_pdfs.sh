@@ -8,6 +8,8 @@ Usage: ./run_import_cvs_jobs_from_pdfs.sh [--help|-h] [-- <python-args>]
 Runs import_cvs_jobs_from_pdfs.py inside an already running GraphRAG container.
 
 Examples:
+  cd /Users/pak/HRTool-testdep/HRTool
+  ./graphrag/batch_tools/run_import_cvs_jobs_from_pdfs.sh -- --mode cv --input-dir ./cv_input
   ./run_import_cvs_jobs_from_pdfs.sh -- --mode cv --input-dir ./cv_input
   ./run_import_cvs_jobs_from_pdfs.sh -- --dry-run
 

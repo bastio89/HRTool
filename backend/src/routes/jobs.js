@@ -339,7 +339,9 @@ router.post('/', (req, res) => {
  * @swagger
  * /jobs/parse-description:
  *   post:
- *     summary: Stellenbeschreibung aus Datei extrahieren
+ *     summary: Stellenbeschreibung aus Datei extrahieren (veraltet)
+ *     deprecated: true
+ *     description: Veralteter Endpunkt. Verwenden Sie stattdessen den GraphRAG-Service zur Extraktion und Persistenz.
  *     tags: [Jobs]
  *     requestBody:
  *       required: true
@@ -391,7 +393,8 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       });
     }
 
-    const graphRag = await ingestIntoGraphRag(trimmedText, persist ? 'neo4j' : false);
+    // GraphRAG handles parsing and Neo4j persistence; the local backend can still mirror the job record.
+    const graphRag = await ingestIntoGraphRag(trimmedText, 'neo4j');
     const profile = graphRag?.profile || {};
     const extractedSkills = serializeJobSkills(profile.required_skills);
     const filenameTitle = path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname;

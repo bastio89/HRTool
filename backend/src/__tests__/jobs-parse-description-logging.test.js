@@ -19,7 +19,7 @@ describe('jobs parse-description logging', () => {
 
     process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
     global.fetch = jest.fn(async (url, options) => {
-      expect(String(url)).toBe('http://fake-graphrag/ingest/job?persist=0');
+      expect(String(url)).toBe('http://fake-graphrag/ingest/job?persist=neo4j');
       expect(options?.method).toBe('POST');
       const payload = JSON.parse(options.body);
       expect(payload.raw_text).toContain('Senior Backend Engineer');

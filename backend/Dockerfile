@@ -13,7 +13,6 @@ COPY backend/server.js ./server.js
 COPY backend/src ./src
 COPY backend/scripts ./scripts
 COPY batch_tools ./batch_tools
-COPY backend_new ./backend_new
 
 RUN mkdir -p data/uploads data/tmp
 

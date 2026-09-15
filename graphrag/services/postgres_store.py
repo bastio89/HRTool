@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 import psycopg
+from psycopg import errors as pg_errors
 from psycopg.rows import dict_row
 
 from models import AiUsageMetrics, CandidateProfileExtraction, JobProfileExtraction
@@ -96,6 +97,23 @@ class PostgresStore:
                     )
                     """
                 )
+                for column_sql in (
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS graph_job_id TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS recruiter_company TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS employer_company TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS description TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS requirements TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS about_us TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS benefits TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS location TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'Vollzeit'",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Offen'",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS url TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS raw_text TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parsed_profile_json TEXT",
+                ):
+                    await cursor.execute(column_sql)
                 for table in ("ai_logs", "jobs"):
                     await cursor.execute(
                         """
@@ -483,7 +501,7 @@ class PostgresStore:
             raise RuntimeError("PostgreSQL did not return a candidate id")
         return dict(row)
 
-    async def upsert_job(self, job_id: str, raw_text: str, profile: JobProfileExtraction) -> int:
+    async def _upsert_job_once(self, job_id: str, raw_text: str, profile: JobProfileExtraction) -> int:
         description = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
         requirements = self._summarize_requirements(profile)
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -515,6 +533,15 @@ class PostgresStore:
         if row is None:
             raise RuntimeError("PostgreSQL did not return a job id")
         return int(row["id"])
+
+    async def upsert_job(self, job_id: str, raw_text: str, profile: JobProfileExtraction) -> int:
+        try:
+            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile)
+        except pg_errors.UndefinedColumn as exc:
+            if "graph_job_id" not in str(exc):
+                raise
+            await self.ensure_schema()
+            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile)
 
     @staticmethod
     def _summarize_requirements(profile: JobProfileExtraction) -> str | None:

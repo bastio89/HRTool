@@ -1,0 +1,2248 @@
+openapi: 3.1.0
+info:
+  title: HR Graph Matching API
+  description: High-efficiency 3-stage candidate-job matching service
+  version: 1.0.0
+paths:
+  /match/vectormatch:
+    post:
+      summary: Vector Match
+      operationId: vector_match_match_vectormatch_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorMatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/VectorMatchPayload'
+                - $ref: '#/components/schemas/VectorMatchNeo4jPayload'
+                title: Response Vector Match Match Vectormatch Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /match/external/run:
+    post:
+      summary: External Run
+      operationId: external_run_match_external_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchingRunRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchingResultsPayload'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /match/external/matrix:
+    post:
+      summary: External Matrix
+      operationId: external_matrix_match_external_matrix_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchingMatrixRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchingMatrixPayload'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /match/external/matrix_neo4j:
+    post:
+      summary: External Matrix Neo4J
+      operationId: external_matrix_neo4j_match_external_matrix_neo4j_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchingMatrixRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchingMatrixPayload'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /match/vectormatch_neo4j:
+    post:
+      summary: Vector Match Neo4J
+      operationId: vector_match_neo4j_match_vectormatch_neo4j_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorMatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorMatchNeo4jPayload'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/health:
+    get:
+      tags:
+      - legacy
+      summary: Health
+      operationId: health_api_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacyHealthResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/health/live:
+    get:
+      tags:
+      - legacy
+      summary: Health Live
+      operationId: health_live_api_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Live Api Health Live Get
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/jobs:
+    get:
+      tags:
+      - legacy
+      summary: List Jobs
+      operationId: list_jobs_api_jobs_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/JobRead'
+                type: array
+                title: Response List Jobs Api Jobs Get
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+      - legacy
+      summary: Create Job
+      operationId: create_job_api_jobs_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRead'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/candidates:
+    get:
+      tags:
+      - legacy
+      summary: List Candidates
+      operationId: list_candidates_api_candidates_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CandidateRead'
+                type: array
+                title: Response List Candidates Api Candidates Get
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+      - legacy
+      summary: Create Candidate
+      operationId: create_candidate_api_candidates_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidateCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateRead'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /health:
+    get:
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /health/live:
+    get:
+      summary: Health Live
+      operationId: health_live_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Live Health Live Get
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /linkedin/profile:
+    post:
+      tags:
+      - LinkedIn
+      summary: Linkedin Profile
+      operationId: linkedin_profile_linkedin_profile_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkedInProfileRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkedInProfileResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /linkedin/people-search.csv:
+    post:
+      tags:
+      - LinkedIn
+      summary: Linkedin People Search Csv
+      operationId: linkedin_people_search_csv_linkedin_people_search_csv_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkedInPeopleSearchRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/csv:
+              schema:
+                type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /candidates/anon:
+    post:
+      summary: Anonymize Candidate
+      operationId: anonymize_candidate_candidates_anon_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidatePrivacyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidatePrivacyResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /candidates/deanon:
+    post:
+      summary: Deanonymize Candidate
+      operationId: deanonymize_candidate_candidates_deanon_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidatePrivacyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidatePrivacyResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /cv-parser/parse:
+    post:
+      tags:
+      - CV Parser
+      summary: CV parsen und optional in Neo4j speichern
+      operationId: parse_cv_cv_parser_parse_post
+      parameters:
+      - name: persist
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Persist
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_parse_cv_cv_parser_parse_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Parse Cv Cv Parser Parse Post
+        '400':
+          description: Keine Datei oder ungültiges Format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Kein lesbarer Text gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: CV-Parsing fehlgeschlagen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Neo4j-Speicherung fehlgeschlagen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /ingest/candidate:
+    post:
+      summary: Ingest Candidate
+      operationId: ingest_candidate_ingest_candidate_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /ingest/job:
+    post:
+      summary: Ingest Job
+      operationId: ingest_job_ingest_job_post
+      parameters:
+      - name: persist
+        in: query
+        required: false
+        schema:
+          type: string
+          default: 'true'
+          title: Persist
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobIngestResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /add/job/:
+    post:
+      summary: Ingest Job
+      operationId: ingest_job_add_job__post
+      parameters:
+      - name: persist
+        in: query
+        required: false
+        schema:
+          type: string
+          default: 'true'
+          title: Persist
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobIngestResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /match/{job_id}:
+    post:
+      summary: Match Candidates
+      operationId: match_candidates_match__job_id__post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    AiUsageMetrics:
+      properties:
+        calls:
+          type: integer
+          title: Calls
+          default: 0
+        input_tokens:
+          type: integer
+          title: Input Tokens
+          default: 0
+        output_tokens:
+          type: integer
+          title: Output Tokens
+          default: 0
+        total_tokens:
+          type: integer
+          title: Total Tokens
+          default: 0
+      type: object
+      title: AiUsageMetrics
+    Body_parse_cv_cv_parser_parse_post:
+      properties:
+        file:
+          anyOf:
+          - items:
+              type: string
+              contentMediaType: application/octet-stream
+            type: array
+          - type: 'null'
+          title: File
+      type: object
+      title: Body_parse_cv_cv_parser_parse_post
+    CandidateCreate:
+      properties:
+        name:
+          type: string
+          minLength: 2
+          title: Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          default: new
+      type: object
+      required:
+      - name
+      title: CandidateCreate
+    CandidatePrivacyRequest:
+      properties:
+        candidate_id:
+          type: string
+          minLength: 1
+          title: Candidate Id
+      type: object
+      required:
+      - candidate_id
+      title: CandidatePrivacyRequest
+    CandidatePrivacyResponse:
+      properties:
+        candidate_id:
+          type: string
+          title: Candidate Id
+        mode:
+          type: string
+          enum:
+          - anon
+          - deanon
+          title: Mode
+        text:
+          type: string
+          title: Text
+        original_text:
+          type: string
+          title: Original Text
+        anonymized_text:
+          type: string
+          title: Anonymized Text
+        mapping:
+          additionalProperties:
+            type: string
+          type: object
+          title: Mapping
+      type: object
+      required:
+      - candidate_id
+      - mode
+      - text
+      - original_text
+      - anonymized_text
+      title: CandidatePrivacyResponse
+    CandidateProfileExtraction:
+      properties:
+        name:
+          type: string
+          title: Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        experience_years:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Experience Years
+        salary_expectation:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Salary Expectation
+        experience:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Experience
+        education:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Education
+        certificates:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Certificates
+        drivers_license:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Drivers License
+        mobility:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mobility
+        desired_salary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Desired Salary
+        availability:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Availability
+        notice_period:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notice Period
+        linkedin_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Linkedin Url
+        xing_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Xing Url
+        github_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Github Url
+        portfolio_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Portfolio Url
+        tags:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tags
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        current_employer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Current Employer
+        current_position:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Current Position
+        nationality:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Nationality
+        gender:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gender
+        parsing_method:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Parsing Method
+        skills:
+          items:
+            $ref: '#/components/schemas/CandidateSkillExtraction'
+          type: array
+          title: Skills
+        languages:
+          items:
+            $ref: '#/components/schemas/LanguageExtraction'
+          type: array
+          title: Languages
+        educations:
+          items:
+            $ref: '#/components/schemas/EducationExtraction'
+          type: array
+          title: Educations
+        industries:
+          items:
+            $ref: '#/components/schemas/IndustryExtraction'
+          type: array
+          title: Industries
+        work_history:
+          items:
+            $ref: '#/components/schemas/WorkHistoryExtraction'
+          type: array
+          title: Work History
+        education_history:
+          items:
+            $ref: '#/components/schemas/EducationHistoryExtraction'
+          type: array
+          title: Education History
+        preferred_roles:
+          items:
+            type: string
+          type: array
+          title: Preferred Roles
+      type: object
+      required:
+      - name
+      title: CandidateProfileExtraction
+    CandidateRead:
+      properties:
+        name:
+          type: string
+          minLength: 2
+          title: Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          default: new
+        id:
+          type: integer
+          title: Id
+      type: object
+      required:
+      - name
+      - id
+      title: CandidateRead
+    CandidateSkillExtraction:
+      properties:
+        name:
+          type: string
+          minLength: 1
+          title: Name
+        category:
+          anyOf:
+          - type: string
+            enum:
+            - HardSkill
+            - SoftSkill
+          - type: 'null'
+          title: Category
+        level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Level
+        experience_years:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Experience Years
+      type: object
+      required:
+      - name
+      title: CandidateSkillExtraction
+    EducationExtraction:
+      properties:
+        level:
+          type: string
+          minLength: 1
+          title: Level
+        field_of_study:
+          type: string
+          minLength: 1
+          title: Field Of Study
+      type: object
+      required:
+      - level
+      - field_of_study
+      title: EducationExtraction
+    EducationHistoryExtraction:
+      properties:
+        institution:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Institution
+        degree:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Degree
+        field_of_study:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field Of Study
+        from_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: From Date
+        to_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: To Date
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+      type: object
+      title: EducationHistoryExtraction
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+          default: ok
+        ai_usage:
+          $ref: '#/components/schemas/AiUsageMetrics'
+      type: object
+      title: HealthResponse
+    IndustryExtraction:
+      properties:
+        name:
+          type: string
+          minLength: 1
+          title: Name
+      type: object
+      required:
+      - name
+      title: IndustryExtraction
+    IngestResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - id
+      - message
+      title: IngestResponse
+    JobCreate:
+      properties:
+        title:
+          type: string
+          minLength: 2
+          title: Title
+        company:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Company
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        employment_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Employment Type
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          default: open
+      type: object
+      required:
+      - title
+      title: JobCreate
+    JobIngestResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        message:
+          type: string
+          title: Message
+        profile:
+          $ref: '#/components/schemas/JobProfileExtraction'
+        persisted:
+          type: boolean
+          title: Persisted
+          default: true
+      type: object
+      required:
+      - id
+      - message
+      - profile
+      title: JobIngestResponse
+    JobProfileExtraction:
+      properties:
+        title:
+          type: string
+          title: Title
+        department:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department
+        company:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Company
+        recruiter_company:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recruiter Company
+        employer_company:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Employer Company
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        employment_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Employment Type
+        about_us:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: About Us
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        requirements:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirements
+        benefits:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Benefits
+        required_skills:
+          items:
+            $ref: '#/components/schemas/JobSkillExtraction'
+          type: array
+          title: Required Skills
+        required_languages:
+          items:
+            $ref: '#/components/schemas/LanguageExtraction'
+          type: array
+          title: Required Languages
+        required_degrees:
+          items:
+            $ref: '#/components/schemas/EducationExtraction'
+          type: array
+          title: Required Degrees
+        industries:
+          items:
+            $ref: '#/components/schemas/IndustryExtraction'
+          type: array
+          title: Industries
+      type: object
+      required:
+      - title
+      title: JobProfileExtraction
+    JobRead:
+      properties:
+        title:
+          type: string
+          minLength: 2
+          title: Title
+        company:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Company
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        employment_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Employment Type
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+          default: open
+        id:
+          type: integer
+          title: Id
+      type: object
+      required:
+      - title
+      - id
+      title: JobRead
+    JobSkillExtraction:
+      properties:
+        name:
+          type: string
+          minLength: 1
+          title: Name
+        category:
+          anyOf:
+          - type: string
+            enum:
+            - HardSkill
+            - SoftSkill
+          - type: 'null'
+          title: Category
+        priority:
+          type: string
+          title: Priority
+      type: object
+      required:
+      - name
+      - priority
+      title: JobSkillExtraction
+    LanguageExtraction:
+      properties:
+        name:
+          type: string
+          minLength: 1
+          title: Name
+        level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Level
+      type: object
+      required:
+      - name
+      title: LanguageExtraction
+    LegacyHealthResponse:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+          default: ok
+        app:
+          type: string
+          title: App
+          default: HR Graph Matching API
+        version:
+          type: string
+          title: Version
+          default: 1.0.0
+      type: object
+      title: LegacyHealthResponse
+    LinkedInPeopleSearchRequest:
+      properties:
+        enrichEmails:
+          type: boolean
+          title: Enrichemails
+          default: true
+        keywords:
+          type: string
+          minLength: 1
+          title: Keywords
+        location:
+          type: string
+          minLength: 1
+          title: Location
+        maxResults:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Maxresults
+          default: 5
+        mode:
+          type: string
+          title: Mode
+          default: public
+      type: object
+      required:
+      - keywords
+      - location
+      title: LinkedInPeopleSearchRequest
+    LinkedInProfileRequest:
+      properties:
+        url:
+          type: string
+          minLength: 1
+          title: Url
+      type: object
+      required:
+      - url
+      title: LinkedInProfileRequest
+    LinkedInProfileResponse:
+      properties:
+        source_url:
+          type: string
+          title: Source Url
+        tool_name:
+          type: string
+          title: Tool Name
+        profile:
+          $ref: '#/components/schemas/CandidateProfileExtraction'
+      type: object
+      required:
+      - source_url
+      - tool_name
+      - profile
+      title: LinkedInProfileResponse
+    MatchCandidateResponse:
+      properties:
+        candidate_id:
+          type: string
+          title: Candidate Id
+        score:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Score
+        explanation:
+          type: string
+          title: Explanation
+        vector_score:
+          type: number
+          title: Vector Score
+        jaccard_score:
+          type: number
+          title: Jaccard Score
+        combined_score:
+          type: number
+          title: Combined Score
+        profile:
+          additionalProperties: true
+          type: object
+          title: Profile
+      type: object
+      required:
+      - candidate_id
+      - score
+      - explanation
+      - vector_score
+      - jaccard_score
+      - combined_score
+      - profile
+      title: MatchCandidateResponse
+    MatchResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        stage1_count:
+          type: integer
+          title: Stage1 Count
+        stage2_count:
+          type: integer
+          title: Stage2 Count
+        matches:
+          items:
+            $ref: '#/components/schemas/MatchCandidateResponse'
+          type: array
+          title: Matches
+      type: object
+      required:
+      - job_id
+      - stage1_count
+      - stage2_count
+      title: MatchResponse
+    MatchingCandidateInput:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: integer
+          title: Id
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        location:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Location
+        experience:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Experience
+        skills:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Skills
+        has_skill:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Has Skill
+        education:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Education
+        desired_salary:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Desired Salary
+        availability:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Availability
+        languages:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Languages
+        certificates:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Certificates
+        mobility:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Mobility
+      type: object
+      required:
+      - id
+      title: MatchingCandidateInput
+    MatchingJobInput:
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: integer
+          - type: 'null'
+          title: Id
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        requirements:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirements
+        required_skills:
+          anyOf:
+          - {}
+          - type: 'null'
+          title: Required Skills
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+        type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
+      type: object
+      title: MatchingJobInput
+    MatchingMatrixPayload:
+      properties:
+        type:
+          type: string
+          const: matrix
+          title: Type
+          default: matrix
+        mode:
+          type: string
+          title: Mode
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        embeddingModel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Embeddingmodel
+        matchedAt:
+          type: string
+          title: Matchedat
+        jobs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Jobs
+        candidates:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Candidates
+        matrix:
+          items:
+            $ref: '#/components/schemas/MatchingMatrixRow'
+          type: array
+          title: Matrix
+        jobsRanked:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Jobsranked
+        candidatesRanked:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Candidatesranked
+      type: object
+      required:
+      - mode
+      - matchedAt
+      title: MatchingMatrixPayload
+    MatchingMatrixRequest:
+      properties:
+        mode:
+          type: string
+          title: Mode
+          default: all_jobs_all_candidates
+        jobs:
+          items:
+            $ref: '#/components/schemas/MatchingJobInput'
+          type: array
+          title: Jobs
+        candidates:
+          items:
+            $ref: '#/components/schemas/MatchingCandidateInput'
+          type: array
+          title: Candidates
+        weights:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Weights
+        options:
+          additionalProperties: true
+          type: object
+          title: Options
+        engine:
+          type: string
+          enum:
+          - python
+          - neo4j
+          title: Engine
+          default: python
+      type: object
+      title: MatchingMatrixRequest
+    MatchingMatrixRow:
+      properties:
+        jobId:
+          type: string
+          title: Jobid
+        jobTitle:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jobtitle
+        candidateId:
+          type: string
+          title: Candidateid
+        candidateName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Candidatename
+        score:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Score
+        strengths:
+          items:
+            type: string
+          type: array
+          title: Strengths
+        weaknesses:
+          items:
+            type: string
+          type: array
+          title: Weaknesses
+        summary:
+          type: string
+          title: Summary
+          default: ''
+      type: object
+      required:
+      - jobId
+      - candidateId
+      - score
+      title: MatchingMatrixRow
+    MatchingResultItem:
+      properties:
+        candidateId:
+          type: string
+          title: Candidateid
+        candidateName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Candidatename
+        score:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Score
+        strengths:
+          items:
+            type: string
+          type: array
+          title: Strengths
+        weaknesses:
+          items:
+            type: string
+          type: array
+          title: Weaknesses
+        summary:
+          type: string
+          title: Summary
+          default: ''
+      type: object
+      required:
+      - candidateId
+      - score
+      title: MatchingResultItem
+    MatchingResultsPayload:
+      properties:
+        results:
+          items:
+            $ref: '#/components/schemas/MatchingResultItem'
+          type: array
+          title: Results
+      type: object
+      title: MatchingResultsPayload
+    MatchingRunRequest:
+      properties:
+        job:
+          $ref: '#/components/schemas/MatchingJobInput'
+        candidates:
+          items:
+            $ref: '#/components/schemas/MatchingCandidateInput'
+          type: array
+          title: Candidates
+        weights:
+          anyOf:
+          - additionalProperties:
+              type: integer
+            type: object
+          - type: 'null'
+          title: Weights
+        options:
+          additionalProperties: true
+          type: object
+          title: Options
+      type: object
+      required:
+      - job
+      title: MatchingRunRequest
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VectorMatchNeo4jPayload:
+      properties:
+        type:
+          type: string
+          const: vectormatch_neo4j
+          title: Type
+          default: vectormatch_neo4j
+        mode:
+          type: string
+          title: Mode
+          default: job_cv_vector_neo4j
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        embeddingModel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Embeddingmodel
+        matchedAt:
+          type: string
+          title: Matchedat
+        jobs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Jobs
+        candidates:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Candidates
+        matrix:
+          items:
+            $ref: '#/components/schemas/VectorMatchRow'
+          type: array
+          title: Matrix
+        jobsRanked:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Jobsranked
+        candidatesRanked:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Candidatesranked
+      type: object
+      required:
+      - matchedAt
+      title: VectorMatchNeo4jPayload
+    VectorMatchPayload:
+      properties:
+        type:
+          type: string
+          const: vectormatch
+          title: Type
+          default: vectormatch
+        mode:
+          type: string
+          title: Mode
+          default: job_cv_vector
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        embeddingModel:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Embeddingmodel
+        matchedAt:
+          type: string
+          title: Matchedat
+        jobs:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Jobs
+        candidates:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Candidates
+        matrix:
+          items:
+            $ref: '#/components/schemas/VectorMatchRow'
+          type: array
+          title: Matrix
+        jobsRanked:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Jobsranked
+        candidatesRanked:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Candidatesranked
+      type: object
+      required:
+      - matchedAt
+      title: VectorMatchPayload
+    VectorMatchRequest:
+      properties:
+        job_ids:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Job Ids
+        job_titles:
+          items:
+            type: string
+          type: array
+          title: Job Titles
+        cv_ids:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Cv Ids
+        candidate_names:
+          items:
+            type: string
+          type: array
+          title: Candidate Names
+        engine:
+          type: string
+          enum:
+          - python
+          - neo4j
+          title: Engine
+          default: python
+      type: object
+      title: VectorMatchRequest
+    VectorMatchRow:
+      properties:
+        jobId:
+          type: string
+          title: Jobid
+        jobTitle:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jobtitle
+        candidateId:
+          type: string
+          title: Candidateid
+        candidateName:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Candidatename
+        score:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Score
+        vectorScore:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Vectorscore
+        hardSkillScore:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Hardskillscore
+        softSkillScore:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Softskillscore
+        strengths:
+          items:
+            type: string
+          type: array
+          title: Strengths
+        weaknesses:
+          items:
+            type: string
+          type: array
+          title: Weaknesses
+        summary:
+          type: string
+          title: Summary
+          default: ''
+        matchedSkills:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Matchedskills
+      type: object
+      required:
+      - jobId
+      - candidateId
+      - score
+      title: VectorMatchRow
+    WorkHistoryExtraction:
+      properties:
+        employer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Employer
+        position:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Position
+        from_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: From Date
+        to_date:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: To Date
+        is_current:
+          type: boolean
+          title: Is Current
+          default: false
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location
+      type: object
+      title: WorkHistoryExtraction
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          oneOf:
+          - type: string
+          - type: array
+            items: {}
+          - type: object
+      required:
+      - detail
+      additionalProperties: true
+      description: Generic JSON error payload returned by HTTPException handlers.

@@ -133,6 +133,7 @@ export default function Layout() {
                 </NavLink>
               ))}
 
+              {isAdmin && (
               <div className="mt-2">
                 <button
                   onClick={() => setToolsOpen(!toolsOpen)}
@@ -170,6 +171,7 @@ export default function Layout() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Revisor: show audit/reports/ki section */}
               {isRevisor && (

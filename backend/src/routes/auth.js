@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { loginRateLimiter } = require('../middleware/rateLimiter');
 
 const router = express.Router();
 
@@ -47,7 +48,7 @@ function validatePassword(password) {
  *       200: { description: JWT Token + User-Daten }
  *       401: { description: Ungültige Anmeldedaten }
  */
-router.post('/login', (req, res) => {
+router.post('/login', loginRateLimiter, (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {

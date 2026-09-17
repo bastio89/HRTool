@@ -25,9 +25,9 @@ setInterval(() => {
  * @param {string} opts.keyPrefix  - Prefix for the bucket key (default: 'ai')
  * @returns Express middleware
  */
-function createRateLimiter({ maxRequests = 20, windowMs = 60000, keyPrefix = 'ai' } = {}) {
+function createRateLimiter({ maxRequests = 20, windowMs = 60000, keyPrefix = 'ai', keyFn } = {}) {
   return (req, res, next) => {
-    const userId = req.user?.id || req.ip || 'anonymous';
+    const userId = keyFn ? keyFn(req) : (req.user?.id || req.ip || 'anonymous');
     const key = `${keyPrefix}:${userId}`;
     const now = Date.now();
 
@@ -61,7 +61,18 @@ function createRateLimiter({ maxRequests = 20, windowMs = 60000, keyPrefix = 'ai
 
 // Pre-configured limiters for different AI features
 const aiRateLimiter = createRateLimiter({ maxRequests: 10, windowMs: 60000, keyPrefix: 'ai' });
+// Der Login laeuft hinter nginx bzw. Caddy, und Express vertraut dem
+// X-Forwarded-For-Header nicht (kein 'trust proxy'). req.ip waere deshalb fuer
+// jede Anfrage die IP des Proxys - ein IP-Limit haette nach zehn Fehlversuchen
+// saemtliche Nutzer ausgesperrt. Der Schluessel ist daher der Benutzername:
+// deployment-unabhaengig und durch wechselnde IPs nicht zu umgehen.
+const loginRateLimiter = createRateLimiter({
+  maxRequests: 10,
+  windowMs: 5 * 60000,
+  keyPrefix: 'login',
+  keyFn: (req) => String(req.body?.username || '').trim().toLowerCase() || 'anonymous',
+});
 const matchingRateLimiter = createRateLimiter({ maxRequests: 5, windowMs: 60000, keyPrefix: 'matching' });
 const generatorRateLimiter = createRateLimiter({ maxRequests: 10, windowMs: 60000, keyPrefix: 'generator' });
 
-module.exports = { createRateLimiter, aiRateLimiter, matchingRateLimiter, generatorRateLimiter };
+module.exports = { createRateLimiter, aiRateLimiter, matchingRateLimiter, generatorRateLimiter, loginRateLimiter };

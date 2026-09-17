@@ -11,7 +11,26 @@ const PUBLIC_PATHS = [
 ];
 
 function isPublicPath(path) {
+  if (path === '/api/docs' || path.startsWith('/api/docs/') || path === '/api/docs.json') {
+    // Die vollstaendige API-Dokumentation gehoert nicht ins oeffentliche Netz.
+    return process.env.NODE_ENV !== 'production';
+  }
   return PUBLIC_PATHS.some(p => path === p || path.startsWith(p + '/'));
+}
+
+// Bilder und Downloads werden vom Browser ueber <img src> bzw. einen Link
+// geladen - dort laesst sich kein Authorization-Header setzen. Nur diese
+// lesenden Routen akzeptieren das Token deshalb aus der Query. Ueberall sonst
+// waere es ein unnoetiges Leck: Query-Parameter landen in Zugriffsprotokollen,
+// im Browserverlauf und im Referer-Header.
+const QUERY_TOKEN_PATTERNS = [
+  /^\/api\/uploads\/download\/[^/]+$/,
+  /^\/api\/uploads\/preview\/[^/]+$/,
+  /^\/api\/candidate-details\/[^/]+\/photo$/,
+];
+
+function allowsQueryToken(path) {
+  return QUERY_TOKEN_PATTERNS.some(re => re.test(path));
 }
 
 function authMiddleware(req, res, next) {
@@ -21,7 +40,7 @@ function authMiddleware(req, res, next) {
   }
 
   const authHeader = req.headers.authorization;
-  const queryToken = req.query?.token;
+  const queryToken = allowsQueryToken(req.path) ? req.query?.token : undefined;
   const tokenStr = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : queryToken;
   
   if (!tokenStr) {

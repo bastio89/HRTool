@@ -71,6 +71,12 @@ router.get('/', (req, res) => {
 
 router.get('/apify/status', async (req, res) => {
   try {
+    // Zeigt den Monatsverbrauch in Dollar - das ist keine Information fuer
+    // jeden eingeloggten Nutzer.
+    if (!isAdmin(req)) {
+      return res.status(403).json({ error: 'Nur Administratoren duerfen den Apify-Status einsehen' });
+    }
+
     const token = readApifyToken();
     if (!token) {
       return res.json({

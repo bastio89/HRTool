@@ -40,6 +40,12 @@ function AdminRoute({ children }) {
   return children
 }
 
+function ToolsRoute({ children }) {
+  const { user } = useAuth()
+  if (!['admin', 'recruiter'].includes(user?.role)) return <Navigate to="/" replace />
+  return children
+}
+
 function RevisorRoute({ children }) {
   const { user } = useAuth()
   if (!['admin', 'revisor'].includes(user?.role)) return <Navigate to="/" replace />
@@ -97,8 +103,8 @@ const router = createBrowserRouter(
           <Route path="matching/results/selected" element={<SelectedMatchingResults />} />
           <Route path="matching/results/:id" element={<MatchingResults />} />
           <Route path="history" element={<History />} />
-          <Route path="tools" element={<AdminRoute><Tools /></AdminRoute>} />
-          <Route path="tools/linkedin" element={<AdminRoute><ToolsLinkedIn /></AdminRoute>} />
+          <Route path="tools" element={<ToolsRoute><Tools /></ToolsRoute>} />
+          <Route path="tools/linkedin" element={<ToolsRoute><ToolsLinkedIn /></ToolsRoute>} />
           <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
           <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
           <Route path="admin/audit" element={<RevisorRoute><AuditLog /></RevisorRoute>} />

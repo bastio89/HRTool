@@ -35,7 +35,7 @@ const adminItems = [
 
 
 export default function Layout() {
-  const { user, logout, isAdmin, isRevisor, isFachbereich } = useAuth()
+  const { user, logout, isAdmin, isRecruiter, isRevisor, isFachbereich } = useAuth()
   const { isDark, toggleTheme } = useTheme()
   const { locale, changeLocale, t } = useI18n()
   const location = useLocation()
@@ -50,8 +50,8 @@ export default function Layout() {
   }, [isAdminRoute])
 
   useEffect(() => {
-    if (isToolsRoute) setToolsOpen(true)
-  }, [isToolsRoute])
+    if (isToolsRoute || isRecruiter || isAdmin) setToolsOpen(true)
+  }, [isToolsRoute, isRecruiter, isAdmin])
 
   const closeSidebar = () => setSidebarOpen(false)
 
@@ -133,7 +133,7 @@ export default function Layout() {
                 </NavLink>
               ))}
 
-              {isAdmin && (
+              {(isAdmin || isRecruiter) && (
               <div className="mt-2">
                 <button
                   onClick={() => setToolsOpen(!toolsOpen)}

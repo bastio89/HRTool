@@ -76,6 +76,7 @@ export function AuthProvider({ children }) {
       logout,
       loading,
       isAdmin: user?.role === 'admin',
+      isRecruiter: user?.role === 'recruiter',
       isRevisor: user?.role === 'revisor',
       isFachbereich: user?.role === 'fachbereich',
       assignedJobIds: user?.job_ids || [],

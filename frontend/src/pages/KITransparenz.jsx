@@ -536,7 +536,7 @@ function ComplianceTab({ t }) {
               {stats.byFeature.map(f => {
                 const riskLevel = ['matching', 'cv-parser'].includes(f.feature) ? t('ki.high_risk') : t('ki.low_risk')
                 const riskColor = ['matching', 'cv-parser'].includes(f.feature) ? '#ff3b30' : '#34c759'
-                const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen'), 'email-template': t('ki.feature_email_tpl'), 'interview-questions': t('ki.feature_interview_q') }
+                const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen'), 'job-import': t('ki.feature_job_import'), 'email-template': t('ki.feature_email_tpl'), 'interview-questions': t('ki.feature_interview_q') }
                 return (
                   <div key={f.feature} className="flex items-center justify-between p-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e]">
                     <div className="flex items-center gap-4">
@@ -708,7 +708,7 @@ function LogsTab({ t }) {
 
   useEffect(() => { load() }, [load])
 
-  const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen'), 'email-template': t('ki.feature_email_tpl'), 'interview-questions': t('ki.feature_interview_q') }
+  const names = { matching: t('ki.feature_matching'), 'cv-parser': t('ki.feature_cv_parser'), 'job-generator': t('ki.feature_job_gen'), 'job-import': t('ki.feature_job_import'), 'email-template': t('ki.feature_email_tpl'), 'interview-questions': t('ki.feature_interview_q') }
 
   const loadDetail = async (id) => {
     if (expandedId === id) { setExpandedId(null); setDetail(null); return }
@@ -745,6 +745,7 @@ function LogsTab({ t }) {
             <option value="matching">{t('ki.feature_matching')}</option>
             <option value="cv-parser">{t('ki.feature_cv_parser')}</option>
             <option value="job-generator">{t('ki.feature_job_gen')}</option>
+            <option value="job-import">{t('ki.feature_job_import')}</option>
             <option value="email-template">{t('ki.feature_email_tpl')}</option>
             <option value="interview-questions">{t('ki.feature_interview_q')}</option>
           </select>

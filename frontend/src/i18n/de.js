@@ -799,6 +799,7 @@ export default {
   'ki.feature_matching': 'KI-Matching',
   'ki.feature_cv_parser': 'CV-Parser',
   'ki.feature_job_gen': 'Stellenbeschreibung',
+  'ki.feature_job_import': 'Stellen-Import',
   'ki.all_features': 'Alle Features',
   'ki.all_status': 'Alle Status',
   'ki.successful': 'Erfolgreich',

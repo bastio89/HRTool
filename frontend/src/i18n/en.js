@@ -799,6 +799,7 @@ export default {
   'ki.feature_matching': 'AI Matching',
   'ki.feature_cv_parser': 'CV Parser',
   'ki.feature_job_gen': 'Job Description',
+  'ki.feature_job_import': 'Job import',
   'ki.all_features': 'All Features',
   'ki.all_status': 'All Status',
   'ki.successful': 'Successful',

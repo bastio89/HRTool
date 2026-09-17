@@ -141,6 +141,7 @@ router.get('/model-card', (req, res) => {
           { feature: 'matching', description: 'Bewertung der Passung zwischen Bewerberprofilen und Stellenanforderungen', riskLevel: 'high', aiActCategory: 'Annex III, Kat. 4 — Beschäftigung' },
           { feature: 'cv-parser', description: 'Extraktion strukturierter Daten aus Lebensläufen (PDF/Word)', riskLevel: 'high', aiActCategory: 'Annex III, Kat. 4 — Beschäftigung' },
           { feature: 'job-generator', description: 'Generierung von Stellenbeschreibungen aus Stichpunkten', riskLevel: 'low', aiActCategory: 'Art. 50 — Transparenzpflicht' },
+          { feature: 'job-import', description: 'Extraktion strukturierter Stellendaten aus hochgeladenen Stellenbeschreibungen', riskLevel: 'low', aiActCategory: 'Art. 50 — Transparenzpflicht' },
           { feature: 'email-template', description: 'Generierung von E-Mail-Vorlagen für HR-Kommunikation', riskLevel: 'low', aiActCategory: 'Art. 50 — Transparenzpflicht' },
           { feature: 'interview-questions', description: 'Generierung von Interviewfragen basierend auf Stelle und Profil', riskLevel: 'low', aiActCategory: 'Art. 50 — Transparenzpflicht' },
         ],

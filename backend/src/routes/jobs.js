@@ -391,9 +391,25 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       });
     }
 
+    // GraphRAG laesst hier ein Sprachmodell auf den Stellentext los. Der Aufruf
+    // gehoert deshalb ins KI-Protokoll (Art. 12 EU AI Act), genauso wie der
+    // Generator weiter unten.
+    const aiStartedAt = Date.now();
     const graphRag = await ingestIntoGraphRag(trimmedText, persist ? 'neo4j' : false);
     const profile = graphRag?.profile || {};
     const extractedSkills = serializeJobSkills(profile.required_skills);
+
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'job-import',
+      model: getAiConfig().model,
+      prompt: trimmedText,
+      response: graphRag,
+      parsedResult: profile,
+      skills: extractedSkills,
+      durationMs: Date.now() - aiStartedAt,
+      success: true,
+    });
     const filenameTitle = path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname;
     const resolvedTitle = profile.title && String(profile.title).trim() && String(profile.title).trim() !== 'Unknown Job'
       ? String(profile.title).trim()
@@ -443,6 +459,19 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   } catch (err) {
     console.error('Job description upload error:', err);
     const message = String(err?.message || '');
+
+    // Auch der fehlgeschlagene Versuch ist aufzeichnungspflichtig.
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'job-import',
+      model: getAiConfig().model,
+      prompt: null,
+      response: null,
+      parsedResult: null,
+      success: false,
+      errorMessage: message || 'Unbekannter Fehler',
+    });
+
     if (message.includes('GraphRAG HTTP 502: Job parsing failed:')) {
       return res.status(502).json({
         error: 'GraphRAG-Parsing fehlgeschlagen',

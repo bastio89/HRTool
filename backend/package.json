@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest --runInBand",
+    "test": "jest --runInBand --forceExit",
     "reset:admin": "node scripts/reset-admin.js",
-    "test:stack": "RUN_STACK_TESTS=1 jest --runInBand"
+    "test:stack": "RUN_STACK_TESTS=1 jest --runInBand --forceExit"
   },
   "keywords": [],
   "author": "",

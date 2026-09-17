@@ -93,6 +93,11 @@ router.get('/apify/status', async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
+    // Zeigt den Monatsverbrauch in Dollar - das ist keine Information fuer
+    // jeden eingeloggten Nutzer.
+    if (!isAdmin(req)) {
+      return res.status(403).json({ error: 'Nur Administratoren duerfen den Apify-Status einsehen' });
+    }
     const token = readApifyToken();
     if (!token) {
       return res.json({

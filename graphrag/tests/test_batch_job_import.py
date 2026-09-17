@@ -1,12 +1,17 @@
+"""Tests fuer den Batch-Import von Stellen-PDFs.
+
+Der Importer orchestrierte frueher LLM, Neo4j und Postgres selbst. Inzwischen
+schickt er die Datei an /jobs/parse-description im Backend und verschiebt sie
+danach. Der alte Test prueft Verhalten, das es nicht mehr gibt - er liess sich
+nicht reparieren, nur ersetzen.
+"""
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
-from HRTool.graphrag.batch_tools import import_cvs_jobs_from_pdfs as importer
-from models import JobCandidateMatch, JobProfileExtraction, JobSkillExtraction, LanguageExtraction, EducationExtraction, IndustryExtraction
+from batch_tools import import_cvs_jobs_from_pdfs as importer
 
 
 class FakePdfService:
@@ -14,45 +19,9 @@ class FakePdfService:
         return "Senior Data Engineer with Python, SQL and German B2 requirements."
 
 
-class FakeDbService:
-    def __init__(self) -> None:
-        self.upsert_kwargs = None
-
-    async def find_job_by_source_hash(self, source_hash: str):
-        return None
-
-    async def find_job_by_profile_hash(self, profile_hash: str):
-        return None
-
-    async def upsert_job(self, **kwargs):
-        self.upsert_kwargs = kwargs
-
-    async def get_top_candidate_matches_for_job(self, job_id: str, limit: int = 10):
-        return [
-            JobCandidateMatch(
-                candidate_id="cand-1",
-                name="Max Mustermann",
-                location="Berlin",
-                experience_years=7,
-                skill_similarity=0.91,
-                shared_skills=["python"],
-                similar_skills=[],
-                candidate_skills=["python", "sql"],
-                job_skills=["python", "sql"],
-            )
-        ]
-
-    async def close(self) -> None:
-        return None
-
-
-class FakePostgresStore:
-    def __init__(self) -> None:
-        self.upsert_kwargs = None
-
-    async def upsert_job(self, job_id: str, raw_text: str, profile):
-        self.upsert_kwargs = {"job_id": job_id, "raw_text": raw_text, "profile": profile}
-        return 99
+class ExplodingPdfService:
+    def extract_text(self, data: bytes) -> str:
+        raise ValueError("kaputtes PDF")
 
 
 def test_resolve_input_dir_uses_job_input_for_job_mode():
@@ -61,62 +30,104 @@ def test_resolve_input_dir_uses_job_input_for_job_mode():
     assert importer._resolve_input_dir(args).name == "job_input"
 
 
+async def _run(pdf_path, done_dir, **overrides):
+    kwargs = dict(
+        pdf_path=pdf_path,
+        done_dir=done_dir,
+        dry_run=False,
+        api_base="http://backend:3001/api",
+        timeout_seconds=30,
+        token="t0ken",
+        pdf_service=FakePdfService(),
+    )
+    kwargs.update(overrides)
+    return await importer.process_job_file(**kwargs)
+
+
 @pytest.mark.anyio
-async def test_process_job_file_parses_profile_and_persists_skills(tmp_path, monkeypatch):
+async def test_process_job_file_posts_to_the_backend_and_files_the_pdf(tmp_path, monkeypatch):
     pdf_path = tmp_path / "job.pdf"
     pdf_path.write_bytes(b"fake pdf bytes")
     done_dir = tmp_path / "done"
 
-    fake_profile = JobProfileExtraction(
-        title="Senior Data Engineer",
-        department="Analytics",
-        company="Beyond Gravity",
-        recruiter_company="Beyond Gravity Recruiting",
-        employer_company="Beyond Gravity AG",
-        location="Zurich",
-        employment_type="Vollzeit",
-        required_skills=[
-            JobSkillExtraction(name="python", importance="mandatory"),
-            JobSkillExtraction(name="sql", importance="mandatory"),
-        ],
-        required_languages=[LanguageExtraction(name="Deutsch", level="B2")],
-        required_degrees=[EducationExtraction(level="Master", field_of_study="Informatik")],
-        industries=[IndustryExtraction(name="Aerospace")],
-    )
+    calls = {}
 
-    fake_db = FakeDbService()
-    fake_postgres = FakePostgresStore()
-    fake_llm = AsyncMock()
-    fake_llm.parse_job_description = AsyncMock(return_value=fake_profile)
-    fake_llm.create_embedding = AsyncMock(side_effect=[[0.1, 0.2, 0.3], [0.4], [0.5]])
+    def fake_post(url, file_path, timeout_seconds, token, field_name="file"):
+        calls.update(url=url, file_path=file_path, timeout_seconds=timeout_seconds, token=token)
+        return {"success": True, "job": {"id": "job-123", "title": "Senior Data Engineer"}}
 
-    monkeypatch.setattr(importer, "uuid4", lambda: "job-123")
+    monkeypatch.setattr(importer, "post_multipart_file", fake_post)
 
-    ok, message = await importer.process_job_file(
-        pdf_path=pdf_path,
-        done_dir=done_dir,
-        dry_run=False,
-        pdf_service=FakePdfService(),
-        db_service=fake_db,
-        llm_service=fake_llm,
-        postgres_store=fake_postgres,
-        match_limit=5,
-    )
+    ok, message = await _run(pdf_path, done_dir)
 
     assert ok is True
     assert "imported as job id=job-123" in message
-    assert "top candidate matches:" in message
+    assert "title=Senior Data Engineer" in message
+    assert calls["url"] == "http://backend:3001/api/jobs/parse-description?persist=1"
+    assert calls["token"] == "t0ken"
+    # Die Datei wandert nach dem Import in den Done-Ordner.
     assert pdf_path.exists() is False
     assert (done_dir / "job.pdf").exists() is True
-    assert fake_llm.parse_job_description.await_count == 1
-    assert fake_llm.create_embedding.await_count == 3
-    assert fake_db.upsert_kwargs is not None
-    assert fake_db.upsert_kwargs["job_id"] == "job-123"
-    assert fake_db.upsert_kwargs["profile"].title == "Senior Data Engineer"
-    assert fake_db.upsert_kwargs["skill_embeddings"]["python"] == [0.4]
-    assert fake_db.upsert_kwargs["skill_embeddings"]["sql"] == [0.5]
-    assert fake_db.upsert_kwargs["source_hash"]
-    assert fake_db.upsert_kwargs["profile_hash"]
-    assert fake_postgres.upsert_kwargs is not None
-    assert fake_postgres.upsert_kwargs["job_id"] == "job-123"
-    assert fake_postgres.upsert_kwargs["profile"].title == "Senior Data Engineer"
+
+
+@pytest.mark.anyio
+async def test_process_job_file_keeps_the_pdf_when_the_backend_fails(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "job.pdf"
+    pdf_path.write_bytes(b"fake pdf bytes")
+    done_dir = tmp_path / "done"
+
+    def fake_post(*args, **kwargs):
+        raise RuntimeError("backend nicht erreichbar")
+
+    monkeypatch.setattr(importer, "post_multipart_file", fake_post)
+
+    ok, message = await _run(pdf_path, done_dir)
+
+    assert ok is False
+    assert "backend job parsing failed" in message
+    # Wichtig: nichts verschieben, sonst waere die Datei nach einem Ausfall weg.
+    assert pdf_path.exists() is True
+    assert done_dir.exists() is False
+
+
+@pytest.mark.anyio
+async def test_process_job_file_reports_a_missing_job_id(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "job.pdf"
+    pdf_path.write_bytes(b"fake pdf bytes")
+
+    monkeypatch.setattr(importer, "post_multipart_file", lambda *a, **k: {"success": True, "job": {}})
+
+    ok, message = await _run(pdf_path, tmp_path / "done")
+
+    assert ok is False
+    assert "no job id" in message
+    assert pdf_path.exists() is True
+
+
+@pytest.mark.anyio
+async def test_dry_run_touches_neither_backend_nor_filesystem(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "job.pdf"
+    pdf_path.write_bytes(b"fake pdf bytes")
+
+    def explode(*args, **kwargs):
+        raise AssertionError("dry-run darf das Backend nicht aufrufen")
+
+    monkeypatch.setattr(importer, "post_multipart_file", explode)
+
+    ok, message = await _run(pdf_path, tmp_path / "done", dry_run=True)
+
+    assert ok is True
+    assert "dry-run ok" in message
+    assert pdf_path.exists() is True
+
+
+@pytest.mark.anyio
+async def test_unreadable_pdf_is_reported_and_left_in_place(tmp_path):
+    pdf_path = tmp_path / "job.pdf"
+    pdf_path.write_bytes(b"not really a pdf")
+
+    ok, message = await _run(pdf_path, tmp_path / "done", pdf_service=ExplodingPdfService())
+
+    assert ok is False
+    assert "PDF extraction failed" in message
+    assert pdf_path.exists() is True

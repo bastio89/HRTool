@@ -1,4 +1,5 @@
 const express = require('express');
+const { graphRagAuthHeaders } = require('../graphragAuth');
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ router.post('/', express.text({ type: ['text/plain', 'text/*'], limit: '2mb' }),
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/add/job/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'text/plain', ...graphRagAuthHeaders() },
       body: rawText,
     });
 

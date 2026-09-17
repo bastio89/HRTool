@@ -42,6 +42,25 @@ _CURRENT_DATE_TOKENS = {"heute", "present", "today", "now", "aktuell", "current"
 _DATE_RANGE_PATTERN = re.compile(r"(\d{4})\s*[\u2013\u2014-]\s*(heute|present|today|now|aktuell|current|\d{4})", re.IGNORECASE)
 
 
+_ROLE_TITLE_WORDS = (
+    # Englisch
+    "developer", "engineer", "manager", "consultant", "analyst", "architect",
+    "specialist", "administrator", "designer", "scientist", "officer",
+    "director", "trainee", "intern", "freelancer",
+    # Deutsch
+    "entwickler", "berater", "beraterin", "ingenieur", "ingenieurin",
+    "sachbearbeiter", "sachbearbeiterin", "fachinformatiker", "werkstudent",
+    "praktikant", "praktikantin", "geschaeftsfuehrer", "projektleiter",
+    "teamleiter", "mitarbeiter", "mitarbeiterin",
+    # Senioritaet
+    "senior", "junior", "principal", "praktikum",
+)
+
+_ROLE_TITLE_PATTERN = re.compile(
+    r"\b(?:" + "|".join(_ROLE_TITLE_WORDS) + r")\b", re.IGNORECASE
+)
+
+
 class LLMService:
     def __init__(
         self,
@@ -455,6 +474,18 @@ class LLMService:
         if any(ch.isdigit() for ch in name):
             return True
         if "@" in name:
+            return True
+        # Das Modell gibt statt des Namens gelegentlich die Berufsbezeichnung
+        # zurueck ("Senior .NET Core Developer"). Das fiel bisher durch, weil
+        # keines der obigen Woerter vorkommt - der Bewerber hiess dann so.
+        #
+        # Bewusst nur Begriffe, die praktisch nie ein Nachname sind: viele
+        # deutsche Nachnamen SIND Berufsbezeichnungen (Koch, Schneider, Bauer,
+        # Weber, Mueller, Fischer, Richter), die duerfen hier nicht auftauchen.
+        # Ein Fehlalarm ist ungefaehrlich - die Aufrufstelle ersetzt den Namen
+        # nur, wenn die Wiederherstellung etwas Brauchbares liefert - aber er
+        # kostet einen zusaetzlichen Modellaufruf.
+        if _ROLE_TITLE_PATTERN.search(lowered):
             return True
         return False
 

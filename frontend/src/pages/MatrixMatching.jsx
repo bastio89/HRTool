@@ -90,17 +90,17 @@ export default function MatrixMatching() {
               <div className="p-8 rounded-[24px] bg-[#f5f5f7] dark:bg-[#2c2c2e] text-center">
                 <Briefcase className="w-7 h-7 text-gray-500 dark:text-gray-400 mx-auto mb-4" />
                 <p className="text-[40px] leading-none font-semibold tracking-tight text-black dark:text-white">{jobs.length}</p>
-                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">Stellen</p>
+                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">{t('matrix.stat_jobs')}</p>
               </div>
               <div className="p-8 rounded-[24px] bg-[#f5f5f7] dark:bg-[#2c2c2e] text-center">
                 <Users className="w-7 h-7 text-gray-500 dark:text-gray-400 mx-auto mb-4" />
                 <p className="text-[40px] leading-none font-semibold tracking-tight text-black dark:text-white">{candidates.length}</p>
-                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">Bewerber</p>
+                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">{t('matrix.stat_candidates')}</p>
               </div>
               <div className="p-8 rounded-[24px] bg-[#8b5cf6]/5 text-center ring-1 ring-[#8b5cf6]/20">
                 <GitCompare className="w-7 h-7 text-[#8b5cf6] mx-auto mb-4" />
                 <p className="text-[40px] leading-none font-semibold tracking-tight text-[#8b5cf6]">{pairCount}</p>
-                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">Kombinationen</p>
+                <p className="text-[15px] font-medium text-gray-500 dark:text-gray-400 mt-3">{t('matrix.stat_combinations')}</p>
               </div>
             </div>
 

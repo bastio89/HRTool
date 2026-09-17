@@ -71,6 +71,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+	if not (settings.graphrag_api_key or "").strip():
+		logging.getLogger(__name__).warning(
+			"GRAPHRAG_API_KEY ist nicht gesetzt - die API nimmt Anfragen ohne Authentifizierung entgegen."
+		)
 	await postgres_store.ensure_schema()
 	await postgres_store.ensure_setting("ai_base_url", settings.resolved_ai_base_url)
 	await postgres_store.ensure_setting("ai_provider", settings.resolved_provider)
@@ -91,6 +95,37 @@ app = FastAPI(
 
 app.include_router(create_matching_router(llm_service, db_service))
 app.include_router(create_legacy_router(postgres_store))
+
+
+# Bis hierher war kein einziger Endpunkt geschuetzt, waehrend nginx den Dienst
+# unter /graphrag-api/ nach aussen durchreicht. /candidates/deanon hebt die
+# Anonymisierung von Bewerbern auf, /ingest und /match verarbeiten
+# Personendaten - nichts davon ruft der Browser je auf, das macht
+# ausschliesslich das Node-Backend.
+#
+# OPEN_PATHS: Statuspruefungen, die ohne Schluessel erreichbar bleiben muessen.
+# BROWSER_PATHS: die beiden Routen, die das Frontend heute direkt aufruft. Sie
+# gehoeren hinter einen authentifizierten Proxy im Node-Backend; bis dahin
+# wuerde ein Schluessel hier nur den CV-Import und die LinkedIn-Suche
+# lahmlegen, ohne etwas zu gewinnen - der Browser koennte ihn ohnehin nicht
+# geheim halten.
+OPEN_PATHS = {"/health", "/health/live", "/docs", "/openapi.json", "/redoc"}
+BROWSER_PATHS = {"/cv-parser/parse", "/linkedin/people-search.csv"}
+
+
+@app.middleware("http")
+async def require_api_key(request: Request, call_next):
+	api_key = (settings.graphrag_api_key or "").strip()
+	path = request.url.path.rstrip("/") or "/"
+	if not api_key or path in OPEN_PATHS or path in BROWSER_PATHS:
+		return await call_next(request)
+	if request.headers.get("x-api-key") != api_key:
+		return Response(
+			content='{"detail":"Invalid or missing API key"}',
+			status_code=401,
+			media_type="application/json",
+		)
+	return await call_next(request)
 
 
 async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_candidate: bool) -> str:

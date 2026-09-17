@@ -201,7 +201,7 @@ export default function JobForm() {
 
       <form onSubmit={handleSubmit} className="space-y-10">
         <Card className="p-12">
-          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">Allgemeine Angaben</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('job.section_general')}</h2>
           <div className="space-y-8">
             <Input
               label="Jobtitel *"
@@ -212,12 +212,12 @@ export default function JobForm() {
             />
             <Input
               label={t('form.location')}
-              placeholder="München / Remote / Hybrid"
+              placeholder={t('job.location_placeholder')}
               value={form.location}
               onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
             />
             <Input
-              label="Link zur Stelle"
+              label={t('job.url_label')}
               placeholder="https://karriere.unternehmen.de/stelle/..."
               value={form.url}
               onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
@@ -225,7 +225,7 @@ export default function JobForm() {
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col gap-3">
-                <label htmlFor={`${fieldIdPrefix}-job-type`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">Anstellungsart</label>
+                <label htmlFor={`${fieldIdPrefix}-job-type`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">{t('job.employment_type')}</label>
                 <select id={`${fieldIdPrefix}-job-type`}
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
@@ -252,7 +252,7 @@ export default function JobForm() {
 
         <Card className="p-6 sm:p-12">
           <div className="flex items-center justify-between mb-8">
-            <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">Details</h2>
+            <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('job.section_details')}</h2>
             {aiModel && (
               <div className="flex items-center gap-3">
                 <KiBadge label="KI-generiert" tooltip="Beschreibung und Anforderungen wurden von einer KI generiert. Bitte prüfe den Text." />
@@ -277,7 +277,7 @@ export default function JobForm() {
             </div>
             <textarea
               aria-label={t('form.skills')}
-              placeholder="z.B. React, 3+ Jahre Erfahrung, agiles Team, Remote möglich, CI/CD, Code-Reviews, Mentoring ..."
+              placeholder={t('job.requirements_placeholder')}
               value={aiKeywords}
               onChange={e => setAiKeywords(e.target.value)}
               rows={3}
@@ -355,22 +355,22 @@ export default function JobForm() {
               </div>
             </div>
             <Textarea
-              label="Über uns"
-              placeholder="Wer sind wir? Was macht unser Unternehmen besonders? Kurze Vorstellung der Firma."
+              label={t('job.about_us')}
+              placeholder={t('job.about_us_placeholder')}
               value={form.about_us}
               onChange={e => setForm(f => ({ ...f, about_us: e.target.value }))}
               rows={5}
             />
             <Textarea
               label={t('jobs.description')}
-              placeholder="Was sind die Hauptaufgaben und Verantwortlichkeiten dieser Rolle?"
+              placeholder={t('job.tasks_placeholder')}
               value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
               rows={8}
             />
             <Textarea
               label={t('jobs.requirements')}
-              placeholder="Welche Skills, Erfahrungen und Qualifikationen werden erwartet?"
+              placeholder={t('job.profile_placeholder')}
               value={form.requirements}
               onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))}
               rows={8}
@@ -384,7 +384,7 @@ export default function JobForm() {
             />
             <Textarea
               label={t('form.benefits')}
-              placeholder="Welche Benefits, Vorteile und Angebote haben wir für unsere Mitarbeiter?"
+              placeholder={t('job.benefits_placeholder')}
               value={form.benefits}
               onChange={e => setForm(f => ({ ...f, benefits: e.target.value }))}
               rows={5}

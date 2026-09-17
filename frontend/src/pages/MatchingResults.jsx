@@ -166,24 +166,24 @@ export default function MatchingResults() {
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-[12px]">
           <div className="rounded-[16px] bg-[#0071e3]/5 border border-[#0071e3]/10 p-3">
             <div className="font-semibold text-[#0071e3] mb-2 flex items-center justify-between gap-3">
-              <span>HardSkill</span>
-              <span className="text-[11px] font-medium text-[#0071e3]/70">{hardMatches.length} Matches</span>
+              <span>{t('matching.hard_skill')}</span>
+              <span className="text-[11px] font-medium text-[#0071e3]/70">{t('matching.n_matches').replace('{count}', hardMatches.length)}</span>
             </div>
             <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
               {hardMatches.length > 0 ? hardMatches.map((skill, index) => (
                 <div key={`hard-${row.jobId}-${row.candidateId}-${index}`}>{formatMatchedSkillLabel(skill)}</div>
-              )) : <div>keine Treffer</div>}
+              )) : <div>{t('matching.no_matches')}</div>}
             </div>
           </div>
           <div className="rounded-[16px] bg-[#34c759]/5 border border-[#34c759]/10 p-3">
             <div className="font-semibold text-[#34c759] mb-2 flex items-center justify-between gap-3">
-              <span>SoftSkill</span>
-              <span className="text-[11px] font-medium text-[#34c759]/70">{softMatches.length} Matches</span>
+              <span>{t('matching.soft_skill')}</span>
+              <span className="text-[11px] font-medium text-[#34c759]/70">{t('matching.n_matches').replace('{count}', softMatches.length)}</span>
             </div>
             <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
               {softMatches.length > 0 ? softMatches.map((skill, index) => (
                 <div key={`soft-${row.jobId}-${row.candidateId}-${index}`}>{formatMatchedSkillLabel(skill)}</div>
-              )) : <div>keine Treffer</div>}
+              )) : <div>{t('matching.no_matches')}</div>}
             </div>
           </div>
         </div>
@@ -241,7 +241,7 @@ export default function MatchingResults() {
           <div className="flex items-center gap-3 sm:gap-4 ml-14 sm:ml-0">
             <Button size="md" variant="secondary" onClick={exportMatrixCSV}>
               <Download className="w-5 h-5" />
-              <span className="hidden sm:inline">CSV Export</span>
+              <span className="hidden sm:inline">{t('matching.csv_export')}</span>
             </Button>
             <Link to="/matching"><Button size="md" variant="dark">{t('matching.new')}</Button></Link>
           </div>
@@ -250,17 +250,17 @@ export default function MatchingResults() {
         <KiDisclaimer feature="matching" className="mb-6" />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
-          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.jobs?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Stellen</p></Card>
-          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.candidates?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Bewerber</p></Card>
-          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">{pairCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Paarungen</p></Card>
-          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">{bestScoreMatrix}%</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">Bester Match</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.jobs?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_jobs')}</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.candidates?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_candidates')}</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">{pairCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_pairs')}</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">{bestScoreMatrix}%</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_best_match')}</p></Card>
         </div>
 
         <Card className="p-8 sm:p-10 mb-12">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">Beste Paarungen übergreifend</h2>
-              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-2">{selectedPairs.length} von {pairCount} Paarungen ausgewählt</p>
+              <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('matching.best_pairs_overall')}</h2>
+              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-2">{t('matching.pairs_selected').replace('{selected}', selectedPairs.length).replace('{total}', pairCount)}</p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <Button size="md" variant="secondary" onClick={toggleAllPairs} disabled={matrixRows.length === 0}>
@@ -303,11 +303,11 @@ export default function MatchingResults() {
                   </button>
                   <div>
                     <p className="text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Bewerber</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_candidate')}</p>
                   </div>
                   <div>
                     <p className="text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">Stelle</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_job')}</p>
                   </div>
                   <div className="flex items-center justify-end gap-3">
                     {isLoading ? (
@@ -343,7 +343,7 @@ export default function MatchingResults() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <Card className="p-8 sm:p-10">
-            <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Ranking pro Stelle</h2>
+            <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('matching.ranking_per_job')}</h2>
             <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2">
               {(matrixData.jobsRanked || []).map((job) => (
                 <div key={job.jobId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
@@ -376,7 +376,7 @@ export default function MatchingResults() {
           </Card>
 
           <Card className="p-8 sm:p-10">
-            <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">Ranking pro Bewerber</h2>
+            <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('matching.ranking_per_candidate')}</h2>
             <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2">
               {(matrixData.candidatesRanked || []).map((candidate) => (
                 <div key={candidate.candidateId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
@@ -492,11 +492,11 @@ export default function MatchingResults() {
                 setTimeout(() => document.getElementById('print-styles')?.remove(), 500)
               }}>
                 <FileText className="w-5 h-5" />
-                <span className="hidden sm:inline">PDF Export</span>
+                <span className="hidden sm:inline">{t('matching.pdf_export')}</span>
               </Button>
               <Button size="md" variant="secondary" onClick={exportCSV}>
                 <Download className="w-5 h-5" />
-                <span className="hidden sm:inline">CSV Export</span>
+                <span className="hidden sm:inline">{t('matching.csv_export')}</span>
               </Button>
             </>
           )}

@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { useI18n } from '../I18nContext'
 
 export function Card({ children, className = '', hover = false, ...props }) {
   return (
@@ -225,12 +226,14 @@ const SPINNER_SIZES = {
   lg: { wrap: 'py-40', ring: 'w-12 h-12 border-4 mb-8', text: 'text-[17px]' },
 }
 
-export function LoadingSpinner({ text = 'Laden...', size = 'md', className = '' }) {
+export function LoadingSpinner({ text, size = 'md', className = '' }) {
+  const { t } = useI18n()
+  const label = text === undefined ? t('common.loading') : text
   const s = SPINNER_SIZES[size] || SPINNER_SIZES.md
   return (
     <div className={`flex flex-col items-center justify-center ${s.wrap} ${className}`} role="status" aria-live="polite">
       <div className={`${s.ring} border-gray-100 dark:border-gray-700 border-t-[#0071e3] rounded-full animate-spin`} />
-      {text && <p className={`${s.text}font-medium text-gray-500 dark:text-gray-400`}>{text}</p>}
+      {label && <p className={`${s.text}font-medium text-gray-500 dark:text-gray-400`}>{label}</p>}
     </div>
   )
 }
@@ -242,9 +245,10 @@ export function Skeleton({ className = '', rounded = 'rounded-[12px]' }) {
 }
 
 export function SkeletonList({ rows = 5, className = '' }) {
+  const { t } = useI18n()
   return (
     <div className={`space-y-4 ${className}`} role="status" aria-live="polite" aria-busy="true">
-      <span className="sr-only">Laden...</span>
+      <span className="sr-only">{t('common.loading')}</span>
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}

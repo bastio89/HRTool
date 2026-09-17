@@ -4,8 +4,10 @@ import { Download, FileText, Loader2, Linkedin } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Button } from '../components/UI'
 import { useToast } from '../components/Toast'
+import { useI18n } from '../I18nContext'
 
 export default function Tools() {
+  const { t } = useI18n()
   const toast = useToast()
   const [linksText, setLinksText] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -20,7 +22,7 @@ export default function Tools() {
 
   const handleExport = async () => {
     if (links.length === 0) {
-      toast.warning('Bitte mindestens einen jobs.ch-Link eintragen.')
+      toast.warning(t('tools.warn_no_links'))
       return
     }
 
@@ -35,13 +37,14 @@ export default function Tools() {
       downloadLink.click()
       downloadLink.remove()
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000)
+      const exported = t('tools.export_success').replace('{count}', links.length)
       if (result.warning) {
-        toast.warning(`${links.length} Jobs als PDF exportiert. ${result.warning}`)
+        toast.warning(`${exported}. ${result.warning}`)
       } else {
-        toast.success(`${links.length} Jobs als PDF exportiert`)
+        toast.success(exported)
       }
     } catch (err) {
-      toast.error(err.message || 'jobs.ch-Export fehlgeschlagen')
+      toast.error(err.message || t('tools.export_failed'))
     } finally {
       setExporting(false)
     }
@@ -50,9 +53,9 @@ export default function Tools() {
   return (
     <div className="max-w-[1200px] mx-auto fade-in">
       <div className="mb-8 sm:mb-12">
-        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">Jobs.ch</h1>
+        <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('nav.jobs_ch')}</h1>
         <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-2">
-          Hier kannst du jobs.ch-Links einfügen und daraus ein ZIP mit PDF-Dateien erzeugen.
+          {t('tools.jobs_ch_subtitle')}
         </p>
       </div>
 
@@ -63,14 +66,14 @@ export default function Tools() {
               <FileText className="w-5 h-5 text-[#0077b5]" />
             </div>
             <div>
-              <h2 className="text-[18px] font-semibold text-black dark:text-white">jobs.ch PDF Export</h2>
-              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">Ein Link pro Zeile. Der Export lädt die Seiten, parst sie und liefert ein ZIP mit PDFs zurück.</p>
+              <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('tools.jobs_ch_export_title')}</h2>
+              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('tools.jobs_ch_export_desc')}</p>
             </div>
           </div>
 
           <div className="space-y-4">
             <label className="space-y-2 block">
-              <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Jobs.ch Links</span>
+              <span className="text-[13px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('tools.jobs_ch_links_label')}</span>
               <textarea
                 value={linksText}
                 onChange={(event) => setLinksText(event.target.value)}
@@ -82,11 +85,15 @@ export default function Tools() {
 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[13px] text-gray-500 dark:text-gray-400">
-                {links.length > 0 ? `${links.length} Link${links.length === 1 ? '' : 's'} erkannt` : 'Noch keine Links eingetragen'}
+                {links.length === 0
+                  ? t('tools.no_links')
+                  : links.length === 1
+                    ? t('tools.links_detected_one')
+                    : t('tools.links_detected').replace('{count}', links.length)}
               </p>
               <Button type="button" variant="dark" size="md" onClick={handleExport} disabled={exporting}>
                 {exporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-                Exportiere al PDF
+                {t('tools.export_pdf')}
               </Button>
             </div>
           </div>
@@ -101,8 +108,8 @@ export default function Tools() {
               <Linkedin className="w-6 h-6 text-[#0077b5]" />
             </div>
             <div>
-              <h2 className="text-[18px] font-semibold text-black dark:text-white">LinkedIn</h2>
-              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">Werkzeuge rund um LinkedIn-Profile und Apify-Workflows.</p>
+              <h2 className="text-[18px] font-semibold text-black dark:text-white">{t('nav.linkedin')}</h2>
+              <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('tools.linkedin_desc')}</p>
             </div>
           </div>
         </Link>

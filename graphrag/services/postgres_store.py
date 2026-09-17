@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import psycopg
@@ -8,6 +9,8 @@ from psycopg import errors as pg_errors
 from psycopg.rows import dict_row
 
 from models import AiUsageMetrics, CandidateProfileExtraction, JobProfileExtraction
+
+logger = logging.getLogger(__name__)
 
 
 class PostgresStore:
@@ -137,17 +140,26 @@ class PostgresStore:
                 await cursor.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS parsing_method TEXT")
 
     async def read_ai_usage(self) -> AiUsageMetrics:
-        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
-            async with connection.cursor() as cursor:
-                await cursor.execute(
-                    """
-                    SELECT COUNT(*),
-                           COALESCE(SUM(COALESCE(input_tokens, 0)), 0),
-                           COALESCE(SUM(COALESCE(output_tokens, 0)), 0)
-                    FROM ai_logs
-                    """
-                )
-                row = await cursor.fetchone()
+        # ai_logs legt das Node-Backend an, nicht dieser Dienst. Fehlt die
+        # Tabelle - frische Datenbank, Backend noch nicht gestartet -, darf der
+        # Health-Endpunkt daran nicht scheitern: er wuerde mit 500 antworten und
+        # die Statusanzeige meldete den Dienst als tot, obwohl nur eine
+        # Statistik fehlt. In dem Fall wird ein Verbrauch von null berichtet.
+        try:
+            async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(
+                        """
+                        SELECT COUNT(*),
+                               COALESCE(SUM(COALESCE(input_tokens, 0)), 0),
+                               COALESCE(SUM(COALESCE(output_tokens, 0)), 0)
+                        FROM ai_logs
+                        """
+                    )
+                    row = await cursor.fetchone()
+        except psycopg.Error:
+            logger.warning("read_ai_usage: ai_logs nicht lesbar, melde Verbrauch 0", exc_info=True)
+            return AiUsageMetrics()
         if not row:
             return AiUsageMetrics()
         input_tokens = int(row[1] or 0)

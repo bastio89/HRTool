@@ -280,12 +280,12 @@ export default function Candidates() {
           {filtered.length > 0 && (
             <Button size="md" variant="secondary" onClick={exportCSV}>
               <Download className="w-5 h-5" />
-              <span className="hidden sm:inline">CSV Export</span>
+              <span className="hidden sm:inline">{t('candidates.csv_export')}</span>
             </Button>
           )}
           <Button size="md" variant="secondary" onClick={() => setShowImport(true)}>
             <Upload className="w-5 h-5" />
-            <span className="hidden sm:inline">CSV Import</span>
+            <span className="hidden sm:inline">{t('candidates.csv_import')}</span>
           </Button>
           <Button size="md" variant="secondary" onClick={() => setShowBatchImport(true)}>
             <Upload className="w-5 h-5" />

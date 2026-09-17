@@ -11,6 +11,7 @@ const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 const { tmpDir, extractText } = require('../utils/documentText');
+const { graphRagAuthHeaders } = require('../graphragAuth');
 
 const router = express.Router();
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -181,7 +182,7 @@ async function ingestIntoGraphRag(rawText, persist = true) {
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${encodeURIComponent(persistValue)}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders() },
       body: JSON.stringify({ raw_text: rawText }),
       signal: controller.signal,
     });
@@ -393,10 +394,25 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       });
     }
 
-    // GraphRAG handles parsing and Neo4j persistence; the local backend can still mirror the job record.
-    const graphRag = await ingestIntoGraphRag(trimmedText, 'neo4j');
+  // GraphRAG laesst hier ein Sprachmodell auf den Stellentext los. Der Aufruf
+  // gehoert deshalb ins KI-Protokoll (Art. 12 EU AI Act), genauso wie der
+  // Generator weiter unten.
+  const aiStartedAt = Date.now();
+  const graphRag = await ingestIntoGraphRag(trimmedText, persist ? 'neo4j' : false);
     const profile = graphRag?.profile || {};
     const extractedSkills = serializeJobSkills(profile.required_skills);
+
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'job-import',
+      model: getAiConfig().model,
+      prompt: trimmedText,
+      response: graphRag,
+      parsedResult: profile,
+      skills: extractedSkills,
+      durationMs: Date.now() - aiStartedAt,
+      success: true,
+    });
     const filenameTitle = path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname;
     const resolvedTitle = profile.title && String(profile.title).trim() && String(profile.title).trim() !== 'Unknown Job'
       ? String(profile.title).trim()
@@ -446,6 +462,19 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   } catch (err) {
     console.error('Job description upload error:', err);
     const message = String(err?.message || '');
+
+    // Auch der fehlgeschlagene Versuch ist aufzeichnungspflichtig.
+    logAiCall({
+      userId: req.user?.id,
+      feature: 'job-import',
+      model: getAiConfig().model,
+      prompt: null,
+      response: null,
+      parsedResult: null,
+      success: false,
+      errorMessage: message || 'Unbekannter Fehler',
+    });
+
     if (message.includes('GraphRAG HTTP 502: Job parsing failed:')) {
       return res.status(502).json({
         error: 'GraphRAG-Parsing fehlgeschlagen',

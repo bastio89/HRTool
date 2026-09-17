@@ -97,8 +97,8 @@ const router = createBrowserRouter(
           <Route path="matching/results/selected" element={<SelectedMatchingResults />} />
           <Route path="matching/results/:id" element={<MatchingResults />} />
           <Route path="history" element={<History />} />
-          <Route path="tools" element={<Tools />} />
-          <Route path="tools/linkedin" element={<ToolsLinkedIn />} />
+          <Route path="tools" element={<AdminRoute><Tools /></AdminRoute>} />
+          <Route path="tools/linkedin" element={<AdminRoute><ToolsLinkedIn /></AdminRoute>} />
           <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
           <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
           <Route path="admin/audit" element={<RevisorRoute><AuditLog /></RevisorRoute>} />

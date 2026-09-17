@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     parse_latency_window_size: int = 200
     parse_latency_log_every: int = 20
 
+    graphrag_api_key: str | None = None
     apify_linkedin_mcp_command: str | None = None
     apify_linkedin_mcp_search_tool_name: str = "search_profiles"
 

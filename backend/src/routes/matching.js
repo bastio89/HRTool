@@ -7,6 +7,7 @@ const { promptGuard } = require('../middleware/promptSanitizer');
 const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
+const { graphRagAuthHeaders } = require('../graphragAuth');
 
 const router = express.Router();
 
@@ -112,7 +113,7 @@ async function callGraphRagMatching(endpoint, payload) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   const response = await fetch(`${baseUrl.replace(/\/+$/, '')}${endpoint}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders() },
     body: JSON.stringify(payload),
   });
 

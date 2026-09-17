@@ -300,7 +300,7 @@ export default function InterviewScheduler({ open, onClose, entry: entryProp, on
                       <input id={`${fieldIdPrefix}-meeting-link`}
                         value={form.meeting_link}
                         onChange={e => setForm(f => ({ ...f, meeting_link: e.target.value }))}
-                        placeholder="https://meet.google.com/... oder https://zoom.us/..."
+                        placeholder={t('interview.link_placeholder')}
                         type="url"
                         className="w-full px-4 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[14px] text-[15px] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0071e3]/30 border border-transparent focus:border-[#0071e3]/30 transition"
                       />

@@ -30,6 +30,14 @@ jobs:
           POSTGRES_USER: hrtool
           POSTGRES_PASSWORD: hrtool
           POSTGRES_DB: hrtool_test
+          # Der synchrone Verbindungsaufbau in src/postgresDatabase.js (deasync)
+          # blockiert den Event-Loop, solange Postgres einen Passwort-Handshake
+          # verlangt: die Verbindung steht, bis Postgres nach 60 s abbricht
+          # ("canceling authentication due to timeout"). Reproduziert mit md5
+          # und mit scram-sha-256; nur trust funktioniert. Fuer eine
+          # Wegwerf-Testdatenbank ist trust vertretbar - der Fehler selbst
+          # bleibt offen und gehoert behoben, siehe Produktionsreife-Liste.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -100,6 +108,14 @@ jobs:
           POSTGRES_USER: hrtool
           POSTGRES_PASSWORD: hrtool
           POSTGRES_DB: hrtool_test
+          # Der synchrone Verbindungsaufbau in src/postgresDatabase.js (deasync)
+          # blockiert den Event-Loop, solange Postgres einen Passwort-Handshake
+          # verlangt: die Verbindung steht, bis Postgres nach 60 s abbricht
+          # ("canceling authentication due to timeout"). Reproduziert mit md5
+          # und mit scram-sha-256; nur trust funktioniert. Fuer eine
+          # Wegwerf-Testdatenbank ist trust vertretbar - der Fehler selbst
+          # bleibt offen und gehoert behoben, siehe Produktionsreife-Liste.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-

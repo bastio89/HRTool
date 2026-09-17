@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./src/swagger');
 const candidatesRouter = require('./src/routes/candidates');
@@ -32,7 +33,20 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'] }));
+// Sicherheits-Header. Die Content-Security-Policy bleibt hier aus: dieser
+// Dienst liefert JSON und die Swagger-Oberflaeche, deren Inline-Assets an der
+// Standardrichtlinie scheitern wuerden. Die Seiten-CSP gehoert ohnehin in den
+// nginx, der das Frontend ausliefert.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// Erlaubte Herkuenfte aus der Umgebung, damit nicht jede Umgebung ein
+// Sonderfall im Code ist. Kommagetrennt, Standard sind die lokalen Dev-Ports.
+const DEFAULT_CORS_ORIGINS = 'http://localhost:5173,http://localhost:5174,http://localhost:3000';
+const corsOrigins = (process.env.CORS_ORIGINS || DEFAULT_CORS_ORIGINS)
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+app.use(cors({ origin: corsOrigins }));
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/docs', (req, res) => res.redirect('/api/docs'));

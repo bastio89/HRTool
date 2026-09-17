@@ -75,7 +75,8 @@ class Settings(BaseSettings):
 
     @property
     def resolved_chat_model(self) -> str:
-        return self.ai_chat_model or self._backend_setting("ai_model") or self.ollama_chat_model
+        backend_chat_model = self._backend_setting("ai_model")
+        return backend_chat_model or self.ai_chat_model or self.ollama_chat_model
 
     @property
     def resolved_embedding_model(self) -> str:

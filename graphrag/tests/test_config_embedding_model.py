@@ -51,3 +51,20 @@ def test_resolved_embedding_model_prefers_database_setting(monkeypatch):
     )
 
     assert config.settings.resolved_embedding_model == "db-embedding-model"
+
+
+def test_resolved_chat_model_prefers_database_setting_over_env(monkeypatch):
+    monkeypatch.setenv("AI_CHAT_MODEL", "env-chat-model")
+    monkeypatch.delenv("BACKEND_DB_PATH", raising=False)
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
+    monkeypatch.setenv("NEO4J_USER", "neo4j")
+    monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
+
+    config = _reload_config_module()
+    monkeypatch.setattr(
+        config.Settings,
+        "_backend_setting",
+        lambda self, key: "db-chat-model" if key == "ai_model" else None,
+    )
+
+    assert config.settings.resolved_chat_model == "db-chat-model"

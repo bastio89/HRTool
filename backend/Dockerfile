@@ -20,12 +20,6 @@ RUN mkdir -p data/uploads data/tmp
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Der Prozess startet Python-Unterprozesse; als root waere der Schaden jeder
-# Luecke entsprechend groesser. Das Image bringt den Benutzer node (UID 1000)
-# bereits mit.
-RUN chown -R node:node /app
-USER node
-
 EXPOSE 3001
 
 CMD ["node", "server.js"]

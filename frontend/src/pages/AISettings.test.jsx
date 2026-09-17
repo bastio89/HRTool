@@ -24,14 +24,14 @@ describe('AISettings', () => {
     settingsApi.getAiConfig.mockResolvedValue({
       baseUrl: 'https://openrouter.ai/api/v1',
       model: 'qwen/qwen3.8-27b',
-      embeddingModel: 'qwen3-embedding:4b',
+      embeddingModel: 'nomic-embed-text',
       provider: 'openai',
       apiKeyConfigured: true,
       loggingEnabled: false,
       source: { baseUrl: 'settings', model: 'settings', embeddingModel: 'settings' },
     })
     settingsApi.getAiModels.mockResolvedValue({ models: [{ name: 'qwen/qwen3.8-flash' }] })
-    settingsApi.getAiEmbeddingModels.mockResolvedValue({ models: [{ name: 'qwen3-embedding:4b' }] })
+    settingsApi.getAiEmbeddingModels.mockResolvedValue({ models: [{ name: 'nomic-embed-text' }] })
 
     render(
       <I18nProvider>
@@ -61,7 +61,7 @@ describe('AISettings', () => {
     settingsApi.getAiConfig.mockResolvedValue({
       baseUrl: 'https://openrouter.ai/api/v1',
       model: 'qwen/qwen3.8-27b',
-      embeddingModel: 'qwen3-embedding:4b',
+      embeddingModel: 'nomic-embed-text',
       provider: 'openai',
       apiKeyConfigured: false,
       loggingEnabled: false,

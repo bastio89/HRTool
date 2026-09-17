@@ -488,7 +488,7 @@ export default function AISettings() {
               label={t('ai_settings.model_label')}
               value={model}
               onChange={(e) => { setModel(e.target.value); setLlmTestResult(null) }}
-              placeholder="llama3.2"
+              placeholder="qwen3.8:27b-mlx"
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"

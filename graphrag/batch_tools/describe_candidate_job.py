@@ -68,7 +68,7 @@ def _build_llm_service(database_url: str) -> LLMService:
         chat_model=settings.resolved_chat_model,
         embedding_model=settings.resolved_embedding_model,
         embedding_dimensions=settings.embedding_dimensions,
-        enable_reasoning=settings.ollama_enable_reasoning,
+        enable_reasoning=settings.resolved_reasoning_level != "none",
         reasoning_level=settings.resolved_reasoning_level,
         enable_call_logging=False,
         database_url=database_url,

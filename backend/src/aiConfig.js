@@ -1,11 +1,6 @@
 const fs = require('fs');
 const db = require('./database');
 
-// Default values used when neither the DB settings nor env vars are configured.
-const DEFAULT_BASE_URL = 'http://localhost:11434';
-const DEFAULT_MODEL = 'llama3.2';
-const DEFAULT_PROVIDER = 'auto'; // 'auto' | 'ollama' | 'openai'
-const DEFAULT_REASONING_LEVEL = 'none'; // 'none' | 'low' | 'medium' | 'high'
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 function readSetting(key) {
@@ -49,7 +44,7 @@ function openAiApiBase(baseUrl) {
 /**
  * Central AI (LLM) configuration resolver.
  *
- * Precedence: DB settings (admin-configurable) → environment variables → hardcoded defaults.
+ * Configuration is read exclusively from the shared settings table.
  *
  * @returns {{ baseUrl: string, model: string, provider: string, source: object }}
  */
@@ -61,35 +56,17 @@ function getAiConfig() {
   const dbApiKey = readSetting('ai_api_key');
   const dbReasoningLevel = readSetting('ai_reasoning_level');
   const dbLoggingEnabled = readSetting('ai_log_llm_calls');
-
-  const envBaseUrl = process.env.AI_BASE_URL?.trim() || process.env.OLLAMA_BASE_URL?.trim() || null;
-  const envModel = process.env.AI_MODEL?.trim() || process.env.OLLAMA_MODEL?.trim() || null;
-  const envEmbeddingModel = process.env.AI_EMBEDDING_MODEL?.trim() || null;
-  const envProvider = process.env.AI_PROVIDER?.trim() || null;
-  const envApiKey = process.env.AI_API_KEY?.trim() || process.env.OPENROUTER_API_KEY?.trim() || null;
-  const envLogging = process.env.AI_LOG_LLM_CALLS?.trim() || null;
-  const envReasoningLevel = process.env.AI_REASONING_LEVEL?.trim().toLowerCase() || null;
-
-  const provider = dbProvider || envProvider || DEFAULT_PROVIDER;
+  const provider = dbProvider || 'auto';
   const normalizedProvider = provider.trim().toLowerCase();
-  const providerBaseUrl = normalizedProvider === 'openai' || normalizedProvider === 'openrouter'
-    ? OPENROUTER_BASE_URL
-    : DEFAULT_BASE_URL;
-  const rawBaseUrl = dbBaseUrl || envBaseUrl || providerBaseUrl;
-  const model = dbModel || envModel || DEFAULT_MODEL;
-  const embeddingModel = dbEmbeddingModel
-    || envEmbeddingModel
-    || (normalizedProvider === 'openai' || normalizedProvider === 'openrouter'
-      ? 'openai/text-embedding-3-small'
-      : 'qwen3-embedding:4b');
-  const apiKey = dbApiKey || envApiKey || null;
-  const loggingEnabledRaw = dbLoggingEnabled || envLogging || null;
+  const rawBaseUrl = dbBaseUrl || '';
+  const model = dbModel || '';
+  const embeddingModel = dbEmbeddingModel || '';
+  const apiKey = dbApiKey || null;
+  const loggingEnabledRaw = dbLoggingEnabled || null;
   const loggingEnabled = ['1', 'true', 'yes', 'on'].includes(String(loggingEnabledRaw).trim().toLowerCase());
   const reasoningLevel = ['none', 'low', 'medium', 'high'].includes(dbReasoningLevel || '')
     ? dbReasoningLevel
-    : ['none', 'low', 'medium', 'high'].includes(envReasoningLevel || '')
-      ? envReasoningLevel
-      : DEFAULT_REASONING_LEVEL;
+    : 'none';
 
   const baseUrl = normalizeAiBaseUrl(rawBaseUrl);
 
@@ -102,12 +79,12 @@ function getAiConfig() {
     reasoningLevel,
     loggingEnabled,
     source: {
-      baseUrl: dbBaseUrl ? 'settings' : envBaseUrl ? 'env' : 'default',
-      model: dbModel ? 'settings' : envModel ? 'env' : 'default',
-      embeddingModel: dbEmbeddingModel ? 'settings' : envEmbeddingModel ? 'env' : 'default',
-      provider: dbProvider ? 'settings' : envProvider ? 'env' : 'default',
-      apiKey: dbApiKey ? 'settings' : envApiKey ? 'env' : 'default',
-      reasoningLevel: dbReasoningLevel ? 'settings' : envReasoningLevel ? 'env' : 'default',
+      baseUrl: dbBaseUrl ? 'settings' : 'missing',
+      model: dbModel ? 'settings' : 'missing',
+      embeddingModel: dbEmbeddingModel ? 'settings' : 'missing',
+      provider: dbProvider ? 'settings' : 'missing',
+      apiKey: dbApiKey ? 'settings' : 'missing',
+      reasoningLevel: dbReasoningLevel ? 'settings' : 'missing',
     },
   };
 }
@@ -362,8 +339,5 @@ module.exports = {
   fetchAiModels,
   filterModelsByKind,
   stripReasoningTags,
-  DEFAULT_BASE_URL,
-  DEFAULT_MODEL,
-  DEFAULT_PROVIDER,
   OPENROUTER_BASE_URL,
 };

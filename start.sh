@@ -38,6 +38,10 @@ if ! command -v docker >/dev/null 2>&1; then
   echo "Fehler: Docker ist nicht installiert oder nicht im PATH." >&2
   exit 1
 fi
+if ! docker info >/dev/null 2>&1; then
+  echo "Fehler: Docker-Daemon ist nicht erreichbar. Starte Docker Desktop oder wechsle zu einem gültigen Docker-Context, bevor du ./start.sh ausführst." >&2
+  exit 1
+fi
 if ! docker compose version >/dev/null 2>&1; then
   echo "Fehler: Docker Compose v2 ist nicht verfügbar." >&2
   exit 1

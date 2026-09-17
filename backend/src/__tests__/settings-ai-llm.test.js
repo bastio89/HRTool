@@ -103,7 +103,7 @@ describe('settings AI llm-test route', () => {
       expect(String(url)).toBe('http://host.docker.internal:11434/api/embeddings');
       expect(options?.method).toBe('POST');
       const payload = JSON.parse(options.body);
-      expect(payload.model).toBe('qwen3-embedding:4b');
+      expect(payload.model).toBe('nomic-embed-text');
       expect(payload.prompt).toBe('Kubernetes');
       return {
         ok: true,
@@ -121,7 +121,7 @@ describe('settings AI llm-test route', () => {
       .send({
         baseUrl: 'http://localhost:11434',
         provider: 'ollama',
-        embeddingModel: 'qwen3-embedding:4b',
+        embeddingModel: 'nomic-embed-text',
         sampleText: 'Kubernetes',
       });
 
@@ -130,7 +130,7 @@ describe('settings AI llm-test route', () => {
       reachable: true,
       provider: 'ollama',
       baseUrl: 'http://localhost:11434',
-      embeddingModel: 'qwen3-embedding:4b',
+      embeddingModel: 'nomic-embed-text',
       dims: 3,
     }));
   });
@@ -163,7 +163,7 @@ describe('settings AI llm-test route', () => {
       .send({
         baseUrl: 'http://localhost:11434',
         provider: 'openai',
-        embeddingModel: 'qwen3-embedding:4b',
+        embeddingModel: 'nomic-embed-text',
         sampleText: 'Kubernetes',
       });
 
@@ -186,7 +186,7 @@ describe('settings AI llm-test route', () => {
         return {
           ok: true,
           json: async () => ({
-            models: [{ name: 'qwen3-embedding:4b' }],
+            models: [{ name: 'nomic-embed-text' }],
           }),
         };
       }
@@ -194,7 +194,7 @@ describe('settings AI llm-test route', () => {
       expect(requestUrl).toBe('http://host.docker.internal:11434/api/embeddings');
       expect(options?.method).toBe('POST');
       const payload = JSON.parse(options.body);
-      expect(payload.model).toBe('qwen3-embedding:4b');
+      expect(payload.model).toBe('nomic-embed-text');
       return {
         ok: true,
         json: async () => ({ embedding: [1, 2, 3] }),
@@ -218,7 +218,7 @@ describe('settings AI llm-test route', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual(expect.objectContaining({
       provider: 'ollama',
-      embeddingModel: 'qwen3-embedding:4b',
+      embeddingModel: 'nomic-embed-text',
       dims: 3,
     }));
   });

@@ -16,7 +16,7 @@ describe('settingsApi', () => {
     }))
 
     await expect(
-      settingsApi.testEmbeddingModel('https://openrouter.ai/api/v1', '', 'openai', 'qwen3-embedding:4b')
+      settingsApi.testEmbeddingModel('https://openrouter.ai/api/v1', '', 'openai', 'nomic-embed-text')
     ).rejects.toThrow('OpenRouter rejected the request')
   })
 })

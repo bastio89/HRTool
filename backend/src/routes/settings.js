@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, resolveAiRuntimeBaseUrl, buildAiRequest, extractAiText, stripReasoningTags, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, DEFAULT_BASE_URL, DEFAULT_MODEL, DEFAULT_PROVIDER, OPENROUTER_BASE_URL } = require('../aiConfig');
+const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, resolveAiRuntimeBaseUrl, buildAiRequest, extractAiText, stripReasoningTags, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, OPENROUTER_BASE_URL } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -170,13 +170,6 @@ router.get('/ai/config', (req, res) => {
       loggingEnabled: Boolean(config.loggingEnabled),
       reasoningLevel: config.reasoningLevel,
       source: config.source,
-      defaults: {
-        baseUrl: DEFAULT_BASE_URL,
-        model: DEFAULT_MODEL,
-        embeddingModel: config.embeddingModel,
-        provider: DEFAULT_PROVIDER,
-        openRouterBaseUrl: OPENROUTER_BASE_URL,
-      },
     });
   } catch (error) {
     console.error('Error fetching AI config:', error);
@@ -489,12 +482,8 @@ router.post('/ai/embedding-test', async (req, res) => {
     try {
       let resolvedEmbeddingModel = embeddingModel;
       if (provider === 'ollama' && looksLikeOpenAiEmbeddingModel(resolvedEmbeddingModel)) {
-        try {
-          const localModels = filterModelsByKind(await fetchAiModels(runtimeBaseUrl, provider, 5000, requestApiKey), 'embedding');
-          resolvedEmbeddingModel = localModels.find((m) => m.name)?.name || 'qwen3-embedding:4b';
-        } catch (_) {
-          resolvedEmbeddingModel = 'qwen3-embedding:4b';
-        }
+        const localModels = filterModelsByKind(await fetchAiModels(runtimeBaseUrl, provider, 5000, requestApiKey), 'embedding');
+        resolvedEmbeddingModel = localModels.find((m) => m.name)?.name || resolvedEmbeddingModel;
       }
 
       let response;

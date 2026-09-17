@@ -5,21 +5,18 @@ import psycopg
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_AI_BASE_URL = "http://host.docker.internal:11434"
+DEFAULT_AI_PROVIDER = "ollama"
+DEFAULT_AI_MODEL = "qwen3.8:27b-mlx"
+DEFAULT_AI_EMBEDDING_MODEL = "qwen3-embedding:4b"
+DEFAULT_AI_REASONING_LEVEL = "none"
+
+
 class Settings(BaseSettings):
     neo4j_uri: str
     neo4j_user: str = "neo4j"
     neo4j_password: str
-    ai_provider: str | None = None
-    ai_base_url: str | None = None
-    openrouter_api_key: str | None = None
     database_url: str = "postgresql://hrtool:hrtoolpass@localhost:5432/hrtool"
-    ai_chat_model: str | None = None
-    ai_embedding_model: str | None = None
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_chat_model: str = "qwen3.6:35b"
-    ollama_embedding_model: str = "qwen3-embedding:4b"
-    ollama_enable_reasoning: bool = True
-    ai_reasoning_level: str | None = None
     enable_parse_latency_aggregation: bool = False
     parse_latency_window_size: int = 200
     parse_latency_log_every: int = 20
@@ -39,16 +36,12 @@ class Settings(BaseSettings):
 
     @property
     def resolved_ai_base_url(self) -> str:
-        provider = self.resolved_provider
-        if provider == "openrouter":
-            default_base_url = "https://openrouter.ai/api/v1"
-        else:
-            default_base_url = self.ollama_base_url
-        return (self.ai_base_url or self._backend_setting("ai_base_url") or default_base_url).rstrip("/")
+        return (self._backend_setting("ai_base_url") or DEFAULT_AI_BASE_URL).rstrip("/")
 
     def _backend_database_url(self) -> str:
         parsed = urlsplit(self.database_url)
-        if parsed.hostname == "postgres":
+        in_docker = os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv") or os.environ.get("DOCKER_CONTAINER") == "true"
+        if parsed.hostname == "postgres" and not in_docker:
             return urlunsplit((parsed.scheme, parsed.netloc.replace("postgres", "localhost", 1), parsed.path, parsed.query, parsed.fragment))
         return self.database_url
 
@@ -62,12 +55,12 @@ class Settings(BaseSettings):
 
     @property
     def resolved_provider(self) -> str:
-        provider = self.ai_provider or self._backend_setting("ai_provider") or "ollama"
+        provider = self._backend_setting("ai_provider") or DEFAULT_AI_PROVIDER
         return "openrouter" if provider.strip().lower() == "openai" else provider.strip().lower()
 
     @property
     def resolved_api_key(self) -> str | None:
-        return self.openrouter_api_key or self._backend_setting("ai_api_key")
+        return self._backend_setting("ai_api_key")
 
     @property
     def resolved_apify_token(self) -> str | None:
@@ -75,19 +68,11 @@ class Settings(BaseSettings):
 
     @property
     def resolved_chat_model(self) -> str:
-        backend_chat_model = self._backend_setting("ai_model")
-        return backend_chat_model or self.ai_chat_model or self.ollama_chat_model
+        return self._backend_setting("ai_model") or DEFAULT_AI_MODEL
 
     @property
     def resolved_embedding_model(self) -> str:
-        if self.ai_embedding_model:
-            return self.ai_embedding_model
-        backend_embedding_model = self._backend_setting("ai_embedding_model")
-        if backend_embedding_model:
-            return backend_embedding_model
-        if self.resolved_provider == "openrouter":
-            return "openai/text-embedding-3-small"
-        return self.ollama_embedding_model
+        return self._backend_setting("ai_embedding_model") or DEFAULT_AI_EMBEDDING_MODEL
 
     @property
     def resolved_reasoning_level(self) -> str:
@@ -97,10 +82,55 @@ class Settings(BaseSettings):
             level = row[0].strip().lower() if row and isinstance(row[0], str) else None
         except psycopg.Error:
             level = None
-        level = level or self.ai_reasoning_level or ""
+        level = level or DEFAULT_AI_REASONING_LEVEL
         if level in {"none", "low", "medium", "high"}:
             return level
-        return "none"
+        return DEFAULT_AI_REASONING_LEVEL
+
+
+def _seed_default_ai_settings(database_url: str) -> None:
+    try:
+        parsed = urlsplit(database_url)
+        if parsed.hostname == "postgres":
+            database_url = urlunsplit((parsed.scheme, parsed.netloc.replace("postgres", "localhost", 1), parsed.path, parsed.query, parsed.fragment))
+        with psycopg.connect(database_url) as connection:
+            for key, value in (
+                ("ai_base_url", DEFAULT_AI_BASE_URL),
+                ("ai_provider", DEFAULT_AI_PROVIDER),
+                ("ai_model", DEFAULT_AI_MODEL),
+                ("ai_reasoning_level", DEFAULT_AI_REASONING_LEVEL),
+            ):
+                connection.execute(
+                    "INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING",
+                    (key, value),
+                )
+            connection.execute(
+                """
+                UPDATE settings
+                SET value = %s
+                WHERE key = %s
+                  AND value IN (%s, %s, %s)
+                """,
+                (
+                    DEFAULT_AI_BASE_URL,
+                    "ai_base_url",
+                    "http://localhost:11434",
+                    "http://127.0.0.1:11434",
+                    "http://localhost:8000",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO settings (key, value)
+                VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                WHERE settings.value = %s
+                """,
+                ("ai_embedding_model", DEFAULT_AI_EMBEDDING_MODEL, "nomic-embed-text"),
+            )
+    except psycopg.Error:
+        return
 
 
 settings = Settings()
+_seed_default_ai_settings(settings.database_url)

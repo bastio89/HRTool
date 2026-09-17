@@ -47,7 +47,7 @@ llm_service = LLMService(
 	chat_model=settings.resolved_chat_model,
 	embedding_model=settings.resolved_embedding_model,
 	embedding_dimensions=settings.embedding_dimensions,
-	enable_reasoning=settings.ollama_enable_reasoning,
+		enable_reasoning=settings.resolved_reasoning_level != "none",
 	reasoning_level=settings.resolved_reasoning_level,
 	enable_parse_latency_aggregation=settings.enable_parse_latency_aggregation,
 	parse_latency_window_size=settings.parse_latency_window_size,
@@ -72,7 +72,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
 	await postgres_store.ensure_schema()
+	await postgres_store.ensure_setting("ai_base_url", settings.resolved_ai_base_url)
+	await postgres_store.ensure_setting("ai_provider", settings.resolved_provider)
+	await postgres_store.ensure_setting("ai_model", settings.resolved_chat_model)
 	await postgres_store.ensure_setting("ai_embedding_model", settings.resolved_embedding_model)
+	await postgres_store.ensure_setting("ai_reasoning_level", settings.resolved_reasoning_level)
 	yield
 	await db_service.close()
 	await llm_service.close()

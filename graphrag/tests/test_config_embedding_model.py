@@ -10,35 +10,7 @@ def _reload_config_module():
     return importlib.reload(config)
 
 
-def test_resolved_embedding_model_defaults_to_openai_embedding_when_provider_is_openrouter(monkeypatch):
-    monkeypatch.delenv("AI_EMBEDDING_MODEL", raising=False)
-    monkeypatch.delenv("BACKEND_DB_PATH", raising=False)
-    monkeypatch.setenv("AI_PROVIDER", "openrouter")
-    monkeypatch.setenv("AI_BASE_URL", "https://openrouter.ai/api/v1")
-    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
-    monkeypatch.setenv("NEO4J_USER", "neo4j")
-    monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
-
-    config = _reload_config_module()
-    assert config.settings.resolved_embedding_model == "openai/text-embedding-3-small"
-
-
-def test_resolved_embedding_model_uses_ollama_default_for_ollama_provider(monkeypatch):
-    monkeypatch.delenv("AI_EMBEDDING_MODEL", raising=False)
-    monkeypatch.delenv("BACKEND_DB_PATH", raising=False)
-    monkeypatch.setenv("AI_PROVIDER", "ollama")
-    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
-    monkeypatch.setenv("NEO4J_USER", "neo4j")
-    monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
-
-    config = _reload_config_module()
-    assert config.settings.resolved_embedding_model == config.settings.ollama_embedding_model
-
-
 def test_resolved_embedding_model_prefers_database_setting(monkeypatch):
-    monkeypatch.delenv("AI_EMBEDDING_MODEL", raising=False)
-    monkeypatch.delenv("BACKEND_DB_PATH", raising=False)
-    monkeypatch.setenv("AI_PROVIDER", "ollama")
     monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
     monkeypatch.setenv("NEO4J_USER", "neo4j")
     monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
@@ -53,9 +25,7 @@ def test_resolved_embedding_model_prefers_database_setting(monkeypatch):
     assert config.settings.resolved_embedding_model == "db-embedding-model"
 
 
-def test_resolved_chat_model_prefers_database_setting_over_env(monkeypatch):
-    monkeypatch.setenv("AI_CHAT_MODEL", "env-chat-model")
-    monkeypatch.delenv("BACKEND_DB_PATH", raising=False)
+def test_resolved_embedding_model_returns_default_without_database_value(monkeypatch):
     monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
     monkeypatch.setenv("NEO4J_USER", "neo4j")
     monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
@@ -64,7 +34,7 @@ def test_resolved_chat_model_prefers_database_setting_over_env(monkeypatch):
     monkeypatch.setattr(
         config.Settings,
         "_backend_setting",
-        lambda self, key: "db-chat-model" if key == "ai_model" else None,
+        lambda self, key: None,
     )
 
-    assert config.settings.resolved_chat_model == "db-chat-model"
+    assert config.settings.resolved_embedding_model == "qwen3-embedding:4b"

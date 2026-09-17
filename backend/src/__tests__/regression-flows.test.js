@@ -458,14 +458,6 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
   //Ollama --------------------------------
   /*
-  test('CV parser parses Daniel fixture with ollama:llama3.2 and stores data in database', async () => {
-    await runDanielFixtureTest({
-      modelName: 'llama3.2',
-      baseUrl: 'http://localhost:11434',
-      provider: 'ollama',
-    });
-  }, 180000);
-
   test('CV parser parses Daniel fixture with ollama:gemma4:latest and stores data in database', async () => {
     await runDanielFixtureTest({
       modelName: 'gemma4:latest',
@@ -491,14 +483,6 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
   }, 180000);
 
   */
-  test('CV parser parses Daniel fixture with ollama:qwen3.6:35b and stores data in database', async () => {
-    await runDanielFixtureTest({
-      modelName: 'qwen3.6:35b',
-      baseUrl: 'http://localhost:11434',
-      provider: 'ollama',
-    });
-  }, 180000);
-
   //lmstudio ------------------------
   /*
   test('CV parser parses Daniel fixture with lmstudio:gemma-4-e4b-it-mlx and stores data in database', async () => {
@@ -520,14 +504,6 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     test('CV parser parses Daniel fixture with lmstudio:gemma-4-31b-a4b-it-mlx and stores data in database', async () => {
     await runDanielFixtureTest({
       modelName: 'gemma-4-31b-a4b-it-mlx',
-      baseUrl: 'http://localhost:1234',
-      provider: 'openai',
-    });
-  }, 180000);
-
-  test('CV parser parses Daniel fixture with lmstudio:qwen3.6-35b-a3b-ud-mlx and stores data in database', async () => {
-    await runDanielFixtureTest({
-      modelName: 'qwen3.6-35b-a3b-ud-mlx',
       baseUrl: 'http://localhost:1234',
       provider: 'openai',
     });

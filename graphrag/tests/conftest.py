@@ -12,8 +12,6 @@ os.environ.setdefault("NEO4J_URI", "bolt://localhost:7687")
 os.environ.setdefault("NEO4J_USER", "neo4j")
 os.environ.setdefault("NEO4J_PASSWORD", "test-password")
 os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434")
-os.environ.setdefault("OLLAMA_CHAT_MODEL", "qwen3.6:35b")
-os.environ.setdefault("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
 
 
 @pytest_asyncio.fixture

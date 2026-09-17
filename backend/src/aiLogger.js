@@ -26,7 +26,7 @@ function appendDebugLog(entry) {
  * @param {Object} opts
  * @param {number|null}  opts.userId       - ID of the user who triggered the call
  * @param {string}       opts.feature      - 'matching' | 'cv-parser' | 'job-generator'
- * @param {string}       opts.model        - Model name (e.g. 'llama3.2')
+ * @param {string}       opts.model        - Model name
  * @param {string|null}  opts.modelVersion - Optional version/tag
  * @param {string}       opts.prompt       - Full prompt sent to the model
  * @param {string}       opts.response     - Raw response text

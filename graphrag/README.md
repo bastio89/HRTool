@@ -29,13 +29,11 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-For OpenRouter-based batch imports, set `AI_PROVIDER=openrouter`, provide `OPENROUTER_API_KEY`, and keep `AI_BASE_URL` at `https://openrouter.ai/api/v1` unless you override it. The default embedding model for Neo4j vectors is now `qwen3-embedding:4b`.
-
-If you want to use local Ollama instead, make sure it is running locally and the configured models are available, e.g. `qwen3.6:35b` for chat and `qwen3-embedding:4b` for vectorization.
+The batch importer reads host, provider, chat model, embedding model, and reasoning settings exclusively from the shared database settings written by the GUI.
 
 ```bash
-ollama pull qwen3.6:35b
-ollama pull qwen3-embedding:4b
+ollama pull <chat-model-from-gui>
+ollama pull <embedding-model-from-gui>
 ```
 
 ## Initialize database

@@ -1,5 +1,3 @@
-const path = require('path');
-
 describe('aiConfig', () => {
   const nativeEnv = {
     AI_BASE_URL: process.env.AI_BASE_URL,
@@ -23,42 +21,47 @@ describe('aiConfig', () => {
     jest.resetModules();
   });
 
-  test('prefers GUI settings and AI_* environment variables over Ollama defaults', () => {
-    process.env.AI_BASE_URL = 'https://openrouter.ai/api/v1';
-    process.env.AI_MODEL = 'openai/gpt-4o-mini';
-    process.env.AI_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
-    process.env.AI_PROVIDER = 'openrouter';
-    process.env.AI_API_KEY = 'env-api-key';
-    process.env.OLLAMA_BASE_URL = 'http://localhost:11434';
-    process.env.OLLAMA_MODEL = 'qwen3.6:35b';
-
+  test('reads AI config only from the settings table', () => {
     jest.doMock('../database', () => ({
-      prepare: () => ({ get: () => undefined }),
+      prepare: () => ({
+        get: (key) => {
+          const values = {
+            ai_base_url: 'https://openrouter.ai/api/v1',
+            ai_model: 'settings-chat-model',
+            ai_embedding_model: 'settings-embedding-model',
+            ai_provider: 'openrouter',
+            ai_api_key: 'db-api-key',
+            ai_reasoning_level: 'low',
+            ai_log_llm_calls: '1',
+          };
+          return values[key] ? { value: values[key] } : undefined;
+        },
+      }),
     }));
 
     jest.isolateModules(() => {
       const { getAiConfig } = require('../aiConfig');
       expect(getAiConfig()).toEqual({
         baseUrl: 'https://openrouter.ai/api/v1',
-        model: 'openai/gpt-4o-mini',
-        embeddingModel: 'openai/text-embedding-3-small',
+        model: 'settings-chat-model',
+        embeddingModel: 'settings-embedding-model',
         provider: 'openrouter',
-        apiKey: 'env-api-key',
-        loggingEnabled: false,
+        apiKey: 'db-api-key',
+        loggingEnabled: true,
+        reasoningLevel: 'low',
         source: {
-          baseUrl: 'env',
-          model: 'env',
-          embeddingModel: 'env',
-          provider: 'env',
-          apiKey: 'env',
+          baseUrl: 'settings',
+          model: 'settings',
+          embeddingModel: 'settings',
+          provider: 'settings',
+          apiKey: 'settings',
+          reasoningLevel: 'settings',
         },
       });
     });
   });
 
-  test('defaults to the OpenRouter base URL when provider is openrouter and no base URL is set', () => {
-    process.env.AI_PROVIDER = 'openrouter';
-
+  test('returns empty values when no settings exist', () => {
     jest.doMock('../database', () => ({
       prepare: () => ({ get: () => undefined }),
     }));
@@ -66,8 +69,11 @@ describe('aiConfig', () => {
     jest.isolateModules(() => {
       const { getAiConfig } = require('../aiConfig');
       expect(getAiConfig()).toMatchObject({
-        baseUrl: 'https://openrouter.ai/api/v1',
-        embeddingModel: 'openai/text-embedding-3-small',
+        baseUrl: '',
+        model: '',
+        embeddingModel: '',
+        provider: 'auto',
+        apiKey: null,
       });
     });
   });
@@ -81,10 +87,10 @@ describe('aiConfig', () => {
       const { filterModelsByKind } = require('../aiConfig');
       const models = filterModelsByKind(
         [
-          { name: 'llama3.2' },
-          { name: 'qwen3.6:35b' },
+          { name: 'chat-model-y' },
+          { name: 'chat-model-x' },
           { name: 'Qwen/Qwen3 Embedding 4B' },
-          { name: 'qwen3-embedding:4b' },
+             { name: 'embedding-model-x' },
           { name: 'nomic-embed-text' },
           { name: 'bge-m3' },
           { name: 'openai/text-embedding-3-small' },
@@ -94,7 +100,7 @@ describe('aiConfig', () => {
 
       expect(models).toEqual([
         'Qwen/Qwen3 Embedding 4B',
-        'qwen3-embedding:4b',
+           'embedding-model-x',
         'nomic-embed-text',
         'bge-m3',
         'openai/text-embedding-3-small',

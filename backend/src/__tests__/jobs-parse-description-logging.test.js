@@ -18,8 +18,14 @@ describe('jobs parse-description logging', () => {
     jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
 
     process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    // Die Route leitet den persist-Wert der Anfrage an GraphRAG weiter:
+    // persist=1 wird zu persist=neo4j, alles andere zu persist=0. Erwartung
+    // und Anfrage muessen deshalb zusammenpassen - beide haengen an dieser
+    // Konstante, damit sie nicht wieder auseinanderlaufen koennen.
+    const requestedPersist = '0';
+    const forwardedPersist = requestedPersist === '1' ? 'neo4j' : '0';
     global.fetch = jest.fn(async (url, options) => {
-      expect(String(url)).toBe('http://fake-graphrag/ingest/job?persist=neo4j');
+      expect(String(url)).toBe(`http://fake-graphrag/ingest/job?persist=${forwardedPersist}`);
       expect(options?.method).toBe('POST');
       const payload = JSON.parse(options.body);
       expect(payload.raw_text).toContain('Senior Backend Engineer');
@@ -43,7 +49,7 @@ describe('jobs parse-description logging', () => {
     fs.writeFileSync(filePath, 'Senior Backend Engineer with Node.js and SQL');
 
     const response = await request(app)
-      .post('/api/jobs/parse-description?persist=0')
+      .post(`/api/jobs/parse-description?persist=${requestedPersist}`)
       .attach('file', filePath, { contentType: 'text/plain' });
 
     expect(response.status).toBe(200);

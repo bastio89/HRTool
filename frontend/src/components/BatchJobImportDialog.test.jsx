@@ -3,6 +3,7 @@ import { vi } from 'vitest'
 import BatchJobImportDialog from './BatchJobImportDialog'
 import { I18nProvider } from '../I18nContext'
 import { jobsApi } from '../api'
+import de from '../i18n/de'
 
 vi.mock('../api', () => ({
   jobsApi: {
@@ -48,10 +49,18 @@ describe('BatchJobImportDialog', () => {
       expect(screen.getByText('Senior Backend Engineer.pdf')).toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /1 Stellen importieren/i }))
+    // Beschriftungen aus dem Woerterbuch ableiten statt abzutippen: der Test
+    // prueft, dass der Sync-Fehler beim Nutzer ankommt, nicht den Wortlaut.
+    // Eine abgetippte Fassung ist an einer Umformulierung gescheitert.
+    const startLabel = de['batch_job_import.start'].replace('{n}', '1')
+    fireEvent.click(screen.getByRole('button', { name: startLabel }))
 
+    const syncError = de['batch_job_import.graph_rag_error'].replace(
+      '{error}',
+      'GraphRAG HTTP 503: service unavailable'
+    )
     await waitFor(() => {
-      expect(screen.getByText(/GraphRAG-Sync fehlgeschlagen: GraphRAG HTTP 503: service unavailable/i)).toBeInTheDocument()
+      expect(screen.getByText(syncError)).toBeInTheDocument()
     })
 
     expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, false, true)

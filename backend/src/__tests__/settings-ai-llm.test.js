@@ -222,4 +222,39 @@ describe('settings AI llm-test route', () => {
       dims: 3,
     }));
   });
+
+  test('falls back to embedding suggestions when the host advertises no embedding models', async () => {
+    jest.doMock('../database', () => ({
+      prepare: () => ({ get: () => undefined, all: () => [], run: () => ({}) }),
+    }));
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    global.fetch = jest.fn(async (url) => {
+      expect(String(url)).toBe('https://openrouter.ai/api/v1/models');
+      return {
+        ok: true,
+        json: async () => ({
+          models: [{ name: 'openai/gpt-mini-latest' }, { name: 'openai/gpt-4o-mini' }],
+        }),
+      };
+    });
+
+    const settingsRouter = require('../routes/settings');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/settings', settingsRouter);
+
+    const response = await request(app)
+      .get('/api/settings/ai/embedding-models')
+      .query({ baseUrl: 'https://openrouter.ai/api/v1', provider: 'openai' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.models.map((m) => m.name)).toEqual([
+      'openai/text-embedding-3-small',
+      'openai/text-embedding-3-large',
+      'qwen/qwen3-embedding-4b',
+      'jinaai/jina-embeddings-v3',
+      'BAAI/bge-m3',
+    ]);
+  });
 });

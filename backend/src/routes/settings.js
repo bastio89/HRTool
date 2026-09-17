@@ -19,6 +19,26 @@ function forceOllamaForKnownLocalHost(baseUrl, provider) {
   }
 }
 
+function embeddingModelSuggestions(provider) {
+  const normalized = String(provider || '').trim().toLowerCase();
+  if (normalized === 'ollama') {
+    return [
+      { name: 'nomic-embed-text' },
+      { name: 'mxbai-embed-large' },
+      { name: 'qwen3-embedding:4b' },
+      { name: 'bge-m3' },
+    ];
+  }
+
+  return [
+    { name: 'openai/text-embedding-3-small' },
+    { name: 'openai/text-embedding-3-large' },
+    { name: 'qwen/qwen3-embedding-4b' },
+    { name: 'jinaai/jina-embeddings-v3' },
+    { name: 'BAAI/bge-m3' },
+  ];
+}
+
 function looksLikeOpenAiEmbeddingModel(modelName) {
   const normalized = String(modelName || '').trim().toLowerCase();
   if (!normalized) return false;
@@ -594,6 +614,9 @@ router.get('/ai/embedding-models', async (req, res) => {
     let models = [];
     try {
       models = filterModelsByKind(await fetchAiModels(baseUrl, provider, 5000, requestApiKey), 'embedding');
+      if (models.length === 0) {
+        models = embeddingModelSuggestions(provider);
+      }
     } catch (err) {
       return res.status(502).json({
         error: 'KI-Host nicht erreichbar',

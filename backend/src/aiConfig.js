@@ -302,7 +302,7 @@ function filterModelsByKind(models, kind = 'chat') {
 
   if (normalizedKind === 'embedding') {
     const filtered = mapped.filter((model) => isEmbeddingModelName(model.name));
-    return filtered.length > 0 ? filtered : mapped;
+    return filtered;
   }
 
   return mapped;

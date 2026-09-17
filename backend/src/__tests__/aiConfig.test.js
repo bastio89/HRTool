@@ -108,6 +108,26 @@ describe('aiConfig', () => {
     });
   });
 
+  test('returns no embedding models when none are advertised', () => {
+    jest.doMock('../database', () => ({
+      prepare: () => ({ get: () => undefined }),
+    }));
+
+    jest.isolateModules(() => {
+      const { filterModelsByKind } = require('../aiConfig');
+      const models = filterModelsByKind(
+        [
+          { name: 'openai/gpt-mini-latest' },
+          { name: 'openai/gpt-4o-mini' },
+          { name: 'chat-model-x' },
+        ],
+        'embedding',
+      ).map((model) => model.name);
+
+      expect(models).toEqual([]);
+    });
+  });
+
   test('rewrites localhost AI URLs to host.docker.internal inside Docker', () => {
     jest.doMock('fs', () => ({
       existsSync: (path) => path === '/.dockerenv',

@@ -37,4 +37,4 @@ def test_resolved_embedding_model_returns_default_without_database_value(monkeyp
         lambda self, key: None,
     )
 
-    assert config.settings.resolved_embedding_model == "qwen3-embedding:4b"
+    assert config.settings.resolved_embedding_model == ""

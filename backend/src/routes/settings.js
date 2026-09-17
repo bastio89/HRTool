@@ -25,7 +25,6 @@ function embeddingModelSuggestions(provider) {
     return [
       { name: 'nomic-embed-text' },
       { name: 'mxbai-embed-large' },
-      { name: 'qwen3-embedding:4b' },
       { name: 'bge-m3' },
     ];
   }

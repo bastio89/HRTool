@@ -7,7 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_AI_BASE_URL = "http://host.docker.internal:11434"
 DEFAULT_AI_PROVIDER = "ollama"
-DEFAULT_AI_EMBEDDING_MODEL = "qwen3-embedding:4b"
 DEFAULT_AI_REASONING_LEVEL = "none"
 
 
@@ -72,7 +71,7 @@ class Settings(BaseSettings):
 
     @property
     def resolved_embedding_model(self) -> str:
-        return self._backend_setting("ai_embedding_model") or DEFAULT_AI_EMBEDDING_MODEL
+        return self._backend_setting("ai_embedding_model") or ""
 
     @property
     def resolved_reasoning_level(self) -> str:
@@ -117,15 +116,6 @@ def _seed_default_ai_settings(database_url: str) -> None:
                     "http://127.0.0.1:11434",
                     "http://localhost:8000",
                 ),
-            )
-            connection.execute(
-                """
-                INSERT INTO settings (key, value)
-                VALUES (%s, %s)
-                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
-                WHERE settings.value = %s
-                """,
-                ("ai_embedding_model", DEFAULT_AI_EMBEDDING_MODEL, "nomic-embed-text"),
             )
     except psycopg.Error:
         return

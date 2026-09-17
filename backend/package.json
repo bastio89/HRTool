@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "jest --runInBand",
-    "reset:admin": "node scripts/reset-admin.js"
+    "reset:admin": "node scripts/reset-admin.js",
+    "test:stack": "RUN_STACK_TESTS=1 jest --runInBand"
   },
   "keywords": [],
   "author": "",

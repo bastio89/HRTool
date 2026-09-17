@@ -1506,6 +1506,7 @@ export default {
   'ai_settings.models_word': 'Modelle',
   'ai_settings.model_title': 'KI-Modell',
   'ai_settings.model_label': 'Modell auswählen',
+  'ai_settings.model_placeholder': 'Modell aus der Datenbank',
   'ai_settings.embedding_model_title': 'Embedding-Modell',
   'ai_settings.embedding_model_label': 'Embedding-Modell auswählen',
   'ai_settings.embedding_model_required': 'Bitte ein Embedding-Modell auswählen oder eintragen.',

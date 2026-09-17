@@ -7,7 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_AI_BASE_URL = "http://host.docker.internal:11434"
 DEFAULT_AI_PROVIDER = "ollama"
-DEFAULT_AI_MODEL = "qwen3.8:27b-mlx"
 DEFAULT_AI_EMBEDDING_MODEL = "qwen3-embedding:4b"
 DEFAULT_AI_REASONING_LEVEL = "none"
 
@@ -69,7 +68,7 @@ class Settings(BaseSettings):
 
     @property
     def resolved_chat_model(self) -> str:
-        return self._backend_setting("ai_model") or DEFAULT_AI_MODEL
+        return self._backend_setting("ai_model") or ""
 
     @property
     def resolved_embedding_model(self) -> str:
@@ -98,7 +97,6 @@ def _seed_default_ai_settings(database_url: str) -> None:
             for key, value in (
                 ("ai_base_url", DEFAULT_AI_BASE_URL),
                 ("ai_provider", DEFAULT_AI_PROVIDER),
-                ("ai_model", DEFAULT_AI_MODEL),
                 ("ai_reasoning_level", DEFAULT_AI_REASONING_LEVEL),
             ):
                 connection.execute(

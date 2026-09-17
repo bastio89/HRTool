@@ -1506,6 +1506,7 @@ export default {
   'ai_settings.models_word': 'models',
   'ai_settings.model_title': 'AI Model',
   'ai_settings.model_label': 'Select model',
+  'ai_settings.model_placeholder': 'Model from the database',
   'ai_settings.embedding_model_title': 'Embedding model',
   'ai_settings.embedding_model_label': 'Select embedding model',
   'ai_settings.embedding_model_required': 'Please select or enter an embedding model.',

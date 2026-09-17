@@ -38,3 +38,14 @@ def test_resolved_embedding_model_returns_default_without_database_value(monkeyp
     )
 
     assert config.settings.resolved_embedding_model == ""
+
+
+def test_initial_embedding_model_reads_environment(monkeypatch):
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
+    monkeypatch.setenv("NEO4J_USER", "neo4j")
+    monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
+    monkeypatch.setenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+
+    config = _reload_config_module()
+
+    assert config.settings.initial_embedding_model == "nomic-embed-text"

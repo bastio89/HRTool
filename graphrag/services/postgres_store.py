@@ -29,6 +29,21 @@ class PostgresStore:
             )
         return getattr(result, "rowcount", 0) == 1
 
+    async def ensure_setting_if_blank(self, key: str, value: str) -> bool:
+        if not isinstance(value, str) or not value.strip():
+            return False
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            result = await connection.execute(
+                """
+                INSERT INTO settings (key, value)
+                VALUES (%s, %s)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+                WHERE settings.value IS NULL OR btrim(settings.value) = ''
+                """,
+                (key, value.strip()),
+            )
+        return getattr(result, "rowcount", 0) == 1
+
     async def ensure_schema(self) -> None:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor() as cursor:

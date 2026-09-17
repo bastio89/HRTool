@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         return os.environ.get("APIFY_TOKEN") or self._backend_setting("apify_token")
 
     @property
+    def initial_embedding_model(self) -> str:
+        return (os.environ.get("OLLAMA_EMBEDDING_MODEL") or os.environ.get("AI_EMBEDDING_MODEL") or "").strip()
+
+    @property
     def resolved_chat_model(self) -> str:
         return self._backend_setting("ai_model") or ""
 

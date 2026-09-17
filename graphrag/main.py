@@ -78,7 +78,7 @@ async def lifespan(_: FastAPI):
 	await postgres_store.ensure_schema()
 	await postgres_store.ensure_setting("ai_base_url", settings.resolved_ai_base_url)
 	await postgres_store.ensure_setting("ai_provider", settings.resolved_provider)
-	await postgres_store.ensure_setting("ai_embedding_model", settings.resolved_embedding_model)
+	await postgres_store.ensure_setting_if_blank("ai_embedding_model", settings.initial_embedding_model)
 	await postgres_store.ensure_setting("ai_reasoning_level", settings.resolved_reasoning_level)
 	yield
 	await db_service.close()

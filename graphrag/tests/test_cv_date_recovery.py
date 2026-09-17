@@ -13,7 +13,11 @@ from services.llm import LLMService
 
 @pytest.mark.anyio
 async def test_parse_candidate_cv_recovers_work_history_dates_from_pdf_text() -> None:
-    fixture_path = Path(__file__).parent / "CV 16 - Android Entwickler (Öffentlicher Verkehr) Omar El-Sayed Alter_ 34 - Google Docs.pdf"
+    # Per glob statt per Literal: der Dateiname enthaelt ein "OE", und das
+    # Literal stand hier in zerlegter Form (O + U+0308), waehrend die Datei
+    # zusammengesetzt (U+00D6) im Repository liegt. Unter Linux sind das zwei
+    # verschiedene Namen - der Test hat die Datei nie gefunden.
+    fixture_path = next(Path(__file__).parent.glob("CV 16*.pdf"))
     raw_text = "\n".join(page.extract_text() or "" for page in PdfReader(str(fixture_path)).pages)
 
     service = LLMService(
@@ -51,7 +55,11 @@ async def test_parse_candidate_cv_recovers_work_history_dates_from_pdf_text() ->
 
 @pytest.mark.anyio
 async def test_parse_candidate_cv_recovers_education_history_dates_from_pdf_text() -> None:
-    fixture_path = Path(__file__).parent / "CV 16 - Android Entwickler (Öffentlicher Verkehr) Omar El-Sayed Alter_ 34 - Google Docs.pdf"
+    # Per glob statt per Literal: der Dateiname enthaelt ein "OE", und das
+    # Literal stand hier in zerlegter Form (O + U+0308), waehrend die Datei
+    # zusammengesetzt (U+00D6) im Repository liegt. Unter Linux sind das zwei
+    # verschiedene Namen - der Test hat die Datei nie gefunden.
+    fixture_path = next(Path(__file__).parent.glob("CV 16*.pdf"))
     raw_text = "\n".join(page.extract_text() or "" for page in PdfReader(str(fixture_path)).pages)
 
     service = LLMService(

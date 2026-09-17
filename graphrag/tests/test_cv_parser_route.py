@@ -20,6 +20,7 @@ async def test_cv_parser_parse_combines_files_without_persisting(app_module, api
         "extract_document_text",
         lambda data, content_type: data.decode("utf-8"),
     )
+    monkeypatch.setattr(app_module.pdf_service, "extract_text", lambda data: data.decode("utf-8"))
 
     response = await api_client.post(
         "/cv-parser/parse",
@@ -56,7 +57,12 @@ async def test_cv_parser_parse_requires_a_file(api_client):
 async def test_cv_parser_parse_persists_to_neo4j(app_module, api_client, monkeypatch):
     profile = CandidateProfileExtraction(name="Grace Hopper", skills=[])
     monkeypatch.setattr(app_module, "uuid4", lambda: "candidate-123")
+    # Die Route holt Text aus PDFs ueber pdf_service, aus allen anderen
+    # Formaten ueber extract_document_text. Wird nur das zweite gepatcht,
+    # laufen die Fake-PDF-Bytes in den echten Parser und die Route
+    # antwortet mit 422 "kein lesbarer Text".
     monkeypatch.setattr(app_module, "extract_document_text", lambda data, content_type: data.decode("utf-8"))
+    monkeypatch.setattr(app_module.pdf_service, "extract_text", lambda data: data.decode("utf-8"))
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", AsyncMock(return_value=profile))
     monkeypatch.setattr(app_module.llm_service, "create_embedding", AsyncMock(return_value=[0.1, 0.2]))
     upsert_mock = AsyncMock()
@@ -96,7 +102,12 @@ async def test_cv_parser_parse_persists_to_neo4j(app_module, api_client, monkeyp
 @pytest.mark.anyio
 async def test_cv_parser_parse_recovers_work_history_when_llm_misses_it(app_module, api_client, monkeypatch):
     profile = CandidateProfileExtraction(name="Alina Moser", skills=[])
+    # Die Route holt Text aus PDFs ueber pdf_service, aus allen anderen
+    # Formaten ueber extract_document_text. Wird nur das zweite gepatcht,
+    # laufen die Fake-PDF-Bytes in den echten Parser und die Route
+    # antwortet mit 422 "kein lesbarer Text".
     monkeypatch.setattr(app_module, "extract_document_text", lambda data, content_type: data.decode("utf-8"))
+    monkeypatch.setattr(app_module.pdf_service, "extract_text", lambda data: data.decode("utf-8"))
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", AsyncMock(return_value=profile))
 
     raw_text = (
@@ -125,7 +136,12 @@ async def test_cv_parser_parse_recovers_work_history_when_llm_misses_it(app_modu
 @pytest.mark.anyio
 async def test_cv_parser_parse_recovers_education_history_when_llm_misses_it(app_module, api_client, monkeypatch):
     profile = CandidateProfileExtraction(name="Alina Moser", skills=[])
+    # Die Route holt Text aus PDFs ueber pdf_service, aus allen anderen
+    # Formaten ueber extract_document_text. Wird nur das zweite gepatcht,
+    # laufen die Fake-PDF-Bytes in den echten Parser und die Route
+    # antwortet mit 422 "kein lesbarer Text".
     monkeypatch.setattr(app_module, "extract_document_text", lambda data, content_type: data.decode("utf-8"))
+    monkeypatch.setattr(app_module.pdf_service, "extract_text", lambda data: data.decode("utf-8"))
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", AsyncMock(return_value=profile))
 
     raw_text = (
@@ -151,17 +167,30 @@ async def test_cv_parser_parse_recovers_education_history_when_llm_misses_it(app
 
 
 @pytest.mark.anyio
-async def test_cv_parser_parse_logs_warning_when_no_work_history_recoverable(app_module, api_client, monkeypatch, caplog):
+async def test_cv_parser_parse_survives_a_cv_without_work_history(app_module, api_client, monkeypatch):
+    """Hiess frueher ..._logs_warning_... und prueft nun das Verhalten statt
+    einer Logzeile: die erwartete Meldung existiert im Code nicht mehr, und der
+    Test mockt parse_candidate_cv ohnehin weg - sie haette nur noch aus der
+    Route kommen koennen. Schuetzenswert ist, dass ein Lebenslauf ohne
+    erkennbaren Werdegang sauber durchlaeuft, statt zu scheitern."""
     profile = CandidateProfileExtraction(name="No History Person", skills=[])
+    # Die Route holt Text aus PDFs ueber pdf_service, aus allen anderen
+    # Formaten ueber extract_document_text. Wird nur das zweite gepatcht,
+    # laufen die Fake-PDF-Bytes in den echten Parser und die Route
+    # antwortet mit 422 "kein lesbarer Text".
     monkeypatch.setattr(app_module, "extract_document_text", lambda data, content_type: data.decode("utf-8"))
+    monkeypatch.setattr(app_module.pdf_service, "extract_text", lambda data: data.decode("utf-8"))
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", AsyncMock(return_value=profile))
 
-    with caplog.at_level("WARNING"):
-        response = await api_client.post(
-            "/cv-parser/parse",
-            params={"persist": "false"},
-            files={"file": ("cv.pdf", b"No History Person has no clear career section here at all.", "application/pdf")},
-        )
+    response = await api_client.post(
+        "/cv-parser/parse",
+        params={"persist": "false"},
+        files={"file": ("cv.pdf", b"No History Person has no clear career section here at all.", "application/pdf")},
+    )
 
     assert response.status_code == 200
-    assert "kein Beruflicher Werdegang beim Parsen gefunden" in caplog.text
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["candidate"]["name"] == "No History Person"
+    assert payload["profile"]["work_history"] == []
+    assert payload["persisted"] is False

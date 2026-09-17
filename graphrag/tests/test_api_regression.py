@@ -20,6 +20,19 @@ from models import (
 )
 
 
+def assert_candidate_inserted(postgres_mock, expected_payload):
+    """insert_candidate erhaelt das validierte Modell, nicht das rohe Dict aus
+    dem Request. Die drei Tests, die diesen Helfer nutzen, verglichen frueher
+    gegen das Dict und schlugen seit der Umstellung fehl - die Werte stimmen,
+    nur der Typ nicht. Geprueft wird deshalb der Inhalt."""
+    postgres_mock.assert_awaited_once()
+    (profile,) = postgres_mock.await_args.args
+    assert postgres_mock.await_args.kwargs == {"source": "Candidate-Ingest"}
+    actual = profile.model_dump() if hasattr(profile, "model_dump") else profile
+    assert actual == expected_payload
+
+
+
 @pytest.mark.anyio
 async def test_health_ok(api_client):
     response = await api_client.get("/health")
@@ -185,7 +198,7 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     assert [language["name"] for language in profile_payload["languages"]] == ["Deutsch (C2)", "Englisch (B2)"]
     assert profile_payload["preferred_roles"] == ["Data Engineer", "Backend Engineer"]
     upsert_mock.assert_awaited_once()
-    postgres_mock.assert_awaited_once_with(parse_mock.await_args.args[0] if parse_mock.await_args else profile_payload, source="Candidate-Ingest")
+    assert_candidate_inserted(postgres_mock, profile_payload)
     store_text_mock.assert_awaited_once()
     anonymize_mock.assert_awaited_once_with("44")
 
@@ -235,7 +248,7 @@ async def test_ingest_candidate_forwards_work_history(app_module, api_client, mo
     assert profile_payload["work_history"][0]["employer"] == "ACME GmbH"
     assert profile_payload["work_history"][0]["position"] == "Senior Engineer"
     upsert_mock.assert_awaited_once()
-    postgres_mock.assert_awaited_once_with(parse_mock.await_args.args[0] if parse_mock.await_args else profile_payload, source="Candidate-Ingest")
+    assert_candidate_inserted(postgres_mock, profile_payload)
     store_text_mock.assert_awaited_once()
     anonymize_mock.assert_awaited_once_with("45")
 
@@ -284,7 +297,7 @@ async def test_ingest_candidate_forwards_education_history(app_module, api_clien
     assert profile_payload["education_history"][0]["institution"] == "FHNW"
     assert profile_payload["education_history"][0]["degree"] == "Bachelor of Science"
     upsert_mock.assert_awaited_once()
-    postgres_mock.assert_awaited_once_with(parse_mock.await_args.args[0] if parse_mock.await_args else profile_payload, source="Candidate-Ingest")
+    assert_candidate_inserted(postgres_mock, profile_payload)
     store_text_mock.assert_awaited_once()
     anonymize_mock.assert_awaited_once_with("46")
 
@@ -616,10 +629,15 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     upsert_mock = AsyncMock()
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
+    # Fehlte hier als einzigem Test dieser Reihe - die Zuweisung und das
+    # Patchen von insert_candidate waren beim Kopieren verlorengegangen,
+    # weshalb die Zusicherung unten auf einen undefinierten Namen zugriff.
+    postgres_mock = AsyncMock(return_value=43)
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 

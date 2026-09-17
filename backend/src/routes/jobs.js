@@ -14,7 +14,7 @@ const { tmpDir, extractText } = require('../utils/documentText');
 
 const router = express.Router();
 const repoRoot = path.resolve(__dirname, '..', '..');
-const jobsChExportScript = path.join(repoRoot, 'graphrag', 'batch_tools', 'import_jobs_from_pdfs.py');
+const jobsChExportScript = path.join(repoRoot, 'graphrag', 'batch_tools', 'import_jobs_from_pdfs_obsolete.py');
 
 const uploadStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, tmpDir),

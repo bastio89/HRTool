@@ -13,6 +13,7 @@ COPY backend/server.js ./server.js
 COPY backend/src ./src
 COPY backend/scripts ./scripts
 COPY batch_tools ./batch_tools
+COPY graphrag ./graphrag
 
 RUN mkdir -p data/uploads data/tmp
 

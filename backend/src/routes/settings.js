@@ -91,6 +91,8 @@ router.get('/', (req, res) => {
 
 router.get('/apify/status', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
     const token = readApifyToken();
     if (!token) {
       return res.json({

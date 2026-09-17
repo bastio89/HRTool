@@ -290,8 +290,8 @@ export const jobsApi = {
 
     return {
       blob: await response.blob(),
-      filename: parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'jobs-ch-pdfs.zip',
-      warning: response.headers.get('X-HRTool-JobsCh-Warning') || null,
+      filename: parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'linkedin-profiles.zip',
+      warning: response.headers.get('X-HRTool-LinkedIn-Warning') || null,
     }
   },
   generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data), timeout: 200000 }),
@@ -604,7 +604,7 @@ export const settingsApi = {
   update: (key, value) => request(`/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   getExpired: () => request('/settings/dsgvo/expired'),
   deleteExpired: () => request('/settings/dsgvo/delete-expired', { method: 'DELETE' }),
-  getApifyStatus: () => request('/settings/apify/status'),
+  getApifyStatus: () => request('/settings/apify/status', { cache: 'no-store' }),
   saveApifyConfig: (apiToken) => request('/settings/apify/config', { method: 'PUT', body: JSON.stringify({ apiToken }) }),
   // KI-Konfiguration (Host & Modell)
   getAiConfig: () => request('/settings/ai/config'),

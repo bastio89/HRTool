@@ -8,7 +8,7 @@ const db = require('../database')
 const router = express.Router()
 
 const repoRoot = path.resolve(__dirname, '..', '..')
-const pythonScript = path.join(repoRoot, 'batch_tools', 'linkedin_profile_to_pdf.py')
+const pythonScript = path.join(repoRoot, 'graphrag', 'batch_tools', 'linkedin_profile_to_pdf.py')
 
 function readApifyToken() {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('apify_token')

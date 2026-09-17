@@ -6,6 +6,7 @@ const db = require('../database');
 const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { tmpDir, extractText } = require('../utils/documentText');
+const { graphRagAuthHeaders } = require('../graphragAuth');
 
 const router = express.Router();
 
@@ -374,7 +375,7 @@ async function ingestIntoGraphRag(rawText, persist) {
     const requestPayload = { raw_text: rawText };
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/candidate?persist=${persist ? '1' : '0'}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders() },
       body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });

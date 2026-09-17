@@ -11,6 +11,7 @@ const { generatorRateLimiter } = require('../middleware/rateLimiter');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 const { tmpDir, extractText } = require('../utils/documentText');
+const { graphRagAuthHeaders } = require('../graphragAuth');
 
 const router = express.Router();
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -181,7 +182,7 @@ async function ingestIntoGraphRag(rawText, persist = true) {
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${encodeURIComponent(persistValue)}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders() },
       body: JSON.stringify({ raw_text: rawText }),
       signal: controller.signal,
     });

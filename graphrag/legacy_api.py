@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from models import CandidateCreate, CandidateRead, JobCreate, JobRead, LegacyHealthResponse
 from services.postgres_store import PostgresStore
@@ -63,6 +63,31 @@ def create_legacy_router(postgres_store: PostgresStore) -> APIRouter:
 			)
 			for row in rows
 		]
+
+	@router.get("/candidates/search", response_model=list[CandidateRead])
+	async def search_candidates(
+		search: str = Query(..., min_length=1),
+		limit: int = Query(default=50, ge=1, le=200),
+	) -> list[CandidateRead]:
+		rows = await postgres_store.search_compat_candidates(search, limit=limit)
+		return [
+			CandidateRead(
+				id=int(row["id"]),
+				name=row["name"],
+				email=row.get("email"),
+				phone=row.get("phone"),
+				location=row.get("location"),
+				status=row.get("status"),
+			)
+			for row in rows
+		]
+
+	@router.get("/search")
+	async def search_global(
+		q: str = Query(..., min_length=1),
+		limit: int = Query(default=10, ge=1, le=25),
+	) -> dict[str, object]:
+		return await postgres_store.search_compat_global(q, limit=limit)
 
 	@router.post("/candidates", response_model=CandidateRead, status_code=status.HTTP_201_CREATED)
 	async def create_candidate(payload: CandidateCreate) -> CandidateRead:

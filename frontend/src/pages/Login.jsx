@@ -28,7 +28,10 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7] dark:bg-black flex items-center justify-center selection:bg-[#0071e3] selection:text-white" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif' }}>
+    <div className="min-h-screen bg-[#f5f5f7] dark:bg-black flex items-center justify-center selection:bg-[#0071e3] selection:text-white relative" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif' }}>
+      <span className="pointer-events-none absolute right-4 top-3 text-[10px] sm:text-[11px] font-medium tracking-[0.18em] uppercase text-gray-400 dark:text-gray-500">
+        v{appVersion}
+      </span>
       <div className="w-full max-w-[420px] mx-4">
         {/* Logo */}
         <div className="flex flex-col items-center mb-10">
@@ -91,9 +94,6 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-[12px] text-gray-400 dark:text-gray-500 mt-6 tracking-wide">
-          Version {appVersion}
-        </p>
       </div>
     </div>
   )

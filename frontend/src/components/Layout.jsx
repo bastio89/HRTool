@@ -9,6 +9,8 @@ import { useI18n } from '../I18nContext'
 import Breadcrumb from './Breadcrumb'
 import NotificationBell from './NotificationBell'
 
+const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+
 const navItems = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav.overview' },
   { to: '/candidates', icon: Users, labelKey: 'nav.candidates' },
@@ -272,7 +274,10 @@ export default function Layout() {
       {/* Main Content Area */}
       <main className="flex-1 bg-white dark:bg-[#1c1c1e] rounded-none lg:rounded-l-[48px] lg:my-4 lg:mr-4 shadow-[0_0_40px_rgba(0,0,0,0.03)] border-0 lg:border lg:border-gray-200/50 dark:lg:border-gray-700/50 overflow-hidden flex flex-col relative">
         {/* Top Bar */}
-        <header className="h-16 sm:h-24 flex items-center justify-between lg:justify-end px-4 sm:px-8 lg:px-14 flex-shrink-0 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-2xl border-b border-gray-100/50 dark:border-gray-800/50 layer-sticky sticky top-0">
+        <header className="h-16 sm:h-24 flex items-center justify-between lg:justify-end px-4 sm:px-8 lg:px-14 flex-shrink-0 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-2xl border-b border-gray-100/50 dark:border-gray-800/50 layer-sticky sticky top-0 relative">
+          <span className="pointer-events-none absolute right-4 top-2 sm:right-8 sm:top-3 text-[10px] sm:text-[11px] font-medium tracking-[0.18em] uppercase text-gray-400 dark:text-gray-500">
+            v{appVersion}
+          </span>
           {/* Mobile hamburger */}
           <button
             onClick={() => setSidebarOpen(true)}

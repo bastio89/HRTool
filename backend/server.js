@@ -24,6 +24,7 @@ const reportsRouter = require('./src/routes/reports');
 const candidateDetailsRouter = require('./src/routes/candidate-details');
 const matchingWeightsRouter = require('./src/routes/matching-weights');
 const complianceActionsRouter = require('./src/routes/compliance-actions');
+const searchRouter = require('./src/routes/search');
 const addJobRouter = require('./src/routes/add-job');
 const linkedinRouter = require('./src/routes/linkedin');
 const authMiddleware = require('./src/middleware/auth');
@@ -83,6 +84,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/candidate-details', candidateDetailsRouter);
 app.use('/api/matching-weights', matchingWeightsRouter);
 app.use('/api/compliance-actions', complianceActionsRouter);
+app.use('/api/search', searchRouter);
 app.use('/api/add/job', addJobRouter);
 app.use('/api/linkedin', linkedinRouter);
 

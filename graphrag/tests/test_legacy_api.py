@@ -130,3 +130,61 @@ async def test_legacy_candidate_routes_delegate_to_postgres_store(app_module, ap
 		"location": "Zug",
 		"status": "new",
 	}
+
+
+@pytest.mark.anyio
+async def test_legacy_candidate_search_route_delegates_to_postgres_store(app_module, api_client, monkeypatch):
+	search_mock = AsyncMock(
+		return_value=[
+			{
+				"id": 7,
+				"name": "Anna Müller",
+				"email": "anna@example.com",
+				"phone": None,
+				"location": "Zürich",
+				"status": "new",
+			}
+		]
+	)
+
+	monkeypatch.setattr(app_module.postgres_store, "search_compat_candidates", search_mock)
+
+	response = await api_client.get("/api/candidates/search?search=graphQL&limit=10")
+
+	assert response.status_code == 200
+	assert response.json() == [
+		{
+			"id": 7,
+			"name": "Anna Müller",
+			"email": "anna@example.com",
+			"phone": None,
+			"location": "Zürich",
+			"status": "new",
+		}
+	]
+
+
+@pytest.mark.anyio
+async def test_legacy_global_search_route_delegates_to_postgres_store(app_module, api_client, monkeypatch):
+	search_mock = AsyncMock(
+		return_value={
+			"query": "react zürich",
+			"jobs": [{"id": 1, "title": "Senior Frontend Engineer"}],
+			"candidates": [{"id": 7, "name": "Anna Müller"}],
+			"total_jobs": 1,
+			"total_candidates": 1,
+		}
+	)
+
+	monkeypatch.setattr(app_module.postgres_store, "search_compat_global", search_mock)
+
+	response = await api_client.get("/api/search?q=react zürich&limit=10")
+
+	assert response.status_code == 200
+	assert response.json() == {
+		"query": "react zürich",
+		"jobs": [{"id": 1, "title": "Senior Frontend Engineer"}],
+		"candidates": [{"id": 7, "name": "Anna Müller"}],
+		"total_jobs": 1,
+		"total_candidates": 1,
+	}

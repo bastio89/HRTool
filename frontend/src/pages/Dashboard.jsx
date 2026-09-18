@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText } from 'lucide-react'
-import { candidatesApi, matchingApi, pipelineApi, settingsApi, interviewsApi } from '../api'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText, Search } from 'lucide-react'
+import { candidatesApi, matchingApi, pipelineApi, settingsApi, interviewsApi, searchApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
 import WidgetConfigurator from '../components/WidgetConfigurator'
@@ -27,6 +27,10 @@ export default function Dashboard() {
   const [upcomingInterviews, setUpcomingInterviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [periodDays, setPeriodDays] = useState(30)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState({ jobs: [], candidates: [], totalJobs: 0, totalCandidates: 0 })
+  const [searchLoading, setSearchLoading] = useState(false)
   const { widgets, visibleWidgets, toggleWidget, reorder, resetToDefault } = useWidgetConfig()
 
   const loadData = useCallback(async () => {
@@ -57,14 +61,63 @@ export default function Dashboard() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim())
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (!debouncedSearchQuery || debouncedSearchQuery.length < 2) {
+      setSearchResults({ jobs: [], candidates: [], totalJobs: 0, totalCandidates: 0 })
+      return
+    }
+
+    let cancelled = false
+    setSearchLoading(true)
+    searchApi.global(debouncedSearchQuery, 6)
+      .then((result) => {
+        if (cancelled) return
+        setSearchResults({
+          jobs: result.jobs || [],
+          candidates: result.candidates || [],
+          totalJobs: result.totalJobs || 0,
+          totalCandidates: result.totalCandidates || 0,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSearchResults({ jobs: [], candidates: [], totalJobs: 0, totalCandidates: 0 })
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSearchLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedSearchQuery])
+
   if (loading) return <LoadingSpinner text={t('dashboard.loading')} />
 
   return (
     <PageContainer width="content" className="space-y-8 sm:space-y-14">
-      <div className="mb-4 flex items-start justify-between">
-        <div>
+      <div className="mb-4 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div className="space-y-4">
           <h1 className="text-[28px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.title')}</h1>
           <p className="text-[15px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-3">{t('dashboard.subtitle')}</p>
+          <div className="relative w-full max-w-2xl">
+            <Search className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('dashboard.search_placeholder')}
+              className="w-full rounded-full border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-[#1c1c1e] pl-12 pr-5 py-4 text-[15px] text-black dark:text-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] outline-none transition focus:border-[#0071e3] focus:ring-4 focus:ring-[#0071e3]/10"
+            />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-full p-1">
@@ -118,6 +171,72 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {debouncedSearchQuery.length >= 2 && (
+        <Card className="p-6 sm:p-8">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.search_results')}</h2>
+              <p className="text-[14px] sm:text-[15px] text-gray-500 dark:text-gray-400 mt-1">{searchLoading ? t('dashboard.loading') : `${searchResults.totalCandidates + searchResults.totalJobs} Treffer`}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-[13px] font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors"
+            >
+              {t('common.clear')}
+            </button>
+          </div>
+
+          {!searchLoading && searchResults.jobs.length === 0 && searchResults.candidates.length === 0 ? (
+            <EmptyState title={t('dashboard.search_no_results')} description={searchQuery} />
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <SearchResultGroup
+                title={t('dashboard.search_candidates')}
+                count={searchResults.totalCandidates}
+                items={searchResults.candidates}
+                emptyLabel={t('dashboard.search_no_results')}
+                renderItem={(candidate) => (
+                  <Link key={`candidate-${candidate.id}`} to={`/candidates/${candidate.id}/detail`} className="block rounded-[22px] border border-gray-100/80 dark:border-gray-700/70 p-4 sm:p-5 hover:border-[#0071e3]/30 hover:bg-[#0071e3]/5 transition">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[16px] font-semibold text-black dark:text-white">{candidate.name}</p>
+                        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{candidate.location || candidate.current_position || candidate.current_employer || ' '}</p>
+                      </div>
+                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#0071e3]/10 text-[#0071e3]">CV</span>
+                    </div>
+                    {candidate.full_text && (
+                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 line-clamp-2">{candidate.full_text}</p>
+                    )}
+                  </Link>
+                )}
+              />
+
+              <SearchResultGroup
+                title={t('dashboard.search_jobs')}
+                count={searchResults.totalJobs}
+                items={searchResults.jobs}
+                emptyLabel={t('dashboard.search_no_results')}
+                renderItem={(job) => (
+                  <Link key={`job-${job.id}`} to={`/jobs/${job.id}/edit`} className="block rounded-[22px] border border-gray-100/80 dark:border-gray-700/70 p-4 sm:p-5 hover:border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/5 transition">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[16px] font-semibold text-black dark:text-white">{job.title}</p>
+                        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{job.location || job.company || ' '}</p>
+                      </div>
+                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#8b5cf6]/10 text-[#8b5cf6]">Job</span>
+                    </div>
+                    {job.description && (
+                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 line-clamp-2">{job.description}</p>
+                    )}
+                  </Link>
+                )}
+              />
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Render widgets in configured order */}
       {visibleWidgets.map(widget => {
         switch (widget.id) {
@@ -140,6 +259,20 @@ export default function Dashboard() {
         </Card>
       )}
     </PageContainer>
+  )
+}
+
+function SearchResultGroup({ title, count, items, emptyLabel, renderItem }) {
+  return (
+    <div className="rounded-[28px] border border-gray-100/80 dark:border-gray-700/70 bg-white dark:bg-[#1c1c1e] p-5 sm:p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[18px] font-semibold text-black dark:text-white">{title}</h3>
+        <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{count}</span>
+      </div>
+      <div className="space-y-3">
+        {items.length > 0 ? items.map(renderItem) : <p className="text-[14px] text-gray-500 dark:text-gray-400">{emptyLabel}</p>}
+      </div>
+    </div>
   )
 }
 

@@ -8,9 +8,66 @@ const nativeOllamaBaseUrl = process.env.OLLAMA_BASE_URL;
 const nativeAiProvider = process.env.AI_PROVIDER;
 const nativeGraphRagBaseUrl = process.env.GRAPHRAG_BASE_URL;
 
+const CANDIDATE_SEARCH_FIELDS = [
+  'name',
+  'email',
+  'phone',
+  'location',
+  'experience',
+  'skills',
+  'education',
+  'desired_salary',
+  'availability',
+  'languages',
+  'certificates',
+  'drivers_license',
+  'mobility',
+  'notes',
+  'status',
+  'tags',
+  'source',
+  'linkedin_url',
+  'xing_url',
+  'github_url',
+  'portfolio_url',
+  'current_employer',
+  'current_position',
+  'gender',
+];
+
+const CANDIDATE_SEARCH_FIELD_WIDTH = CANDIDATE_SEARCH_FIELDS.length + 4;
+const JOB_SEARCH_FIELDS = [
+  'title',
+  'company',
+  'description',
+  'requirements',
+  'about_us',
+  'benefits',
+  'location',
+  'type',
+  'status',
+  'url',
+];
+const JOB_SEARCH_FIELD_WIDTH = JOB_SEARCH_FIELDS.length;
+
+function matchesSearch(candidate, queryTerms, fullText = null, fields = CANDIDATE_SEARCH_FIELDS) {
+  return queryTerms.every((term) => {
+    const needle = term.toLowerCase();
+    const values = [
+      ...fields.map((field) => candidate[field]),
+      fullText?.candidate_name,
+      fullText?.original_text,
+      fullText?.anonymized_text,
+      fullText?.profile_json ? JSON.stringify(fullText.profile_json) : null,
+    ];
+    return values.some((value) => String(value || '').toLowerCase().includes(needle));
+  });
+}
+
 function createMockDb(seed = {}) {
   const state = {
     candidates: seed.candidates ? [...seed.candidates] : [],
+    candidateTexts: seed.candidateTexts ? [...seed.candidateTexts] : [],
     jobs: seed.jobs ? [...seed.jobs] : [],
     candidateFiles: seed.candidateFiles ? [...seed.candidateFiles] : [],
     activities: seed.activities ? [...seed.activities] : [],
@@ -34,6 +91,49 @@ function createMockDb(seed = {}) {
 
       return {
         get: (...args) => {
+          if (q.includes("to_regclass('public.candidate_texts')")) {
+            return { exists: state.candidateTexts.length > 0 ? 'candidate_texts' : null };
+          }
+
+          if (q.includes('COUNT(*) as count FROM jobs j') && q.includes('LOWER(COALESCE(')) {
+            const queryTerms = args
+              .filter((_, index) => index % JOB_SEARCH_FIELD_WIDTH === 0)
+              .map((value) => String(value).replace(/^%|%$/g, ''));
+            return {
+              count: state.jobs.filter((job) => matchesSearch(
+                {
+                  title: job.title,
+                  company: job.company,
+                  description: job.description,
+                  requirements: job.requirements,
+                  about_us: job.about_us,
+                  benefits: job.benefits,
+                  location: job.location,
+                  type: job.type,
+                  status: job.status,
+                  url: job.url,
+                  experience: null,
+                  skills: job.skills,
+                },
+                queryTerms,
+                null,
+                JOB_SEARCH_FIELDS,
+              )).length,
+            };
+          }
+
+          if (q.includes('COUNT(*) as count FROM candidates') && q.includes('LOWER(COALESCE(')) {
+            const queryTerms = args
+              .filter((_, index) => index % CANDIDATE_SEARCH_FIELD_WIDTH === 0)
+              .map((value) => String(value).replace(/^%|%$/g, ''));
+            return {
+              count: state.candidates.filter((candidate) => {
+                const fullText = state.candidateTexts.find((row) => String(row.candidate_id) === String(candidate.id));
+                return matchesSearch(candidate, queryTerms, fullText);
+              }).length,
+            };
+          }
+
           if (q.includes('SELECT id FROM candidates WHERE id = ?')) {
             return state.candidates.find((c) => c.id === Number(args[0]));
           }
@@ -54,6 +154,51 @@ function createMockDb(seed = {}) {
         },
 
         all: (...args) => {
+          if (q.includes('FROM jobs j') && q.includes('LOWER(COALESCE(')) {
+            const queryTerms = args
+              .slice(0, Math.max(0, args.length - 1))
+              .filter((_, index) => index % JOB_SEARCH_FIELD_WIDTH === 0)
+              .map((value) => String(value).replace(/^%|%$/g, ''));
+            return state.jobs.filter((job) => matchesSearch(
+              {
+                title: job.title,
+                company: job.company,
+                description: job.description,
+                requirements: job.requirements,
+                about_us: job.about_us,
+                benefits: job.benefits,
+                location: job.location,
+                type: job.type,
+                status: job.status,
+                url: job.url,
+                experience: null,
+                skills: job.skills,
+              },
+              queryTerms,
+              null,
+              JOB_SEARCH_FIELDS,
+            ));
+          }
+
+          if (q.includes('FROM candidates c LEFT JOIN candidate_texts ct')) {
+            const queryTerms = [];
+            for (let i = 0; i < Math.max(0, args.length - 1); i += CANDIDATE_SEARCH_FIELDS.length + 4) {
+              queryTerms.push(String(args[i]).replace(/^%|%$/g, ''));
+            }
+            return state.candidates.filter((candidate) => {
+              const fullText = state.candidateTexts.find((row) => String(row.candidate_id) === String(candidate.id));
+              return matchesSearch(candidate, queryTerms, fullText);
+            });
+          }
+
+          if (q.includes('LOWER(COALESCE(') && q.includes('FROM candidates')) {
+            const queryTerms = [];
+            for (let i = 0; i < args.length; i += CANDIDATE_SEARCH_FIELDS.length) {
+              queryTerms.push(String(args[i]).replace(/^%|%$/g, ''));
+            }
+            return state.candidates.filter((candidate) => matchesSearch(candidate, queryTerms));
+          }
+
           if (q.includes('FROM candidates WHERE id IN')) {
             const ids = args.map(Number);
             return state.candidates.filter((c) => ids.includes(c.id));
@@ -398,6 +543,241 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.candidate.name).toBe('Max Mustermann');
     expect(response.body.candidate.email).toBe('max@example.com');
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('candidate search is case-insensitive and combines profile fields', async () => {
+    const mockDb = createMockDb({
+      candidates: [
+        {
+          id: 1,
+          name: 'Anna Müller',
+          email: 'anna@example.com',
+          phone: '',
+          location: 'Zürich',
+          experience: 'Frontend Entwicklung',
+          skills: 'React, Node.js',
+          education: 'ETH Zürich',
+          desired_salary: '',
+          availability: '',
+          languages: 'Deutsch, Englisch',
+          certificates: '',
+          drivers_license: '',
+          mobility: '',
+          notes: 'Sucht eine hybride Rolle',
+          status: 'Aktiv',
+          tags: 'Remote, Senior',
+          source: 'LinkedIn',
+          linkedin_url: '',
+          xing_url: '',
+          github_url: '',
+          portfolio_url: '',
+          current_employer: 'HRTool AG',
+          current_position: 'Senior Frontend Engineer',
+          gender: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 2,
+          name: 'Beatrice Keller',
+          email: 'bea@example.com',
+          phone: '',
+          location: 'Bern',
+          experience: 'Backend Entwicklung',
+          skills: 'Python, Django',
+          education: 'BFH',
+          desired_salary: '',
+          availability: '',
+          languages: 'Deutsch',
+          certificates: '',
+          drivers_license: '',
+          mobility: '',
+          notes: 'Möchte nach Zürich wechseln',
+          status: 'Aktiv',
+          tags: 'Onsite',
+          source: 'Stepstone',
+          linkedin_url: '',
+          xing_url: '',
+          github_url: '',
+          portfolio_url: '',
+          current_employer: 'Code Factory',
+          current_position: 'Backend Engineer',
+          gender: '',
+          created_at: '2026-01-02T00:00:00.000Z',
+          updated_at: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+      candidateTexts: [
+        {
+          candidate_id: '1',
+          candidate_name: 'Anna Müller',
+          source: 'CV Import',
+          original_text: 'Anna Müller arbeitet seit Jahren mit React, TypeScript und GraphQL.',
+          anonymized_text: null,
+          profile_json: { name: 'Anna Müller' },
+        },
+        {
+          candidate_id: '2',
+          candidate_name: 'Beatrice Keller',
+          source: 'CV Import',
+          original_text: 'Backend-Schwerpunkt mit Python und Django.',
+          anonymized_text: null,
+          profile_json: { name: 'Beatrice Keller' },
+        },
+      ],
+    });
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    const candidatesRouter = require('../routes/candidates');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/candidates', candidatesRouter);
+
+    const combinedResponse = await request(app).get('/api/candidates?search=ANNA remote');
+    expect(combinedResponse.status).toBe(200);
+    expect(combinedResponse.body.data).toHaveLength(1);
+    expect(combinedResponse.body.data[0].id).toBe(1);
+
+    const fullTextResponse = await request(app).get('/api/candidates?search=hybride zürich');
+    expect(fullTextResponse.status).toBe(200);
+    expect(fullTextResponse.body.data).toHaveLength(1);
+    expect(fullTextResponse.body.data[0].id).toBe(1);
+
+    const secondCandidateResponse = await request(app).get('/api/candidates?search=bern python');
+    expect(secondCandidateResponse.status).toBe(200);
+    expect(secondCandidateResponse.body.data).toHaveLength(1);
+    expect(secondCandidateResponse.body.data[0].id).toBe(2);
+
+    const fullTextOnlyResponse = await request(app).get('/api/candidates?search=graphQL');
+    expect(fullTextOnlyResponse.status).toBe(200);
+    expect(fullTextOnlyResponse.body.data).toHaveLength(1);
+    expect(fullTextOnlyResponse.body.data[0].id).toBe(1);
+  });
+
+  test('global search combines jobs and CV full text', async () => {
+    const mockDb = createMockDb({
+      jobs: [
+        {
+          id: 1,
+          title: 'Senior Frontend Engineer',
+          company: 'HRTool AG',
+          location: 'Zürich',
+          type: 'Vollzeit',
+          status: 'Offen',
+          description: 'Build React interfaces for the recruiting platform.',
+          requirements: 'React, TypeScript',
+          about_us: 'Modern product team',
+          benefits: 'Remote friendly',
+          url: 'https://example.com/jobs/1',
+          skills: 'React, TypeScript',
+          updated_at: '2026-01-03T00:00:00.000Z',
+        },
+        {
+          id: 2,
+          title: 'Backend Engineer',
+          company: 'Code Factory',
+          location: 'Bern',
+          type: 'Vollzeit',
+          status: 'Offen',
+          description: 'Python services and APIs.',
+          requirements: 'Python, FastAPI',
+          about_us: 'Backend team',
+          benefits: 'Hybrid',
+          url: 'https://example.com/jobs/2',
+          skills: 'Python, FastAPI',
+          updated_at: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+      candidates: [
+        {
+          id: 1,
+          name: 'Anna Müller',
+          email: 'anna@example.com',
+          phone: '',
+          location: 'Zürich',
+          experience: 'Frontend Entwicklung',
+          skills: 'React, Node.js',
+          education: 'ETH Zürich',
+          desired_salary: '',
+          availability: '',
+          languages: 'Deutsch, Englisch',
+          certificates: '',
+          drivers_license: '',
+          mobility: '',
+          notes: 'Sucht eine hybride Rolle',
+          status: 'Aktiv',
+          tags: 'Remote, Senior',
+          source: 'LinkedIn',
+          current_employer: 'HRTool AG',
+          current_position: 'Senior Frontend Engineer',
+          gender: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 2,
+          name: 'Beatrice Keller',
+          email: 'bea@example.com',
+          phone: '',
+          location: 'Bern',
+          experience: 'Backend Entwicklung',
+          skills: 'Python, Django',
+          education: 'BFH',
+          desired_salary: '',
+          availability: '',
+          languages: 'Deutsch',
+          certificates: '',
+          drivers_license: '',
+          mobility: '',
+          notes: 'Möchte nach Zürich wechseln',
+          status: 'Aktiv',
+          tags: 'Onsite',
+          source: 'Stepstone',
+          current_employer: 'Code Factory',
+          current_position: 'Backend Engineer',
+          gender: '',
+          created_at: '2026-01-02T00:00:00.000Z',
+          updated_at: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+      candidateTexts: [
+        {
+          candidate_id: '1',
+          candidate_name: 'Anna Müller',
+          source: 'CV Import',
+          original_text: 'Anna Müller arbeitet seit Jahren mit React, TypeScript und GraphQL.',
+          anonymized_text: null,
+          profile_json: { name: 'Anna Müller' },
+        },
+        {
+          candidate_id: '2',
+          candidate_name: 'Beatrice Keller',
+          source: 'CV Import',
+          original_text: 'Backend-Schwerpunkt mit Python und Django.',
+          anonymized_text: null,
+          profile_json: { name: 'Beatrice Keller' },
+        },
+      ],
+    });
+
+    jest.doMock('../database', () => mockDb);
+
+    const searchRouter = require('../routes/search');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/search', searchRouter);
+
+    const response = await request(app).get('/api/search?q=react zürich&limit=10');
+
+    expect(response.status).toBe(200);
+    expect(response.body.totalJobs).toBe(1);
+    expect(response.body.totalCandidates).toBe(1);
+    expect(response.body.jobs).toHaveLength(1);
+    expect(response.body.jobs[0].title).toBe('Senior Frontend Engineer');
+    expect(response.body.candidates).toHaveLength(1);
+    expect(response.body.candidates[0].name).toBe('Anna Müller');
   });
 
   test('CV parser handles fixture PDF upload through the real multipart path', async () => {

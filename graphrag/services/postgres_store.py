@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import psycopg
@@ -16,6 +17,86 @@ logger = logging.getLogger(__name__)
 class PostgresStore:
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
+
+    async def has_candidate_texts(self) -> bool:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute("SELECT to_regclass('public.candidate_texts')")
+                row = await cursor.fetchone()
+        return bool(row and row[0])
+
+    @staticmethod
+    def _split_search_terms(search: str) -> list[str]:
+        return [term.strip().lower() for term in re.split(r"[\s,]+", str(search)) if term.strip()]
+
+    @staticmethod
+    def _build_search_clause(fields: list[str], search: str) -> tuple[str, list[str]]:
+        terms = PostgresStore._split_search_terms(search)
+        if not terms:
+            return "", []
+
+        conditions: list[str] = []
+        params: list[str] = []
+        for term in terms:
+            term_conditions = " OR ".join([f"LOWER(COALESCE({field}, '')) LIKE %s" for field in fields])
+            conditions.append(f"({term_conditions})")
+            params.extend([f"%{term}%"] * len(fields))
+        return " AND ".join(conditions), params
+
+    @staticmethod
+    def _candidate_search_fields(include_candidate_texts: bool = True) -> list[str]:
+        fields = [
+            "c.name",
+            "c.email",
+            "c.phone",
+            "c.location",
+            "c.experience",
+            "c.skills",
+            "c.education",
+            "c.desired_salary",
+            "c.availability",
+            "c.languages",
+            "c.certificates",
+            "c.drivers_license",
+            "c.mobility",
+            "c.notes",
+            "c.status",
+            "c.tags",
+            "c.source",
+            "c.linkedin_url",
+            "c.xing_url",
+            "c.github_url",
+            "c.portfolio_url",
+            "c.current_employer",
+            "c.current_position",
+            "c.gender",
+        ]
+        if include_candidate_texts:
+            fields.extend(["ct.candidate_name", "ct.original_text", "ct.anonymized_text", "ct.profile_json::text"])
+        return fields
+
+    @staticmethod
+    def _job_search_fields() -> list[str]:
+        return [
+            "title",
+            "company",
+            "recruiter_company",
+            "employer_company",
+            "description",
+            "requirements",
+            "about_us",
+            "benefits",
+            "location",
+            "type",
+            "status",
+            "url",
+            "raw_text",
+            "parsed_profile_json::text",
+        ]
+
+    @staticmethod
+    def _candidate_text_select(has_candidate_texts: bool) -> str:
+        return "COALESCE(ct.original_text, ct.anonymized_text, '') AS full_text" if has_candidate_texts else "'' AS full_text"
 
     async def ensure_setting(self, key: str, value: str) -> bool:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -499,6 +580,76 @@ class PostgresStore:
                 )
                 rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+    async def search_compat_jobs(self, search: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+        terms = self._split_search_terms(search)
+        if not terms:
+            return []
+
+        searchable_fields = self._job_search_fields()
+        where_clause, params = self._build_search_clause(searchable_fields, search)
+
+        query = f"""
+            SELECT id, title, company, location, type, status, description, requirements, about_us, benefits, url, raw_text, updated_at
+            FROM jobs
+            WHERE {where_clause}
+            ORDER BY updated_at DESC, id DESC
+        """
+        if limit is not None and limit > 0:
+            query += " LIMIT %s"
+            params.append(limit)
+
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, params)
+                rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def search_compat_candidates(
+        self,
+        search: str,
+        *,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        has_candidate_texts = await self.has_candidate_texts()
+        where_clause, params = self._build_search_clause(self._candidate_search_fields(include_candidate_texts=has_candidate_texts), search)
+        if not where_clause:
+            return await self.list_compat_candidates()
+
+        candidate_text_join = " LEFT JOIN candidate_texts ct ON ct.candidate_id = c.id::text" if has_candidate_texts else ""
+
+        query = f"""
+            SELECT id,
+                   name,
+                   email,
+                   phone,
+                   location,
+                   status
+            FROM candidates c
+            {candidate_text_join}
+            WHERE {where_clause}
+            ORDER BY c.updated_at DESC, c.id DESC
+        """
+        if limit is not None and limit > 0:
+            query += " LIMIT %s"
+            params.append(limit)
+
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, params)
+                rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def search_compat_global(self, search: str, *, limit: int | None = None) -> dict[str, list[dict[str, Any]] | int | str]:
+        jobs = await self.search_compat_jobs(search, limit=limit)
+        candidates = await self.search_compat_candidates(search, limit=limit)
+        return {
+            "query": search,
+            "jobs": jobs,
+            "candidates": candidates,
+            "total_jobs": len(jobs),
+            "total_candidates": len(candidates),
+        }
 
     async def create_compat_candidate(
         self,

@@ -7,6 +7,69 @@ const { logAudit } = require('./audit');
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '..', '..', 'data', 'uploads');
 
+const SEARCHABLE_FIELDS = [
+  'name',
+  'email',
+  'phone',
+  'location',
+  'experience',
+  'skills',
+  'education',
+  'desired_salary',
+  'availability',
+  'languages',
+  'certificates',
+  'drivers_license',
+  'mobility',
+  'notes',
+  'status',
+  'tags',
+  'source',
+  'linkedin_url',
+  'xing_url',
+  'github_url',
+  'portfolio_url',
+  'current_employer',
+  'current_position',
+  'gender',
+];
+
+const TEXT_SEARCH_FIELDS = [
+  'ct.candidate_name',
+  'ct.original_text',
+  'ct.anonymized_text',
+  'ct.profile_json::text',
+];
+
+function buildSearchFilter(search) {
+  const terms = String(search)
+    .toLowerCase()
+    .split(/[,\s]+/)
+    .map((term) => term.trim())
+    .filter(Boolean);
+
+  if (terms.length === 0) {
+    return { conditions: [], params: [] };
+  }
+
+  const conditions = [];
+  const params = [];
+
+  for (const term of terms) {
+    const allFields = [
+      ...SEARCHABLE_FIELDS.map((field) => `c.${field}`),
+      ...TEXT_SEARCH_FIELDS,
+    ];
+    const termConditions = allFields
+      .map((field) => `LOWER(COALESCE(${field}, '')) LIKE ?`)
+      .join(' OR ');
+    conditions.push(`(${termConditions})`);
+    params.push(...allFields.map(() => `%${term}%`));
+  }
+
+  return { conditions, params };
+}
+
 // Helper: Delete physical files for candidate IDs
 function cleanupCandidateFiles(candidateIds) {
   const ids = Array.isArray(candidateIds) ? candidateIds : [candidateIds];
@@ -395,12 +458,13 @@ router.get('/', (req, res) => {
     
     const conditions = [];
     const params = [];
+    const joinClause = search ? ' LEFT JOIN candidate_texts ct ON ct.candidate_id = CAST(c.id AS TEXT)' : '';
     
-    // Full-text search (including tags)
+    // Combined search across the candidate profile and full text fields.
     if (search) {
-      conditions.push('(name LIKE ? OR skills LIKE ? OR location LIKE ? OR experience LIKE ? OR education LIKE ? OR tags LIKE ?)');
-      const searchTerm = `%${search}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      const searchFilter = buildSearchFilter(search);
+      conditions.push(...searchFilter.conditions);
+      params.push(...searchFilter.params);
     }
     
     // Tags AND-logic: each tag must be present
@@ -440,7 +504,7 @@ router.get('/', (req, res) => {
     const whereClause = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
     
     // Total count for pagination
-    const total = db.prepare(`SELECT COUNT(*) as count FROM candidates${whereClause}`).get(...params).count;
+    const total = db.prepare(`SELECT COUNT(*) as count FROM candidates c${joinClause}${whereClause}`).get(...params).count;
     
     const allowedSorts = ['name', 'location', 'created_at', 'updated_at', 'availability'];
     const sortCol = allowedSorts.includes(sort) ? sort : 'created_at';
@@ -449,7 +513,7 @@ router.get('/', (req, res) => {
     const selectFields = fields === 'matching'
       ? 'id, name, email, location, skills, experience, education, languages, desired_salary, availability, certificates, mobility, status, tags, source, created_at, updated_at'
       : '*';
-    let query = `SELECT ${selectFields} FROM candidates${whereClause} ORDER BY ${sortCol} ${sortOrder}`;
+    let query = `SELECT ${selectFields} FROM candidates c${joinClause}${whereClause} ORDER BY c.${sortCol} ${sortOrder}`;
     
     // Pagination (optional - if page/limit not provided, return all)
     const pageNum = parseInt(page);

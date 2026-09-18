@@ -362,6 +362,15 @@ export const auditApi = {
   },
 };
 
+export const searchApi = {
+  global: (query, limit = 10) => {
+    const q = new URLSearchParams();
+    q.set('q', query);
+    q.set('limit', String(limit));
+    return request(`/search?${q.toString()}`);
+  },
+};
+
 // Uploads API
 export const uploadsApi = {
   getByCandidate: (candidateId) => request(`/uploads/candidate/${candidateId}`),

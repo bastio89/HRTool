@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText, Search, Circle, CheckCircle2, X } from 'lucide-react'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText, Search, Square, CheckSquare, X } from 'lucide-react'
 import { candidatesApi, matchingApi, pipelineApi, settingsApi, interviewsApi, searchApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
@@ -79,7 +79,37 @@ export default function Dashboard() {
     setSelectionError('')
   }
 
-  const handleMatchSelected = () => {
+  const toggleAllSelectedJobs = () => {
+    const currentIds = new Set(searchResults.jobs.map((job) => job.id))
+    const allSelected = searchResults.jobs.length > 0 && searchResults.jobs.every((job) => selectedJobs.some((item) => item.id === job.id))
+
+    setSelectionError('')
+    setSelectedJobs((prev) => {
+      if (allSelected) {
+        return prev.filter((item) => !currentIds.has(item.id))
+      }
+      const map = new Map(prev.map((item) => [item.id, item]))
+      searchResults.jobs.forEach((job) => map.set(job.id, job))
+      return [...map.values()]
+    })
+  }
+
+  const toggleAllSelectedCandidates = () => {
+    const currentIds = new Set(searchResults.candidates.map((candidate) => candidate.id))
+    const allSelected = searchResults.candidates.length > 0 && searchResults.candidates.every((candidate) => selectedCandidates.some((item) => item.id === candidate.id))
+
+    setSelectionError('')
+    setSelectedCandidates((prev) => {
+      if (allSelected) {
+        return prev.filter((item) => !currentIds.has(item.id))
+      }
+      const map = new Map(prev.map((item) => [item.id, item]))
+      searchResults.candidates.forEach((candidate) => map.set(candidate.id, candidate))
+      return [...map.values()]
+    })
+  }
+
+  const handleMatchSelected = (mode) => {
     if (selectedJobs.length === 0 || selectedCandidates.length === 0) {
       setSelectionError(t('dashboard.selection_missing'))
       return
@@ -92,9 +122,10 @@ export default function Dashboard() {
 
     sessionStorage.setItem('hrtool:matching:selected-batch', JSON.stringify({
       pairs: selectedPairs,
+      mode,
       sourceLabel: 'Dashboard selection',
     }))
-    navigate('/matching/results/selected', { state: { pairs: selectedPairs } })
+    navigate('/matching/results/selected', { state: { pairs: selectedPairs, mode } })
   }
 
   const loadData = useCallback(async () => {
@@ -262,6 +293,9 @@ export default function Dashboard() {
                   title={t('dashboard.search_candidates')}
                   count={searchResults.totalCandidates}
                   items={searchResults.candidates}
+                  actionLabel={t('dashboard.select_all_candidates')}
+                  actionChecked={searchResults.candidates.length > 0 && searchResults.candidates.every((candidate) => selectedCandidates.some((item) => item.id === candidate.id))}
+                  onActionToggle={toggleAllSelectedCandidates}
                   emptyLabel={t('dashboard.search_no_results')}
                   renderItem={(candidate) => {
                     const isSelected = selectedCandidates.some((item) => item.id === candidate.id)
@@ -273,7 +307,7 @@ export default function Dashboard() {
                           aria-label={isSelected ? `${candidate.name} ${t('dashboard.deselect')}` : `${candidate.name} ${t('dashboard.select')}`}
                           className={`absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border transition ${isSelected ? 'border-[#0071e3] bg-[#0071e3] text-white' : 'border-gray-300 text-gray-400 hover:border-[#0071e3] hover:text-[#0071e3]'}`}
                         >
-                          {isSelected ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                          {isSelected ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
                         </button>
                         <div className="pr-12">
                           <div className="flex items-start justify-between gap-3">
@@ -302,6 +336,9 @@ export default function Dashboard() {
                   title={t('dashboard.search_jobs')}
                   count={searchResults.totalJobs}
                   items={searchResults.jobs}
+                  actionLabel={t('dashboard.select_all_jobs')}
+                  actionChecked={searchResults.jobs.length > 0 && searchResults.jobs.every((job) => selectedJobs.some((item) => item.id === job.id))}
+                  onActionToggle={toggleAllSelectedJobs}
                   emptyLabel={t('dashboard.search_no_results')}
                   renderItem={(job) => {
                     const isSelected = selectedJobs.some((item) => item.id === job.id)
@@ -313,7 +350,7 @@ export default function Dashboard() {
                           aria-label={isSelected ? `${job.title} ${t('dashboard.deselect')}` : `${job.title} ${t('dashboard.select')}`}
                           className={`absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border transition ${isSelected ? 'border-[#8b5cf6] bg-[#8b5cf6] text-white' : 'border-gray-300 text-gray-400 hover:border-[#8b5cf6] hover:text-[#8b5cf6]'}`}
                         >
-                          {isSelected ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                          {isSelected ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
                         </button>
                         <div className="pr-12">
                           <div className="flex items-start justify-between gap-3">
@@ -407,14 +444,24 @@ export default function Dashboard() {
                 </div>
 
                 <div className="mt-6 space-y-3">
-                  <button
-                    type="button"
-                    onClick={handleMatchSelected}
-                    disabled={selectedJobs.length === 0 || selectedCandidates.length === 0 || selectionPairsOverLimit}
-                    className="w-full rounded-full bg-black px-5 py-4 text-[15px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-gray-700"
-                  >
-                    {t('dashboard.match_selected')}
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleMatchSelected('vector')}
+                      disabled={selectedJobs.length === 0 || selectedCandidates.length === 0 || selectionPairsOverLimit}
+                      className="w-full rounded-full border border-[#8b5cf6]/30 bg-[#8b5cf6]/10 px-5 py-4 text-[15px] font-semibold text-[#8b5cf6] transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {t('dashboard.match_selected_vector')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMatchSelected('ai')}
+                      disabled={selectedJobs.length === 0 || selectedCandidates.length === 0 || selectionPairsOverLimit}
+                      className="w-full rounded-full bg-black px-5 py-4 text-[15px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-gray-700"
+                    >
+                      {t('dashboard.match_selected_ai')}
+                    </button>
+                  </div>
                   <p className={`text-[12px] ${selectionPairsOverLimit ? 'text-[#ff3b30]' : 'text-gray-500 dark:text-gray-400'}`}>
                     {selectionPairsOverLimit ? t('dashboard.selection_limit') : t('dashboard.selection_hint')}
                   </p>
@@ -450,12 +497,24 @@ export default function Dashboard() {
   )
 }
 
-function SearchResultGroup({ title, count, items, emptyLabel, renderItem }) {
+function SearchResultGroup({ title, count, items, emptyLabel, renderItem, actionLabel, actionChecked, onActionToggle }) {
   return (
     <div className="rounded-[28px] border border-gray-100/80 dark:border-gray-700/70 bg-white dark:bg-[#1c1c1e] p-5 sm:p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <h3 className="text-[18px] font-semibold text-black dark:text-white">{title}</h3>
-        <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{count}</span>
+        <div className="flex items-center gap-2">
+          {onActionToggle && (
+            <button
+              type="button"
+              onClick={onActionToggle}
+              className="inline-flex items-center gap-2 rounded-full border border-gray-200/80 dark:border-gray-700 px-3 py-1.5 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:border-[#0071e3]/40 hover:text-[#0071e3] transition-colors"
+            >
+              {actionChecked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              {actionLabel}
+            </button>
+          )}
+          <span className="text-[12px] font-medium text-gray-500 dark:text-gray-400">{count}</span>
+        </div>
       </div>
       <div className="space-y-3">
         {items.length > 0 ? items.map(renderItem) : <p className="text-[14px] text-gray-500 dark:text-gray-400">{emptyLabel}</p>}

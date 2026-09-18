@@ -215,6 +215,23 @@ export const matchingApi = {
   reviewResult: (id, notes) => request(`/matching/history/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
 };
 
+export const graphRagMatchingApi = {
+  vectorMatch: async (payload = {}) => {
+    const response = await fetch(`${GRAPHRAG_API_BASE}/match/vectormatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'GraphRAG Vector-Matching fehlgeschlagen' }))
+      throw new Error(error.error || error.detail || `HTTP ${response.status}`)
+    }
+
+    return response.json()
+  },
+};
+
 // Matching Weights API
 export const matchingWeightsApi = {
   getProfiles: () => request('/matching-weights/profiles'),

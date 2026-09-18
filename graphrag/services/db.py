@@ -250,6 +250,67 @@ class Neo4jService:
                 "experience_years": record["experience_years"],
             }
 
+    async def get_candidate_profile(self, candidate_id: str) -> dict[str, Any] | None:
+        query = """
+        MATCH (c:Candidate {id: $candidate_id})
+        OPTIONAL MATCH (c)-[:HAS_SKILL]->(s:Skill)
+        OPTIONAL MATCH (c)-[:HAS_LANGUAGE]->(l:Language)
+        OPTIONAL MATCH (c)-[:HAS_EDUCATION]->(e:Education)
+        OPTIONAL MATCH (c)-[:PREFERS_ROLE]->(r:Role)
+        RETURN c.id AS id,
+               c.name AS name,
+               c.location AS location,
+               c.experience_years AS experience_years,
+               c.experience AS experience,
+               c.education AS education,
+               c.currentEmployer AS current_employer,
+               c.currentPosition AS current_position,
+               c.salaryExpectation AS salary_expectation,
+               c.desiredSalary AS desired_salary,
+               c.availability AS availability,
+               c.noticePeriod AS notice_period,
+               c.availableFrom AS available_from,
+               collect(DISTINCT {name: s.name, category: s.category}) AS skills,
+               collect(DISTINCT {name: l.name, level: null}) AS languages,
+               collect(DISTINCT {level: e.level, field_of_study: e.fieldOfStudy}) AS educations,
+               collect(DISTINCT {name: r.name}) AS preferred_roles
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, candidate_id=candidate_id)
+            record = await result.single()
+            if not record:
+                return None
+            return {
+                "id": record["id"],
+                "name": record["name"],
+                "location": record["location"],
+                "experience_years": record["experience_years"],
+                "experience": record["experience"],
+                "education": record["education"],
+                "current_employer": record["current_employer"],
+                "current_position": record["current_position"],
+                "salary_expectation": record["salary_expectation"],
+                "desired_salary": record["desired_salary"],
+                "availability": record["availability"],
+                "notice_period": record["notice_period"],
+                "available_from": record["available_from"],
+                "skills": [skill for skill in record["skills"] if skill.get("name") is not None],
+                "languages": [lang for lang in record["languages"] if lang.get("name") is not None],
+                "educations": [edu for edu in record["educations"] if edu.get("field_of_study") is not None],
+                "preferred_roles": [role for role in record["preferred_roles"] if role.get("name") is not None],
+            }
+
+    async def get_candidate_by_id(self, candidate_id: str) -> dict[str, Any] | None:
+        candidate = await self.get_candidate_profile(candidate_id)
+        if candidate is None:
+            return None
+        if self.postgres_store is not None:
+            candidate_text = await self.postgres_store.get_candidate_text(candidate_id)
+            if candidate_text:
+                candidate["raw_text"] = candidate_text.get("original_text") or candidate_text.get("anonymized_text")
+                candidate["profile_json"] = candidate_text.get("profile_json")
+        return candidate
+
     async def list_candidates_for_backfill(self) -> list[dict[str, Any]]:
         query = """
         MATCH (c:Candidate)

@@ -147,6 +147,108 @@ function toRequiredSkills(value) {
   return splitSkillValues(value).map((name) => ({ name, priority: 'Mandatory' }));
 }
 
+function normalizeKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function remapVectorMatchIds(graphRagResult, { direction, jobRecord, candidateRecords, jobs, candidateRecord }) {
+  const matrix = Array.isArray(graphRagResult?.matrix) ? graphRagResult.matrix : [];
+
+  if (direction === 'candidate_to_jobs') {
+    const jobIdByTitle = new Map((jobs || []).map((job) => [normalizeKey(job.title), job.id]));
+    const mappedRows = matrix.map((row) => ({
+      ...row,
+      sourceJobId: row.jobId,
+      sourceCandidateId: row.candidateId,
+      jobId: jobIdByTitle.get(normalizeKey(row.jobTitle)) ?? row.jobId,
+      candidateId: candidateRecord?.id ?? row.candidateId,
+    }));
+
+    const mappedJobsRanked = Array.isArray(graphRagResult?.jobsRanked)
+      ? graphRagResult.jobsRanked.map((jobGroup) => ({
+          ...jobGroup,
+          jobId: jobIdByTitle.get(normalizeKey(jobGroup.jobTitle)) ?? jobGroup.jobId,
+          results: Array.isArray(jobGroup.results)
+            ? jobGroup.results.map((row) => ({
+                ...row,
+                sourceJobId: row.jobId,
+                sourceCandidateId: row.candidateId,
+                jobId: jobIdByTitle.get(normalizeKey(row.jobTitle)) ?? row.jobId,
+                candidateId: candidateRecord?.id ?? row.candidateId,
+              }))
+            : [],
+        }))
+      : [];
+
+    return {
+      ...graphRagResult,
+      matrix: mappedRows,
+      jobsRanked: mappedJobsRanked,
+      candidatesRanked: Array.isArray(graphRagResult?.candidatesRanked)
+        ? graphRagResult.candidatesRanked.map((candidateGroup) => ({
+            ...candidateGroup,
+            candidateId: candidateRecord?.id ?? candidateGroup.candidateId,
+            results: Array.isArray(candidateGroup.results)
+              ? candidateGroup.results.map((row) => ({
+                  ...row,
+                  sourceJobId: row.jobId,
+                  sourceCandidateId: row.candidateId,
+                  jobId: jobIdByTitle.get(normalizeKey(row.jobTitle)) ?? row.jobId,
+                  candidateId: candidateRecord?.id ?? row.candidateId,
+                }))
+              : [],
+          }))
+        : [],
+    };
+  }
+
+  const candidateIdByName = new Map((candidateRecords || []).map((candidate) => [normalizeKey(candidate.name), candidate.id]));
+  const mappedRows = matrix.map((row) => ({
+    ...row,
+    sourceJobId: row.jobId,
+    sourceCandidateId: row.candidateId,
+    jobId: jobRecord?.id ?? row.jobId,
+    candidateId: candidateIdByName.get(normalizeKey(row.candidateName)) ?? row.candidateId,
+  }));
+
+  const mappedCandidatesRanked = Array.isArray(graphRagResult?.candidatesRanked)
+    ? graphRagResult.candidatesRanked.map((candidateGroup) => ({
+        ...candidateGroup,
+        candidateId: candidateIdByName.get(normalizeKey(candidateGroup.candidateName)) ?? candidateGroup.candidateId,
+        results: Array.isArray(candidateGroup.results)
+          ? candidateGroup.results.map((row) => ({
+              ...row,
+              sourceJobId: row.jobId,
+              sourceCandidateId: row.candidateId,
+              jobId: jobRecord?.id ?? row.jobId,
+              candidateId: candidateIdByName.get(normalizeKey(row.candidateName)) ?? row.candidateId,
+            }))
+          : [],
+      }))
+    : [];
+
+  return {
+    ...graphRagResult,
+    matrix: mappedRows,
+    jobsRanked: Array.isArray(graphRagResult?.jobsRanked)
+      ? graphRagResult.jobsRanked.map((jobGroup) => ({
+          ...jobGroup,
+          jobId: jobRecord?.id ?? jobGroup.jobId,
+          results: Array.isArray(jobGroup.results)
+            ? jobGroup.results.map((row) => ({
+                ...row,
+                sourceJobId: row.jobId,
+                sourceCandidateId: row.candidateId,
+                jobId: jobRecord?.id ?? row.jobId,
+                candidateId: candidateIdByName.get(normalizeKey(row.candidateName)) ?? row.candidateId,
+              }))
+            : [],
+        }))
+      : [],
+    candidatesRanked: mappedCandidatesRanked,
+  };
+}
+
 async function callGraphRagMatching(endpoint, payload) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   const response = await fetch(`${baseUrl.replace(/\/+$/, '')}${endpoint}`, {
@@ -462,11 +564,19 @@ async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle
     engine,
   });
 
+  const normalizedGraphRagResult = remapVectorMatchIds(graphRagResult, {
+    direction,
+    jobRecord: matchedJob,
+    candidateRecords,
+    jobs: [],
+    candidateRecord: candidateRecords[0] || null,
+  });
+
   return {
     direction,
     job: matchedJob,
     candidates: candidateRecords,
-    graphRagResult,
+    graphRagResult: normalizedGraphRagResult,
   };
 }
 
@@ -717,158 +827,23 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
       return res.status(400).json({ error: 'Maximal 20 Paarungen pro Anfrage erlaubt' });
     }
 
-    const results = [];
-    const failures = [];
-    const jobsByKey = new Map();
-
-    for (const pair of pairs) {
-      const jobRecord = pair?.jobId ? getJobs([pair.jobId])[0] : (pair?.jobTitle ? getJobByTitle(pair.jobTitle) : null);
-      const candidateRecord = pair?.candidateId
-        ? getCandidates([pair.candidateId])[0]
-        : (pair?.candidateName ? getCandidateByName(pair.candidateName) : null);
-
-      const normalizedJob = {
-        id: jobRecord?.id || pair?.jobId || null,
-        title: jobRecord?.title || pair?.jobTitle || 'Unbenannte Stelle',
-        description: pair?.jobDescription || jobRecord?.description,
-        rawDescription: pair?.jobDescription || jobRecord?.description || '',
-        skills: jobRecord?.skills,
-        requirements: jobRecord?.requirements,
-        location: jobRecord?.location,
-        type: jobRecord?.type,
-      };
-      const jobDescription = buildJobDescription(normalizedJob);
-      const jobKey = String(normalizedJob.id || normalizedJob.title || 'job');
-      if (!jobsByKey.has(jobKey)) {
-        jobsByKey.set(jobKey, {
-          job: normalizedJob,
-          jobDescription,
-          candidates: [],
-          pairs: [],
-        });
-      }
-
-      const normalizedCandidate = {
-        id: candidateRecord?.id || pair?.candidateId || null,
-        name: candidateRecord?.name || pair?.candidateName || 'Unbekannter Bewerber',
-        location: candidateRecord?.location,
-        experience: candidateRecord?.experience,
-        skills: candidateRecord?.skills,
-        education: candidateRecord?.education,
-        desired_salary: candidateRecord?.desired_salary,
-        availability: candidateRecord?.availability,
-        languages: candidateRecord?.languages,
-        certificates: candidateRecord?.certificates,
-        mobility: candidateRecord?.mobility,
-        has_skill: splitSkillValues(candidateRecord?.skills),
-        matchedSkills: Array.isArray(pair?.matchedSkills) ? pair.matchedSkills : [],
-        hardSkillScore: typeof pair?.hardSkillScore === 'number' ? pair.hardSkillScore : null,
-        softSkillScore: typeof pair?.softSkillScore === 'number' ? pair.softSkillScore : null,
-        score: typeof pair?.score === 'number' ? pair.score : null,
-      };
-
-      jobsByKey.get(jobKey).candidates.push(normalizedCandidate);
-      jobsByKey.get(jobKey).pairs.push({
-        jobId: normalizedJob.id,
-        jobTitle: normalizedJob.title,
-        jobDescription,
-        candidateId: normalizedCandidate.id,
-        candidateName: normalizedCandidate.name,
-      });
-    }
-
-    for (const { job, jobDescription, candidates: jobCandidates, pairs: jobPairs } of jobsByKey.values()) {
-      if (!jobDescription || jobDescription === 'Unbenannte Stelle') {
-        for (const pair of jobPairs) {
-          failures.push({
-            ...pair,
-            error: 'Stellentitel, Beschreibung oder Anforderungen sind erforderlich',
-          });
-        }
-        continue;
-      }
-
-      try {
-        const { prompt, raw, matchingResults, model: OLLAMA_MODEL, durationMs: matchingDuration } = await runAiMatchingCore({
-          resolvedJob: {
-            id: job.id,
-            title: job.title,
-            description: jobDescription,
-            rawDescription: jobDescription,
-            requirements: job.requirements,
-            skills: job.skills,
-            location: job.location,
-            type: job.type,
-          },
-          candidates: jobCandidates,
-          weights,
-        });
-
-        const resultByCandidateId = new Map((matchingResults.results || []).map((item) => [String(item.candidateId), item]));
-        const saveResult = db.prepare(`
-          INSERT INTO matching_results (job_description, job_title, results, job_id)
-          VALUES (?, ?, ?, ?)
-        `).run(
-          jobDescription,
-          job.title,
-          JSON.stringify(matchingResults),
-          Number.isFinite(Number(job.id)) ? Number(job.id) : null,
-        );
-
-        logAiCall({
-          userId: req.user?.id,
-          feature: 'matching',
-          model: OLLAMA_MODEL,
-          prompt,
-          response: raw,
-          parsedResult: matchingResults,
-          durationMs: matchingDuration,
-          success: true,
-        });
-
-        for (const pair of jobPairs) {
-          const row = resultByCandidateId.get(String(pair.candidateId)) || {};
-          results.push({
-            id: saveResult.lastInsertRowid,
-            jobId: pair.jobId,
-            jobTitle: pair.jobTitle,
-            candidateId: pair.candidateId,
-            candidateName: pair.candidateName,
-            score: row.score ?? 0,
-            strengths: row.strengths || [],
-            weaknesses: row.weaknesses || [],
-            summary: row.summary || '',
-            model: OLLAMA_MODEL || null,
-          });
-        }
-      } catch (error) {
-        for (const pair of jobPairs) {
-          failures.push({
-            ...pair,
-            error: error.name === 'AbortError'
-              ? 'KI-Timeout beim Matching'
-              : error.status === 429
-                ? 'Das KI-Modell ist aktuell rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
-                : error.message || 'Fehler beim Matching',
-          });
-        }
-      }
-    }
+    const graphRagResult = await callGraphRagMatching('/match/ki_match_pairs', {
+      pairs: pairs.map((pair) => ({
+        jobId: pair.sourceJobId || pair.jobId,
+        jobTitle: pair.jobTitle,
+        candidateId: pair.sourceCandidateId || pair.candidateId,
+        candidateName: pair.candidateName,
+      })),
+      weights,
+    });
 
     logAudit(req, 'ki-matching-batch', 'Matching', null, 'KI-Matching selektierte Paarungen', {
       selectedCount: pairs.length,
-      matchedCount: results.length,
-      failedCount: failures.length,
+      matchedCount: graphRagResult?.matchedCount ?? graphRagResult?.results?.length ?? 0,
+      failedCount: graphRagResult?.failedCount ?? graphRagResult?.failures?.length ?? 0,
     });
 
-    res.json({
-      results,
-      failures,
-      selectedCount: pairs.length,
-      matchedCount: results.length,
-      failedCount: failures.length,
-      timestamp: new Date().toISOString(),
-    });
+    res.json(graphRagResult);
   } catch (error) {
     console.error('Error running selected matching batch:', error);
     res.status(error.status || 500).json({

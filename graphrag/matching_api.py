@@ -13,6 +13,10 @@ from models import (
 	MatchingJobInput,
 	MatchingMatrixPayload,
 	MatchingMatrixRequest,
+	KiMatchPairFailure,
+	KiMatchPairResult,
+	KiMatchPairsRequest,
+	KiMatchPairsResponse,
 	MatchingResultItem,
 	MatchingResultsPayload,
 	MatchingRunRequest,
@@ -827,6 +831,8 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		strengths = build_strengths(job, candidate, pair)
 		weaknesses = build_weaknesses(job, candidate, pair)
 		summary = f"{candidate.name or 'Kandidat'} erzielt {pair['score']}% für {job.title or 'die Stelle'}."
+		hard_skill_score = next((item['coverage'] for item in pair['fieldScores'] if item['key'] == 'skills'), pair['score'] / 100 if pair['score'] else 0.0)
+		soft_skill_score = next((item['coverage'] for item in pair['fieldScores'] if item['key'] == 'cultural_fit'), pair['score'] / 100 if pair['score'] else 0.0)
 
 		return {
 			'jobId': pair['jobId'],
@@ -835,8 +841,8 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			'candidateName': pair['candidateName'],
 			'score': pair['score'],
 			'vectorScore': pair['score'] / 100 if pair['score'] else 0.0,
-			'hardSkillScore': pair['hardSkillScore'],
-			'softSkillScore': pair['softSkillScore'],
+			'hardSkillScore': hard_skill_score,
+			'softSkillScore': soft_skill_score,
 			'strengths': strengths,
 			'weaknesses': weaknesses,
 			'summary': summary,
@@ -942,6 +948,130 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		if not request.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
 		return await build_vector_matrix(request.jobs, request.candidates, request.mode, 'graph-rag-neo4j-skill-vector-match')
+
+	@router.post('/match/ki_match_pairs', response_model=KiMatchPairsResponse)
+	async def ki_match_pairs(request: KiMatchPairsRequest) -> KiMatchPairsResponse:
+		if db_service is None or llm_service is None:
+			raise HTTPException(status_code=503, detail='Matching service is not available')
+		if not request.pairs:
+			raise HTTPException(status_code=400, detail='Mindestens eine Paarung ist erforderlich')
+		if len(request.pairs) > 20:
+			raise HTTPException(status_code=400, detail='Maximal 20 Paarungen pro Anfrage erlaubt')
+
+		postgres_store = getattr(db_service, 'postgres_store', None) or getattr(llm_service, 'postgres_store', None)
+		results: list[KiMatchPairResult] = []
+		failures: list[KiMatchPairFailure] = []
+
+		for pair in request.pairs:
+			job_id = str(pair.job_id).strip()
+			candidate_id = str(pair.candidate_id).strip()
+			try:
+				job_text_payload = await postgres_store.get_job_text(job_id) if postgres_store is not None else None
+				candidate_text_payload = await postgres_store.get_candidate_text(candidate_id) if postgres_store is not None else None
+				if job_text_payload is None:
+					raise ValueError('Stelle nicht gefunden')
+				if candidate_text_payload is None:
+					raise ValueError('Kandidat nicht gefunden')
+
+				job_profile = job_text_payload.get('parsed_profile_json') or {}
+				candidate_profile = candidate_text_payload.get('profile_json') or {}
+				job_title = str(job_text_payload.get('title') or pair.job_title or job_profile.get('title') or job_id).strip()
+				candidate_name = str(candidate_text_payload.get('candidate_name') or pair.candidate_name or candidate_profile.get('name') or candidate_id).strip()
+
+				job_description_parts = [
+					str(job_text_payload.get('raw_text')).strip() if job_text_payload and job_text_payload.get('raw_text') else '',
+					str(job_text_payload.get('description')).strip() if job_text_payload and job_text_payload.get('description') else '',
+					str(job_text_payload.get('requirements')).strip() if job_text_payload and job_text_payload.get('requirements') else '',
+				]
+				job_description = '\n\n'.join(part for part in job_description_parts if part)
+				if not job_description:
+					job_description = str(job_profile.get('description') or job_profile.get('title') or job_title).strip()
+
+				candidate_text_parts = [
+					str(candidate_text_payload.get('original_text')).strip() if candidate_text_payload and candidate_text_payload.get('original_text') else '',
+					str(candidate_text_payload.get('anonymized_text')).strip() if candidate_text_payload and candidate_text_payload.get('anonymized_text') else '',
+					str(candidate_profile.get('experience') or '').strip(),
+					str(candidate_profile.get('education') or '').strip(),
+				]
+				candidate_text = '\n\n'.join(part for part in candidate_text_parts if part)
+
+				job_input = MatchingJobInput(
+					id=job_id,
+					title=job_title,
+					description=job_description or None,
+					requirements=job_text_payload.get('requirements') if job_text_payload else None,
+					location=job_text_payload.get('location'),
+					type=job_text_payload.get('type') or job_profile.get('employment_type'),
+				)
+				candidate_input = MatchingCandidateInput(
+					id=candidate_id,
+					name=candidate_name,
+					location=candidate_profile.get('location'),
+					experience=candidate_text or candidate_profile.get('experience'),
+					education=candidate_profile.get('education'),
+					desired_salary=candidate_profile.get('desired_salary'),
+					availability=candidate_profile.get('availability'),
+					languages=candidate_profile.get('languages'),
+					certificates=None,
+					mobility=None,
+					has_skill=candidate_profile.get('skills'),
+					skills=candidate_profile.get('skills'),
+				)
+
+				ranked = await llm_service.rerank_candidates(
+					{
+						**job_profile,
+						'id': job_id,
+						'title': job_input.title,
+						'description': job_input.description,
+						'requirements': job_input.requirements,
+						'raw_text': job_description,
+					},
+					[
+						{
+							**candidate_profile,
+							'id': candidate_id,
+							'name': candidate_input.name,
+							'raw_text': candidate_text,
+						},
+					],
+				)
+				rerank_item = ranked.ranked_candidates[0] if ranked.ranked_candidates else None
+				deterministic = score_pair(job_input, candidate_input, request.weights)
+				results.append(
+					KiMatchPairResult(
+						jobId=job_id,
+						jobTitle=job_input.title,
+						candidateId=candidate_id,
+						candidateName=candidate_input.name,
+						score=rerank_item.score if rerank_item is not None else deterministic['score'],
+						strengths=deterministic['strengths'],
+						weaknesses=deterministic['weaknesses'],
+						summary=rerank_item.explanation if rerank_item is not None else deterministic['summary'],
+						model=getattr(llm_service, 'chat_model', None),
+					),
+				)
+			except Exception as exc:
+				failures.append(
+					KiMatchPairFailure(
+						jobId=job_id or None,
+						jobTitle=pair.job_title,
+						candidateId=candidate_id or None,
+						candidateName=pair.candidate_name,
+						error=str(exc),
+					),
+				)
+
+		results.sort(key=lambda item: item.score, reverse=True)
+		return KiMatchPairsResponse(
+			results=results,
+			failures=failures,
+			selectedCount=len(request.pairs),
+			matchedCount=len(results),
+			failedCount=len(failures),
+			timestamp=datetime.now(timezone.utc).isoformat(),
+			model=getattr(llm_service, 'chat_model', None),
+		)
 
 	@router.post('/match/vectormatch_neo4j', response_model=VectorMatchNeo4jPayload)
 	async def vector_match_neo4j(request: VectorMatchRequest) -> VectorMatchNeo4jPayload:

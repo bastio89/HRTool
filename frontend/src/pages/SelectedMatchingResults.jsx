@@ -59,10 +59,13 @@ export default function SelectedMatchingResults() {
             const matrixRows = response?.matrix || response?.results?.matrix || response?.results?.results || []
             return matrixRows.map((row) => ({
               ...row,
-              jobId: row.jobId || pair.jobId,
+              jobId: pair.jobId,
               jobTitle: row.jobTitle || pair.jobTitle,
-              candidateId: row.candidateId || pair.candidateId,
+              sourceJobId: pair.sourceJobId || pair.jobId,
+              sourceJobTitle: pair.sourceJobTitle || pair.jobTitle,
+              candidateId: pair.candidateId,
               candidateName: row.candidateName || pair.candidateName,
+              sourceCandidateId: pair.sourceCandidateId || pair.candidateId,
               score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
             }))
           }).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
@@ -136,6 +139,7 @@ export default function SelectedMatchingResults() {
       sourceJobTitle: row.sourceJobTitle || row.jobTitle,
       jobDescription: row.jobDescription || payload?.sourceJobDescription || '',
       candidateId: row.candidateId,
+      sourceCandidateId: row.sourceCandidateId || row.candidateId,
       candidateName: row.candidateName,
     }))
 

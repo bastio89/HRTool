@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -522,6 +523,68 @@ async def test_vectormatch_neo4j_uses_neo4j_cosine_similarity(app_module, api_cl
     assert payload["matrix"][0]["hardSkillScore"] == 0.97
     assert payload["matrix"][0]["softSkillScore"] == 0.84
     assert payload["matrix"][0]["matchedSkills"][0]["similarity"] == 0.97
+
+
+@pytest.mark.anyio
+async def test_ki_match_pairs_uses_id_based_graph_rag_matching(app_module, api_client, monkeypatch):
+    fake_store = type(
+        "FakeStore",
+        (),
+        {
+            "get_job_text": AsyncMock(return_value={
+                "id": 2,
+                "graph_job_id": "graph-job-1",
+                "title": "Data Engineer",
+                "location": "Zürich",
+                "type": "Vollzeit",
+                "raw_text": "Data Engineer role with Python, SQL and ETL focus.",
+                "description": "Data Engineer role",
+                "requirements": "Python, SQL, ETL",
+                "parsed_profile_json": {
+                    "title": "Data Engineer",
+                    "location": "Zürich",
+                    "employment_type": "Vollzeit",
+                },
+            }),
+            "get_candidate_text": AsyncMock(return_value={
+                "candidate_id": "7",
+                "original_text": "Ada Example has worked with Python, SQL and ETL pipelines.",
+                "anonymized_text": None,
+                "candidate_name": "Ada Example",
+                "profile_json": {
+                    "name": "Ada Example",
+                    "location": "Zürich",
+                    "experience": "Python, SQL, ETL",
+                    "education": "BSc Informatik",
+                    "skills": [{"name": "python", "category": "HardSkill"}],
+                    "languages": [{"name": "de"}],
+                    "desired_salary": "120000",
+                    "availability": "Per sofort",
+                },
+            }),
+        },
+    )()
+    monkeypatch.setattr(app_module.db_service, "postgres_store", fake_store)
+    monkeypatch.setattr(
+        app_module.llm_service,
+        "rerank_candidates",
+        AsyncMock(return_value=SimpleNamespace(ranked_candidates=[SimpleNamespace(score=91, explanation="Sehr guter Fit")]))
+    )
+
+    response = await api_client.post(
+        "/match/ki_match_pairs",
+        json={"pairs": [{"jobId": "job-ki-1", "cvId": "cv-ki-1"}]},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["selectedCount"] == 1
+    assert payload["matchedCount"] == 1
+    assert payload["failedCount"] == 0
+    assert payload["results"][0]["jobId"] == "job-ki-1"
+    assert payload["results"][0]["candidateId"] == "cv-ki-1"
+    assert payload["results"][0]["score"] == 91
+    assert payload["results"][0]["summary"] == "Sehr guter Fit"
 
 
 @pytest.mark.anyio

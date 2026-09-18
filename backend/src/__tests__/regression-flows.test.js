@@ -1881,6 +1881,115 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.results.results[0].candidateName).toBe('Grace Hopper');
   });
 
+  test('Vector matching returns local Postgres ids in the response payload', async () => {
+    const mockDb = createMockDb({
+      jobs: [
+        {
+          id: 2,
+          title: 'Backend Engineer',
+          description: 'Job description from SQL',
+          requirements: 'Node.js, APIs, Tests',
+          skills: 'Node.js, Express, SQL',
+          location: 'Berlin',
+          type: 'Vollzeit',
+        },
+      ],
+      candidates: [
+        {
+          id: 7,
+          name: 'Ada Lovelace',
+          email: 'ada@example.com',
+          location: 'Berlin',
+          experience: '7 Jahre Backend',
+          skills: 'Node.js, Express, SQL',
+          education: 'MSc Computer Science',
+          desired_salary: '90000',
+          availability: 'Sofort',
+          languages: 'Deutsch C1, Englisch C2',
+          certificates: 'AWS',
+          mobility: 'Remote',
+        },
+      ],
+    });
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      matchingRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+      sanitizeObject: (obj) => ({ sanitized: obj }),
+    }));
+    jest.doMock('../middleware/apiKey', () => (req, res, next) => next());
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model', provider: 'ollama' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
+      extractAiText: () => ({ text: JSON.stringify({ results: [] }) }),
+      pingAiService: async () => true,
+    }));
+
+    global.fetch = jest.fn(async (url) => {
+      if (String(url).includes('/match/vectormatch')) {
+        return {
+          ok: true,
+          json: async () => ({
+            type: 'vectormatch',
+            mode: 'job_cv_vector',
+            model: 'graph-rag-python-skill-vector-match',
+            matchedAt: '2026-09-18T00:00:00.000Z',
+            jobs: [{ id: 'graph-job-1', title: 'Backend Engineer' }],
+            candidates: [{ id: 'graph-cand-1', name: 'Ada Lovelace' }],
+            matrix: [
+              {
+                jobId: 'graph-job-1',
+                jobTitle: 'Backend Engineer',
+                candidateId: 'graph-cand-1',
+                candidateName: 'Ada Lovelace',
+                score: 93,
+                vectorScore: 0.93,
+                hardSkillScore: 0.9,
+                softSkillScore: 0.8,
+                strengths: ['Starke Backend-Erfahrung'],
+                weaknesses: [],
+                summary: 'Sehr guter Fit',
+                matchedSkills: [],
+              },
+            ],
+            jobsRanked: [{ jobId: 'graph-job-1', jobTitle: 'Backend Engineer', results: [] }],
+            candidatesRanked: [{ candidateId: 'graph-cand-1', candidateName: 'Ada Lovelace', results: [] }],
+          }),
+        };
+      }
+
+      return { ok: true, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) };
+    });
+
+    const matchingRouter = require('../routes/matching');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/matching', matchingRouter);
+
+    const response = await request(app)
+      .post('/api/matching/vectormatch')
+      .send({
+        jobId: 2,
+        candidateIds: [7],
+        engine: 'python',
+      });
+
+    expect(response.status).toBe(200, response.text);
+    expect(response.body.results.matrix).toHaveLength(1);
+    expect(response.body.results.matrix[0].jobId).toBe(2);
+    expect(response.body.results.matrix[0].candidateId).toBe(7);
+    expect(response.body.results.matrix[0].sourceJobId).toBe('graph-job-1');
+    expect(response.body.results.matrix[0].sourceCandidateId).toBe('graph-cand-1');
+    expect(response.body.results.jobsRanked[0].jobId).toBe(2);
+    expect(response.body.results.candidatesRanked[0].candidateId).toBe(7);
+  });
+
   test('Selected matching batch prefers structured job skills over free-text requirements', async () => {
     const mockDb = createMockDb({
       jobs: [
@@ -1953,15 +2062,28 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       }),
     }));
 
-    global.fetch = jest
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => JSON.stringify({ ok: true }),
-      });
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          {
+            jobId: 2,
+            jobTitle: 'Java Developer Sopra Steria',
+            candidateId: 99,
+            candidateName: 'Thomas Zimmermann',
+            score: 91,
+            strengths: ['Sehr guter Fit'],
+            weaknesses: [],
+            summary: 'Sehr guter Fit fuer Java',
+          },
+        ],
+        failures: [],
+        selectedCount: 1,
+        matchedCount: 1,
+        failedCount: 0,
+        timestamp: '2026-09-18T00:00:00.000Z',
+      }),
+    });
 
     const matchingRouter = require('../routes/matching');
     const app = express();
@@ -1973,10 +2095,12 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       .send({
         pairs: [
           {
-            jobId: 2,
+            jobId: 'graph-job-1',
+            sourceJobId: 2,
             jobTitle: 'Java Developer Sopra Steria',
             jobDescription: 'Java Developer description',
-            candidateId: 99,
+            candidateId: 'graph-cand-1',
+            sourceCandidateId: 99,
             candidateName: 'Thomas Zimmermann',
           },
         ],
@@ -1985,14 +2109,19 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.status).toBe(200);
     expect(response.body.results).toHaveLength(1);
     expect(response.body.results[0].score).toBe(91);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    const requestBody = JSON.parse(global.fetch.mock.calls[1][1].body);
-    expect(requestBody.prompt).toContain('Java Developer Sopra Steria');
-    expect(requestBody.prompt).toContain('Thomas Zimmermann');
-    expect(requestBody.prompt).toContain('Java, Spring, REST, Angular');
-    expect(requestBody.prompt).toContain('CV-Volltext');
-    expect(requestBody.prompt).toContain('Job-Volltext');
-    expect(requestBody.prompt).toContain('Thomas Zimmermann ist ein Senior Java Developer');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [requestUrl, requestOptions] = global.fetch.mock.calls[0];
+    expect(requestUrl).toContain('/match/ki_match_pairs');
+    const requestBody = JSON.parse(requestOptions.body);
+    expect(requestBody.pairs).toEqual([
+      {
+        jobId: 2,
+        jobTitle: 'Java Developer Sopra Steria',
+        candidateId: 99,
+        candidateName: 'Thomas Zimmermann',
+      },
+    ]);
+    expect(requestBody.weights).toBeUndefined();
   });
 
   test('Matching run returns 400 when neither jobId nor job description is provided', async () => {

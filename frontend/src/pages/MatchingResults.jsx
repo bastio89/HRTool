@@ -125,16 +125,19 @@ export default function MatchingResults() {
           sourceJobTitle: data?.job_title || data?.jobTitle || row.jobTitle,
           jobDescription: row.jobDescription || sourceJobDescription,
           candidateId: row.candidateId,
+          sourceCandidateId: row.sourceCandidateId || row.candidateId,
           candidateName: row.candidateName,
         }))
+        const response = await matchingApi.runSelected(batchPayload)
         sessionStorage.setItem('hrtool:matching:selected-batch', JSON.stringify({
           pairs: batchPayload,
           engine: matrixData?.type === 'vectormatch_neo4j' ? 'neo4j' : 'python',
           sourceResultId: id,
           sourceLabel: resultModeLabel,
           sourceJobDescription,
+          response,
         }))
-        navigate('/matching/results/selected', { state: { pairs: batchPayload, sourceJobDescription } })
+        navigate('/matching/results/selected', { state: { pairs: batchPayload, sourceJobDescription, precomputed: response, mode: 'ai' } })
       } catch (err) {
         setSelectedBatchError(err.message)
       }

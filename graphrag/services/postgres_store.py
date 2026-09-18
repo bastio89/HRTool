@@ -622,6 +622,28 @@ class PostgresStore:
                 rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
+    async def get_job_text(self, job_id: str) -> dict[str, Any] | None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT id, graph_job_id, title, company, location, type, status, description, requirements,
+                           about_us, benefits, url, raw_text, parsed_profile_json
+                    FROM jobs
+                    WHERE graph_job_id = %s OR id::text = %s
+                    LIMIT 1
+                    """,
+                    (job_id, job_id),
+                )
+                row = await cursor.fetchone()
+        if row is None:
+            return None
+        parsed_profile_json = row.get("parsed_profile_json")
+        return {
+            **row,
+            "parsed_profile_json": json.loads(parsed_profile_json) if isinstance(parsed_profile_json, str) and parsed_profile_json.strip() else None,
+        }
+
     async def search_compat_matchings(self, search: str, *, limit: int | None = None) -> list[dict[str, Any]]:
         terms = self._split_search_terms(search)
         if not terms:

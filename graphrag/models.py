@@ -463,6 +463,51 @@ class MatchingRunRequest(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
+class KiMatchPairInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str | int = Field(validation_alias=AliasChoices("job_id", "jobId"))
+    candidate_id: str | int = Field(validation_alias=AliasChoices("candidate_id", "candidateId", "cv_id", "cvId"))
+    job_title: str | None = Field(default=None, validation_alias=AliasChoices("job_title", "jobTitle"))
+    candidate_name: str | None = Field(default=None, validation_alias=AliasChoices("candidate_name", "candidateName"))
+
+
+class KiMatchPairsRequest(BaseModel):
+    pairs: list[KiMatchPairInput] = Field(default_factory=list)
+    weights: dict[str, int] | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class KiMatchPairResult(BaseModel):
+    jobId: str
+    jobTitle: str | None = None
+    candidateId: str
+    candidateName: str | None = None
+    score: int = Field(..., ge=0, le=100)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    summary: str = ""
+    model: str | None = None
+
+
+class KiMatchPairFailure(BaseModel):
+    jobId: str | None = None
+    jobTitle: str | None = None
+    candidateId: str | None = None
+    candidateName: str | None = None
+    error: str
+
+
+class KiMatchPairsResponse(BaseModel):
+    results: list[KiMatchPairResult] = Field(default_factory=list)
+    failures: list[KiMatchPairFailure] = Field(default_factory=list)
+    selectedCount: int = 0
+    matchedCount: int = 0
+    failedCount: int = 0
+    timestamp: str
+    model: str | None = None
+
+
 class MatchingMatrixRequest(BaseModel):
     mode: str = "all_jobs_all_candidates"
     jobs: list[MatchingJobInput] = Field(default_factory=list)

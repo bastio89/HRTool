@@ -29,6 +29,7 @@ export default function SelectedMatchingResults() {
         const fromStatePairs = location.state?.pairs
         const pairs = fromStatePairs || parsed.pairs || []
         const mode = location.state?.mode || parsed.mode || 'ai'
+        const precomputed = location.state?.precomputed
 
         if (!Array.isArray(pairs) || pairs.length === 0) {
           setPayload(null)
@@ -64,6 +65,12 @@ export default function SelectedMatchingResults() {
               score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
             }))
           }).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
+        } else if (precomputed) {
+          rows = (precomputed?.results || []).map((row) => ({
+            ...row,
+            score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
+          })).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
+          failures = precomputed?.failures || []
         } else {
           const response = await matchingApi.runSelected(pairs)
           rows = (response?.results || []).map((row) => ({
@@ -117,6 +124,9 @@ export default function SelectedMatchingResults() {
   const handleRunSelectedAiMatching = async () => {
     if (selectedRows.length === 0) return
 
+    setLoading(true)
+    setError('')
+
     const batchPayload = selectedRows.map((row) => ({
       jobId: row.jobId,
       jobTitle: row.jobTitle,
@@ -127,14 +137,21 @@ export default function SelectedMatchingResults() {
       candidateName: row.candidateName,
     }))
 
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-      pairs: batchPayload,
-      mode: 'ai',
-      sourceResultId: payload?.sourceResultId || null,
-      sourceLabel: '3D-Matching',
-    }))
-
-    navigate('/matching/results/selected', { state: { pairs: batchPayload, mode: 'ai' } })
+    try {
+      const response = await matchingApi.runSelected(batchPayload)
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        pairs: batchPayload,
+        mode: 'ai',
+        sourceResultId: payload?.sourceResultId || null,
+        sourceLabel: '3D-Matching',
+        response,
+      }))
+      navigate('/matching/results/selected', { state: { pairs: batchPayload, mode: 'ai', precomputed: response } })
+    } catch (err) {
+      setError(err.message || 'KI-Matching konnte nicht gestartet werden.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const formatVectorScore = (value) => {

@@ -173,6 +173,10 @@ function createMockDb(seed = {}) {
             return state.candidateFiles.find((f) => f.id === Number(args[0]));
           }
 
+          if (q.includes('FROM candidate_texts') && q.includes('candidate_id = CAST(? AS TEXT)')) {
+            return state.candidateTexts.find((row) => String(row.candidate_id) === String(args[0]));
+          }
+
           if (q.includes('SELECT * FROM jobs WHERE id = ?')) {
             return state.jobs.find((j) => j.id === Number(args[0]));
           }
@@ -1903,6 +1907,16 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
           mobility: 'Remote',
         },
       ],
+      candidateTexts: [
+        {
+          candidate_id: '99',
+          candidate_name: 'Thomas Zimmermann',
+          source: 'CV Import',
+          original_text: 'Thomas Zimmermann ist ein Senior Java Developer mit Java, Spring, REST, Angular und Erfahrung in GraphQL.',
+          anonymized_text: null,
+          profile_json: { name: 'Thomas Zimmermann' },
+        },
+      ],
     });
 
     jest.doMock('../database', () => mockDb);
@@ -1919,7 +1933,10 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model', provider: 'ollama' }),
       stripReasoningTags: (text) => text,
       resolveAiProvider: async () => 'ollama',
-      buildAiRequest: () => ({ url: 'http://fake-ai/api/generate', body: { prompt: 'x' } }),
+      buildAiRequest: ({ baseUrl, model, provider, prompt }) => ({
+        url: `${baseUrl}/api/generate`,
+        body: { model, provider, prompt },
+      }),
       extractAiText: () => ({
         text: JSON.stringify({
           results: [
@@ -1940,18 +1957,10 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          results: [
-            {
-              candidateId: 99,
-              candidateName: 'Thomas Zimmermann',
-              score: 91,
-              strengths: ['Sehr guter Fit'],
-              weaknesses: [],
-              summary: 'Sehr guter Fit fuer Java',
-            },
-          ],
-        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ ok: true }),
       });
 
     const matchingRouter = require('../routes/matching');
@@ -1976,11 +1985,13 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.status).toBe(200);
     expect(response.body.results).toHaveLength(1);
     expect(response.body.results[0].score).toBe(91);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    const requestBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    expect(requestBody.job.required_skills.map((skill) => skill.name)).toEqual(['Java', 'Spring', 'REST', 'Angular']);
-    expect(requestBody.candidates).toHaveLength(1);
-    expect(requestBody.candidates[0].has_skill).toEqual(['Java', 'Spring', 'REST', 'Angular']);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const requestBody = JSON.parse(global.fetch.mock.calls[1][1].body);
+    expect(requestBody.prompt).toContain('Java Developer Sopra Steria');
+    expect(requestBody.prompt).toContain('Thomas Zimmermann');
+    expect(requestBody.prompt).toContain('Java, Spring, REST, Angular');
+    expect(requestBody.prompt).toContain('CV-Volltext');
+    expect(requestBody.prompt).toContain('Java, Spring, REST, Angular');
   });
 
   test('Matching run returns 400 when neither jobId nor job description is provided', async () => {

@@ -171,8 +171,10 @@ async def test_legacy_global_search_route_delegates_to_postgres_store(app_module
 			"query": "react zürich",
 			"jobs": [{"id": 1, "title": "Senior Frontend Engineer"}],
 			"candidates": [{"id": 7, "name": "Anna Müller"}],
+			"matchings": [{"id": 9, "job_title": "Senior Frontend Engineer"}],
 			"total_jobs": 1,
 			"total_candidates": 1,
+			"total_matchings": 1,
 		}
 	)
 
@@ -185,6 +187,8 @@ async def test_legacy_global_search_route_delegates_to_postgres_store(app_module
 		"query": "react zürich",
 		"jobs": [{"id": 1, "title": "Senior Frontend Engineer"}],
 		"candidates": [{"id": 7, "name": "Anna Müller"}],
+		"matchings": [{"id": 9, "job_title": "Senior Frontend Engineer"}],
 		"total_jobs": 1,
 		"total_candidates": 1,
+		"total_matchings": 1,
 	}

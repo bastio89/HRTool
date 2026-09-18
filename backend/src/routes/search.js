@@ -50,6 +50,14 @@ const CANDIDATE_TEXT_FIELDS = [
   'ct.profile_json::text',
 ];
 
+const MATCHING_SEARCH_FIELDS = [
+  'm.job_title',
+  'm.job_description',
+  'm.results',
+  'm.review_notes',
+  'm.reviewed_by',
+];
+
 function splitSearchTerms(search) {
   return String(search)
     .toLowerCase()
@@ -131,9 +139,11 @@ router.get('/', (req, res) => {
 
     const jobClause = buildSearchClause(JOB_SEARCH_FIELDS, terms);
     const candidateClause = buildSearchClause(candidateSearchFields, terms);
+    const matchingClause = buildSearchClause(MATCHING_SEARCH_FIELDS, terms);
 
     const jobWhere = ` WHERE ${jobClause.where}`;
     const candidateWhere = ` WHERE ${candidateClause.where}`;
+    const matchingWhere = ` WHERE ${matchingClause.where}`;
 
     const jobs = db.prepare(`
       SELECT j.id, j.title, j.location, j.status, j.type, j.skills, j.company, j.description, j.requirements, j.about_us, j.benefits, j.url, j.updated_at
@@ -153,15 +163,27 @@ router.get('/', (req, res) => {
       LIMIT ?
     `).all(...candidateClause.params, limit);
 
+    const matchings = db.prepare(`
+      SELECT m.id, m.job_title, m.job_description, m.results, m.review_notes, m.reviewed_by, m.human_reviewed, m.created_at
+      FROM matching_results m
+      ${matchingWhere}
+      ORDER BY m.created_at DESC, m.id DESC
+      LIMIT ?
+    `).all(...matchingClause.params, limit)
+
     const totalJobs = db.prepare(`SELECT COUNT(*) as count FROM jobs j ${jobWhere}`).get(...jobClause.params).count;
     const totalCandidates = db.prepare(`SELECT COUNT(*) as count FROM candidates c${candidateTextJoin} ${candidateWhere}`).get(...candidateClause.params).count;
+    const matchingCount = db.prepare(`SELECT COUNT(*) as count FROM matching_results m ${matchingWhere}`).get(...matchingClause.params).count;
+    const totalMatchings = Math.max(Number(matchingCount) || 0, matchings.length);
 
     res.json({
       query,
       jobs: normalizeRows(jobs, 'job'),
       candidates: normalizeRows(candidates, 'candidate'),
+      matchings: normalizeRows(matchings, 'matching'),
       totalJobs,
       totalCandidates,
+      totalMatchings,
     });
   } catch (error) {
     console.error('Error performing global search:', error);

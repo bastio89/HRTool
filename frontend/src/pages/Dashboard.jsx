@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText, Search } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Users, GitCompare, TrendingUp, TrendingDown, Clock, ArrowRight, MapPin, BarChart2, Activity, Briefcase, CheckCircle, Share2, ShieldAlert, Calendar, Video, Phone, Timer, Zap, FileText, Search, Circle, CheckCircle2, X } from 'lucide-react'
 import { candidatesApi, matchingApi, pipelineApi, settingsApi, interviewsApi, searchApi } from '../api'
 import { Card, ScoreRing, LoadingSpinner, PageContainer, EmptyState } from '../components/UI'
 import { useWidgetConfig } from '../hooks/useWidgetConfig'
@@ -18,6 +18,7 @@ const PERIOD_OPTIONS = [
 export default function Dashboard() {
   const { isAdmin } = useAuth()
   const { t, locale } = useI18n()
+  const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [recentMatches, setRecentMatches] = useState([])
   const [activePipelines, setActivePipelines] = useState([])
@@ -29,9 +30,72 @@ export default function Dashboard() {
   const [periodDays, setPeriodDays] = useState(30)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState({ jobs: [], candidates: [], totalJobs: 0, totalCandidates: 0 })
+  const [searchResults, setSearchResults] = useState({ jobs: [], candidates: [], matchings: [], totalJobs: 0, totalCandidates: 0, totalMatchings: 0 })
   const [searchLoading, setSearchLoading] = useState(false)
+  const [selectedJobs, setSelectedJobs] = useState([])
+  const [selectedCandidates, setSelectedCandidates] = useState([])
+  const [selectionError, setSelectionError] = useState('')
   const { widgets, visibleWidgets, toggleWidget, reorder, resetToDefault } = useWidgetConfig()
+
+  const selectedPairs = useMemo(() => selectedJobs.flatMap((job) => selectedCandidates.map((candidate) => ({
+    jobId: job.id,
+    jobTitle: job.title,
+    jobDescription: job.description || job.full_text || '',
+    candidateId: candidate.id,
+    candidateName: candidate.name,
+  }))), [selectedJobs, selectedCandidates])
+
+  const selectionPairsOverLimit = selectedPairs.length > 20
+
+  const toggleSelectedJob = (job) => {
+    setSelectionError('')
+    setSelectedJobs((prev) => (
+      prev.some((item) => item.id === job.id)
+        ? prev.filter((item) => item.id !== job.id)
+        : [...prev, job]
+    ))
+  }
+
+  const toggleSelectedCandidate = (candidate) => {
+    setSelectionError('')
+    setSelectedCandidates((prev) => (
+      prev.some((item) => item.id === candidate.id)
+        ? prev.filter((item) => item.id !== candidate.id)
+        : [...prev, candidate]
+    ))
+  }
+
+  const removeSelectedJob = (jobId) => {
+    setSelectedJobs((prev) => prev.filter((item) => item.id !== jobId))
+  }
+
+  const removeSelectedCandidate = (candidateId) => {
+    setSelectedCandidates((prev) => prev.filter((item) => item.id !== candidateId))
+  }
+
+  const clearSelection = () => {
+    setSelectedJobs([])
+    setSelectedCandidates([])
+    setSelectionError('')
+  }
+
+  const handleMatchSelected = () => {
+    if (selectedJobs.length === 0 || selectedCandidates.length === 0) {
+      setSelectionError(t('dashboard.selection_missing'))
+      return
+    }
+
+    if (selectionPairsOverLimit) {
+      setSelectionError(t('dashboard.selection_limit'))
+      return
+    }
+
+    sessionStorage.setItem('hrtool:matching:selected-batch', JSON.stringify({
+      pairs: selectedPairs,
+      sourceLabel: 'Dashboard selection',
+    }))
+    navigate('/matching/results/selected', { state: { pairs: selectedPairs } })
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -70,7 +134,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!debouncedSearchQuery || debouncedSearchQuery.length < 2) {
-      setSearchResults({ jobs: [], candidates: [], totalJobs: 0, totalCandidates: 0 })
+      setSearchResults({ jobs: [], candidates: [], matchings: [], totalJobs: 0, totalCandidates: 0, totalMatchings: 0 })
       return
     }
 
@@ -82,13 +146,15 @@ export default function Dashboard() {
         setSearchResults({
           jobs: result.jobs || [],
           candidates: result.candidates || [],
+          matchings: result.matchings || [],
           totalJobs: result.totalJobs || 0,
           totalCandidates: result.totalCandidates || 0,
+          totalMatchings: result.totalMatchings || 0,
         })
       })
       .catch(() => {
         if (!cancelled) {
-          setSearchResults({ jobs: [], candidates: [], totalJobs: 0, totalCandidates: 0 })
+          setSearchResults({ jobs: [], candidates: [], matchings: [], totalJobs: 0, totalCandidates: 0, totalMatchings: 0 })
         }
       })
       .finally(() => {
@@ -176,7 +242,7 @@ export default function Dashboard() {
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
               <h2 className="text-[22px] sm:text-[28px] font-semibold tracking-tight text-black dark:text-white">{t('dashboard.search_results')}</h2>
-              <p className="text-[14px] sm:text-[15px] text-gray-500 dark:text-gray-400 mt-1">{searchLoading ? t('dashboard.loading') : `${searchResults.totalCandidates + searchResults.totalJobs} Treffer`}</p>
+              <p className="text-[14px] sm:text-[15px] text-gray-500 dark:text-gray-400 mt-1">{searchLoading ? t('dashboard.loading') : `${searchResults.totalCandidates + searchResults.totalJobs + searchResults.totalMatchings} Treffer`}</p>
             </div>
             <button
               type="button"
@@ -187,51 +253,173 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {!searchLoading && searchResults.jobs.length === 0 && searchResults.candidates.length === 0 ? (
+          {!searchLoading && searchResults.jobs.length === 0 && searchResults.candidates.length === 0 && searchResults.matchings.length === 0 ? (
             <EmptyState title={t('dashboard.search_no_results')} description={searchQuery} />
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <SearchResultGroup
-                title={t('dashboard.search_candidates')}
-                count={searchResults.totalCandidates}
-                items={searchResults.candidates}
-                emptyLabel={t('dashboard.search_no_results')}
-                renderItem={(candidate) => (
-                  <Link key={`candidate-${candidate.id}`} to={`/candidates/${candidate.id}/detail`} className="block rounded-[22px] border border-gray-100/80 dark:border-gray-700/70 p-4 sm:p-5 hover:border-[#0071e3]/30 hover:bg-[#0071e3]/5 transition">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[16px] font-semibold text-black dark:text-white">{candidate.name}</p>
-                        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{candidate.location || candidate.current_position || candidate.current_employer || ' '}</p>
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+              <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
+                <SearchResultGroup
+                  title={t('dashboard.search_candidates')}
+                  count={searchResults.totalCandidates}
+                  items={searchResults.candidates}
+                  emptyLabel={t('dashboard.search_no_results')}
+                  renderItem={(candidate) => {
+                    const isSelected = selectedCandidates.some((item) => item.id === candidate.id)
+                    return (
+                      <div key={`candidate-${candidate.id}`} className={`relative rounded-[22px] border p-4 sm:p-5 transition ${isSelected ? 'border-[#0071e3]/40 bg-[#0071e3]/5' : 'border-gray-100/80 dark:border-gray-700/70 hover:border-[#0071e3]/30 hover:bg-[#0071e3]/5'}`}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectedCandidate(candidate)}
+                          aria-label={isSelected ? `${candidate.name} ${t('dashboard.deselect')}` : `${candidate.name} ${t('dashboard.select')}`}
+                          className={`absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border transition ${isSelected ? 'border-[#0071e3] bg-[#0071e3] text-white' : 'border-gray-300 text-gray-400 hover:border-[#0071e3] hover:text-[#0071e3]'}`}
+                        >
+                          {isSelected ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                        </button>
+                        <div className="pr-12">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[16px] font-semibold text-black dark:text-white">{candidate.name}</p>
+                              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{candidate.location || candidate.current_position || candidate.current_employer || ' '}</p>
+                            </div>
+                            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#0071e3]/10 text-[#0071e3]">CV</span>
+                          </div>
+                          {candidate.full_text && (
+                            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 line-clamp-2">{candidate.full_text}</p>
+                          )}
+                          <div className="mt-4 flex items-center justify-between gap-3">
+                            <Link to={`/candidates/${candidate.id}/detail`} className="text-[13px] font-semibold text-[#0071e3] hover:opacity-70 transition-opacity">
+                              {t('dashboard.open_result')}
+                            </Link>
+                            {isSelected && <span className="text-[11px] font-semibold text-[#0071e3]">{t('dashboard.selected')}</span>}
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#0071e3]/10 text-[#0071e3]">CV</span>
-                    </div>
-                    {candidate.full_text && (
-                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 line-clamp-2">{candidate.full_text}</p>
-                    )}
-                  </Link>
-                )}
-              />
+                    )
+                  }}
+                />
 
-              <SearchResultGroup
-                title={t('dashboard.search_jobs')}
-                count={searchResults.totalJobs}
-                items={searchResults.jobs}
-                emptyLabel={t('dashboard.search_no_results')}
-                renderItem={(job) => (
-                  <Link key={`job-${job.id}`} to={`/jobs/${job.id}/edit`} className="block rounded-[22px] border border-gray-100/80 dark:border-gray-700/70 p-4 sm:p-5 hover:border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/5 transition">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[16px] font-semibold text-black dark:text-white">{job.title}</p>
-                        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{job.location || job.company || ' '}</p>
+                <SearchResultGroup
+                  title={t('dashboard.search_jobs')}
+                  count={searchResults.totalJobs}
+                  items={searchResults.jobs}
+                  emptyLabel={t('dashboard.search_no_results')}
+                  renderItem={(job) => {
+                    const isSelected = selectedJobs.some((item) => item.id === job.id)
+                    return (
+                      <div key={`job-${job.id}`} className={`relative rounded-[22px] border p-4 sm:p-5 transition ${isSelected ? 'border-[#8b5cf6]/40 bg-[#8b5cf6]/5' : 'border-gray-100/80 dark:border-gray-700/70 hover:border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/5'}`}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSelectedJob(job)}
+                          aria-label={isSelected ? `${job.title} ${t('dashboard.deselect')}` : `${job.title} ${t('dashboard.select')}`}
+                          className={`absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border transition ${isSelected ? 'border-[#8b5cf6] bg-[#8b5cf6] text-white' : 'border-gray-300 text-gray-400 hover:border-[#8b5cf6] hover:text-[#8b5cf6]'}`}
+                        >
+                          {isSelected ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                        </button>
+                        <div className="pr-12">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[16px] font-semibold text-black dark:text-white">{job.title}</p>
+                              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{job.location || job.company || ' '}</p>
+                            </div>
+                            <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#8b5cf6]/10 text-[#8b5cf6]">Job</span>
+                          </div>
+                          {job.description && (
+                            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 line-clamp-2">{job.description}</p>
+                          )}
+                          <div className="mt-4 flex items-center justify-between gap-3">
+                            <Link to={`/jobs/${job.id}/edit`} className="text-[13px] font-semibold text-[#8b5cf6] hover:opacity-70 transition-opacity">
+                              {t('dashboard.open_result')}
+                            </Link>
+                            {isSelected && <span className="text-[11px] font-semibold text-[#8b5cf6]">{t('dashboard.selected')}</span>}
+                          </div>
+                        </div>
                       </div>
-                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#8b5cf6]/10 text-[#8b5cf6]">Job</span>
-                    </div>
-                    {job.description && (
-                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 line-clamp-2">{job.description}</p>
-                    )}
-                  </Link>
+                    )
+                  }}
+                />
+
+                <SearchResultGroup
+                  title={t('dashboard.search_matchings')}
+                  count={searchResults.totalMatchings}
+                  items={searchResults.matchings}
+                  emptyLabel={t('dashboard.search_no_results')}
+                  renderItem={(matching) => (
+                    <Link key={`matching-${matching.id}`} to={`/matching/results/${matching.id}`} className="block rounded-[22px] border border-gray-100/80 dark:border-gray-700/70 p-4 sm:p-5 hover:border-[#34c759]/30 hover:bg-[#34c759]/5 transition">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[16px] font-semibold text-black dark:text-white">{matching.job_title || `Matching ${matching.id}`}</p>
+                          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{matching.reviewed_by || matching.created_at || ' '}</p>
+                        </div>
+                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#34c759]/10 text-[#34c759]">Match</span>
+                      </div>
+                      {matching.review_notes || matching.results ? (
+                        <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-3 line-clamp-2">{matching.review_notes || matching.results}</p>
+                      ) : null}
+                    </Link>
+                  )}
+                />
+              </div>
+
+              <aside className="xl:sticky xl:top-6 rounded-[28px] border border-gray-100/80 dark:border-gray-700/70 bg-white dark:bg-[#1c1c1e] p-5 sm:p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('dashboard.selection_title')}</h3>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
+                      {t('dashboard.selection_summary').replace('{jobs}', String(selectedJobs.length)).replace('{candidates}', String(selectedCandidates.length)).replace('{pairs}', String(selectedPairs.length))}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="text-[13px] font-medium text-gray-500 hover:text-black dark:hover:text-white transition-colors"
+                  >
+                    {t('common.clear')}
+                  </button>
+                </div>
+
+                {selectionError && (
+                  <p className="mt-4 rounded-[16px] bg-[#ff3b30]/10 px-4 py-3 text-[13px] font-medium text-[#ff3b30]">
+                    {selectionError}
+                  </p>
                 )}
-              />
+
+                <div className="mt-5 space-y-5 max-h-[min(60vh,560px)] overflow-y-auto pr-1">
+                  <SelectionSection
+                    title={t('dashboard.selected_jobs')}
+                    count={selectedJobs.length}
+                    items={selectedJobs}
+                    emptyLabel={t('dashboard.selection_empty_jobs')}
+                    accent="#8b5cf6"
+                    onRemove={removeSelectedJob}
+                    renderLabel={(job) => job.title}
+                    renderMeta={(job) => [job.location, job.company].filter(Boolean).join(' · ')}
+                  />
+                  <SelectionSection
+                    title={t('dashboard.selected_candidates')}
+                    count={selectedCandidates.length}
+                    items={selectedCandidates}
+                    emptyLabel={t('dashboard.selection_empty_candidates')}
+                    accent="#0071e3"
+                    onRemove={removeSelectedCandidate}
+                    renderLabel={(candidate) => candidate.name}
+                    renderMeta={(candidate) => [candidate.location, candidate.current_position].filter(Boolean).join(' · ')}
+                  />
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleMatchSelected}
+                    disabled={selectedJobs.length === 0 || selectedCandidates.length === 0 || selectionPairsOverLimit}
+                    className="w-full rounded-full bg-black px-5 py-4 text-[15px] font-semibold text-white transition disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-gray-700"
+                  >
+                    {t('dashboard.match_selected')}
+                  </button>
+                  <p className={`text-[12px] ${selectionPairsOverLimit ? 'text-[#ff3b30]' : 'text-gray-500 dark:text-gray-400'}`}>
+                    {selectionPairsOverLimit ? t('dashboard.selection_limit') : t('dashboard.selection_hint')}
+                  </p>
+                </div>
+              </aside>
             </div>
           )}
         </Card>
@@ -273,6 +461,38 @@ function SearchResultGroup({ title, count, items, emptyLabel, renderItem }) {
         {items.length > 0 ? items.map(renderItem) : <p className="text-[14px] text-gray-500 dark:text-gray-400">{emptyLabel}</p>}
       </div>
     </div>
+  )
+}
+
+function SelectionSection({ title, count, items, emptyLabel, accent, onRemove, renderLabel, renderMeta }) {
+  return (
+    <section className="rounded-[22px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h4 className="text-[15px] font-semibold text-black dark:text-white">{title}</h4>
+          <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">{count}</p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {items.length > 0 ? items.map((item) => (
+          <div key={item.id} className="flex items-start gap-3 rounded-[16px] bg-white dark:bg-[#1c1c1e] px-3 py-2.5 shadow-sm">
+            <div className="mt-0.5 h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: accent }} />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-black dark:text-white truncate">{renderLabel(item)}</p>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400 truncate mt-0.5">{renderMeta(item) || ' '}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onRemove(item.id)}
+              className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-gray-400 hover:text-black dark:hover:text-white transition-colors"
+              aria-label={title}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )) : <p className="text-[13px] text-gray-500 dark:text-gray-400">{emptyLabel}</p>}
+      </div>
+    </section>
   )
 }
 

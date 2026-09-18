@@ -25,6 +25,13 @@ class PostgresStore:
                 row = await cursor.fetchone()
         return bool(row and row[0])
 
+    async def has_matching_results(self) -> bool:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute("SELECT to_regclass('public.matching_results')")
+                row = await cursor.fetchone()
+        return bool(row and row[0])
+
     @staticmethod
     def _split_search_terms(search: str) -> list[str]:
         return [term.strip().lower() for term in re.split(r"[\s,]+", str(search)) if term.strip()]
@@ -92,6 +99,16 @@ class PostgresStore:
             "url",
             "raw_text",
             "parsed_profile_json::text",
+        ]
+
+    @staticmethod
+    def _matching_search_fields() -> list[str]:
+        return [
+            "m.job_title",
+            "m.job_description",
+            "m.results",
+            "m.review_notes",
+            "m.reviewed_by",
         ]
 
     @staticmethod
@@ -605,6 +622,33 @@ class PostgresStore:
                 rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
+    async def search_compat_matchings(self, search: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+        terms = self._split_search_terms(search)
+        if not terms:
+            return []
+
+        fields = self._matching_search_fields()
+        where_clause, params = self._build_search_clause(fields, search)
+        has_table = await self.has_matching_results()
+        if not has_table:
+            return []
+
+        query = f"""
+            SELECT id, job_title, job_description, results, review_notes, reviewed_by, human_reviewed, created_at
+            FROM matching_results m
+            WHERE {where_clause}
+            ORDER BY created_at DESC, id DESC
+        """
+        if limit is not None and limit > 0:
+            query += " LIMIT %s"
+            params.append(limit)
+
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, params)
+                rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
     async def search_compat_candidates(
         self,
         search: str,
@@ -643,12 +687,15 @@ class PostgresStore:
     async def search_compat_global(self, search: str, *, limit: int | None = None) -> dict[str, list[dict[str, Any]] | int | str]:
         jobs = await self.search_compat_jobs(search, limit=limit)
         candidates = await self.search_compat_candidates(search, limit=limit)
+        matchings = await self.search_compat_matchings(search, limit=limit)
         return {
             "query": search,
             "jobs": jobs,
             "candidates": candidates,
+            "matchings": matchings,
             "total_jobs": len(jobs),
             "total_candidates": len(candidates),
+            "total_matchings": len(matchings),
         }
 
     async def create_compat_candidate(

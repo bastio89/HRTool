@@ -49,6 +49,14 @@ const JOB_SEARCH_FIELDS = [
   'url',
 ];
 const JOB_SEARCH_FIELD_WIDTH = JOB_SEARCH_FIELDS.length;
+const MATCHING_SEARCH_FIELDS = [
+  'job_title',
+  'job_description',
+  'results',
+  'review_notes',
+  'reviewed_by',
+];
+const MATCHING_SEARCH_FIELD_WIDTH = MATCHING_SEARCH_FIELDS.length;
 
 function matchesSearch(candidate, queryTerms, fullText = null, fields = CANDIDATE_SEARCH_FIELDS) {
   return queryTerms.every((term) => {
@@ -95,6 +103,10 @@ function createMockDb(seed = {}) {
             return { exists: state.candidateTexts.length > 0 ? 'candidate_texts' : null };
           }
 
+          if (q.includes("to_regclass('public.matching_results')")) {
+            return { exists: state.matchingResults.length > 0 ? 'matching_results' : null };
+          }
+
           if (q.includes('COUNT(*) as count FROM jobs j') && q.includes('LOWER(COALESCE(')) {
             const queryTerms = args
               .filter((_, index) => index % JOB_SEARCH_FIELD_WIDTH === 0)
@@ -131,6 +143,21 @@ function createMockDb(seed = {}) {
                 const fullText = state.candidateTexts.find((row) => String(row.candidate_id) === String(candidate.id));
                 return matchesSearch(candidate, queryTerms, fullText);
               }).length,
+            };
+          }
+
+          if (q.includes('COUNT(*) as count FROM matching_results') && q.includes('LOWER(COALESCE(')) {
+            const queryTerms = [...new Set(args
+              .filter((value) => typeof value === 'string')
+              .map((value) => String(value).replace(/^%|%$/g, ''))
+              .filter(Boolean))];
+            return {
+              count: state.matchingResults.filter((matching) => matchesSearch(
+                matching,
+                queryTerms,
+                null,
+                MATCHING_SEARCH_FIELDS,
+              )).length,
             };
           }
 
@@ -189,6 +216,19 @@ function createMockDb(seed = {}) {
               const fullText = state.candidateTexts.find((row) => String(row.candidate_id) === String(candidate.id));
               return matchesSearch(candidate, queryTerms, fullText);
             });
+          }
+
+          if (q.includes('FROM matching_results m') && q.includes('LOWER(COALESCE(')) {
+            const queryTerms = [...new Set(args
+              .filter((value) => typeof value === 'string')
+              .map((value) => String(value).replace(/^%|%$/g, ''))
+              .filter(Boolean))];
+            return state.matchingResults.filter((matching) => matchesSearch(
+              matching,
+              queryTerms,
+              null,
+              MATCHING_SEARCH_FIELDS,
+            ));
           }
 
           if (q.includes('LOWER(COALESCE(') && q.includes('FROM candidates')) {
@@ -760,6 +800,18 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
           profile_json: { name: 'Beatrice Keller' },
         },
       ],
+      matchingResults: [
+        {
+          id: 1,
+          job_title: 'Senior Frontend Engineer',
+          job_description: 'Build React interfaces for the recruiting platform.',
+          results: JSON.stringify([{ candidateId: 1, score: 96 }]),
+          review_notes: 'React match for remote role',
+          reviewed_by: 'Reviewer',
+          human_reviewed: 1,
+          created_at: '2026-01-04T00:00:00.000Z',
+        },
+      ],
     });
 
     jest.doMock('../database', () => mockDb);
@@ -769,15 +821,18 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     app.use(express.json());
     app.use('/api/search', searchRouter);
 
-    const response = await request(app).get('/api/search?q=react zürich&limit=10');
+    const response = await request(app).get('/api/search?q=react&limit=10');
 
     expect(response.status).toBe(200);
     expect(response.body.totalJobs).toBe(1);
     expect(response.body.totalCandidates).toBe(1);
+    expect(response.body.totalMatchings).toBe(1);
     expect(response.body.jobs).toHaveLength(1);
     expect(response.body.jobs[0].title).toBe('Senior Frontend Engineer');
     expect(response.body.candidates).toHaveLength(1);
     expect(response.body.candidates[0].name).toBe('Anna Müller');
+    expect(response.body.matchings).toHaveLength(1);
+    expect(response.body.matchings[0].job_title).toBe('Senior Frontend Engineer');
   });
 
   test('CV parser handles fixture PDF upload through the real multipart path', async () => {

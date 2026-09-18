@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, Download, FileText, Target, User, UserCheck, XCircle } from 'lucide-react'
+import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, Download, FileText, Target, User, UserCheck, XCircle, CheckSquare, Square } from 'lucide-react'
 import { graphRagMatchingApi, matchingApi } from '../api'
 import { Card, Button, ScoreBadge, ScoreRing, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
@@ -14,6 +14,7 @@ export default function SelectedMatchingResults() {
   const [payload, setPayload] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [selectedRowKeys, setSelectedRowKeys] = useState([])
 
   useEffect(() => {
     const raw = sessionStorage.getItem(STORAGE_KEY)
@@ -79,6 +80,7 @@ export default function SelectedMatchingResults() {
           response: { results: rows, failures, selectedCount: pairs.length, mode },
         }))
         setPayload({ results: rows, failures, selectedCount: pairs.length, mode })
+        setSelectedRowKeys([])
       } catch (err) {
         setPayload(null)
         setError(err.message || 'KI-Matching konnte nicht gestartet werden.')
@@ -98,6 +100,42 @@ export default function SelectedMatchingResults() {
   const modeLabel = payload?.mode === 'vector' ? '3D-Matching' : 'KI-Matching'
   const pageTitle = payload?.mode === 'vector' ? t('selected_results.title_vector') : t('selected_results.title_ai')
   const loadingLabel = payload?.mode === 'vector' ? t('selected_results.loading_vector') : t('selected_results.loading_ai')
+  const isVectorMode = payload?.mode === 'vector'
+  const getRowKey = (row) => `${row.jobId}-${row.candidateId}`
+  const selectedRows = results.filter((row) => selectedRowKeys.includes(getRowKey(row)))
+  const allRowsSelected = results.length > 0 && selectedRowKeys.length === results.length
+
+  const toggleRowSelection = (row) => {
+    const key = getRowKey(row)
+    setSelectedRowKeys((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))
+  }
+
+  const toggleAllRows = () => {
+    setSelectedRowKeys((prev) => (prev.length === results.length ? [] : results.map(getRowKey)))
+  }
+
+  const handleRunSelectedAiMatching = async () => {
+    if (selectedRows.length === 0) return
+
+    const batchPayload = selectedRows.map((row) => ({
+      jobId: row.jobId,
+      jobTitle: row.jobTitle,
+      sourceJobId: row.sourceJobId || null,
+      sourceJobTitle: row.sourceJobTitle || row.jobTitle,
+      jobDescription: row.jobDescription || '',
+      candidateId: row.candidateId,
+      candidateName: row.candidateName,
+    }))
+
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      pairs: batchPayload,
+      mode: 'ai',
+      sourceResultId: payload?.sourceResultId || null,
+      sourceLabel: '3D-Matching',
+    }))
+
+    navigate('/matching/results/selected', { state: { pairs: batchPayload, mode: 'ai' } })
+  }
 
   const formatVectorScore = (value) => {
     if (typeof value !== 'number' || Number.isNaN(value)) return '0.000'
@@ -265,23 +303,52 @@ export default function SelectedMatchingResults() {
         {results.length === 0 && failures.length === 0 ? (
           <p className="text-[15px] text-gray-500 dark:text-gray-400">{t('selected_results.none')}</p>
         ) : (
-          <div className="space-y-4">
+          <>
+            {isVectorMode && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <button
+                  type="button"
+                  onClick={toggleAllRows}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200/80 dark:border-gray-700 px-4 py-2.5 text-[14px] font-semibold text-gray-600 dark:text-gray-300 hover:border-[#0071e3]/40 hover:text-[#0071e3] transition-colors"
+                >
+                  {allRowsSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                  {allRowsSelected ? 'Auswahl löschen' : 'Alle auswählen'}
+                </button>
+                <Button
+                  size="md"
+                  variant="dark"
+                  onClick={handleRunSelectedAiMatching}
+                  disabled={selectedRows.length === 0}
+                >
+                  KI-Matching selektierte
+                </Button>
+              </div>
+            )}
+
+            <div className="space-y-4">
             {results.map((result, index) => {
-              const isVectorMode = payload?.mode === 'vector'
               const hardScore = Number(result.hardSkillScore ?? 0)
               const softScore = Number(result.softSkillScore ?? 0)
               const displayScore = Number(result.score) || 0
+              const rowKey = getRowKey(result)
+              const isSelected = selectedRowKeys.includes(rowKey)
 
               return (
                 <div key={result.id || `${result.jobId}-${result.candidateId}-${index}`} className="rounded-[22px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-5 sm:p-6">
                   <div className="grid grid-cols-1 lg:grid-cols-[56px_64px_1fr_1fr_180px] gap-4 items-center">
                     <div className="flex items-center justify-center">
-                      <div className="w-10 h-10 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 flex items-center justify-center text-[14px] font-semibold text-gray-600 dark:text-gray-300">
-                        #{index + 1}
-                      </div>
+                      <label className="w-10 h-10 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 flex items-center justify-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleRowSelection(result)}
+                          className="sr-only"
+                        />
+                        {isSelected ? <CheckSquare className="h-5 w-5 text-[#0071e3]" /> : <Square className="h-5 w-5 text-gray-400" />}
+                      </label>
                     </div>
                     <div className="flex items-center justify-center">
-                      <span className="text-[18px] font-semibold text-gray-500 dark:text-gray-400">•</span>
+                      <span className="text-[18px] font-semibold text-gray-500 dark:text-gray-400">#{index + 1}</span>
                     </div>
                     <div>
                       <p className="text-[16px] font-semibold text-black dark:text-white">{result.candidateName}</p>
@@ -387,6 +454,7 @@ export default function SelectedMatchingResults() {
               </div>
             )}
           </div>
+          </>
         )}
       </Card>
     </PageContainer>

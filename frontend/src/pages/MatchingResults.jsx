@@ -117,12 +117,13 @@ export default function MatchingResults() {
     const handleRunSelectedMatching = async () => {
       if (selectedPairs.length === 0) return
       try {
+        const sourceJobDescription = data?.job_description || data?.jobDescription || ''
         const batchPayload = selectedPairs.map((row) => ({
           jobId: row.jobId,
           jobTitle: row.jobTitle,
           sourceJobId: data?.job_id || data?.jobId || null,
           sourceJobTitle: data?.job_title || data?.jobTitle || row.jobTitle,
-          jobDescription: data?.job_description || data?.jobDescription || row.jobDescription || '',
+          jobDescription: row.jobDescription || sourceJobDescription,
           candidateId: row.candidateId,
           candidateName: row.candidateName,
         }))
@@ -131,8 +132,9 @@ export default function MatchingResults() {
           engine: matrixData?.type === 'vectormatch_neo4j' ? 'neo4j' : 'python',
           sourceResultId: id,
           sourceLabel: resultModeLabel,
+          sourceJobDescription,
         }))
-        navigate('/matching/results/selected', { state: { pairs: batchPayload } })
+        navigate('/matching/results/selected', { state: { pairs: batchPayload, sourceJobDescription } })
       } catch (err) {
         setSelectedBatchError(err.message)
       }

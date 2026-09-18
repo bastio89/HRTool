@@ -1991,7 +1991,8 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(requestBody.prompt).toContain('Thomas Zimmermann');
     expect(requestBody.prompt).toContain('Java, Spring, REST, Angular');
     expect(requestBody.prompt).toContain('CV-Volltext');
-    expect(requestBody.prompt).toContain('Java, Spring, REST, Angular');
+    expect(requestBody.prompt).toContain('Job-Volltext');
+    expect(requestBody.prompt).toContain('Thomas Zimmermann ist ein Senior Java Developer');
   });
 
   test('Matching run returns 400 when neither jobId nor job description is provided', async () => {

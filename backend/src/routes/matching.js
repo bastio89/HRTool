@@ -211,8 +211,17 @@ function buildJobToCandidatesPrompt({ job, candidates, weights }) {
   const jobTitle = jobProfile.title || 'Unbenannte Stelle';
   const jobDescription = buildJobDescription(jobProfile);
   const jobSkills = splitSkillValues(jobProfile.skills || jobProfile.requirements || jobDescription);
+  const rawJobText = jobProfile.rawDescription || jobProfile.sourceDescription || '';
 
   return `Du bist ein erfahrener HR-Analyst. Analysiere das folgende Jobprofil und die Kandidatenprofile und bewerte jeden mit einem Score von 0-100.
+
+WICHTIGE BEWERTUNGSREGELN:
+- Nutze primär den Job-Volltext und den CV-Volltext.
+- Beziehe Skills, Erfahrung, Ausbildung, Sprachen, Standort und Arbeitsmodell ein.
+- Gib nicht nur Wortähnlichkeit wieder, sondern bewerte die tatsächliche Passung zur Stelle.
+- Wenn der CV nur teilweise passt, setze einen mittleren Score. Wenn die Passung klar ist, setze einen hohen Score.
+- Wenn wichtige Anforderungen fehlen, senke den Score deutlich.
+- Antworte ausschließlich mit JSON und ohne zusätzliche Erklärungen.
 
 Jobprofil:
 - ID: ${jobProfile.id ?? 'k.A.'}
@@ -222,7 +231,15 @@ Jobprofil:
 - Skills: ${jobSkills.length > 0 ? jobSkills.join(', ') : 'k.A.'}
 - Standort: ${jobProfile.location || 'k.A.'}
 - Arbeitsmodell: ${jobProfile.type || 'k.A.'}
+${rawJobText ? `- Job-Volltext:\n${rawJobText}\n` : ''}
 ${weightInstructions}
+
+Score-Raster als Orientierung:
+- 0-20: klare Nicht-Passung
+- 21-40: schwache Passung
+- 41-60: teilweise passende Profile
+- 61-80: gute Passung
+- 81-100: sehr starke Passung
 
 Stellentitel: ${jobTitle}
 
@@ -239,8 +256,11 @@ ${candidates.map((c, idx) => `Kandidat ${idx + 1} (ID: ${c.id}):
 - Zertifikate: ${c.certificates || 'k.A.'}
 - Mobilität: ${c.mobility || 'k.A.'}`).join('\n\n')}
 
-${candidates.map((c, idx) => c.fullText ? `Zusätzlicher Kandidatenkontext ${idx + 1}:
-${c.fullText}` : '').filter(Boolean).join('\n\n')}
+${candidates.map((c, idx) => {
+  const sections = [];
+  if (c.fullText) sections.push(`Zusätzlicher Kandidatenkontext ${idx + 1}:\n${c.fullText}`);
+  return sections.join('\n\n');
+}).filter(Boolean).join('\n\n')}
 
 Antworte NUR mit einem validen JSON-Objekt in diesem Format (kein Text davor oder danach):
 {
@@ -330,7 +350,10 @@ async function runAiMatchingCore({ resolvedJob, candidates, weights }) {
   });
 
   const prompt = buildJobToCandidatesPrompt({
-    job: resolvedJob,
+    job: {
+      ...resolvedJob,
+      rawDescription: resolvedJob.rawDescription || resolvedJob.description || resolvedJob.jobDescription || '',
+    },
     candidates: enrichedCandidates,
     weights,
   });
@@ -708,6 +731,7 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
         id: jobRecord?.id || pair?.jobId || null,
         title: jobRecord?.title || pair?.jobTitle || 'Unbenannte Stelle',
         description: pair?.jobDescription || jobRecord?.description,
+        rawDescription: pair?.jobDescription || jobRecord?.description || '',
         skills: jobRecord?.skills,
         requirements: jobRecord?.requirements,
         location: jobRecord?.location,
@@ -737,6 +761,10 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
         certificates: candidateRecord?.certificates,
         mobility: candidateRecord?.mobility,
         has_skill: splitSkillValues(candidateRecord?.skills),
+        matchedSkills: Array.isArray(pair?.matchedSkills) ? pair.matchedSkills : [],
+        hardSkillScore: typeof pair?.hardSkillScore === 'number' ? pair.hardSkillScore : null,
+        softSkillScore: typeof pair?.softSkillScore === 'number' ? pair.softSkillScore : null,
+        score: typeof pair?.score === 'number' ? pair.score : null,
       };
 
       jobsByKey.get(jobKey).candidates.push(normalizedCandidate);
@@ -766,6 +794,7 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
             id: job.id,
             title: job.title,
             description: jobDescription,
+            rawDescription: jobDescription,
             requirements: job.requirements,
             skills: job.skills,
             location: job.location,

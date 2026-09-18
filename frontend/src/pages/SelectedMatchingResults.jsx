@@ -30,6 +30,7 @@ export default function SelectedMatchingResults() {
         const pairs = fromStatePairs || parsed.pairs || []
         const mode = location.state?.mode || parsed.mode || 'ai'
         const precomputed = location.state?.precomputed
+        const sourceJobDescription = location.state?.sourceJobDescription || parsed.sourceJobDescription || ''
 
         if (!Array.isArray(pairs) || pairs.length === 0) {
           setPayload(null)
@@ -84,6 +85,7 @@ export default function SelectedMatchingResults() {
           ...parsed,
           pairs,
           mode,
+          sourceJobDescription,
           response: { results: rows, failures, selectedCount: pairs.length, mode },
         }))
         setPayload({ results: rows, failures, selectedCount: pairs.length, mode })
@@ -132,7 +134,7 @@ export default function SelectedMatchingResults() {
       jobTitle: row.jobTitle,
       sourceJobId: row.sourceJobId || null,
       sourceJobTitle: row.sourceJobTitle || row.jobTitle,
-      jobDescription: row.jobDescription || '',
+      jobDescription: row.jobDescription || payload?.sourceJobDescription || '',
       candidateId: row.candidateId,
       candidateName: row.candidateName,
     }))
@@ -144,6 +146,7 @@ export default function SelectedMatchingResults() {
         mode: 'ai',
         sourceResultId: payload?.sourceResultId || null,
         sourceLabel: '3D-Matching',
+        sourceJobDescription: payload?.sourceJobDescription || '',
         response,
       }))
       navigate('/matching/results/selected', { state: { pairs: batchPayload, mode: 'ai', precomputed: response } })

@@ -4,7 +4,6 @@ import { useI18n } from '../I18nContext'
 import { Command, LogIn, AlertCircle } from 'lucide-react'
 
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
-const gitBranch = typeof __GIT_BRANCH__ !== 'undefined' ? __GIT_BRANCH__ : 'unknown'
 
 export default function Login() {
   const fieldIdPrefix = useId()
@@ -93,7 +92,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-[12px] text-gray-400 dark:text-gray-500 mt-6 tracking-wide">
-          Version {appVersion} · Branch {gitBranch}
+          Version {appVersion}
         </p>
       </div>
     </div>

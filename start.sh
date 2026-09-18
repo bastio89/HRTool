@@ -61,6 +61,15 @@ if grep -Eq 'bitte-durch|your_.*_password|change-me' .env; then
   exit 1
 fi
 
+if [ -z "${FRONTEND_APP_VERSION:-}" ]; then
+  git_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  git_count="$(git rev-list --count HEAD 2>/dev/null || true)"
+  if [ -n "$git_branch" ] && [ -n "$git_count" ]; then
+    FRONTEND_APP_VERSION="${git_branch//[^a-zA-Z0-9._-]/-}-${git_count}"
+    export FRONTEND_APP_VERSION
+  fi
+fi
+
 docker compose config --quiet
 
 services=(postgres backend pgadmin frontend neo4j graphrag)

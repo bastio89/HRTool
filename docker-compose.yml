@@ -72,6 +72,8 @@ services:
     image: ${FRONTEND_IMAGE:-hrtool-frontend:dev}
     build:
       context: ./frontend
+      args:
+        FRONTEND_APP_VERSION: ${FRONTEND_APP_VERSION:-}
     container_name: hrtool-frontend
     restart: unless-stopped
     ports:

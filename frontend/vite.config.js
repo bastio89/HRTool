@@ -12,23 +12,34 @@ function readGitBranch() {
   }
 }
 
-function readAppVersion() {
+function readGitBuildVersion() {
+  const injectedVersion = process.env.FRONTEND_APP_VERSION?.trim()
+  if (injectedVersion) {
+    return injectedVersion
+  }
+
   try {
-    const packageJson = JSON.parse(execSync('node -p "JSON.stringify(require(\'./package.json\'))"', { encoding: 'utf8' }))
-    return packageJson.version || '0.0.0'
+    const branch = readGitBranch().replace(/[^a-zA-Z0-9._-]+/g, '-')
+    const runNumber = execSync('git rev-list --count HEAD', { encoding: 'utf8' }).trim()
+    if (branch && runNumber) {
+      return `${branch}-${runNumber}`
+    }
+  } catch {
+  }
+
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim() || '0.0.0'
   } catch {
     return '0.0.0'
   }
 }
 
-const appVersion = readAppVersion()
-const gitBranch = readGitBranch()
+const appVersion = readGitBuildVersion()
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
-    __GIT_BRANCH__: JSON.stringify(gitBranch),
   },
   test: {
     environment: 'jsdom',

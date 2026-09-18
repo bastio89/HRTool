@@ -2,6 +2,9 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 
+ARG FRONTEND_APP_VERSION
+ENV FRONTEND_APP_VERSION=${FRONTEND_APP_VERSION}
+
 COPY package*.json ./
 RUN npm ci
 

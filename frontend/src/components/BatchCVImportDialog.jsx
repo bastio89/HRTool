@@ -214,7 +214,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
     <Modal
       open={open}
       onClose={onClose}
-      size="lg"
+      size="xl"
       icon={Users}
       title={t('batch_import.title')}
       subtitle={t('batch_import.subtitle')}
@@ -310,7 +310,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
                   </div>
                 )}
                 {item.status === STATUS.ERROR && (
-                  <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}</p>
+                  <p className="text-[12px] text-[#ff3b30] mt-0.5 whitespace-normal break-words leading-snug">{item.error}</p>
                 )}
                 {item.status === STATUS.PENDING && (
                   <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">

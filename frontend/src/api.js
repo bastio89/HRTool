@@ -568,6 +568,30 @@ export const aiLogsApi = {
   getBiasAlerts: () => request('/ai-logs/bias-alerts'),
 };
 
+export const serverLogsApi = {
+  getAll: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.limit) q.set('limit', params.limit);
+    if (params.level) q.set('level', params.level);
+    if (params.search) q.set('search', params.search);
+    const qs = q.toString();
+    return request(`/server-logs${qs ? `?${qs}` : ''}`);
+  },
+  download: async () => {
+    const response = await fetch(`${API_BASE}/server-logs/download`, {
+      headers: { ...authHeaders() },
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }));
+      throw new Error(error.error || error.details || `HTTP ${response.status}`);
+    }
+    return {
+      blob: await response.blob(),
+      filename: parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'server-logs.log',
+    };
+  },
+};
+
 // Compliance Actions API
 export const complianceApi = {
   getActions: (params = {}) => {

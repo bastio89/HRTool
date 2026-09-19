@@ -653,7 +653,7 @@ class LLMService:
                     "Create a SEPARATE work_history entry for EVERY employer/period mentioned "
                     "in the CV, sorted with the most recent role first. "
                     "education_history (array of objects with institution, degree, field_of_study, "
-                    "from_date (YYYY-MM or null), to_date (YYYY-MM or null), description|null). "
+                    "from_date (YYYY-MM or null), to_date (YYYY-MM or null, description|null). "
                     "Create a SEPARATE education_history entry for EVERY degree/institution mentioned, "
                     "sorted with the most recent first. "
                     "Keep every description to at most 150 characters, a short summary of the role or "
@@ -680,58 +680,30 @@ class LLMService:
                 use_reasoning=False,
             )
         except Exception as exc:
-            logger.warning("parse_candidate_cv: full parse failed, trying lightweight fallback: %s", exc)
-            try:
-                parsed = await self._generate_json(
-                    system_prompt=(
-                        "Extract core candidate data from CV text. "
-                        "Return JSON with keys: name, location, experience_years, skills, preferred_roles. "
-                        "Name must be the person's full name, not a role or generic label."
-                    ),
-                    user_content=raw_text,
-                    num_predict=500,
-                    required_keys=("name",),
-                    call_context="candidate-parser",
-                    preferred_keys=("name", "location", "experience_years", "skills", "preferred_roles"),
-                    min_preferred_key_matches=0,
-                    use_reasoning=False,
-                )
-
-                parsed = {
-                    "name": parsed.get("name"),
-                    "location": parsed.get("location"),
-                    "experience_years": parsed.get("experience_years"),
-                    "salary_expectation": None,
-                    "skills": parsed.get("skills") if isinstance(parsed.get("skills"), list) else [],
-                    "languages": [],
-                    "educations": [],
-                    "industries": [],
-                    "preferred_roles": (
-                        parsed.get("preferred_roles") if isinstance(parsed.get("preferred_roles"), list) else []
-                    ),
-                }
-            except Exception as fallback_exc:
-                logger.warning(
-                    "parse_candidate_cv: lightweight fallback also failed, using text-derived minimal profile: %s",
-                    fallback_exc,
-                )
-                parsing_method = "text_heuristik"
-                parsed = {
-                    "name": self._infer_candidate_name_from_text(raw_text) or "Unknown Candidate",
-                    "location": None,
-                    "experience_years": None,
-                    "salary_expectation": None,
-                    "skills": [],
-                    "languages": [],
-                    "educations": [],
-                    "industries": [],
-                    "preferred_roles": [],
-                }
+            logger.exception(
+                "parse_candidate_cv primary LLM extraction failed provider=%s base_url=%s model=%s raw_chars=%d",
+                self.provider,
+                self.base_url,
+                self.chat_model,
+                len(raw_text),
+            )
+            raise RuntimeError(
+                f"Candidate CV parsing failed during primary LLM extraction ({type(exc).__name__}: {exc})"
+            ) from exc
 
         if not isinstance(parsed, dict):
-            parsing_method = "text_heuristik"
-            parsed = {"name": self._infer_candidate_name_from_text(raw_text) or "Unknown Candidate"}
-        elif not parsed.get("name"):
+            logger.error(
+                "parse_candidate_cv returned non-object payload provider=%s base_url=%s model=%s raw_chars=%d result_type=%s",
+                self.provider,
+                self.base_url,
+                self.chat_model,
+                len(raw_text),
+                type(parsed).__name__,
+            )
+            raise RuntimeError(
+                f"Candidate CV parsing failed: expected JSON object from LLM, got {type(parsed).__name__}"
+            )
+        if not parsed.get("name"):
             parsed["name"] = self._infer_candidate_name_from_text(raw_text) or "Unknown Candidate"
         parsed["skills"] = self._normalize_candidate_skills(parsed.get("skills"))
         if not parsed["skills"]:
@@ -743,7 +715,20 @@ class LLMService:
         if not isinstance(parsed.get("education_history"), list):
             parsed["education_history"] = []
         parsed["parsing_method"] = parsing_method
-        result = CandidateProfileExtraction.model_validate(parsed)
+        try:
+            result = CandidateProfileExtraction.model_validate(parsed)
+        except Exception as exc:
+            logger.exception(
+                "parse_candidate_cv validation failed provider=%s base_url=%s model=%s raw_chars=%d parsed_keys=%s",
+                self.provider,
+                self.base_url,
+                self.chat_model,
+                len(raw_text),
+                sorted(parsed.keys()),
+            )
+            raise RuntimeError(
+                f"Candidate CV parsing failed during validation ({type(exc).__name__}: {exc})"
+            ) from exc
         if self._is_unreliable_candidate_name(result.name):
             recovered_name: str | None = None
             try:

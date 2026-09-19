@@ -33,7 +33,7 @@ async def test_parse_candidate_cv_marks_parsing_method_as_llm_on_success() -> No
 
 
 @pytest.mark.anyio
-async def test_parse_candidate_cv_marks_parsing_method_as_text_heuristik_when_llm_fails() -> None:
+async def test_parse_candidate_cv_raises_with_context_when_llm_fails() -> None:
     service = LLMService(
         base_url="http://fake-ai",
         chat_model="test-model",
@@ -47,8 +47,7 @@ async def test_parse_candidate_cv_marks_parsing_method_as_text_heuristik_when_ll
     service._generate_json = failing_generate_json  # type: ignore[method-assign]
 
     try:
-        profile = await service.parse_candidate_cv("Max Mustermann\nBerlin, Germany")
+        with pytest.raises(RuntimeError, match="Candidate CV parsing failed during primary LLM extraction"):
+            await service.parse_candidate_cv("Max Mustermann\nBerlin, Germany")
     finally:
         await service.close()
-
-    assert profile.parsing_method == "text_heuristik"

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Bot, Shield, Eye, Scale, UserCheck, AlertTriangle, CheckCircle, XCircle, Clock, ChevronRight, FileText, Info, CreditCard, Zap, Lock, Server, AlertOctagon, TestTubes, Lightbulb, Bell, Play, Plus, ExternalLink, Pencil, Trash2, ChevronDown, ChevronUp, ListTodo, CircleDot, CircleCheck, LayoutDashboard, Download, HelpCircle } from 'lucide-react'
 import { Card, LoadingSpinner, PageContainer } from '../components/UI'
-import { aiLogsApi, complianceApi } from '../api'
+import { aiLogsApi, complianceApi, serverLogsApi } from '../api'
 import { useI18n } from '../I18nContext'
 import useRevealOnOpen from '../hooks/useRevealOnOpen'
 import { localeTag } from '../utils/format'
@@ -17,6 +17,7 @@ const GROUPS = [
       { id: 'riskreg', labelKey: 'ki.tab_risk_register', icon: AlertOctagon },
       { id: 'modelcard', labelKey: 'ki.tab_modelcard', icon: CreditCard },
       { id: 'logs', labelKey: 'ki.tab_logs', icon: FileText },
+      { id: 'serverlogs', labelKey: 'ki.tab_server_logs', icon: Server },
     ],
   },
   {
@@ -184,6 +185,7 @@ export default function KITransparenz() {
       {group === 'audit' && sub === 'riskreg' && <RiskRegisterTab t={t} />}
       {group === 'audit' && sub === 'modelcard' && <ModelCardTab t={t} />}
       {group === 'audit' && sub === 'logs' && <LogsTab t={t} />}
+      {group === 'audit' && sub === 'serverlogs' && <ServerLogsTab t={t} />}
       {group === 'fairness' && sub === 'bias' && (
         <div className="space-y-8">
           <BiasTab t={t} />
@@ -851,6 +853,114 @@ function LogsTab({ t }) {
             </div>
           )}
         </>
+      )}
+    </div>
+  )
+}
+
+function ServerLogsTab({ t }) {
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
+  const [filters, setFilters] = useState({ level: '', search: '' })
+  const [query, setQuery] = useState({ level: '', search: '' })
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await serverLogsApi.getAll({ limit: 250, ...query })
+      setLogs(res.data || [])
+    } finally {
+      setLoading(false)
+    }
+  }, [query])
+
+  useEffect(() => { loadLogs() }, [loadLogs])
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const result = await serverLogsApi.download()
+      const url = URL.createObjectURL(result.blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = result.filename || 'server-logs.log'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const applyFilters = (event) => {
+    event.preventDefault()
+    setQuery(filters)
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-[22px] sm:text-[26px] font-semibold text-black dark:text-white">{t('ki.server_logs_title')}</h3>
+            <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('ki.server_logs_subtitle')}</p>
+          </div>
+          <button onClick={handleExport} disabled={exporting} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0071e3] text-white text-[14px] font-semibold hover:bg-[#005bb5] transition disabled:opacity-60 cursor-pointer">
+            <Download className="w-4 h-4" />
+            {exporting ? t('audit.exporting') : t('ki.server_logs_download')}
+          </button>
+        </div>
+
+        <form onSubmit={applyFilters} className="mt-5 flex flex-wrap items-center gap-3">
+          <select
+            value={filters.level}
+            onChange={(e) => setFilters((current) => ({ ...current, level: e.target.value }))}
+            className="px-4 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700/60 text-[14px] text-black dark:text-white cursor-pointer"
+          >
+            <option value="">{t('ki.server_logs_all_levels')}</option>
+            <option value="ERROR">ERROR</option>
+            <option value="WARN">WARN</option>
+            <option value="INFO">INFO</option>
+            <option value="DEBUG">DEBUG</option>
+          </select>
+          <input
+            value={filters.search}
+            onChange={(e) => setFilters((current) => ({ ...current, search: e.target.value }))}
+            placeholder={t('ki.server_logs_search')}
+            className="min-w-[280px] flex-1 px-4 py-2.5 rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-gray-200/60 dark:border-gray-700/60 text-[14px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-[#0071e3]/15 focus:border-[#0071e3]/30 transition"
+          />
+          <button type="submit" className="px-4 py-2.5 rounded-xl bg-black dark:bg-white text-white dark:text-black text-[14px] font-semibold">
+            {t('audit.filter')}
+          </button>
+        </form>
+      </Card>
+
+      {loading ? (
+        <LoadingSpinner text={t('ki.server_logs_loading')} />
+      ) : logs.length === 0 ? (
+        <Card className="p-10 text-center text-gray-500 dark:text-gray-400">
+          {t('ki.server_logs_empty')}
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {logs.map((entry, index) => (
+            <Card key={`${entry.timestamp || 'log'}-${index}`} className="p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400">
+                    <span className={`px-2 py-1 rounded-full text-[11px] font-semibold ${entry.level === 'ERROR' ? 'bg-[#ff3b30]/10 text-[#c62828]' : entry.level === 'WARN' ? 'bg-[#ff9f0a]/10 text-[#b26a00]' : entry.level === 'DEBUG' ? 'bg-[#0071e3]/10 text-[#1565c0]' : 'bg-[#34c759]/10 text-[#1f9d55]'}`}>
+                      {entry.level}
+                    </span>
+                    <span>{entry.timestamp || t('ki.server_logs_no_timestamp')}</span>
+                  </div>
+                  <pre className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-black dark:text-white font-mono m-0">{entry.message}</pre>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   )

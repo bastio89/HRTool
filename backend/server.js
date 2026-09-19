@@ -27,8 +27,12 @@ const complianceActionsRouter = require('./src/routes/compliance-actions');
 const searchRouter = require('./src/routes/search');
 const addJobRouter = require('./src/routes/add-job');
 const linkedinRouter = require('./src/routes/linkedin');
+const serverLogsRouter = require('./src/routes/server-logs');
 const authMiddleware = require('./src/middleware/auth');
+const { installServerFileLogger } = require('./src/serverLogger');
 const db = require('./src/database');
+
+installServerFileLogger();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -87,6 +91,7 @@ app.use('/api/compliance-actions', complianceActionsRouter);
 app.use('/api/search', searchRouter);
 app.use('/api/add/job', addJobRouter);
 app.use('/api/linkedin', linkedinRouter);
+app.use('/api/server-logs', serverLogsRouter);
 
 /**
  * @swagger

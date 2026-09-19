@@ -112,7 +112,7 @@ class CandidateProfileExtraction(BaseModel):
     current_position: str | None = None
     nationality: str | None = None
     gender: str | None = None
-    # How the profile was extracted: "llm" (model succeeded) or "text_heuristik" (regex fallback).
+    # How the profile was extracted, for example "llm" or other pipeline-specific labels.
     parsing_method: str | None = None
     skills: list[CandidateSkillExtraction] = Field(default_factory=list)
     languages: list[LanguageExtraction] = Field(default_factory=list)

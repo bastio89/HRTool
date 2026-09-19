@@ -221,6 +221,64 @@ describe('settings AI llm-test route', () => {
       embeddingModel: 'nomic-embed-text',
       dims: 3,
     }));
+    expect(response.body.warning).toContain('wurde für Ollama auf nomic-embed-text abgebildet');
+  });
+
+  test('returns a warning when the embedding test maps to a different local model', async () => {
+    jest.doMock('fs', () => ({
+      existsSync: (path) => path === '/.dockerenv',
+    }));
+    jest.doMock('../database', () => ({
+      prepare: () => ({ get: () => undefined, all: () => [], run: () => ({}) }),
+    }));
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    global.fetch = jest.fn(async (url, options) => {
+      const requestUrl = String(url);
+      if (requestUrl === 'http://host.docker.internal:11434/api/tags') {
+        return {
+          ok: true,
+          json: async () => ({
+            models: [{ name: 'nomic-embed-text' }],
+          }),
+        };
+      }
+
+      expect(requestUrl).toBe('http://host.docker.internal:11434/api/embeddings');
+      expect(options?.method).toBe('POST');
+      const payload = JSON.parse(options.body);
+      expect(payload.model).toBe('nomic-embed-text');
+      return {
+        ok: true,
+        json: async () => ({ embedding: [1, 2, 3] }),
+      };
+    });
+
+    const settingsRouter = require('../routes/settings');
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.user = { role: 'admin' };
+      next();
+    });
+    app.use('/api/settings', settingsRouter);
+
+    const response = await request(app)
+      .post('/api/settings/ai/embedding-test')
+      .send({
+        baseUrl: 'http://localhost:11434',
+        provider: 'ollama',
+        embeddingModel: 'openai/text-embedding-3-small',
+        sampleText: 'Kubernetes',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({
+      provider: 'ollama',
+      embeddingModel: 'nomic-embed-text',
+      requestedEmbeddingModel: 'openai/text-embedding-3-small',
+    }));
+    expect(response.body.warning).toContain('wurde für Ollama auf nomic-embed-text abgebildet');
   });
 
   test('falls back to embedding suggestions when the host advertises no embedding models', async () => {

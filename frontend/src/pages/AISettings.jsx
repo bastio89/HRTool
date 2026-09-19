@@ -143,11 +143,9 @@ export default function AISettings() {
       if (names.length > 0) {
         if (activeEmbedding && names.includes(activeEmbedding)) {
           setManualEmbeddingModel(false)
-          setEmbeddingModel(activeEmbedding)
         } else {
           // Keep a custom embedding model value even if the host does not advertise it.
           setManualEmbeddingModel(true)
-          if (activeEmbedding) setEmbeddingModel(activeEmbedding)
         }
       } else {
         setManualEmbeddingModel(true)
@@ -191,9 +189,6 @@ export default function AISettings() {
       const testProvider = resolveTestProvider(baseUrl, provider)
       const res = await settingsApi.testEmbeddingModel(baseUrl, apiKey, testProvider, embeddingModel, 'Kubernetes')
       setEmbeddingTestResult(res)
-      if (res.reachable) {
-        await loadEmbeddingModels(baseUrl, embeddingModel, testProvider)
-      }
     } catch (err) {
       setEmbeddingTestResult({ reachable: false, error: err.message })
     } finally {
@@ -276,7 +271,9 @@ export default function AISettings() {
 
   const embeddingStatus = embeddingTesting
     ? { tone: 'checking', label: 'Test läuft' }
-    : embeddingTestResult?.reachable
+    : embeddingTestResult?.warning
+      ? { tone: 'warning', label: 'Hinweis' }
+      : embeddingTestResult?.reachable
       ? { tone: 'success', label: `OK${embeddingTestResult?.dims ? ` · ${embeddingTestResult.dims} Dim.` : ''}` }
       : embeddingTestResult
         ? { tone: 'error', label: embeddingTestResult.error || 'Fehler' }
@@ -293,6 +290,7 @@ export default function AISettings() {
   const embeddingStatusClasses = {
     checking: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-300 dark:border-gray-700',
     success: 'bg-[#34c759]/10 text-[#1f9d55] border-[#34c759]/20 dark:text-[#7dffaf] dark:border-[#34c759]/25',
+    warning: 'bg-[#ff9f0a]/10 text-[#b26a00] border-[#ff9f0a]/20 dark:text-[#ffcc7a] dark:border-[#ff9f0a]/25',
     error: 'bg-[#ff3b30]/10 text-[#b91c1c] border-[#ff3b30]/20 dark:text-[#ff8a80] dark:border-[#ff3b30]/25',
     idle: 'bg-[#f5f5f7] text-gray-500 border-gray-200 dark:bg-[#2c2c2e] dark:text-gray-400 dark:border-gray-700',
   }
@@ -626,13 +624,18 @@ export default function AISettings() {
             Testen
           </Button>
           <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[12px] font-semibold ${embeddingStatusClasses[embeddingStatus.tone]}`}>
-            <span className={`w-2.5 h-2.5 rounded-full ${embeddingStatus.tone === 'success' ? 'bg-[#34c759]' : embeddingStatus.tone === 'error' ? 'bg-[#ff3b30]' : embeddingStatus.tone === 'checking' ? 'bg-[#8e8e93] animate-pulse' : 'bg-[#8e8e93]'}`} />
+            <span className={`w-2.5 h-2.5 rounded-full ${embeddingStatus.tone === 'success' ? 'bg-[#34c759]' : embeddingStatus.tone === 'warning' ? 'bg-[#ff9f0a]' : embeddingStatus.tone === 'error' ? 'bg-[#ff3b30]' : embeddingStatus.tone === 'checking' ? 'bg-[#8e8e93] animate-pulse' : 'bg-[#8e8e93]'}`} />
             {embeddingStatus.label}
           </span>
         </div>
         <p className="text-[13px] text-gray-500 dark:text-gray-400 ml-2">
           {t('ai_settings.current_source')}: <span className="font-medium">{sourceLabel(source.embeddingModel)}</span>
         </p>
+        {embeddingTestResult?.warning && (
+          <p className="text-[13px] text-[#b26a00] dark:text-[#ffcc7a] ml-2 leading-relaxed">
+            {embeddingTestResult.warning}
+          </p>
+        )}
       </Card>
 
       {/* Save bar */}

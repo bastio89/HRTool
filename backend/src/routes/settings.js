@@ -250,14 +250,17 @@ router.put('/ai/config', (req, res) => {
       return res.status(400).json({ error: 'Ungültige Host-URL' });
     }
 
+    const normalizedEmbeddingModel = typeof embeddingModel === 'string' ? embeddingModel.trim() : '';
     const upsert = db.prepare(`INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))`);
-    upsert.run('ai_base_url', trimmedUrl);
-    upsert.run('ai_model', model.trim());
-    if (typeof embeddingModel === 'string' && embeddingModel.trim()) upsert.run('ai_embedding_model', embeddingModel.trim());
-    upsert.run('ai_provider', normalizedProvider);
-    upsert.run('ai_reasoning_level', normalizedReasoningLevel);
-    if (typeof apiKey === 'string' && apiKey.trim()) upsert.run('ai_api_key', apiKey.trim());
-    if (typeof loggingEnabled === 'boolean') upsert.run('ai_log_llm_calls', loggingEnabled ? '1' : '0');
+    db.transaction(() => {
+      upsert.run('ai_base_url', trimmedUrl);
+      upsert.run('ai_model', model.trim());
+      if (normalizedEmbeddingModel) upsert.run('ai_embedding_model', normalizedEmbeddingModel);
+      upsert.run('ai_provider', normalizedProvider);
+      upsert.run('ai_reasoning_level', normalizedReasoningLevel);
+      if (typeof apiKey === 'string' && apiKey.trim()) upsert.run('ai_api_key', apiKey.trim());
+      if (typeof loggingEnabled === 'boolean') upsert.run('ai_log_llm_calls', loggingEnabled ? '1' : '0');
+    })();
 
     // Invalidate cached provider detection for the old and new URLs
     invalidateProviderCache();
@@ -275,7 +278,7 @@ router.put('/ai/config', (req, res) => {
       success: true,
       baseUrl: trimmedUrl,
       model: model.trim(),
-      embeddingModel: updatedConfig.embeddingModel,
+      embeddingModel: normalizedEmbeddingModel || updatedConfig.embeddingModel,
       provider: normalizedProvider,
       apiKeyConfigured: Boolean(updatedConfig.apiKey),
       loggingEnabled: Boolean(updatedConfig.loggingEnabled),
@@ -507,9 +510,14 @@ router.post('/ai/embedding-test', async (req, res) => {
     const timeout = setTimeout(() => ctrl.abort(), 15000);
     try {
       let resolvedEmbeddingModel = embeddingModel;
+      let warning = null;
       if (provider === 'ollama' && looksLikeOpenAiEmbeddingModel(resolvedEmbeddingModel)) {
         const localModels = filterModelsByKind(await fetchAiModels(runtimeBaseUrl, provider, 5000, requestApiKey), 'embedding');
-        resolvedEmbeddingModel = localModels.find((m) => m.name)?.name || resolvedEmbeddingModel;
+        const suggestedModel = localModels.find((m) => m.name)?.name || resolvedEmbeddingModel;
+        if (suggestedModel !== resolvedEmbeddingModel) {
+          warning = `Das ausgewählte Modell ${resolvedEmbeddingModel} wurde für Ollama auf ${suggestedModel} abgebildet.`;
+        }
+        resolvedEmbeddingModel = suggestedModel;
       }
 
       let response;
@@ -569,10 +577,12 @@ router.post('/ai/embedding-test', async (req, res) => {
         reachable: true,
         provider,
         baseUrl,
+        requestedEmbeddingModel: embeddingModel,
         embeddingModel: resolvedEmbeddingModel,
         sampleText,
         latencyMs: Date.now() - started,
         dims: Array.isArray(embedding) ? embedding.length : 0,
+        ...(warning ? { warning } : {}),
       });
     } finally {
       clearTimeout(timeout);

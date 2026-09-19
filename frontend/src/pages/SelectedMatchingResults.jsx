@@ -119,7 +119,13 @@ export default function SelectedMatchingResults() {
 
   const toggleRowSelection = (row) => {
     const key = getRowKey(row)
+    const scrollContainer = document.querySelector('[data-app-scroll-container]')
+    const scrollTop = scrollContainer?.scrollTop ?? window.scrollY
     setSelectedRowKeys((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))
+    requestAnimationFrame(() => {
+      if (scrollContainer) scrollContainer.scrollTop = scrollTop
+      else window.scrollTo({ top: scrollTop, behavior: 'instant' })
+    })
   }
 
   const toggleAllRows = () => {
@@ -252,7 +258,7 @@ export default function SelectedMatchingResults() {
 
   if (!payload) {
     return (
-      <PageContainer width="content">
+      <PageContainer width="content" className="flex flex-col flex-1 min-h-[calc(100dvh-11rem)] pb-12">
         <Card className="p-10 text-center">
           {error ? (
             <>
@@ -281,7 +287,7 @@ export default function SelectedMatchingResults() {
   }
 
   return (
-    <PageContainer width="content">
+    <PageContainer width="content" className="flex flex-col flex-1 min-h-[calc(100dvh-11rem)] pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
           <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -322,12 +328,12 @@ export default function SelectedMatchingResults() {
         ))}
       </div>
 
-      <Card className="p-8 sm:p-10 mb-12">
+      <Card className="p-8 sm:p-10 mb-12 min-h-[560px] flex flex-col">
         <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('selected_results.result_list')}</h2>
         {results.length === 0 && failures.length === 0 ? (
           <p className="text-[15px] text-gray-500 dark:text-gray-400">{t('selected_results.none')}</p>
         ) : (
-          <>
+          <div className="flex flex-col flex-1 min-h-0 h-full">
             {isVectorMode && (
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <button
@@ -349,7 +355,7 @@ export default function SelectedMatchingResults() {
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-4 pr-1">
             {results.map((result, index) => {
               const hardScore = Number(result.hardSkillScore ?? 0)
               const softScore = Number(result.softSkillScore ?? 0)
@@ -361,15 +367,16 @@ export default function SelectedMatchingResults() {
                 <div key={result.id || `${result.jobId}-${result.candidateId}-${index}`} className="rounded-[22px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-5 sm:p-6">
                   <div className="grid grid-cols-1 lg:grid-cols-[56px_64px_1fr_1fr_180px] gap-4 items-center">
                     <div className="flex items-center justify-center">
-                      <label className="w-10 h-10 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 flex items-center justify-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleRowSelection(result)}
-                          className="sr-only"
-                        />
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
+                        aria-label={`${isSelected ? 'Auswahl aufheben' : 'Auswählen'}: ${result.candidateName || ''}`}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => toggleRowSelection(result)}
+                        className="w-10 h-10 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 flex items-center justify-center cursor-pointer"
+                      >
                         {isSelected ? <CheckSquare className="h-5 w-5 text-[#0071e3]" /> : <Square className="h-5 w-5 text-gray-400" />}
-                      </label>
+                      </button>
                     </div>
                     <div className="flex items-center justify-center">
                       <span className="text-[18px] font-semibold text-gray-500 dark:text-gray-400">#{index + 1}</span>
@@ -478,7 +485,7 @@ export default function SelectedMatchingResults() {
               </div>
             )}
           </div>
-          </>
+          </div>
         )}
       </Card>
     </PageContainer>

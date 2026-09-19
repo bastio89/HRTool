@@ -162,7 +162,7 @@ export default function JobToCandidates() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2">
-          <Card className="p-12 h-full">
+          <Card className="p-12 min-h-[calc(100dvh-16rem)] flex flex-col">
             <div className="flex items-center gap-5 mb-10">
               <div className="w-14 h-14 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center">
                 <FileText className="w-6 h-6 text-black dark:text-white" />
@@ -273,8 +273,8 @@ export default function JobToCandidates() {
           </Card>
         </div>
 
-        <div className="space-y-8">
-          <Card className="p-10">
+        <div className="space-y-8 lg:sticky lg:top-6 self-start">
+          <Card className="p-10 min-h-[calc(100dvh-16rem)] flex flex-col">
             <div className="flex items-center gap-5 mb-8">
               <div className="w-14 h-14 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center">
                 <Users className="w-6 h-6 text-black dark:text-white" />

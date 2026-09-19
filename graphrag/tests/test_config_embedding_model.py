@@ -49,3 +49,33 @@ def test_initial_embedding_model_reads_environment(monkeypatch):
     config = _reload_config_module()
 
     assert config.settings.initial_embedding_model == "nomic-embed-text"
+
+
+def test_resolved_provider_keeps_ollama_for_local_ollama_host(monkeypatch):
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
+    monkeypatch.setenv("NEO4J_USER", "neo4j")
+    monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
+
+    config = _reload_config_module()
+    monkeypatch.setattr(
+        config.Settings,
+        "_backend_setting",
+        lambda self, key: "openai" if key == "ai_provider" else "http://localhost:11434" if key == "ai_base_url" else None,
+    )
+
+    assert config.settings.resolved_provider == "ollama"
+
+
+def test_resolved_provider_keeps_openrouter_for_non_local_openai_hosts(monkeypatch):
+    monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
+    monkeypatch.setenv("NEO4J_USER", "neo4j")
+    monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
+
+    config = _reload_config_module()
+    monkeypatch.setattr(
+        config.Settings,
+        "_backend_setting",
+        lambda self, key: "openai" if key == "ai_provider" else "https://openrouter.ai/api/v1" if key == "ai_base_url" else None,
+    )
+
+    assert config.settings.resolved_provider == "openrouter"

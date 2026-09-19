@@ -397,7 +397,7 @@ export default function Dashboard() {
                 />
               </div>
 
-              <aside className="xl:sticky xl:top-6 rounded-[28px] border border-gray-100/80 dark:border-gray-700/70 bg-white dark:bg-[#1c1c1e] p-5 sm:p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)]">
+              <aside className="xl:sticky xl:top-6 rounded-[28px] border border-gray-100/80 dark:border-gray-700/70 bg-white dark:bg-[#1c1c1e] p-5 sm:p-6 shadow-[0_10px_40px_rgba(0,0,0,0.04)] min-h-[min(60vh,560px)] flex flex-col">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-[18px] font-semibold text-black dark:text-white">{t('dashboard.selection_title')}</h3>
@@ -420,7 +420,7 @@ export default function Dashboard() {
                   </p>
                 )}
 
-                <div className="mt-5 space-y-5 max-h-[min(60vh,560px)] overflow-y-auto pr-1">
+                <div className="mt-5 space-y-5 max-h-[min(60vh,560px)] overflow-y-auto pr-1 flex-1 min-h-0">
                   <SelectionSection
                     title={t('dashboard.selected_jobs')}
                     count={selectedJobs.length}

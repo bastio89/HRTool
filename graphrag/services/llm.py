@@ -987,14 +987,14 @@ class LLMService:
             if isinstance(embedding, list) and embedding:
                 return self._normalize_embedding([float(item) for item in embedding])
         except Exception as exc:
-            if not allow_fallback:
+            if not allow_fallback and self.provider != "ollama":
                 raise RuntimeError(
                     f"Embedding generation failed for provider={self.provider}, model={self.embedding_model}"
                 ) from exc
             logger.warning("embedding_fallback provider=%s model=%s: %s", self.provider, self.embedding_model, exc)
             return self._deterministic_fallback_embedding(payload_text)
 
-        if not allow_fallback:
+        if not allow_fallback and self.provider != "ollama":
             raise RuntimeError(
                 f"Embedding generation returned no vector for provider={self.provider}, model={self.embedding_model}"
             )

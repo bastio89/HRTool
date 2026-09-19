@@ -10,6 +10,17 @@ DEFAULT_AI_PROVIDER = "ollama"
 DEFAULT_AI_REASONING_LEVEL = "none"
 
 
+def _is_known_ollama_host(base_url: str) -> bool:
+    try:
+        parsed = urlsplit(base_url)
+    except ValueError:
+        return False
+
+    return parsed.hostname in {"localhost", "127.0.0.1", "host.docker.internal"} and (
+        parsed.port in {11434, None}
+    )
+
+
 class Settings(BaseSettings):
     neo4j_uri: str
     neo4j_user: str = "neo4j"
@@ -55,7 +66,12 @@ class Settings(BaseSettings):
     @property
     def resolved_provider(self) -> str:
         provider = self._backend_setting("ai_provider") or DEFAULT_AI_PROVIDER
-        return "openrouter" if provider.strip().lower() == "openai" else provider.strip().lower()
+        normalized_provider = provider.strip().lower()
+        if normalized_provider == "openai":
+            if _is_known_ollama_host(self.resolved_ai_base_url):
+                return "ollama"
+            return "openrouter"
+        return normalized_provider
 
     @property
     def resolved_api_key(self) -> str | None:

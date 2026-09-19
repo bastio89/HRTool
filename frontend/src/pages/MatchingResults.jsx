@@ -221,7 +221,7 @@ export default function MatchingResults() {
     }
 
     return (
-      <PageContainer width="content">
+      <PageContainer width="content" className="flex flex-col flex-1 min-h-[calc(100dvh-11rem)] pb-12">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
           <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
             <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -261,7 +261,7 @@ export default function MatchingResults() {
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">{bestScoreMatrix}%</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_best_match')}</p></Card>
         </div>
 
-        <Card className="p-8 sm:p-10 mb-12">
+        <Card className="p-8 sm:p-10 mb-12 min-h-[calc(100dvh-24rem)] flex flex-col">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
             <div>
               <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('matching.best_pairs_overall')}</h2>
@@ -290,14 +290,19 @@ export default function MatchingResults() {
                   key={`${row.jobId}-${row.candidateId}-${idx}`}
                   className={`w-full grid grid-cols-1 lg:grid-cols-[56px_64px_1fr_1fr_180px] gap-4 items-center p-5 rounded-[20px] transition-colors text-left ${isSelected ? 'bg-[#0071e3]/5 dark:bg-[#0071e3]/10 ring-1 ring-[#0071e3]/20' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c]'}`}
                 >
-                  <label className="flex items-center justify-center cursor-pointer" onClick={(event) => event.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => togglePairSelection(row)}
-                      className="h-5 w-5 rounded border-gray-300 text-[#0071e3] focus:ring-[#0071e3]"
-                    />
-                  </label>
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    aria-label={`${isSelected ? 'Auswahl aufheben' : 'Auswählen'}: ${row.candidateName || ''}`}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      togglePairSelection(row)
+                    }}
+                    className="flex items-center justify-center cursor-pointer"
+                  >
+                    {isSelected ? <CheckSquare className="h-5 w-5 text-[#0071e3]" /> : <Square className="h-5 w-5 text-gray-400" />}
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleMatchingRow(row)}
@@ -349,7 +354,7 @@ export default function MatchingResults() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           <Card className="p-8 sm:p-10">
             <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('matching.ranking_per_job')}</h2>
-            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2">
+            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2 flex-1">
               {(matrixData.jobsRanked || []).map((job) => (
                 <div key={job.jobId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
                   <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{job.jobTitle}</h3>
@@ -382,7 +387,7 @@ export default function MatchingResults() {
 
           <Card className="p-8 sm:p-10">
             <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('matching.ranking_per_candidate')}</h2>
-            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2">
+            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2 flex-1">
               {(matrixData.candidatesRanked || []).map((candidate) => (
                 <div key={candidate.candidateId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
                   <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{candidate.candidateName}</h3>
@@ -453,7 +458,7 @@ export default function MatchingResults() {
   }
 
   return (
-    <PageContainer width="content">
+    <PageContainer width="content" className="flex flex-col flex-1 min-h-[calc(100dvh-11rem)] pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
           <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">

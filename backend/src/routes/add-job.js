@@ -13,7 +13,7 @@ router.post('/', express.text({ type: ['text/plain', 'text/*'], limit: '2mb' }),
   try {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/add/job/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', ...graphRagAuthHeaders() },
+      headers: { 'Content-Type': 'text/plain', ...graphRagAuthHeaders(req) },
       body: rawText,
     });
 

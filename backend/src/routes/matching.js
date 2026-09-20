@@ -253,7 +253,7 @@ async function callGraphRagMatching(endpoint, payload) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   const response = await fetch(`${baseUrl.replace(/\/+$/, '')}${endpoint}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders() },
+    headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
     body: JSON.stringify(payload),
   });
 

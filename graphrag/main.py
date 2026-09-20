@@ -111,6 +111,7 @@ async def lifespan(_: FastAPI):
 	await postgres_store.seed_default_prompts()
 	model_config_service.invalidate()
 	prompt_service.invalidate()
+	await postgres_store.ensure_setting_if_blank("plugin.billing.enabled", "1")
 	await postgres_store.ensure_setting_if_blank("plugin.linkedin.enabled", "1" if settings.linkedin_plugin_enabled else "0")
 	await postgres_store.ensure_setting_if_blank("plugin.jobs_ch.enabled", "1" if settings.jobs_ch_plugin_enabled else "0")
 	yield

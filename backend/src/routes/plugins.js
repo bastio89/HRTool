@@ -62,6 +62,9 @@ async function forwardToGraphRag(req, res, targetPath, enabled, disabledMessage)
       ...(req.headers.accept ? { Accept: req.headers.accept } : {}),
       ...(req.headers['content-type'] ? { 'Content-Type': req.headers['content-type'] } : {}),
       ...(GRAPHRAG_API_KEY ? { 'x-api-key': GRAPHRAG_API_KEY } : {}),
+      ...(typeof req.headers.authorization === 'string' && req.headers.authorization.trim()
+        ? { Authorization: req.headers.authorization.trim() }
+        : {}),
     },
     body: req.method === 'GET' || req.method === 'HEAD' ? undefined : JSON.stringify(req.body ?? {}),
   })

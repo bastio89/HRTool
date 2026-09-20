@@ -419,7 +419,7 @@ async function ingestIntoGraphRag(rawText, persist) {
     const requestPayload = { raw_text: rawText };
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/candidate?persist=${persist ? '1' : '0'}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders() },
+      headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
       body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });

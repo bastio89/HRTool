@@ -219,6 +219,41 @@ function summarizeEducation(profile) {
   return null;
 }
 
+function findDuplicateCandidate(row) {
+  if (row.email && String(row.email).trim()) {
+    const existing = db.prepare(
+      "SELECT id FROM candidates WHERE LOWER(COALESCE(email, '')) = LOWER(?) LIMIT 1"
+    ).get(String(row.email).trim());
+    if (existing) return existing;
+  }
+
+  if (row.phone && String(row.phone).trim()) {
+    const existing = db.prepare(
+      "SELECT id FROM candidates WHERE replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '+', '') = replace(replace(replace(?, ' ', ''), '-', ''), '+', '') LIMIT 1"
+    ).get(String(row.phone).trim());
+    if (existing) return existing;
+  }
+
+  if (row.name && String(row.name).trim()) {
+    const existing = db.prepare('SELECT id FROM candidates WHERE LOWER(name) = LOWER(?) LIMIT 1').get(String(row.name).trim());
+    if (existing) return existing;
+  }
+
+  return null;
+}
+
+function loadCandidateWithHistory(candidateId) {
+  const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  if (!candidate) return null;
+  const candidateWorkHistory = db.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(candidateId);
+  const candidateEducationHistory = db.prepare('SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY from_date DESC').all(candidateId);
+  return {
+    ...candidate,
+    work_history: candidateWorkHistory,
+    education_history: candidateEducationHistory,
+  };
+}
+
 function buildCandidateRow(profile) {
   const workHistorySummary = summarizeWorkHistory(normalizeWorkHistory(profile), profile.experience_years);
   return {
@@ -265,6 +300,15 @@ function buildCandidateRow(profile) {
 
 function persistCandidate(profile, req) {
   const row = buildCandidateRow(profile);
+  const duplicate = findDuplicateCandidate(row);
+  if (duplicate) {
+    const existingCandidate = loadCandidateWithHistory(duplicate.id);
+    if (existingCandidate) {
+      logAudit(req, 'duplikat', 'Candidate', existingCandidate.id, existingCandidate.name);
+      return existingCandidate;
+    }
+  }
+
   const insert = db.prepare(`
     INSERT INTO candidates (name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages, certificates,

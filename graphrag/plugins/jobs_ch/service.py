@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import shutil
 import tempfile
@@ -157,24 +159,39 @@ class JobsChImportService:
         ]
         return "\n".join(section for section in sections if section is not None).strip()
 
+    @staticmethod
+    def _normalized_text_hash(text: str | None) -> str | None:
+        if not isinstance(text, str):
+            return None
+        normalized = " ".join(text.split()).strip()
+        if not normalized:
+            return None
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _normalized_profile_hash(profile: JobProfileExtraction) -> str | None:
+        try:
+            payload = profile.model_dump(mode="json")
+            serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+            return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        except Exception:
+            return None
+
     async def _build_skill_embeddings(self, skill_names: list[str]) -> dict[str, list[float]]:
         unique_names = sorted({name.strip() for name in skill_names if isinstance(name, str) and name.strip()})
         if not unique_names:
             return {}
 
-        vectors = await asyncio.gather(
-            *(
-                self.llm_service.create_embedding(
-                    {
-                        "entity": "skill",
-                        "name": skill_name,
-                    },
-                    allow_fallback=False,
-                )
-                for skill_name in unique_names
+        skill_embeddings: dict[str, list[float]] = {}
+        for skill_name in unique_names:
+            skill_embeddings[skill_name.lower()] = await self.llm_service.create_embedding(
+                {
+                    "entity": "skill",
+                    "name": skill_name,
+                },
+                allow_fallback=False,
             )
-        )
-        return {name.lower(): vector for name, vector in zip(unique_names, vectors)}
+        return skill_embeddings
 
     async def search(self, query: str, *, limit: int = 20) -> list[JobsChSearchItem]:
         results = await asyncio.to_thread(jobs_ch_to_pdf.search_jobs, query, 30, limit)
@@ -216,7 +233,19 @@ class JobsChImportService:
                     profile_data["employment_type"] = job.employment_type
                 profile = JobProfileExtraction.model_validate(profile_data)
 
-                job_id = job.job_id or str(uuid4())
+                source_hash = self._normalized_text_hash(raw_text)
+                profile_hash = self._normalized_profile_hash(profile)
+                existing_job = None
+                try:
+                    if source_hash:
+                        existing_job = await self.db_service.find_job_by_source_hash(source_hash)
+                    if existing_job is None and profile_hash:
+                        existing_job = await self.db_service.find_job_by_profile_hash(profile_hash)
+                except Exception:
+                    logger.warning("jobs.ch duplicate lookup failed for %s", link, exc_info=True)
+                    existing_job = None
+
+                job_id = existing_job["id"] if existing_job else (job.job_id or str(uuid4()))
                 embedding = await self.llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
                 skill_embeddings = await self._build_skill_embeddings([item.name for item in profile.required_skills])
 
@@ -226,12 +255,16 @@ class JobsChImportService:
                     raw_text=raw_text,
                     profile=profile,
                     source=self.SOURCE_LABEL,
+                    source_hash=source_hash,
+                    profile_hash=profile_hash,
                 )
                 await self.db_service.upsert_job(
                     job_id=job_id,
                     profile=profile,
                     embedding=embedding,
                     skill_embeddings=skill_embeddings,
+                    source_hash=source_hash,
+                    profile_hash=profile_hash,
                 )
 
                 imported_count += 1

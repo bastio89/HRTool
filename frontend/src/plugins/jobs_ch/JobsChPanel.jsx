@@ -175,7 +175,7 @@ export default function JobsChPanel() {
   }
 
   return (
-    <section className="rounded-[28px] border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-[#1c1c1e] p-6 sm:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.04)] md:w-[150%] md:max-w-none">
+    <section className="w-full max-w-[1100px] mx-auto rounded-[28px] border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-[#1c1c1e] p-6 sm:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-2xl bg-[#0077b5]/10 flex items-center justify-center">
           <FileText className="w-5 h-5 text-[#0077b5]" />

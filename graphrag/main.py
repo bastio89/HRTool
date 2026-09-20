@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -77,6 +79,24 @@ db_service = Neo4jService(
 )
 logger = logging.getLogger(__name__)
 plugins = build_plugins(settings, postgres_store, llm_service, db_service)
+
+
+def _normalized_text_hash(text: str | None) -> str | None:
+	if not isinstance(text, str):
+		return None
+	normalized = " ".join(text.split()).strip()
+	if not normalized:
+		return None
+	return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _normalized_profile_hash(profile: Any) -> str | None:
+	try:
+		payload = profile.model_dump(mode="json") if hasattr(profile, "model_dump") else profile
+		serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+		return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+	except Exception:
+		return None
 
 
 @asynccontextmanager
@@ -415,7 +435,15 @@ async def ingest_candidate(
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
 
-	candidate_id = str(uuid4())
+	text_hash = _normalized_text_hash(text)
+	profile_hash = _normalized_profile_hash(profile)
+	duplicate_candidate = None
+	if text_hash:
+		duplicate_candidate = await db_service.find_candidate_by_source_hash(text_hash)
+	if duplicate_candidate is None and profile_hash:
+		duplicate_candidate = await db_service.find_candidate_by_profile_hash(profile_hash)
+	candidate_id = duplicate_candidate["id"] if duplicate_candidate else str(uuid4())
+
 	try:
 		embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
 		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
@@ -429,6 +457,8 @@ async def ingest_candidate(
 			profile=profile,
 			embedding=embedding,
 			skill_embeddings=skill_embeddings,
+			source_hash=text_hash,
+			profile_hash=profile_hash,
 		)
 		candidate_text = text or render_candidate_fulltext(
 			profile.model_dump(mode="json"),
@@ -496,6 +526,18 @@ async def ingest_job(
 		len(profile.required_skills),
 	)
 
+	text_hash = _normalized_text_hash(text)
+	profile_hash = _normalized_profile_hash(profile)
+	duplicate_job = None
+	try:
+		if text_hash:
+			duplicate_job = await db_service.find_job_by_source_hash(text_hash)
+		if duplicate_job is None and profile_hash:
+			duplicate_job = await db_service.find_job_by_profile_hash(profile_hash)
+	except Exception:
+		logger.warning("ingest_job duplicate lookup failed; continuing without dedupe", exc_info=True)
+		duplicate_job = None
+
 	persist_value = str(persist or "").strip().lower()
 	persist_postgres = persist_value not in {"0", "false", "no", "none", "off", "neo4j", "graph", "neo4j_only", "graph_only"}
 	persist_neo4j = persist_value not in {"0", "false", "no", "none", "off", "postgres", "sql", "db"}
@@ -512,7 +554,7 @@ async def ingest_job(
 		persist_postgres = True
 		persist_neo4j = True
 
-	job_id = str(uuid4())
+	job_id = duplicate_job["id"] if duplicate_job else str(uuid4())
 	if not persist_postgres and not persist_neo4j:
 		return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=False)
 
@@ -530,6 +572,8 @@ async def ingest_job(
 				job_id=job_id,
 				raw_text=text or "",
 				profile=profile,
+				source_hash=text_hash,
+				profile_hash=profile_hash,
 			)
 		except Exception as exc:
 			logger.exception("Job PostgreSQL persistence failed")
@@ -542,6 +586,8 @@ async def ingest_job(
 				profile=profile,
 				embedding=embedding,
 				skill_embeddings=skill_embeddings,
+				source_hash=text_hash,
+				profile_hash=profile_hash,
 			)
 		except Exception as exc:
 			logger.exception("Job persistence failed")

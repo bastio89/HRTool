@@ -504,6 +504,35 @@ class PostgresStore:
                 (anonymized_text, json.dumps(mapping, ensure_ascii=False), candidate_id),
             )
 
+    async def _find_existing_candidate(self, profile: CandidateProfileExtraction) -> dict[str, Any] | None:
+        checks: list[tuple[str, tuple[Any, ...]]] = []
+        if profile.email and str(profile.email).strip():
+            checks.append((
+                "SELECT id, name FROM candidates WHERE LOWER(COALESCE(email, '')) = LOWER(%s) ORDER BY id LIMIT 1",
+                (str(profile.email).strip(),),
+            ))
+        phone = str(profile.phone or "").strip()
+        if phone:
+            checks.append((
+                "SELECT id, name FROM candidates WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]+', '', 'g') = regexp_replace(%s, '[^0-9]+', '', 'g') ORDER BY id LIMIT 1",
+                (phone,),
+            ))
+        name = str(profile.name or "").strip()
+        if name:
+            checks.append((
+                "SELECT id, name FROM candidates WHERE LOWER(name) = LOWER(%s) ORDER BY id LIMIT 1",
+                (name,),
+            ))
+
+        for query, params in checks:
+            async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                async with connection.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(query, params)
+                    row = await cursor.fetchone()
+            if row:
+                return dict(row)
+        return None
+
     async def list_candidates_for_backfill(self) -> list[dict[str, Any]]:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
@@ -576,6 +605,10 @@ class PostgresStore:
         return [dict(row) for row in rows]
 
     async def insert_candidate(self, profile: CandidateProfileExtraction, source: str | None = None) -> int:
+        existing = await self._find_existing_candidate(profile)
+        if existing is not None:
+            return int(existing["id"])
+
         skills = ", ".join(item.name for item in profile.skills) or None
         languages = ", ".join(
             f"{item.name} ({item.level})" if item.level else item.name
@@ -665,7 +698,54 @@ class PostgresStore:
                             item.from_date, item.to_date, item.description,
                         ),
                     )
+
         return candidate_id
+
+    async def _find_existing_job(self, job_id: str, profile: JobProfileExtraction, source: str | None = None) -> dict[str, Any] | None:
+        job_key = str(job_id or "").strip()
+        if job_key:
+            async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                async with connection.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        SELECT id, graph_job_id, title
+                        FROM jobs
+                        WHERE graph_job_id = %s OR id::text = %s
+                        LIMIT 1
+                        """,
+                        (job_key, job_key),
+                    )
+                    row = await cursor.fetchone()
+            if row:
+                return dict(row)
+
+        title = str(profile.title or "").strip()
+        if not title:
+            return None
+
+        company = str(profile.company or profile.employer_company or profile.recruiter_company or "").strip()
+        location = str(profile.location or "").strip()
+        source_value = str(source or "").strip()
+
+        query = [
+            "SELECT id, graph_job_id, title FROM jobs",
+            "WHERE LOWER(title) = LOWER(%s)",
+        ]
+        params: list[Any] = [title]
+        query.append("AND COALESCE(LOWER(company), '') = COALESCE(LOWER(%s), '')")
+        params.append(company)
+        query.append("AND COALESCE(LOWER(location), '') = COALESCE(LOWER(%s), '')")
+        params.append(location)
+        if source_value:
+            query.append("AND COALESCE(LOWER(source), '') = LOWER(%s)")
+            params.append(source_value)
+        query.append("LIMIT 1")
+
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute("\n".join(query), params)
+                row = await cursor.fetchone()
+        return dict(row) if row else None
 
     async def list_compat_jobs(self) -> list[dict[str, Any]]:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -881,7 +961,19 @@ class PostgresStore:
             raise RuntimeError("PostgreSQL did not return a candidate id")
         return dict(row)
 
-    async def _upsert_job_once(self, job_id: str, raw_text: str, profile: JobProfileExtraction, source: str | None = None) -> int:
+    async def _upsert_job_once(
+        self,
+        job_id: str,
+        raw_text: str,
+        profile: JobProfileExtraction,
+        source: str | None = None,
+        source_hash: str | None = None,
+        profile_hash: str | None = None,
+    ) -> int:
+        existing = await self._find_existing_job(job_id, profile, source=source)
+        if existing is not None:
+            return int(existing["id"])
+
         description = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
         requirements = self._summarize_requirements(profile)
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -915,14 +1007,36 @@ class PostgresStore:
             raise RuntimeError("PostgreSQL did not return a job id")
         return int(row["id"])
 
-    async def upsert_job(self, job_id: str, raw_text: str, profile: JobProfileExtraction, source: str | None = None) -> int:
+    async def upsert_job(
+        self,
+        job_id: str,
+        raw_text: str,
+        profile: JobProfileExtraction,
+        source: str | None = None,
+        source_hash: str | None = None,
+        profile_hash: str | None = None,
+    ) -> int:
         try:
-            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile, source=source)
+            return await self._upsert_job_once(
+                job_id=job_id,
+                raw_text=raw_text,
+                profile=profile,
+                source=source,
+                source_hash=source_hash,
+                profile_hash=profile_hash,
+            )
         except pg_errors.UndefinedColumn as exc:
             if "graph_job_id" not in str(exc) and "source" not in str(exc):
                 raise
             await self.ensure_schema()
-            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile, source=source)
+            return await self._upsert_job_once(
+                job_id=job_id,
+                raw_text=raw_text,
+                profile=profile,
+                source=source,
+                source_hash=source_hash,
+                profile_hash=profile_hash,
+            )
 
     @staticmethod
     def _summarize_requirements(profile: JobProfileExtraction) -> str | None:

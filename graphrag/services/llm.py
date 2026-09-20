@@ -1011,32 +1011,56 @@ class LLMService:
             payload.get("entity"),
             payload.get("name"),
         )
-        try:
-            if provider == "openrouter":
-                response = await self.client.post(
-                    f"{base_url}/embeddings",
-                    headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
-                    json={"model": embedding_model, "input": payload_text},
-                )
-            else:
-                response = await self.client.post(
-                    f"{base_url}/api/embeddings",
-                    json={"model": embedding_model, "prompt": payload_text},
-                )
-            response.raise_for_status()
-            data = response.json()
-            embedding = data.get("embedding")
-            if provider == "openrouter":
-                embedding = (data.get("data") or [{}])[0].get("embedding")
-            if isinstance(embedding, list) and embedding:
-                return self._normalize_embedding([float(item) for item in embedding])
-        except Exception as exc:
-            if not allow_fallback and provider != "ollama":
-                raise RuntimeError(
-                    f"Embedding generation failed for provider={provider}, model={embedding_model}"
-                ) from exc
-            logger.warning("embedding_fallback provider=%s model=%s: %s", provider, embedding_model, exc)
-            return self._deterministic_fallback_embedding(payload_text)
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                if provider == "openrouter":
+                    response = await self.client.post(
+                        f"{base_url}/embeddings",
+                        headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+                        json={"model": embedding_model, "input": payload_text},
+                    )
+                else:
+                    response = await self.client.post(
+                        f"{base_url}/api/embeddings",
+                        json={"model": embedding_model, "prompt": payload_text},
+                    )
+                response.raise_for_status()
+                data = response.json()
+                embedding = data.get("embedding")
+                if provider == "openrouter":
+                    embedding = (data.get("data") or [{}])[0].get("embedding")
+                if isinstance(embedding, list) and embedding:
+                    return self._normalize_embedding([float(item) for item in embedding])
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                should_retry = status_code in {429, 500, 502, 503, 504} and attempt < max_attempts
+                if should_retry:
+                    delay_seconds = 0.75 * attempt
+                    logger.warning(
+                        "embedding_retry provider=%s model=%s attempt=%s/%s status=%s delay=%.2fs",
+                        provider,
+                        embedding_model,
+                        attempt,
+                        max_attempts,
+                        status_code,
+                        delay_seconds,
+                    )
+                    await asyncio.sleep(delay_seconds)
+                    continue
+                if not allow_fallback and provider != "ollama":
+                    raise RuntimeError(
+                        f"Embedding generation failed for provider={provider}, model={embedding_model}"
+                    ) from exc
+                logger.warning("embedding_fallback provider=%s model=%s: %s", provider, embedding_model, exc)
+                return self._deterministic_fallback_embedding(payload_text)
+            except Exception as exc:
+                if not allow_fallback and provider != "ollama":
+                    raise RuntimeError(
+                        f"Embedding generation failed for provider={provider}, model={embedding_model}"
+                    ) from exc
+                logger.warning("embedding_fallback provider=%s model=%s: %s", provider, embedding_model, exc)
+                return self._deterministic_fallback_embedding(payload_text)
 
         if not allow_fallback and provider != "ollama":
             raise RuntimeError(

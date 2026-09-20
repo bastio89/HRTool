@@ -152,7 +152,28 @@ function serializeJobSkills(skills) {
   return '';
 }
 
+function findDuplicateJob(job) {
+  if (job.url && String(job.url).trim()) {
+    const existing = db.prepare("SELECT * FROM jobs WHERE LOWER(COALESCE(url, '')) = LOWER(?) LIMIT 1").get(String(job.url).trim());
+    if (existing) return existing;
+  }
+
+  if (!job.title || !String(job.title).trim()) {
+    return null;
+  }
+
+  const existing = db.prepare(
+    "SELECT * FROM jobs WHERE LOWER(title) = LOWER(?) AND COALESCE(LOWER(company), '') = COALESCE(LOWER(?), '') AND COALESCE(LOWER(location), '') = COALESCE(LOWER(?), '') LIMIT 1"
+  ).get(String(job.title).trim(), String(job.company || '').trim(), String(job.location || '').trim());
+  return existing || null;
+}
+
 function persistLocalJob(job) {
+  const duplicate = findDuplicateJob(job);
+  if (duplicate) {
+    return { ...duplicate, duplicate: true };
+  }
+
   const result = db.prepare(`
     INSERT INTO jobs (title, about_us, description, requirements, skills, benefits, location, type, status, url)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -324,7 +345,7 @@ router.post('/', (req, res) => {
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
     const job = persistLocalJob({ title, about_us, description, requirements, skills, benefits, location, type, status, url });
-    logAudit(req, 'erstellt', 'Job', job.id, job.title);
+    logAudit(req, job.duplicate ? 'duplikat' : 'erstellt', 'Job', job.id, job.title);
 
     ingestIntoGraphRag(buildGraphRagJobText(job), 'neo4j').catch((graphRagErr) => {
       console.warn('GraphRAG job ingestion failed:', graphRagErr.message);

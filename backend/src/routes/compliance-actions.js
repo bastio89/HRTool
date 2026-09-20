@@ -292,7 +292,7 @@ router.get('/summary', (req, res) => {
     const open = db.prepare("SELECT COUNT(*) as c FROM compliance_actions WHERE status = 'open'").get().c;
     const inProgress = db.prepare("SELECT COUNT(*) as c FROM compliance_actions WHERE status = 'in_progress'").get().c;
     const done = db.prepare("SELECT COUNT(*) as c FROM compliance_actions WHERE status = 'done'").get().c;
-    const overdue = db.prepare("SELECT COUNT(*) as c FROM compliance_actions WHERE status != 'done' AND due_date < date('now')").get().c;
+    const overdue = db.prepare("SELECT COUNT(*) as c FROM compliance_actions WHERE status != 'done' AND NULLIF(due_date, '')::date < CURRENT_DATE").get().c;
     const critical = db.prepare("SELECT COUNT(*) as c FROM compliance_actions WHERE status != 'done' AND priority = 'critical'").get().c;
 
     res.json({ total, open, inProgress, done, overdue, critical });

@@ -5,8 +5,6 @@ import psycopg
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-DEFAULT_AI_BASE_URL = "http://host.docker.internal:11434"
-DEFAULT_AI_PROVIDER = "ollama"
 DEFAULT_AI_REASONING_LEVEL = "none"
 
 
@@ -48,7 +46,7 @@ class Settings(BaseSettings):
 
     @property
     def resolved_ai_base_url(self) -> str:
-        return (self._backend_setting("ai_base_url") or DEFAULT_AI_BASE_URL).rstrip("/")
+        return (self._backend_setting("ai_base_url") or "").rstrip("/")
 
     def _backend_database_url(self) -> str:
         parsed = urlsplit(self.database_url)
@@ -67,7 +65,7 @@ class Settings(BaseSettings):
 
     @property
     def resolved_provider(self) -> str:
-        provider = self._backend_setting("ai_provider") or DEFAULT_AI_PROVIDER
+        provider = self._backend_setting("ai_provider") or "auto"
         normalized_provider = provider.strip().lower()
         if normalized_provider == "openai":
             if _is_known_ollama_host(self.resolved_ai_base_url):
@@ -115,29 +113,13 @@ def _seed_default_ai_settings(database_url: str) -> None:
         if parsed.hostname == "postgres":
             database_url = urlunsplit((parsed.scheme, parsed.netloc.replace("postgres", "localhost", 1), parsed.path, parsed.query, parsed.fragment))
         with psycopg.connect(database_url) as connection:
-            for key, value in (
-                ("ai_base_url", DEFAULT_AI_BASE_URL),
-                ("ai_provider", DEFAULT_AI_PROVIDER),
-                ("ai_reasoning_level", DEFAULT_AI_REASONING_LEVEL),
-            ):
-                connection.execute(
-                    "INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING",
-                    (key, value),
-                )
             connection.execute(
                 """
-                UPDATE settings
-                SET value = %s
-                WHERE key = %s
-                  AND value IN (%s, %s, %s)
+                INSERT INTO settings (key, value)
+                VALUES (%s, %s)
+                ON CONFLICT (key) DO NOTHING
                 """,
-                (
-                    DEFAULT_AI_BASE_URL,
-                    "ai_base_url",
-                    "http://localhost:11434",
-                    "http://127.0.0.1:11434",
-                    "http://localhost:8000",
-                ),
+                ("ai_reasoning_level", DEFAULT_AI_REASONING_LEVEL),
             )
     except psycopg.Error:
         return

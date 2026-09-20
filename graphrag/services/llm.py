@@ -354,7 +354,7 @@ class LLMService:
                 input_tokens = usage.get("prompt_tokens")
                 output_tokens = usage.get("completion_tokens")
 
-            if self.provider == "openrouter":
+            if provider == "openrouter":
                 choice = (payload.get("choices") or [{}])[0]
                 message = choice.get("message") or {}
                 content = message.get("content")
@@ -406,7 +406,7 @@ class LLMService:
             thinking_objects = _extract_json_objects(thinking)
             best_thinking = _best_match(thinking_objects)
             if best_thinking is not None:
-                logger.warning("ai_json_from_thinking_fallback provider=%s", self.provider)
+                logger.warning("ai_json_from_thinking_fallback provider=%s", provider)
                 await self._write_call_log(
                     model=chat_model,
                     feature=feature,
@@ -425,9 +425,9 @@ class LLMService:
             if not isinstance(content, str) and not isinstance(response_text, str) and not isinstance(thinking, str):
                 err = payload.get("error")
                 if isinstance(err, str) and err.strip():
-                    raise ValueError(f"{self.provider} error: {err}")
-                raise ValueError(f"{self.provider} returned no JSON response content")
-            raise ValueError(f"{self.provider} returned no usable JSON response")
+                    raise ValueError(f"{provider} error: {err}")
+                raise ValueError(f"{provider} returned no JSON response content")
+            raise ValueError(f"{provider} returned no usable JSON response")
         except Exception as exc:
             await self._write_call_log(
                 model=chat_model,

@@ -6,7 +6,8 @@ import { useI18n } from '../I18nContext'
 
 // Common presets to help users who switch away from Ollama's default host.
 const HOST_PRESETS = [
-  { label: 'Ollama', url: 'http://localhost:11434' },
+  { label: 'Ollama', url: 'http://localhost:11434', provider: 'ollama' },
+  { label: 'Ollama (Docker)', url: 'http://host.docker.internal:11434', provider: 'ollama' },
   { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', provider: 'openai' },
   { label: 'LM Studio', url: 'http://localhost:1234' },
   { label: 'Jan / llama.cpp', url: 'http://localhost:1337' },

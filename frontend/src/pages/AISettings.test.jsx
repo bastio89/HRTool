@@ -93,4 +93,41 @@ describe('AISettings', () => {
       ).toBe(true)
     })
   })
+
+  test('includes an ollama docker preset in the quick selection', async () => {
+    settingsApi.getAiConfig.mockResolvedValue({
+      baseUrl: 'http://localhost:11434',
+      model: 'llama3.2',
+      embeddingModel: 'nomic-embed-text',
+      provider: 'openai',
+      apiKeyConfigured: false,
+      loggingEnabled: false,
+      source: { baseUrl: 'settings', model: 'settings', embeddingModel: 'settings' },
+    })
+    settingsApi.getAiModels.mockResolvedValue({ models: [{ name: 'llama3.2' }] })
+    settingsApi.getAiEmbeddingModels.mockResolvedValue({ models: [{ name: 'nomic-embed-text' }] })
+
+    render(
+      <I18nProvider>
+        <AISettings />
+      </I18nProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Ollama \(Docker\)/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Ollama \(Docker\)/i }))
+
+    await waitFor(() => {
+      expect(
+        settingsApi.getAiModels.mock.calls.some(
+          ([url, apiKey, provider]) => url === 'http://host.docker.internal:11434' && apiKey === '' && provider === 'ollama'
+        )
+      ).toBe(true)
+    })
+    expect(settingsApi.getAiEmbeddingModels.mock.calls.some(
+      ([url, apiKey, provider]) => url === 'http://host.docker.internal:11434' && apiKey === '' && provider === 'ollama'
+    )).toBe(true)
+  })
 })

@@ -42,10 +42,10 @@ postgres_store = PostgresStore(settings.database_url)
 candidate_privacy_service = CandidatePrivacyService(postgres_store)
 model_config_service = ModelConfigService(
 	postgres_store,
-	default_chat_base_url=settings.resolved_ai_base_url,
+	default_chat_base_url="",
 	default_chat_model=settings.resolved_chat_model,
 	default_embedding_model=settings.initial_embedding_model or settings.resolved_embedding_model,
-	default_provider=settings.resolved_provider,
+	default_provider="auto",
 	default_api_key=settings.resolved_api_key,
 	default_reasoning_level=settings.resolved_reasoning_level,
 )
@@ -82,8 +82,6 @@ async def lifespan(_: FastAPI):
 			"GRAPHRAG_API_KEY ist nicht gesetzt - die API nimmt Anfragen ohne Authentifizierung entgegen."
 		)
 	await postgres_store.ensure_schema()
-	await postgres_store.ensure_setting("ai_base_url", settings.resolved_ai_base_url)
-	await postgres_store.ensure_setting("ai_provider", settings.resolved_provider)
 	await postgres_store.ensure_setting_if_blank("ai_embedding_model", settings.initial_embedding_model)
 	await postgres_store.ensure_setting("ai_reasoning_level", settings.resolved_reasoning_level)
 	model_config_service.invalidate()

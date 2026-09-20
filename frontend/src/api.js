@@ -1,5 +1,6 @@
 const API_BASE = '/api';
 const GRAPHRAG_API_BASE = '/graphrag-api';
+const CREDIT_REFRESH_EVENT = 'hrtool-credit-refresh';
 
 function authHeaders() {
   const token = localStorage.getItem('hrtool_token');
@@ -100,6 +101,18 @@ function normalizeErrorMessage(error, fallback) {
   return fallback
 }
 
+function notifyCreditRefresh(detail = {}) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(CREDIT_REFRESH_EVENT, { detail }));
+}
+
+export function subscribeCreditRefresh(handler) {
+  if (typeof window === 'undefined') return () => {};
+  const listener = (event) => handler(event.detail || {});
+  window.addEventListener(CREDIT_REFRESH_EVENT, listener);
+  return () => window.removeEventListener(CREDIT_REFRESH_EVENT, listener);
+}
+
 async function request(url, options = {}) {
   const { timeout, ...fetchOptions } = options;
   let controller, timeoutId;
@@ -190,25 +203,25 @@ export const matchingApi = {
       method: 'POST',
       body: JSON.stringify({ jobDescription, jobTitle, candidateIds, candidateNames, weights, jobId }),
       timeout: 200000,
-    }),
+    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.run' }); return result; }),
   runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null, engine = 'python' } = {}) =>
     request('/matching/run-matrix', {
       method: 'POST',
       body: JSON.stringify({ mode, jobIds, candidateIds, weights, engine }),
       timeout: 600000,
-    }),
+    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.runMatrix' }); return result; }),
   vectorMatch: (payload = {}) =>
     request('/matching/vectormatch', {
       method: 'POST',
       body: JSON.stringify(payload),
       timeout: 600000,
-    }),
+    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.vectorMatch' }); return result; }),
   runSelected: (pairs = [], weights = null) =>
     request('/matching/run-selected', {
       method: 'POST',
       body: JSON.stringify({ pairs, weights }),
       timeout: 600000,
-    }),
+    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.runSelected' }); return result; }),
   getHistory: () => request('/matching/history'),
   getResult: (id) => request(`/matching/history/${id}`),
   deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),
@@ -228,7 +241,9 @@ export const graphRagMatchingApi = {
       throw new Error(error.error || error.detail || `HTTP ${response.status}`)
     }
 
-    return response.json()
+    const json = await response.json()
+    notifyCreditRefresh({ source: 'graphRagMatchingApi.vectorMatch' })
+    return json
   },
 };
 
@@ -250,6 +265,21 @@ export const promptsApi = {
   getAll: () => graphRagRequest('/prompts'),
   getById: (id) => graphRagRequest(`/prompts/${id}`),
   update: (id, data) => graphRagRequest(`/prompts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+};
+
+export const billingApi = {
+  getMe: () => graphRagRequest('/credits/me'),
+  getOverview: () => graphRagRequest('/credits/admin/overview'),
+  getUsers: (search) => {
+    const qs = search ? `?${new URLSearchParams({ search }).toString()}` : '';
+    return graphRagRequest(`/credits/admin/users${qs}`);
+  },
+  getTransactions: (userId) => graphRagRequest(`/credits/admin/users/${userId}/transactions`),
+  topUp: async (payload) => {
+    const result = await graphRagRequest('/credits/admin/top-up', { method: 'POST', body: JSON.stringify(payload) });
+    notifyCreditRefresh({ source: 'billingApi.topUp' });
+    return result;
+  },
 };
 
 // Matching Weights API
@@ -288,7 +318,9 @@ export const jobsApi = {
       const error = await response.json().catch(() => ({ error: 'Import fehlgeschlagen' }));
       throw new Error(error.error || error.detail || `HTTP ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    notifyCreditRefresh({ source: 'jobsApi.addPlainTextJob' })
+    return json;
   },
   parseDescriptionFile: async (file, thinking = false, extractOnly = false, persist = false) => {
     const formData = new FormData();
@@ -307,7 +339,9 @@ export const jobsApi = {
       const error = await response.json().catch(() => ({ error: 'Upload fehlgeschlagen' }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
-    return response.json();
+    const json = await response.json();
+    notifyCreditRefresh({ source: 'jobsApi.parseDescriptionFile' })
+    return json;
   },
   exportJobsChPdfs: async (links) => {
     const response = await fetch(`${API_BASE}/plugins/jobs_ch/export-pdf`, {
@@ -324,6 +358,8 @@ export const jobsApi = {
       const error = await response.json().catch(() => ({ error: 'Export fehlgeschlagen' }))
       throw new Error(error.error || error.details || `HTTP ${response.status}`)
     }
+
+    notifyCreditRefresh({ source: 'jobsApi.exportJobsChPdfs' })
 
     return {
       blob: await response.blob(),
@@ -347,13 +383,15 @@ export const jobsApi = {
       throw new Error(error.error || error.details || `HTTP ${response.status}`)
     }
 
+    notifyCreditRefresh({ source: 'jobsApi.importJobsChDescriptions' })
+
     return response.json()
   },
   searchJobsCh: (term, limit = 20) => {
     const q = new URLSearchParams()
     q.set('term', term)
     q.set('limit', String(limit))
-    return request(`/plugins/jobs_ch/search?${q.toString()}`)
+    return request(`/plugins/jobs_ch/search?${q.toString()}`).then((result) => { notifyCreditRefresh({ source: 'jobsApi.searchJobsCh' }); return result; })
   },
   generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data), timeout: 200000 }),
 };
@@ -535,6 +573,7 @@ export const cvParserApi = {
     if (onProgress) {
       onProgress({ type: 'progress', step: 'complete', detail: '', progress: 100 });
     }
+    notifyCreditRefresh({ source: 'cvParserApi.parse' })
     return jsonResult;
   },
 };
@@ -568,6 +607,7 @@ export const linkedinApi = {
     }
 
     const csvText = await response.text()
+    notifyCreditRefresh({ source: 'linkedinApi.searchProfiles' })
     return {
       filename: response.headers.get('Content-Disposition') || null,
       rows: parseCsvText(csvText),
@@ -584,6 +624,8 @@ export const linkedinApi = {
       const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }))
       throw new Error(error.error || error.details || `HTTP ${response.status}`)
     }
+
+    notifyCreditRefresh({ source: 'linkedinApi.exportProfilesAsPdf' })
 
     return {
       blob: await response.blob(),

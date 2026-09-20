@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import Avatar from './Avatar'
 import SystemStatusChip from './SystemStatus'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Wrench, Code2 } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Wrench, Code2, Wallet, Loader2 } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
 import Breadcrumb from './Breadcrumb'
 import NotificationBell from './NotificationBell'
+import { billingApi, subscribeCreditRefresh } from '../api'
 import { usePlugins } from '../plugins/PluginContext'
 import { getPluginDefinition } from '../plugins/registry'
 
@@ -24,6 +25,7 @@ const adminItems = [
   { to: '/admin/users', icon: Shield, labelKey: 'nav.users' },
   { to: '/admin/email', icon: Mail, labelKey: 'nav.email' },
   { to: '/admin/plugins', icon: Wrench, labelKey: 'nav.plugins' },
+  { to: '/admin/credits', icon: Wallet, labelKey: 'nav.credits' },
   { to: '/admin/ai', icon: Cpu, labelKey: 'nav.ai_settings' },
   { to: '/admin/prompts', icon: Code2, labelKey: 'nav.prompts' },
   { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
@@ -45,6 +47,8 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(isAdminRoute)
   const [toolsOpen, setToolsOpen] = useState(isToolsRoute)
+  const [creditSummary, setCreditSummary] = useState(null)
+  const [creditLoading, setCreditLoading] = useState(false)
   const linkedinPlugin = getPluginDefinition('linkedin')
   const jobsChPlugin = getPluginDefinition('jobs_ch')
   const toolsItems = [
@@ -59,6 +63,32 @@ export default function Layout() {
   useEffect(() => {
     if (isToolsRoute || isRecruiter || isAdmin) setToolsOpen(true)
   }, [isToolsRoute, isRecruiter, isAdmin])
+
+  useEffect(() => {
+    if (!user) return undefined
+
+    let active = true
+
+    const loadCredits = async () => {
+      setCreditLoading(true)
+      try {
+        const summary = await billingApi.getMe()
+        if (active) setCreditSummary(summary)
+      } catch {
+        if (active) setCreditSummary(null)
+      } finally {
+        if (active) setCreditLoading(false)
+      }
+    }
+
+    loadCredits()
+    const unsubscribe = subscribeCreditRefresh(() => { loadCredits() })
+
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [user?.id])
 
   const closeSidebar = () => setSidebarOpen(false)
 
@@ -307,6 +337,17 @@ export default function Layout() {
           </button>
 
           <div className="flex items-center gap-2 sm:gap-3 lg:gap-5 flex-wrap justify-end">
+            <div className="hidden xl:flex items-center gap-3 rounded-full border border-gray-200/70 dark:border-gray-700/60 bg-white/80 dark:bg-[#1c1c1e]/80 px-4 py-2 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm">
+              {creditLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4 text-[#0071e3]" />}
+              <div className="leading-tight">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">Credits</div>
+                <div className="flex items-center gap-2 tabular-nums text-black dark:text-white">
+                  <span>{creditSummary ? `${Number(creditSummary.current_balance ?? 0).toFixed(1)} übrig` : '—'}</span>
+                  <span className="text-gray-400 dark:text-gray-500">/</span>
+                  <span>{creditSummary ? `${Number(creditSummary.total_credits_used ?? 0).toFixed(1)} verbraucht` : '—'}</span>
+                </div>
+              </div>
+            </div>
             <SystemStatusChip />
             <NotificationBell />
             <div className="text-right hidden sm:block">

@@ -249,7 +249,7 @@ function remapVectorMatchIds(graphRagResult, { direction, jobRecord, candidateRe
   };
 }
 
-async function callGraphRagMatching(endpoint, payload) {
+async function callGraphRagMatching(req, endpoint, payload) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   const response = await fetch(`${baseUrl.replace(/\/+$/, '')}${endpoint}`, {
     method: 'POST',
@@ -514,7 +514,7 @@ function buildMatrixResult({ jobs, candidates, rows, mode, model }) {
   };
 }
 
-async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle, candidateId, candidateName, candidateIds, engine = 'python' }) {
+async function runVectorMatch(req, { direction = 'job_to_candidates', jobId, jobTitle, candidateId, candidateName, candidateIds, engine = 'python' }) {
   const endpoint = '/match/vectormatch';
 
   if (direction === 'candidate_to_jobs') {
@@ -530,7 +530,7 @@ async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle
       throw Object.assign(new Error('Keine Stellen vorhanden'), { status: 404 });
     }
 
-    const graphRagResult = await callGraphRagMatching(endpoint, {
+    const graphRagResult = await callGraphRagMatching(req, endpoint, {
       jobIds: jobs.map((job) => job.id),
       jobTitles: jobs.map((job) => job.title).filter(Boolean),
       cvIds: [candidateRecord.id],
@@ -556,7 +556,7 @@ async function runVectorMatch({ direction = 'job_to_candidates', jobId, jobTitle
   const storedJobId = jobRecord?.id ?? (Number.isFinite(Number(jobId)) ? Number(jobId) : null);
   const matchedJob = jobRecord || { id: storedJobId, title: `Stelle ${jobId}` };
 
-  const graphRagResult = await callGraphRagMatching(endpoint, {
+  const graphRagResult = await callGraphRagMatching(req, endpoint, {
     jobIds: [storedJobId ?? jobId],
     jobTitles: [matchedJob.title || `Stelle ${jobId}`],
     cvIds: candidateIds,
@@ -653,7 +653,7 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
       return res.status(400).json({ error: 'Stellentitel, Beschreibung oder Anforderungen sind erforderlich' });
     }
 
-    const graphRagResult = await callGraphRagMatching('/match/external/run', {
+    const graphRagResult = await callGraphRagMatching(req, '/match/external/run', {
       job: normalizedJob,
       candidates: normalizedCandidates,
       weights,
@@ -827,7 +827,7 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
       return res.status(400).json({ error: 'Maximal 20 Paarungen pro Anfrage erlaubt' });
     }
 
-    const graphRagResult = await callGraphRagMatching('/match/ki_match_pairs', {
+    const graphRagResult = await callGraphRagMatching(req, '/match/ki_match_pairs', {
       pairs: pairs.map((pair) => ({
         jobId: pair.sourceJobId || pair.jobId,
         jobTitle: pair.jobTitle,
@@ -876,7 +876,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       return res.status(400).json({ error: 'Ungültige Vector-Matching-Engine' });
     }
 
-    const graphRagResult = await callGraphRagMatching(engine === 'neo4j' ? '/match/external/matrix_neo4j' : '/match/external/matrix', {
+    const graphRagResult = await callGraphRagMatching(req, engine === 'neo4j' ? '/match/external/matrix_neo4j' : '/match/external/matrix', {
       mode,
       jobs: jobs.map((job) => ({
         id: job.id,
@@ -970,7 +970,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
         return res.status(400).json({ error: 'candidateId oder candidateName ist erforderlich' });
       }
 
-      const { candidate, jobs, graphRagResult } = await runVectorMatch({ direction, candidateId, candidateName, candidateIds, engine });
+      const { candidate, jobs, graphRagResult } = await runVectorMatch(req, { direction, candidateId, candidateName, candidateIds, engine });
       const resultTitle = `Bewerber → alle Stellen: ${candidate?.name || 'Unbenannter Bewerber'}`;
 
       const saveResult = db.prepare(`
@@ -1010,7 +1010,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       return res.status(400).json({ error: 'Mindestens ein Bewerber ist erforderlich' });
     }
 
-    const { job, graphRagResult } = await runVectorMatch({ direction, jobId, jobTitle, candidateIds, engine });
+    const { job, graphRagResult } = await runVectorMatch(req, { direction, jobId, jobTitle, candidateIds, engine });
     const resultTitle = `Stelle → Kandidaten: ${job.title || 'Unbenannte Stelle'}`;
     const storedJobId = Number.isFinite(Number(job.id)) ? Number(job.id) : null;
 

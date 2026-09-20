@@ -17,7 +17,7 @@ class LinkedInPlugin(BasePlugin):
     def __init__(self, settings: Settings, postgres_store: PostgresStore) -> None:
         self.settings = settings
         self.postgres_store = postgres_store
-        self._router = build_linkedin_router(settings)
+        self._router = build_linkedin_router(settings, postgres_store)
 
     @property
     def manifest(self) -> PluginManifest:

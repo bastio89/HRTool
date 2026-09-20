@@ -410,6 +410,7 @@ class PostgresStore:
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS total_credits_used NUMERIC(10,2) NOT NULL DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS total_credits_purchased NUMERIC(10,2) NOT NULL DEFAULT 0",
                     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ",
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP",
                 ):
                     await cursor.execute(column_sql)
                 await cursor.execute(
@@ -466,19 +467,24 @@ class PostgresStore:
                 await cursor.execute(
                     """
                     INSERT INTO users (
-                        id, username, email, display_name, role,
+                        id, username, email, display_name, role, password_hash,
                         current_balance, total_credits_used, total_credits_purchased,
                         created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        COALESCE((SELECT password_hash FROM users WHERE id = %s), 'billing-placeholder'),
+                        0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
                     ON CONFLICT (id) DO UPDATE SET
                         username = COALESCE(NULLIF(EXCLUDED.username, ''), users.username),
                         email = COALESCE(NULLIF(EXCLUDED.email, ''), users.email),
                         display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), users.display_name),
                         role = COALESCE(NULLIF(EXCLUDED.role, ''), users.role),
+                        password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash),
                         updated_at = CURRENT_TIMESTAMP
                     RETURNING id, username, email, display_name, role, current_balance, total_credits_used, total_credits_purchased, last_activity_at, created_at, updated_at
                     """,
-                    (int(user_id), username, email, display_name, role),
+                    (int(user_id), username, email, display_name, role, int(user_id)),
                 )
                 row = await cursor.fetchone()
         return self._serialize_credit_row(dict(row)) if row else {}
@@ -605,28 +611,6 @@ class PostgresStore:
                 async with connection.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        INSERT INTO users (
-                            id, username, email, display_name, role,
-                            current_balance, total_credits_used, total_credits_purchased,
-                            created_at, updated_at
-                        ) VALUES (%s, %s, %s, %s, %s, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                        ON CONFLICT (id) DO UPDATE SET
-                            username = COALESCE(NULLIF(EXCLUDED.username, ''), users.username),
-                            email = COALESCE(NULLIF(EXCLUDED.email, ''), users.email),
-                            display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), users.display_name),
-                            role = COALESCE(NULLIF(EXCLUDED.role, ''), users.role),
-                            updated_at = CURRENT_TIMESTAMP
-                        """,
-                        (
-                            int(user_id),
-                            user_data.get('username'),
-                            user_data.get('email'),
-                            user_data.get('display_name'),
-                            user_data.get('role'),
-                        ),
-                    )
-                    await cursor.execute(
-                        """
                         SELECT id, username, email, display_name, role, current_balance,
                                total_credits_used, total_credits_purchased, last_activity_at,
                                created_at, updated_at
@@ -638,7 +622,69 @@ class PostgresStore:
                     )
                     row = await cursor.fetchone()
                     if not row:
+                        username = str(user_data.get('username') or f'user-{int(user_id)}')
+                        email = str(user_data.get('email') or '') or None
+                        display_name = str(user_data.get('display_name') or username)
+                        role = str(user_data.get('role') or 'recruiter')
+                        await cursor.execute(
+                            """
+                            INSERT INTO users (
+                                id, username, email, display_name, role, password_hash,
+                                current_balance, total_credits_used, total_credits_purchased,
+                                created_at, updated_at
+                            ) VALUES (
+                                %s, %s, %s, %s, %s, 'billing-placeholder',
+                                0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                            )
+                            """,
+                            (int(user_id), username, email, display_name, role),
+                        )
+                        await cursor.execute(
+                            """
+                            SELECT id, username, email, display_name, role, current_balance,
+                                   total_credits_used, total_credits_purchased, last_activity_at,
+                                   created_at, updated_at
+                            FROM users
+                            WHERE id = %s
+                            FOR UPDATE
+                            """,
+                            (int(user_id),),
+                        )
+                        row = await cursor.fetchone()
+                    if not row:
                         raise RuntimeError('Credit user record could not be created')
+
+                    if any(user_data.get(field) for field in ('username', 'email', 'display_name', 'role')):
+                        await cursor.execute(
+                            """
+                            UPDATE users
+                            SET username = COALESCE(users.username, %s),
+                                email = COALESCE(users.email, %s),
+                                display_name = COALESCE(users.display_name, %s),
+                                role = COALESCE(users.role, %s),
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE id = %s
+                            """,
+                            (
+                                user_data.get('username'),
+                                user_data.get('email'),
+                                user_data.get('display_name'),
+                                user_data.get('role'),
+                                int(user_id),
+                            ),
+                        )
+                        await cursor.execute(
+                            """
+                            SELECT id, username, email, display_name, role, current_balance,
+                                   total_credits_used, total_credits_purchased, last_activity_at,
+                                   created_at, updated_at
+                            FROM users
+                            WHERE id = %s
+                            FOR UPDATE
+                            """,
+                            (int(user_id),),
+                        )
+                        row = await cursor.fetchone()
 
                     current_balance = self._to_decimal(row['current_balance'])
                     if transaction_amount < 0 and not allow_negative_balance and current_balance + transaction_amount < 0:

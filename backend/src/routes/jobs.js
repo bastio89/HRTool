@@ -193,7 +193,7 @@ function persistLocalJob(job) {
   return db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
 }
 
-async function ingestIntoGraphRag(rawText, persist = true) {
+async function ingestIntoGraphRag(req, rawText, persist = true) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   if (!baseUrl) return null;
 
@@ -347,7 +347,7 @@ router.post('/', (req, res) => {
     const job = persistLocalJob({ title, about_us, description, requirements, skills, benefits, location, type, status, url });
     logAudit(req, job.duplicate ? 'duplikat' : 'erstellt', 'Job', job.id, job.title);
 
-    ingestIntoGraphRag(buildGraphRagJobText(job), 'neo4j').catch((graphRagErr) => {
+    ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j').catch((graphRagErr) => {
       console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
       return { error: graphRagErr.message };
     }).then((graphRag) => {
@@ -420,7 +420,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   // gehoert deshalb ins KI-Protokoll (Art. 12 EU AI Act), genauso wie der
   // Generator weiter unten.
   const aiStartedAt = Date.now();
-  const graphRag = await ingestIntoGraphRag(trimmedText, persist ? 'neo4j' : false);
+  const graphRag = await ingestIntoGraphRag(req, trimmedText, persist ? 'neo4j' : false);
     const profile = graphRag?.profile || {};
     const extractedSkills = serializeJobSkills(profile.required_skills);
 

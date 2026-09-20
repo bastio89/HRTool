@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
@@ -39,12 +40,15 @@ from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
 from services.candidate_text_renderer import render_candidate_fulltext
+from plugins.billing.service import BillingService
 from plugins.registry import build_plugins
 from prompts_api import create_prompts_router
+from services.jwt_auth import verify_hs256_jwt
 pdf_service = PDFService()
 postgres_store = PostgresStore(settings.database_url)
 candidate_privacy_service = CandidatePrivacyService(postgres_store)
 prompt_service = PromptService(postgres_store)
+billing_service = BillingService(postgres_store)
 model_config_service = ModelConfigService(
 	postgres_store,
 	default_chat_base_url="",
@@ -99,6 +103,23 @@ def _normalized_profile_hash(profile: Any) -> str | None:
 		return None
 
 
+def _has_valid_user_jwt(request: Request) -> bool:
+	authorization = request.headers.get("authorization", "").strip()
+	if not authorization.lower().startswith("bearer "):
+		return False
+	secret = (os.environ.get("JWT_SECRET") or "").strip()
+	if not secret:
+		return False
+	token = authorization.split(" ", 1)[1].strip()
+	if not token:
+		return False
+	try:
+		verify_hs256_jwt(token, secret)
+		return True
+	except Exception:
+		return False
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
 	if not (settings.graphrag_api_key or "").strip():
@@ -150,7 +171,7 @@ BROWSER_PATHS = {"/cv-parser/parse"}
 async def require_api_key(request: Request, call_next):
 	api_key = (settings.graphrag_api_key or "").strip()
 	path = request.url.path.rstrip("/") or "/"
-	if not api_key or path in OPEN_PATHS or path in BROWSER_PATHS:
+	if not api_key or path in OPEN_PATHS or path in BROWSER_PATHS or _has_valid_user_jwt(request):
 		return await call_next(request)
 	if request.headers.get("x-api-key") != api_key:
 		return Response(
@@ -323,6 +344,7 @@ async def deanonymize_candidate(request: CandidatePrivacyRequest) -> CandidatePr
 	},
 )
 async def parse_cv(
+	request: Request,
 	file: list[UploadFile] | None = File(default=None),
 	persist: bool = Query(default=False),
 ) -> dict[str, Any]:
@@ -362,8 +384,12 @@ async def parse_cv(
 			detail="Kein lesbarer Text in den Dateien gefunden. Möglicherweise ist OCR erforderlich.",
 		)
 
+	await billing_service.charge(request, "-1.00", "CV_PARSE", note="CV ingest")
+
 	try:
 		profile = await extract_candidate_profile(llm_service, combined_text)
+	except HTTPException:
+		raise
 	except Exception as exc:
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
@@ -456,6 +482,8 @@ async def ingest_candidate(
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
 
+	await billing_service.charge(request, "-1.00", "CV_PARSE", note="CV ingest")
+
 	text_hash = _normalized_text_hash(text)
 	profile_hash = _normalized_profile_hash(profile)
 	duplicate_candidate = None
@@ -538,6 +566,8 @@ async def ingest_job(
 					if value:
 						merged[field_name] = value
 				profile = JobProfileExtraction.model_validate(merged)
+	except HTTPException:
+		raise
 	except Exception as exc:
 		logger.exception("Job parsing failed")
 		raise HTTPException(status_code=502, detail=f"Job parsing failed: {exc}") from exc
@@ -579,9 +609,13 @@ async def ingest_job(
 	if not persist_postgres and not persist_neo4j:
 		return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=False)
 
+	await billing_service.charge(request, "-1.00", "JOB_PARSE", note=profile.title or "Job ingest")
+
 	try:
 		embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
 		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
+	except HTTPException:
+		raise
 	except Exception as exc:
 		logger.exception("Job embedding creation failed")
 		raise HTTPException(status_code=502, detail=f"Job embedding creation failed: {exc}") from exc
@@ -618,7 +652,7 @@ async def ingest_job(
 
 
 @app.post("/match/{job_id}", response_model=MatchResponse)
-async def match_candidates(job_id: str) -> MatchResponse:
+async def match_candidates(job_id: str, request: Request) -> MatchResponse:
 	job_profile = await db_service.get_job_profile(job_id)
 	if not job_profile:
 		raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
@@ -626,6 +660,8 @@ async def match_candidates(job_id: str) -> MatchResponse:
 	stage1 = await db_service.stage1_filter_candidates(job_id=job_id, limit=100)
 	if not stage1:
 		return MatchResponse(job_id=job_id, stage1_count=0, stage2_count=0, matches=[])
+
+	await billing_service.charge(request, "-1.00", "AI_MATCH", note=f"match:{job_id}")
 
 	stage2 = await db_service.stage2_rank_candidates(
 		job_profile=job_profile,

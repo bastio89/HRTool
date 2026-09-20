@@ -24,6 +24,7 @@ export default function Breadcrumb() {
     'users': t('breadcrumb.users'),
     'audit': t('breadcrumb.audit'),
     'dsgvo': t('breadcrumb.dsgvo'),
+    'credits': t('breadcrumb.credits'),
     'ki-transparenz': t('breadcrumb.ki_transparency'),
   }
 

@@ -102,19 +102,24 @@ class BillingService:
 
 	async def charge(self, request: Request, amount: Decimal | str | float, action_type: str, *, note: str | None = None, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
 		claims = await self._ensure_claims_user(request)
-		return await self.postgres_store.apply_credit_transaction(
-			claims.user_id,
-			amount,
-			action_type,
-			note=note,
-			metadata=metadata,
-			user_snapshot={
-				'username': claims.username,
-				'email': claims.email,
-				'display_name': claims.display_name,
-				'role': claims.role,
-			},
-		)
+		try:
+			return await self.postgres_store.apply_credit_transaction(
+				claims.user_id,
+				amount,
+				action_type,
+				note=note,
+				metadata=metadata,
+				user_snapshot={
+					'username': claims.username,
+					'email': claims.email,
+					'display_name': claims.display_name,
+					'role': claims.role,
+				},
+			)
+		except ValueError as exc:
+			message = str(exc)
+			status_code = status.HTTP_402_PAYMENT_REQUIRED if 'insufficient' in message.lower() else status.HTTP_400_BAD_REQUEST
+			raise HTTPException(status_code=status_code, detail=message) from exc
 
 	async def _require_admin(self, request: Request) -> BillingUserClaims:
 		claims = await self._ensure_claims_user(request)
@@ -147,11 +152,16 @@ class BillingService:
 	async def admin_top_up(self, request: Request, *, user_id: int, amount: Decimal | str | float, reason: str | None, admin_pin: str) -> dict[str, Any]:
 		await self._require_admin(request)
 		self._verify_admin_pin(request, admin_pin)
-		return await self.postgres_store.apply_credit_transaction(
-			user_id,
-			amount,
-			'ADMIN_TOPUP',
-			note=reason,
-			metadata={'reason': reason or ''},
-			allow_negative_balance=False,
-		)
+		try:
+			return await self.postgres_store.apply_credit_transaction(
+				user_id,
+				amount,
+				'ADMIN_TOPUP',
+				note=reason,
+				metadata={'reason': reason or ''},
+				allow_negative_balance=False,
+			)
+		except ValueError as exc:
+			message = str(exc)
+			status_code = status.HTTP_402_PAYMENT_REQUIRED if 'insufficient' in message.lower() else status.HTTP_400_BAD_REQUEST
+			raise HTTPException(status_code=status_code, detail=message) from exc

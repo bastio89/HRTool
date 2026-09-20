@@ -36,6 +36,7 @@ import Reports from './pages/Reports'
 import Plugins from './pages/Plugins'
 import AISettings from './pages/AISettings'
 import Prompts from './pages/Prompts'
+import AdminCreditsPage from './pages/AdminCreditsPage'
 import { PluginProvider, usePlugins } from './plugins/PluginContext'
 import { getPluginDefinition } from './plugins/registry'
 
@@ -129,6 +130,7 @@ function AppRouter() {
               <Route path="admin/ki-transparenz" element={<RevisorRoute><KITransparenz /></RevisorRoute>} />
               <Route path="admin/email" element={<AdminRoute><EmailSettings /></AdminRoute>} />
               <Route path="admin/plugins" element={<AdminRoute><Plugins /></AdminRoute>} />
+              <Route path="admin/credits" element={<AdminRoute><AdminCreditsPage /></AdminRoute>} />
               <Route path="admin/ai" element={<AdminRoute><AISettings /></AdminRoute>} />
               <Route path="admin/prompts" element={<AdminRoute><Prompts /></AdminRoute>} />
               <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />

@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 import re
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from config import settings
+from plugins.billing.service import BillingService
 from models import (
 	MatchingCandidateInput,
 	MatchingJobInput,
@@ -29,6 +30,8 @@ from models import (
 
 def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 	router = APIRouter()
+	billing_store = getattr(db_service, 'postgres_store', None) or getattr(llm_service, 'postgres_store', None)
+	billing_service = BillingService(billing_store) if billing_store is not None else None
 
 	field_profiles = [
 		('skills', 'skills', 'Fachliche Qualifikation / Skills', 34),
@@ -534,20 +537,22 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		}
 
 	@router.post('/match/vectormatch', response_model=VectorMatchPayload | VectorMatchNeo4jPayload)
-	async def vector_match(request: VectorMatchRequest) -> VectorMatchPayload | VectorMatchNeo4jPayload:
-		if request.engine == 'neo4j':
-			return await vector_match_neo4j(request)
+	async def vector_match(payload: VectorMatchRequest, request: Request) -> VectorMatchPayload | VectorMatchNeo4jPayload:
+		if payload.engine == 'neo4j':
+			return await vector_match_neo4j(payload, request)
 
 		if db_service is None:
 			raise HTTPException(status_code=503, detail='Neo4j service is not available')
 
-		jobs_raw = await db_service.get_jobs_for_vectormatch(request.job_ids, request.job_titles)
-		candidates_raw = await db_service.get_candidates_for_vectormatch(request.cv_ids, request.candidate_names)
+		jobs_raw = await db_service.get_jobs_for_vectormatch(payload.job_ids, payload.job_titles)
+		candidates_raw = await db_service.get_candidates_for_vectormatch(payload.cv_ids, payload.candidate_names)
 
 		if not jobs_raw:
 			raise HTTPException(status_code=404, detail='Keine Stellen für die angegebenen Job-IDs gefunden')
 		if not candidates_raw:
 			raise HTTPException(status_code=404, detail='Keine CVs für die angegebenen CV-IDs gefunden')
+		if billing_service is not None:
+			await billing_service.charge(request, '-0.10', '3D_MATCH', note='vectormatch')
 
 		jobs = [MatchingJobInput.model_validate(job) for job in jobs_raw]
 		candidates = [MatchingCandidateInput.model_validate(candidate) for candidate in candidates_raw]
@@ -908,12 +913,14 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		)
 
 	@router.post('/match/external/run', response_model=MatchingResultsPayload)
-	async def external_run(request: MatchingRunRequest) -> MatchingResultsPayload:
-		if not request.candidates:
+	async def external_run(payload: MatchingRunRequest, request: Request) -> MatchingResultsPayload:
+		if not payload.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
-		if not request.job.title and not request.job.description and not request.job.requirements:
+		if not payload.job.title and not payload.job.description and not payload.job.requirements:
 			raise HTTPException(status_code=400, detail='Stellentitel, Beschreibung oder Anforderungen sind erforderlich')
-		skill_embeddings = await build_skill_embedding_cache([request.job], request.candidates)
+		if billing_service is not None:
+			await billing_service.charge(request, '-1.00', 'AI_MATCH', note='external run')
+		skill_embeddings = await build_skill_embedding_cache([payload.job], payload.candidates)
 		items = [
 			MatchingResultItem(
 				candidateId=pair['candidateId'],
@@ -924,45 +931,51 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 				summary=pair['summary'],
 			)
 			for pair in (
-				score_vector_pair(request.job, candidate, skill_embeddings)
-				for candidate in request.candidates
+				score_vector_pair(payload.job, candidate, skill_embeddings)
+				for candidate in payload.candidates
 			)
 		]
 		items.sort(key=lambda item: item.score, reverse=True)
 		return MatchingResultsPayload(results=items)
 
 	@router.post('/match/external/matrix', response_model=MatchingMatrixPayload)
-	async def external_matrix(request: MatchingMatrixRequest) -> MatchingMatrixPayload:
-		if not request.jobs:
+	async def external_matrix(payload: MatchingMatrixRequest, request: Request) -> MatchingMatrixPayload:
+		if not payload.jobs:
 			raise HTTPException(status_code=400, detail='Mindestens eine Stelle ist erforderlich')
-		if not request.candidates:
+		if not payload.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
-		if request.engine == 'neo4j':
-			return await external_matrix_neo4j(request)
-		return await build_vector_matrix(request.jobs, request.candidates, request.mode, 'graph-rag-vector-matrix')
+		if payload.engine == 'neo4j':
+			return await external_matrix_neo4j(payload, request)
+		if billing_service is not None:
+			await billing_service.charge(request, '-0.10', '3D_MATCH', note='external matrix')
+		return await build_vector_matrix(payload.jobs, payload.candidates, payload.mode, 'graph-rag-vector-matrix')
 
 	@router.post('/match/external/matrix_neo4j', response_model=MatchingMatrixPayload)
-	async def external_matrix_neo4j(request: MatchingMatrixRequest) -> MatchingMatrixPayload:
-		if not request.jobs:
+	async def external_matrix_neo4j(payload: MatchingMatrixRequest, request: Request) -> MatchingMatrixPayload:
+		if not payload.jobs:
 			raise HTTPException(status_code=400, detail='Mindestens eine Stelle ist erforderlich')
-		if not request.candidates:
+		if not payload.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
-		return await build_vector_matrix(request.jobs, request.candidates, request.mode, 'graph-rag-neo4j-skill-vector-match')
+		if billing_service is not None:
+			await billing_service.charge(request, '-0.10', '3D_MATCH', note='external matrix neo4j')
+		return await build_vector_matrix(payload.jobs, payload.candidates, payload.mode, 'graph-rag-neo4j-skill-vector-match')
 
 	@router.post('/match/ki_match_pairs', response_model=KiMatchPairsResponse)
-	async def ki_match_pairs(request: KiMatchPairsRequest) -> KiMatchPairsResponse:
+	async def ki_match_pairs(payload: KiMatchPairsRequest, request: Request) -> KiMatchPairsResponse:
 		if db_service is None or llm_service is None:
 			raise HTTPException(status_code=503, detail='Matching service is not available')
-		if not request.pairs:
+		if not payload.pairs:
 			raise HTTPException(status_code=400, detail='Mindestens eine Paarung ist erforderlich')
-		if len(request.pairs) > 20:
+		if len(payload.pairs) > 20:
 			raise HTTPException(status_code=400, detail='Maximal 20 Paarungen pro Anfrage erlaubt')
+		if billing_service is not None:
+			await billing_service.charge(request, '-1.00', 'AI_MATCH', note='ki match pairs')
 
 		postgres_store = getattr(db_service, 'postgres_store', None) or getattr(llm_service, 'postgres_store', None)
 		results: list[KiMatchPairResult] = []
 		failures: list[KiMatchPairFailure] = []
 
-		for pair in request.pairs:
+		for pair in payload.pairs:
 			job_id = str(pair.job_id).strip()
 			candidate_id = str(pair.candidate_id).strip()
 			try:
@@ -1037,7 +1050,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 					],
 				)
 				rerank_item = ranked.ranked_candidates[0] if ranked.ranked_candidates else None
-				deterministic = score_pair(job_input, candidate_input, request.weights)
+				deterministic = score_pair(job_input, candidate_input, payload.weights)
 				results.append(
 					KiMatchPairResult(
 						jobId=job_id,
@@ -1066,7 +1079,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return KiMatchPairsResponse(
 			results=results,
 			failures=failures,
-			selectedCount=len(request.pairs),
+			selectedCount=len(payload.pairs),
 			matchedCount=len(results),
 			failedCount=len(failures),
 			timestamp=datetime.now(timezone.utc).isoformat(),
@@ -1074,17 +1087,19 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		)
 
 	@router.post('/match/vectormatch_neo4j', response_model=VectorMatchNeo4jPayload)
-	async def vector_match_neo4j(request: VectorMatchRequest) -> VectorMatchNeo4jPayload:
+	async def vector_match_neo4j(payload: VectorMatchRequest, request: Request) -> VectorMatchNeo4jPayload:
 		if db_service is None:
 			raise HTTPException(status_code=503, detail='Neo4j service is not available')
 
-		jobs_raw = await db_service.get_jobs_for_vectormatch(request.job_ids, request.job_titles)
-		candidates_raw = await db_service.get_candidates_for_vectormatch(request.cv_ids, request.candidate_names)
+		jobs_raw = await db_service.get_jobs_for_vectormatch(payload.job_ids, payload.job_titles)
+		candidates_raw = await db_service.get_candidates_for_vectormatch(payload.cv_ids, payload.candidate_names)
 		job_ids = [row['id'] for row in jobs_raw if row.get('id') is not None]
 		candidate_ids = [row['id'] for row in candidates_raw if row.get('id') is not None]
 		rows = await db_service.get_vectormatch_neo4j_rows(job_ids, candidate_ids)
 		if not rows:
 			raise HTTPException(status_code=404, detail='Keine Treffer für die angegebenen Job- oder CV-IDs gefunden')
+		if billing_service is not None:
+			await billing_service.charge(request, '-0.10', '3D_MATCH', note='vectormatch neo4j')
 
 		normalized_rows = [build_neo4j_vector_result(row) for row in rows]
 		normalized_rows.sort(key=lambda item: item['score'], reverse=True)

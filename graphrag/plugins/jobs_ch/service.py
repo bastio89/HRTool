@@ -20,6 +20,7 @@ from services.db import Neo4jService
 
 from .schemas import JobsChExportRequest
 from .schemas import JobsChImportRequest
+from .schemas import JobsChSearchItem
 
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,19 @@ class JobsChImportService:
             )
         )
         return {name.lower(): vector for name, vector in zip(unique_names, vectors)}
+
+    async def search(self, query: str, *, limit: int = 20) -> list[JobsChSearchItem]:
+        results = await asyncio.to_thread(jobs_ch_to_pdf.search_jobs, query, 30, limit)
+        return [
+            JobsChSearchItem(
+                title=item.title,
+                link=item.link,
+                job_id=item.job_id,
+                company=item.company,
+                location=item.location,
+            )
+            for item in results
+        ]
 
     async def import_links(self, payload: JobsChImportRequest) -> JobsChImportResult:
         links = self._normalize_links(payload)

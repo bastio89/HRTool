@@ -25,6 +25,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://hrtool:hrtoolpw@localhost:54
 from config import settings
 from services.candidate_text_renderer import build_candidate_profile_json, render_candidate_fulltext
 from services.db import Neo4jService
+from services.model_config import ModelConfigService
 from services.llm import LLMService
 from services.postgres_store import PostgresStore
 
@@ -61,6 +62,16 @@ def _candidate_database_urls(database_url: str) -> list[str]:
 
 
 def _build_llm_service(database_url: str) -> LLMService:
+    postgres_store = PostgresStore(database_url)
+    model_config_service = ModelConfigService(
+        postgres_store,
+        default_chat_base_url=settings.resolved_ai_base_url,
+        default_chat_model=settings.resolved_chat_model,
+        default_embedding_model=settings.initial_embedding_model or settings.resolved_embedding_model,
+        default_provider=settings.resolved_provider,
+        default_api_key=settings.resolved_api_key,
+        default_reasoning_level=settings.resolved_reasoning_level,
+    )
     return LLMService(
         provider=settings.resolved_provider,
         base_url=settings.resolved_ai_base_url,
@@ -72,6 +83,7 @@ def _build_llm_service(database_url: str) -> LLMService:
         reasoning_level=settings.resolved_reasoning_level,
         enable_call_logging=False,
         database_url=database_url,
+        model_config_service=model_config_service,
     )
 
 

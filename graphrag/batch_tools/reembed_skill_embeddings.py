@@ -36,7 +36,9 @@ os.environ.setdefault("DATABASE_URL", "postgresql://hrtool:hrtoolpw@localhost:54
 
 from config import settings
 from services.db import Neo4jService
+from services.model_config import ModelConfigService
 from services.llm import LLMService
+from services.postgres_store import PostgresStore
 
 
 DEFAULT_BATCH_SIZE = 32
@@ -116,6 +118,16 @@ async def _write_skill_embeddings(db_service: Neo4jService, rows: list[dict[str,
 async def run(args: argparse.Namespace) -> int:
     _print_config()
     db_service = Neo4jService(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+    postgres_store = PostgresStore(settings.database_url)
+    model_config_service = ModelConfigService(
+        postgres_store,
+        default_chat_base_url=settings.resolved_ai_base_url,
+        default_chat_model=settings.resolved_chat_model,
+        default_embedding_model=settings.initial_embedding_model or settings.resolved_embedding_model,
+        default_provider=settings.resolved_provider,
+        default_api_key=settings.resolved_api_key,
+        default_reasoning_level=settings.resolved_reasoning_level,
+    )
     llm_service = LLMService(
         provider=settings.resolved_provider,
         base_url=settings.resolved_ai_base_url,
@@ -127,6 +139,7 @@ async def run(args: argparse.Namespace) -> int:
         reasoning_level=settings.resolved_reasoning_level,
         enable_call_logging=False,
         database_url=settings.database_url,
+        model_config_service=model_config_service,
     )
 
     try:

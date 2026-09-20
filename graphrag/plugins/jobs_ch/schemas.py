@@ -24,3 +24,17 @@ class JobsChImportResponse(BaseModel):
     failed: int
     warning: str | None = None
     items: list[JobsChImportItem] = Field(default_factory=list)
+
+
+class JobsChSearchItem(BaseModel):
+    title: str
+    link: str
+    job_id: str | None = None
+    company: str | None = None
+    location: str | None = None
+
+
+class JobsChSearchResponse(BaseModel):
+    query: str
+    count: int
+    items: list[JobsChSearchItem] = Field(default_factory=list)

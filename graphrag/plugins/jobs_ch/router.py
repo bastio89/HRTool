@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from config import Settings
 from services.db import Neo4jService
 from services.llm import LLMService
 from services.postgres_store import PostgresStore
 
-from .schemas import JobsChExportRequest, JobsChImportRequest
+from .schemas import JobsChExportRequest, JobsChImportRequest, JobsChSearchResponse
 from .service import JobsChExportService, JobsChImportService
 from .settings import is_enabled
 
@@ -63,5 +63,17 @@ def build_jobs_ch_router(settings: Settings, *, llm_service: LLMService, postgre
             "items": [item.model_dump() if hasattr(item, "model_dump") else item.__dict__ for item in result.items],
         }
         return response
+
+    @router.get("/search", response_model=JobsChSearchResponse)
+    async def search_jobs(term: str = Query(..., min_length=1), limit: int = Query(20, ge=1, le=50)):
+        await ensure_enabled()
+        try:
+            items = await import_service.search(term, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=f"jobs.ch-Suche fehlgeschlagen: {exc}") from exc
+
+        return JobsChSearchResponse(query=term, count=len(items), items=items)
 
     return router

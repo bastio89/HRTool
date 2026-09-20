@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 from services.postgres_store import PostgresStore
+from services.model_config import ModelConfigService, ModelRuntimeConfig
 
 from models import (
     CandidateProfileExtraction,
@@ -77,10 +78,9 @@ class LLMService:
         parse_latency_log_every: int = 20,
         enable_call_logging: bool = False,
         database_url: str | None = None,
+        model_config_service: ModelConfigService | None = None,
     ) -> None:
-        self.provider = provider.strip().lower()
-        if self.provider == "openai":
-            self.provider = "openrouter"
+        self.provider = self._normalize_provider(provider)
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.chat_model = chat_model
@@ -93,11 +93,45 @@ class LLMService:
         self.parse_latency_log_every = max(1, parse_latency_log_every)
         self.enable_call_logging = enable_call_logging
         self.postgres_store = PostgresStore(database_url) if database_url else None
+        self.model_config_service = model_config_service
+        self._static_chat_config = ModelRuntimeConfig(
+            task="chat",
+            provider=self.provider,
+            base_url=self.base_url,
+            model=self.chat_model,
+            api_key=self.api_key,
+            reasoning_level=self.reasoning_level,
+        )
+        self._static_embedding_config = ModelRuntimeConfig(
+            task="embedding",
+            provider=self.provider,
+            base_url=self.base_url,
+            model=self.embedding_model,
+            api_key=self.api_key,
+            reasoning_level=self.reasoning_level,
+        )
         self._latency_samples: dict[str, deque[float]] = defaultdict(
             lambda: deque(maxlen=self.parse_latency_window_size)
         )
         self._latency_counts: dict[str, int] = defaultdict(int)
         self.client = httpx.AsyncClient(timeout=120.0)
+
+    @staticmethod
+    def _normalize_provider(provider: str) -> str:
+        normalized = provider.strip().lower()
+        if normalized == "openai":
+            return "openrouter"
+        return normalized or "ollama"
+
+    async def _resolve_chat_config(self) -> ModelRuntimeConfig:
+        if self.model_config_service is not None:
+            return await self.model_config_service.get_chat_model()
+        return self._static_chat_config
+
+    async def _resolve_embedding_config(self) -> ModelRuntimeConfig:
+        if self.model_config_service is not None:
+            return await self.model_config_service.get_embedding_model()
+        return self._static_embedding_config
 
     async def close(self) -> None:
         await self.client.aclose()
@@ -126,6 +160,7 @@ class LLMService:
     async def _write_call_log(
         self,
         *,
+        model: str,
         feature: str,
         system_prompt: str,
         user_content: str,
@@ -142,7 +177,7 @@ class LLMService:
 
         prompt_payload = json.dumps(
             {
-                "model": self.chat_model,
+                "model": model,
                 "system_prompt": system_prompt,
                 "user_content": user_content,
             },
@@ -253,11 +288,18 @@ class LLMService:
 
             return max(matching, key=_score)
 
-        if self.provider == "openrouter":
-            headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-            request_url = f"{self.base_url}/chat/completions"
+        chat_config = await self._resolve_chat_config()
+        provider = chat_config.provider
+        base_url = chat_config.base_url or self.base_url
+        chat_model = chat_config.model or self.chat_model
+        api_key = chat_config.api_key if chat_config.api_key is not None else self.api_key
+        reasoning_level = chat_config.reasoning_level or self.reasoning_level
+
+        if provider == "openrouter":
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            request_url = f"{base_url}/chat/completions"
             request_body = {
-                "model": self.chat_model,
+                "model": chat_model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Respond ONLY with valid JSON and no surrounding markdown.\n\nInput:\n{user_content}"},
@@ -267,13 +309,13 @@ class LLMService:
                 # "exclude" only hides reasoning from the response but still burns completion
                 # tokens on hidden thinking, which truncated JSON output for longer CVs.
                 # "enabled": False actually turns reasoning generation off.
-                "reasoning": {"enabled": False} if self.reasoning_level == "none" else {"effort": self.reasoning_level},
+                "reasoning": {"enabled": False} if reasoning_level == "none" else {"effort": reasoning_level},
             }
         else:
             headers = {}
-            request_url = f"{self.base_url}/api/chat"
+            request_url = f"{base_url}/api/chat"
             request_body = {
-                "model": self.chat_model,
+                "model": chat_model,
                 "think": self.enable_reasoning if use_reasoning is None else use_reasoning,
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -347,6 +389,7 @@ class LLMService:
             best_non_reasoning = _best_match(non_reasoning_objects)
             if best_non_reasoning is not None:
                 await self._write_call_log(
+                    model=chat_model,
                     feature=feature,
                     system_prompt=system_prompt,
                     user_content=user_content,
@@ -365,6 +408,7 @@ class LLMService:
             if best_thinking is not None:
                 logger.warning("ai_json_from_thinking_fallback provider=%s", self.provider)
                 await self._write_call_log(
+                    model=chat_model,
                     feature=feature,
                     system_prompt=system_prompt,
                     user_content=user_content,
@@ -386,6 +430,7 @@ class LLMService:
             raise ValueError(f"{self.provider} returned no usable JSON response")
         except Exception as exc:
             await self._write_call_log(
+                model=chat_model,
                 feature=feature,
                 system_prompt=system_prompt,
                 user_content=user_content,
@@ -943,45 +988,50 @@ class LLMService:
 
     async def create_embedding(self, payload: dict[str, Any], *, allow_fallback: bool = True) -> list[float]:
         payload_text = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+        embedding_config = await self._resolve_embedding_config()
+        provider = embedding_config.provider
+        base_url = embedding_config.base_url or self.base_url
+        embedding_model = embedding_config.model or self.embedding_model
+        api_key = embedding_config.api_key if embedding_config.api_key is not None else self.api_key
         logger.info(
             "embedding_call provider=%s model=%s allow_fallback=%s payload_keys=%s entity=%s name=%s",
-            self.provider,
-            self.embedding_model,
+            provider,
+            embedding_model,
             allow_fallback,
             sorted(payload.keys()),
             payload.get("entity"),
             payload.get("name"),
         )
         try:
-            if self.provider == "openrouter":
+            if provider == "openrouter":
                 response = await self.client.post(
-                    f"{self.base_url}/embeddings",
-                    headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
-                    json={"model": self.embedding_model, "input": payload_text},
+                    f"{base_url}/embeddings",
+                    headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+                    json={"model": embedding_model, "input": payload_text},
                 )
             else:
                 response = await self.client.post(
-                    f"{self.base_url}/api/embeddings",
-                    json={"model": self.embedding_model, "prompt": payload_text},
+                    f"{base_url}/api/embeddings",
+                    json={"model": embedding_model, "prompt": payload_text},
                 )
             response.raise_for_status()
             data = response.json()
             embedding = data.get("embedding")
-            if self.provider == "openrouter":
+            if provider == "openrouter":
                 embedding = (data.get("data") or [{}])[0].get("embedding")
             if isinstance(embedding, list) and embedding:
                 return self._normalize_embedding([float(item) for item in embedding])
         except Exception as exc:
-            if not allow_fallback and self.provider != "ollama":
+            if not allow_fallback and provider != "ollama":
                 raise RuntimeError(
-                    f"Embedding generation failed for provider={self.provider}, model={self.embedding_model}"
+                    f"Embedding generation failed for provider={provider}, model={embedding_model}"
                 ) from exc
-            logger.warning("embedding_fallback provider=%s model=%s: %s", self.provider, self.embedding_model, exc)
+            logger.warning("embedding_fallback provider=%s model=%s: %s", provider, embedding_model, exc)
             return self._deterministic_fallback_embedding(payload_text)
 
-        if not allow_fallback and self.provider != "ollama":
+        if not allow_fallback and provider != "ollama":
             raise RuntimeError(
-                f"Embedding generation returned no vector for provider={self.provider}, model={self.embedding_model}"
+                f"Embedding generation returned no vector for provider={provider}, model={embedding_model}"
             )
         return self._deterministic_fallback_embedding(payload_text)
 

@@ -49,6 +49,7 @@ from services.candidate_privacy import CandidatePrivacyService
 from services.candidate_extraction import extract_candidate_profile
 from services.candidate_persistence import persist_candidate_profile
 from services.db import Neo4jService
+from services.model_config import ModelConfigService
 from services.llm import LLMService
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
@@ -505,6 +506,15 @@ async def run_cv_import(args: argparse.Namespace) -> int:
         password=settings.neo4j_password,
         postgres_store=postgres_store,
     )
+    model_config_service = ModelConfigService(
+        postgres_store,
+        default_chat_base_url=settings.resolved_ai_base_url,
+        default_chat_model=settings.resolved_chat_model,
+        default_embedding_model=settings.initial_embedding_model or settings.resolved_embedding_model,
+        default_provider=settings.resolved_provider,
+        default_api_key=settings.resolved_api_key,
+        default_reasoning_level=settings.resolved_reasoning_level,
+    )
     llm_service = LLMService(
         provider=settings.resolved_provider,
         base_url=settings.resolved_ai_base_url,
@@ -518,6 +528,7 @@ async def run_cv_import(args: argparse.Namespace) -> int:
         parse_latency_window_size=settings.parse_latency_window_size,
         parse_latency_log_every=settings.parse_latency_log_every,
         database_url=database_url,
+        model_config_service=model_config_service,
     )
 
     input_dir = _resolve_input_dir(args)

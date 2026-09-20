@@ -1,5 +1,6 @@
 const fs = require('fs');
 const db = require('./database');
+const { modelConfigService } = require('./modelConfigService');
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
@@ -49,43 +50,16 @@ function openAiApiBase(baseUrl) {
  * @returns {{ baseUrl: string, model: string, provider: string, source: object }}
  */
 function getAiConfig() {
-  const dbBaseUrl = readSetting('ai_base_url');
-  const dbModel = readSetting('ai_model');
-  const dbEmbeddingModel = readSetting('ai_embedding_model');
-  const dbProvider = readSetting('ai_provider');
-  const dbApiKey = readSetting('ai_api_key');
-  const dbReasoningLevel = readSetting('ai_reasoning_level');
-  const dbLoggingEnabled = readSetting('ai_log_llm_calls');
-  const provider = dbProvider || 'auto';
-  const normalizedProvider = provider.trim().toLowerCase();
-  const rawBaseUrl = dbBaseUrl || '';
-  const model = dbModel || '';
-  const embeddingModel = dbEmbeddingModel || '';
-  const apiKey = dbApiKey || null;
-  const loggingEnabledRaw = dbLoggingEnabled || null;
-  const loggingEnabled = ['1', 'true', 'yes', 'on'].includes(String(loggingEnabledRaw).trim().toLowerCase());
-  const reasoningLevel = ['none', 'low', 'medium', 'high'].includes(dbReasoningLevel || '')
-    ? dbReasoningLevel
-    : 'none';
-
-  const baseUrl = normalizeAiBaseUrl(rawBaseUrl);
-
+  const config = modelConfigService.getAiConfig();
   return {
-    baseUrl,
-    model,
-    embeddingModel,
-    provider,
-    apiKey,
-    reasoningLevel,
-    loggingEnabled,
-    source: {
-      baseUrl: dbBaseUrl ? 'settings' : 'missing',
-      model: dbModel ? 'settings' : 'missing',
-      embeddingModel: dbEmbeddingModel ? 'settings' : 'missing',
-      provider: dbProvider ? 'settings' : 'missing',
-      apiKey: dbApiKey ? 'settings' : 'missing',
-      reasoningLevel: dbReasoningLevel ? 'settings' : 'missing',
-    },
+    baseUrl: config.baseUrl,
+    model: config.model,
+    embeddingModel: config.embeddingModel,
+    provider: config.provider,
+    apiKey: config.apiKey,
+    reasoningLevel: config.reasoningLevel,
+    loggingEnabled: config.loggingEnabled,
+    source: config.source,
   };
 }
 
@@ -144,6 +118,10 @@ function invalidateProviderCache(baseUrl) {
     return;
   }
   _providerCache.clear();
+}
+
+function invalidateAiConfigCache() {
+  modelConfigService.invalidate();
 }
 
 // ─── Unified request builder ──────────────────────────────────────────────────
@@ -340,4 +318,5 @@ module.exports = {
   filterModelsByKind,
   stripReasoningTags,
   OPENROUTER_BASE_URL,
+  invalidateAiConfigCache,
 };

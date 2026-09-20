@@ -24,7 +24,7 @@ const JOBS_CH_MANIFEST = {
   description: 'jobs.ch PDF export',
   uiSlots: ['sidebar', 'tools', 'routes'],
   routes: ['/tools/jobs-ch'],
-  apiRoutes: ['/api/plugins/jobs_ch/export-pdf', '/api/plugins/jobs_ch/import-db'],
+  apiRoutes: ['/api/plugins/jobs_ch/export-pdf', '/api/plugins/jobs_ch/import-db', '/api/plugins/jobs_ch/search'],
 }
 
 const isAdmin = (req) => req.user?.role === 'admin'

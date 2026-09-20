@@ -29,6 +29,7 @@ from services.candidate_extraction import extract_candidate_profile
 from services.candidate_persistence import persist_candidate_profile
 from services.db import Neo4jService
 from matching_api import create_matching_router
+from services.model_config import ModelConfigService
 from services.job_persistence import persist_job_profile
 from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
@@ -36,6 +37,18 @@ from services.pdf import PDFService
 from services.postgres_store import PostgresStore
 from services.candidate_text_renderer import render_candidate_fulltext
 from plugins.registry import build_plugins
+pdf_service = PDFService()
+postgres_store = PostgresStore(settings.database_url)
+candidate_privacy_service = CandidatePrivacyService(postgres_store)
+model_config_service = ModelConfigService(
+	postgres_store,
+	default_chat_base_url=settings.resolved_ai_base_url,
+	default_chat_model=settings.resolved_chat_model,
+	default_embedding_model=settings.initial_embedding_model or settings.resolved_embedding_model,
+	default_provider=settings.resolved_provider,
+	default_api_key=settings.resolved_api_key,
+	default_reasoning_level=settings.resolved_reasoning_level,
+)
 llm_service = LLMService(
 	provider=settings.resolved_provider,
 	base_url=settings.resolved_ai_base_url,
@@ -50,10 +63,8 @@ llm_service = LLMService(
 	parse_latency_log_every=settings.parse_latency_log_every,
 	enable_call_logging=True,
 	database_url=settings.database_url,
+	model_config_service=model_config_service,
 )
-pdf_service = PDFService()
-postgres_store = PostgresStore(settings.database_url)
-candidate_privacy_service = CandidatePrivacyService(postgres_store)
 db_service = Neo4jService(
 	uri=settings.neo4j_uri,
 	user=settings.neo4j_user,
@@ -75,6 +86,7 @@ async def lifespan(_: FastAPI):
 	await postgres_store.ensure_setting("ai_provider", settings.resolved_provider)
 	await postgres_store.ensure_setting_if_blank("ai_embedding_model", settings.initial_embedding_model)
 	await postgres_store.ensure_setting("ai_reasoning_level", settings.resolved_reasoning_level)
+	model_config_service.invalidate()
 	await postgres_store.ensure_setting_if_blank("plugin.linkedin.enabled", "1" if settings.linkedin_plugin_enabled else "0")
 	await postgres_store.ensure_setting_if_blank("plugin.jobs_ch.enabled", "1" if settings.jobs_ch_plugin_enabled else "0")
 	yield

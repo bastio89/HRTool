@@ -142,6 +142,25 @@ class PostgresStore:
             )
         return getattr(result, "rowcount", 0) == 1
 
+    async def get_settings(self, keys: list[str]) -> dict[str, str]:
+        filtered_keys = [key for key in keys if isinstance(key, str) and key.strip()]
+        if not filtered_keys:
+            return {}
+
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT key, value FROM settings WHERE key = ANY(%s)",
+                    (filtered_keys,),
+                )
+                rows = await cursor.fetchall()
+
+        return {
+            str(key): str(value).strip()
+            for key, value in rows
+            if isinstance(key, str) and isinstance(value, str) and value.strip()
+        }
+
     async def ensure_schema(self) -> None:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor() as cursor:

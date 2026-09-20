@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, resolveAiRuntimeBaseUrl, buildAiRequest, extractAiText, stripReasoningTags, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, OPENROUTER_BASE_URL } = require('../aiConfig');
+const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, resolveAiRuntimeBaseUrl, buildAiRequest, extractAiText, stripReasoningTags, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, invalidateAiConfigCache, OPENROUTER_BASE_URL } = require('../aiConfig');
 
 const router = express.Router();
 
@@ -264,6 +264,7 @@ router.put('/ai/config', (req, res) => {
 
     // Invalidate cached provider detection for the old and new URLs
     invalidateProviderCache();
+    invalidateAiConfigCache();
 
     logAudit(req, 'ki-konfiguration-geändert', 'Setting', null, 'ai_config', {
       baseUrl: trimmedUrl,

@@ -329,6 +329,12 @@ export const jobsApi = {
 
     return response.json()
   },
+  searchJobsCh: (term, limit = 20) => {
+    const q = new URLSearchParams()
+    q.set('term', term)
+    q.set('limit', String(limit))
+    return request(`/plugins/jobs_ch/search?${q.toString()}`)
+  },
   generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data), timeout: 200000 }),
 };
 

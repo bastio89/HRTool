@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from reportlab.lib.enums import TA_LEFT
@@ -46,6 +46,15 @@ class JobPosting:
 	employment_type: str | None = None
 	date_posted: str | None = None
 	source_url: str | None = None
+
+
+@dataclass(frozen=True)
+class JobSearchResult:
+	title: str
+	link: str
+	job_id: str | None = None
+	company: str | None = None
+	location: str | None = None
 
 
 class JsonLdParser(HTMLParser):
@@ -140,12 +149,20 @@ def _walk_json(value: object):
 			yield from _walk_json(child)
 
 
-def _job_posting_from_documents(documents: list[object]) -> dict[str, object]:
+def _job_postings_from_documents(documents: list[object]) -> list[dict[str, object]]:
+	postings: list[dict[str, object]] = []
 	for document in documents:
 		for candidate in _walk_json(document):
 			types = candidate.get("@type")
 			if types == "JobPosting" or isinstance(types, list) and "JobPosting" in types:
-				return candidate
+				postings.append(candidate)
+	return postings
+
+
+def _job_posting_from_documents(documents: list[object]) -> dict[str, object]:
+	postings = _job_postings_from_documents(documents)
+	if postings:
+		return postings[0]
 	raise ValueError("Auf der jobs.ch-Seite wurde keine JobPosting-Beschreibung gefunden.")
 
 
@@ -225,6 +242,62 @@ def fetch_job(url: str, timeout: int = 30) -> JobPosting:
 		date_posted=_as_text(posting.get("datePosted")),
 		source_url=detail_url,
 	)
+
+
+def search_jobs(query: str, timeout: int = 30, limit: int = 20) -> list[JobSearchResult]:
+	search_term = (query or "").strip()
+	if not search_term:
+		raise ValueError("Ein Suchbegriff ist erforderlich.")
+
+	search_url = f"https://www.jobs.ch/de/stellenangebote/?{urlencode({'term': search_term})}"
+	request = Request(search_url, headers={"User-Agent": USER_AGENT, "Accept-Language": "de-CH,de;q=0.9"})
+	try:
+		with urlopen(request, timeout=timeout, context=_ssl_context()) as response:
+			page = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+	except (HTTPError, URLError, TimeoutError) as exc:
+		raise RuntimeError(f"jobs.ch-Suche konnte nicht geladen werden: {exc}") from exc
+
+	parser = JsonLdParser()
+	parser.feed(page)
+	results: list[JobSearchResult] = []
+	seen_links: set[str] = set()
+	for posting in _job_postings_from_documents(parser.documents):
+		title = _as_text(posting.get("title"))
+		if not title:
+			continue
+		detail_link = _as_text(posting.get("url"))
+		identifier = posting.get("identifier")
+		job_id = _as_text(identifier.get("value")) if isinstance(identifier, dict) else _as_text(identifier)
+		if detail_link:
+			try:
+				detail_link = normalize_jobs_ch_url(detail_link)
+			except ValueError:
+				pass
+		elif job_id:
+			detail_link = f"https://www.jobs.ch/de/stellenangebote/detail/{job_id}/"
+		else:
+			continue
+		if detail_link in seen_links:
+			continue
+		seen_links.add(detail_link)
+		location = None
+		job_location = posting.get("jobLocation")
+		if isinstance(job_location, list):
+			location = ", ".join(filter(None, (_nested_name(item) for item in job_location))) or None
+		else:
+			location = _nested_name(job_location)
+		results.append(
+			JobSearchResult(
+				title=title,
+				link=detail_link,
+				job_id=job_id,
+				company=_nested_name(posting.get("hiringOrganization")),
+				location=location,
+			)
+		)
+		if len(results) >= max(1, limit):
+			break
+	return results
 
 
 def _paragraph(text: str, style: ParagraphStyle) -> Paragraph:

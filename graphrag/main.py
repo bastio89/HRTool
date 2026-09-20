@@ -30,6 +30,7 @@ from services.candidate_persistence import persist_candidate_profile
 from services.db import Neo4jService
 from matching_api import create_matching_router
 from services.model_config import ModelConfigService
+from services.prompt_service import PromptService
 from services.job_persistence import persist_job_profile
 from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
@@ -37,9 +38,11 @@ from services.pdf import PDFService
 from services.postgres_store import PostgresStore
 from services.candidate_text_renderer import render_candidate_fulltext
 from plugins.registry import build_plugins
+from prompts_api import create_prompts_router
 pdf_service = PDFService()
 postgres_store = PostgresStore(settings.database_url)
 candidate_privacy_service = CandidatePrivacyService(postgres_store)
+prompt_service = PromptService(postgres_store)
 model_config_service = ModelConfigService(
 	postgres_store,
 	default_chat_base_url="",
@@ -64,6 +67,7 @@ llm_service = LLMService(
 	enable_call_logging=True,
 	database_url=settings.database_url,
 	model_config_service=model_config_service,
+	prompt_service=prompt_service,
 )
 db_service = Neo4jService(
 	uri=settings.neo4j_uri,
@@ -84,7 +88,9 @@ async def lifespan(_: FastAPI):
 	await postgres_store.ensure_schema()
 	await postgres_store.ensure_setting_if_blank("ai_embedding_model", settings.initial_embedding_model)
 	await postgres_store.ensure_setting("ai_reasoning_level", settings.resolved_reasoning_level)
+	await postgres_store.seed_default_prompts()
 	model_config_service.invalidate()
+	prompt_service.invalidate()
 	await postgres_store.ensure_setting_if_blank("plugin.linkedin.enabled", "1" if settings.linkedin_plugin_enabled else "0")
 	await postgres_store.ensure_setting_if_blank("plugin.jobs_ch.enabled", "1" if settings.jobs_ch_plugin_enabled else "0")
 	yield
@@ -101,6 +107,7 @@ app = FastAPI(
 
 app.include_router(create_matching_router(llm_service, db_service))
 app.include_router(create_legacy_router(postgres_store))
+app.include_router(create_prompts_router(prompt_service))
 for plugin in plugins:
 	plugin.register(app)
 

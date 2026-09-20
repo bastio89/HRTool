@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 import psycopg
 from psycopg import errors as pg_errors
+from psycopg.types.json import Jsonb
 from psycopg.rows import dict_row
 
 from models import AiUsageMetrics, CandidateProfileExtraction, JobProfileExtraction
@@ -31,6 +33,21 @@ class PostgresStore:
                 await cursor.execute("SELECT to_regclass('public.matching_results')")
                 row = await cursor.fetchone()
         return bool(row and row[0])
+
+    @staticmethod
+    def _normalize_prompt_row(row: dict[str, Any] | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        normalized = dict(row)
+        model_parameters = normalized.get("model_parameters")
+        if isinstance(model_parameters, str):
+            try:
+                normalized["model_parameters"] = json.loads(model_parameters)
+            except json.JSONDecodeError:
+                normalized["model_parameters"] = {}
+        elif model_parameters is None:
+            normalized["model_parameters"] = {}
+        return normalized
 
     @staticmethod
     def _split_search_terms(search: str) -> list[str]:
@@ -142,6 +159,78 @@ class PostgresStore:
             )
         return getattr(result, "rowcount", 0) == 1
 
+    async def list_prompts(self) -> list[dict[str, Any]]:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT id, key, template, description, model_parameters, version, created_at, updated_at
+                    FROM prompts
+                    ORDER BY key ASC
+                    """
+                )
+                rows = await cursor.fetchall()
+        return [self._normalize_prompt_row(dict(row)) for row in rows if row is not None]
+
+    async def get_prompt_by_id(self, prompt_id: int) -> dict[str, Any] | None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT id, key, template, description, model_parameters, version, created_at, updated_at
+                    FROM prompts
+                    WHERE id = %s
+                    LIMIT 1
+                    """,
+                    (prompt_id,),
+                )
+                row = await cursor.fetchone()
+        return self._normalize_prompt_row(dict(row)) if row else None
+
+    async def get_prompt_by_key(self, prompt_key: str) -> dict[str, Any] | None:
+        key = str(prompt_key or "").strip()
+        if not key:
+            return None
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT id, key, template, description, model_parameters, version, created_at, updated_at
+                    FROM prompts
+                    WHERE key = %s
+                    LIMIT 1
+                    """,
+                    (key,),
+                )
+                row = await cursor.fetchone()
+        return self._normalize_prompt_row(dict(row)) if row else None
+
+    async def update_prompt(
+        self,
+        prompt_id: int,
+        *,
+        template: str,
+        description: str | None,
+        model_parameters: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    UPDATE prompts
+                    SET template = %s,
+                        description = %s,
+                        model_parameters = %s,
+                        version = version + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    RETURNING id, key, template, description, model_parameters, version, created_at, updated_at
+                    """,
+                    (template, description, Jsonb(model_parameters or {}), prompt_id),
+                )
+                row = await cursor.fetchone()
+        return self._normalize_prompt_row(dict(row)) if row else None
+
     async def get_settings(self, keys: list[str]) -> dict[str, str]:
         filtered_keys = [key for key in keys if isinstance(key, str) and key.strip()]
         if not filtered_keys:
@@ -230,6 +319,16 @@ class PostgresStore:
                         status TEXT DEFAULT 'new',
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    );
+                    CREATE TABLE IF NOT EXISTS prompts (
+                        id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                        key TEXT NOT NULL UNIQUE,
+                        template TEXT NOT NULL,
+                        description TEXT,
+                        model_parameters JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        version INTEGER NOT NULL DEFAULT 1,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )
@@ -251,6 +350,12 @@ class PostgresStore:
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parsed_profile_json TEXT",
                 ):
                     await cursor.execute(column_sql)
+                await cursor.execute(
+                    """
+                    ALTER TABLE prompts
+                    ALTER COLUMN model_parameters SET DEFAULT '{}'::jsonb
+                    """
+                )
                 for table in ("ai_logs", "jobs"):
                     await cursor.execute(
                         """
@@ -272,6 +377,13 @@ class PostgresStore:
                         f"SELECT setval('{table}_id_seq', COALESCE((SELECT MAX(id) FROM {table}), 0) + 1, false)"
                     )
                 await cursor.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS parsing_method TEXT")
+
+    async def seed_default_prompts(self) -> None:
+        seed_path = Path(__file__).resolve().parents[1] / "seeds" / "prompts.sql"
+        seed_sql = seed_path.read_text(encoding="utf-8")
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(seed_sql)
 
     async def read_ai_usage(self) -> AiUsageMetrics:
         # ai_logs legt das Node-Backend an, nicht dieser Dienst. Fehlt die

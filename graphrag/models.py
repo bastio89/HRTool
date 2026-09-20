@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import re
 
 from typing import Any, Literal
@@ -693,6 +694,31 @@ class AiUsageMetrics(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     ai_usage: AiUsageMetrics = Field(default_factory=AiUsageMetrics)
+
+
+class PromptBase(BaseModel):
+    key: str = Field(..., min_length=1)
+    description: str | None = None
+    template: str = Field(..., min_length=1)
+    model_parameters: dict[str, Any] = Field(default_factory=dict)
+    version: int = Field(default=1, ge=1)
+
+
+class PromptListItem(PromptBase):
+    id: int
+    updated_at: datetime
+
+
+class PromptDetail(PromptListItem):
+    created_at: datetime
+
+
+class PromptUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    template: str = Field(..., min_length=1)
+    description: str | None = None
+    model_parameters: dict[str, Any] = Field(default_factory=dict)
 
 
 class FileTextInput(BaseModel):

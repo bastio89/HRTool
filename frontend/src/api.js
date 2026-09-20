@@ -232,6 +232,26 @@ export const graphRagMatchingApi = {
   },
 };
 
+async function graphRagRequest(path, options = {}) {
+  const response = await fetch(`${GRAPHRAG_API_BASE}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers },
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'GraphRAG-Anfrage fehlgeschlagen' }))
+    throw new Error(error.error || error.detail || `HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
+
+export const promptsApi = {
+  getAll: () => graphRagRequest('/prompts'),
+  getById: (id) => graphRagRequest(`/prompts/${id}`),
+  update: (id, data) => graphRagRequest(`/prompts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+};
+
 // Matching Weights API
 export const matchingWeightsApi = {
   getProfiles: () => request('/matching-weights/profiles'),

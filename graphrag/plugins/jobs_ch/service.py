@@ -41,6 +41,7 @@ class JobsChImportItemResult:
     job_id: str | None
     title: str | None
     imported: bool
+    duplicate: bool = False
     error: str | None = None
 
 
@@ -48,6 +49,7 @@ class JobsChImportItemResult:
 class JobsChImportResult:
     imported: int
     failed: int
+    duplicates: int
     warning: str | None
     items: list[JobsChImportItemResult]
 
@@ -214,6 +216,7 @@ class JobsChImportService:
         items: list[JobsChImportItemResult] = []
         imported_count = 0
         failed_count = 0
+        duplicate_count = 0
 
         for link in links:
             try:
@@ -246,6 +249,9 @@ class JobsChImportService:
                     existing_job = None
 
                 job_id = existing_job["id"] if existing_job else (job.job_id or str(uuid4()))
+                is_duplicate = existing_job is not None
+                if is_duplicate:
+                    duplicate_count += 1
                 embedding = await self.llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
                 skill_embeddings = await self._build_skill_embeddings([item.name for item in profile.required_skills])
 
@@ -274,6 +280,7 @@ class JobsChImportService:
                         job_id=job_id,
                         title=profile.title,
                         imported=True,
+                        duplicate=is_duplicate,
                     )
                 )
             except Exception as exc:
@@ -296,12 +303,17 @@ class JobsChImportService:
             raise RuntimeError("Kein jobs.ch-Link konnte in die Datenbank geladen werden.")
 
         warning = None
+        if duplicate_count and failed_count:
+            warning = f"{duplicate_count} Dublette{'n' if duplicate_count != 1 else ''} erkannt, {failed_count} Link{'s' if failed_count != 1 else ''} wurden übersprungen."
+        elif duplicate_count:
+            warning = f"{duplicate_count} Dublette{'n' if duplicate_count != 1 else ''} erkannt und mit vorhandenen Daten abgeglichen."
         if failed_count:
-            warning = f"{failed_count} jobs.ch-Link{'s' if failed_count != 1 else ''} wurden übersprungen."
+            warning = warning or f"{failed_count} jobs.ch-Link{'s' if failed_count != 1 else ''} wurden übersprungen."
 
         return JobsChImportResult(
             imported=imported_count,
             failed=failed_count,
+            duplicates=duplicate_count,
             warning=warning,
             items=items,
         )

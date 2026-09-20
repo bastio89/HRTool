@@ -226,6 +226,8 @@ export default {
   'form.only_pdf_word': 'Nur PDF und Word-Dateien werden unterstützt',
   'form.cv_failed': 'CV-Analyse fehlgeschlagen',
   'form.cv_success': '"{file}" wurde analysiert – Felder wurden automatisch befüllt',
+  'form.cv_duplicate': 'Dublette erkannt: {name} wurde bereits gespeichert',
+  'form.cv_duplicate_hint': '{name} wurde im System bereits gefunden',
 
   // Social & Extended
   'form.social_profiles': 'Social-Media-Profile',
@@ -997,6 +999,7 @@ export default {
   'batch_import.cancel': 'Abbrechen',
   'batch_import.close': 'Schließen',
   'batch_import.error_generic': 'Import fehlgeschlagen',
+  'batch_import.duplicate_detected': 'Dublette erkannt',
 
   // Batch Job Import
   'batch_job_import.button': 'Stellen Batch-Import',
@@ -1639,6 +1642,7 @@ export default {
   'tools.jobs_ch_status_read': 'Gelesen',
   'tools.jobs_ch_status_imported': 'Importiert',
   'tools.jobs_ch_status_failed': 'Fehlgeschlagen',
+  'tools.jobs_ch_status_duplicate': 'Dublette erkannt',
   'tools.links_detected_one': '1 Link erkannt',
   'tools.links_detected': '{count} Links erkannt',
   'tools.no_links': 'Noch keine Links eingetragen',

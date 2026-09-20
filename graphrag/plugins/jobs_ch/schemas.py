@@ -16,12 +16,14 @@ class JobsChImportItem(BaseModel):
     job_id: str | None = None
     title: str | None = None
     imported: bool = False
+    duplicate: bool = False
     error: str | None = None
 
 
 class JobsChImportResponse(BaseModel):
     imported: int
     failed: int
+    duplicates: int = 0
     warning: str | None = None
     items: list[JobsChImportItem] = Field(default_factory=list)
 

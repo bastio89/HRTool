@@ -125,6 +125,8 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
           candidate: { id: c.id, name: c.name || item.file.name.replace(/\.[^/.]+$/, '') },
           storage: result.storage || { postgres: Boolean(result.persisted), neo4j: Boolean(result.graphRag?.persisted) },
           parsingMethod: result.parsingMethod || c.parsing_method || null,
+          duplicate: Boolean(result.duplicate),
+          duplicateCandidate: result.duplicateCandidate || null,
         })
       } catch (err) {
         updateFile(item.id, { status: STATUS.ERROR, progress: 0, error: err.message || t('batch_import.error_generic') })
@@ -301,6 +303,11 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
                       <span className={`px-2 py-0.5 rounded-full ${item.storage?.neo4j ? 'bg-[#0071e3]/10 text-[#0058b0]' : 'bg-gray-200 text-gray-500'}`}>
                         Neo4j: {item.storage?.neo4j ? 'gespeichert' : 'nicht gespeichert'}
                       </span>
+                      {item.duplicate && (
+                        <span className="px-2 py-0.5 rounded-full bg-[#ff9500]/10 text-[#a35b00]">
+                          {t('batch_import.duplicate_detected')}
+                        </span>
+                      )}
                       {item.parsingMethod && (
                         <span className={`px-2 py-0.5 rounded-full ${item.parsingMethod === 'llm' ? 'bg-[#5856d6]/10 text-[#4a3f9e]' : 'bg-[#ff9500]/10 text-[#a35b00]'}`}>
                           Methode: {item.parsingMethod === 'llm' ? 'KI-Analyse' : 'Text-Erkennung (Fallback)'}

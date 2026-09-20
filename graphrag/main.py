@@ -367,10 +367,28 @@ async def parse_cv(
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
 
+	text_hash = _normalized_text_hash(combined_text)
+	profile_hash = _normalized_profile_hash(profile)
+	duplicate_candidate = None
+	try:
+		if text_hash:
+			duplicate_candidate = await db_service.find_candidate_by_source_hash(text_hash)
+		if duplicate_candidate is None and profile_hash:
+			duplicate_candidate = await db_service.find_candidate_by_profile_hash(profile_hash)
+		if duplicate_candidate is None:
+			name = str(profile.name or "").strip()
+			email = str(profile.email or "").strip()
+			phone = str(profile.phone or "").strip()
+			if name or email or phone:
+				duplicate_candidate = await postgres_store._find_existing_candidate(profile)
+	except Exception:
+		logger.warning("cv-parser duplicate lookup failed; continuing without dedupe", exc_info=True)
+		duplicate_candidate = None
+
 	graph_candidate_id: str | None = None
 	postgres_candidate_id: int | None = None
 	if persist:
-		graph_candidate_id = str(uuid4())
+		graph_candidate_id = duplicate_candidate["id"] if duplicate_candidate else str(uuid4())
 		try:
 			embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
 			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
@@ -411,6 +429,8 @@ async def parse_cv(
 		"candidate": candidate_payload,
 		"profile": profile_payload,
 		"localCandidate": candidate_payload if postgres_candidate_id else None,
+		"duplicate": duplicate_candidate is not None,
+		"duplicateCandidate": duplicate_candidate,
 		"graphRag": graph_rag,
 		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": graph_candidate_id is not None},
 		"textLength": len(combined_text),

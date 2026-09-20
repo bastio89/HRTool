@@ -57,6 +57,8 @@ export default function CandidateForm() {
   const [parsing, setParsing] = useState(false)
   const [parseProgress, setParseProgress] = useState({ step: '', detail: '', progress: 0 })
   const [parseSuccess, setParseSuccess] = useState('')
+  const [parseDuplicate, setParseDuplicate] = useState(false)
+  const [parseDuplicateName, setParseDuplicateName] = useState('')
   const [attachedFiles, setAttachedFiles] = useState([])
   const fileInputRef = useRef(null)
   // New state
@@ -101,7 +103,7 @@ export default function CandidateForm() {
     if (!file) return
     const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp']
     if (!allowed.includes(file.type)) { setError(t('form.only_pdf_word')); return }
-    setParsing(true); setError(''); setParseSuccess(''); setParseProgress({ step: 'upload', detail: t('cv.progress_uploading'), progress: 2 })
+    setParsing(true); setError(''); setParseSuccess(''); setParseDuplicate(false); setParseDuplicateName(''); setParseProgress({ step: 'upload', detail: t('cv.progress_uploading'), progress: 2 })
     try {
       const result = await cvParserApi.parse(file, (evt) => {
         setParseProgress({ step: evt.step, detail: evt.detail, progress: evt.progress })
@@ -130,7 +132,17 @@ export default function CandidateForm() {
       } else if (Array.isArray(c.education_history) && c.education_history.length === 0 && Array.isArray(result.candidate?.education_history) && result.candidate.education_history.length > 0) {
         setEducationList(result.candidate.education_history.map(e => ({ ...emptyEduEntry, ...e })))
       }
-      setParseSuccess(t('form.cv_success').replace('{file}', file.name))
+      const successMessage = t('form.cv_success').replace('{file}', file.name)
+      if (result.duplicate) {
+        const duplicateName = result.duplicateCandidate?.name || result.candidate?.name || c.name || file.name
+        setParseDuplicate(true)
+        setParseDuplicateName(duplicateName)
+        setParseSuccess(`${successMessage} · ${t('form.cv_duplicate').replace('{name}', duplicateName)}`)
+      } else {
+        setParseDuplicate(false)
+        setParseDuplicateName('')
+        setParseSuccess(successMessage)
+      }
       setAttachedFiles(prev => [...prev, file])
     } catch (err) { setError(err.message || t('form.cv_failed')) }
     finally { setParsing(false) }
@@ -298,6 +310,12 @@ export default function CandidateForm() {
             {parseSuccess && (
               <div className="mt-6 space-y-3">
                 <div className="flex items-center gap-3 bg-[#34c759]/10 text-[#34c759] text-[14px] font-medium px-5 py-3.5 rounded-2xl border border-green-100"><Sparkles className="w-4 h-4 flex-shrink-0" />{parseSuccess}<KiBadge label="KI-extrahiert" className="ml-auto" /></div>
+                {parseDuplicate && (
+                  <div className="flex items-center gap-3 bg-[#ff9500]/10 text-[#c77700] text-[14px] font-medium px-5 py-3.5 rounded-2xl border border-[#ff9500]/20">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>{t('form.cv_duplicate_hint').replace('{name}', parseDuplicateName)}</span>
+                  </div>
+                )}
                 <KiDisclaimer feature="cv-parser" />
               </div>
             )}

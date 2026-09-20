@@ -18,7 +18,6 @@ const navItems = [
   { to: '/candidates', icon: Users, labelKey: 'nav.candidates' },
   { to: '/jobs', icon: Briefcase, labelKey: 'nav.jobs' },
   { to: '/matching', icon: GitCompare, labelKey: 'nav.matching' },
-  { to: '/history', icon: History, labelKey: 'nav.history' },
 ]
 
 const adminItems = [
@@ -140,6 +139,21 @@ export default function Layout() {
                   {t(labelKey)}
                 </NavLink>
               ))}
+
+              <NavLink
+                to="/history"
+                onClick={closeSidebar}
+                className={({ isActive }) =>
+                  `ml-8 flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition duration-300 ${
+                    isActive
+                      ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] dark:text-[#0a84ff] shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-gray-200/60 dark:border-gray-700/60'
+                      : 'text-gray-500 hover:bg-gray-200/50 dark:hover:bg-gray-800/50 hover:text-black dark:hover:text-white border border-transparent'
+                  }`
+                }
+              >
+                <History className="w-4 h-4" />
+                {t('nav.history')}
+              </NavLink>
 
               {(isAdmin || isRecruiter) && (
               <div className="mt-2">

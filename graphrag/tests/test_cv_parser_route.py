@@ -12,9 +12,13 @@ async def test_cv_parser_parse_combines_files_without_persisting(app_module, api
     profile = CandidateProfileExtraction(name="Ada Lovelace", location="London")
     parse_mock = AsyncMock(return_value=profile)
     upsert_mock = AsyncMock()
+    source_hash_mock = AsyncMock(return_value=None)
+    profile_hash_mock = AsyncMock(return_value=None)
 
     monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
+    monkeypatch.setattr(app_module.db_service, "find_candidate_by_source_hash", source_hash_mock)
+    monkeypatch.setattr(app_module.db_service, "find_candidate_by_profile_hash", profile_hash_mock)
     monkeypatch.setattr(
         app_module,
         "extract_document_text",
@@ -43,6 +47,34 @@ async def test_cv_parser_parse_combines_files_without_persisting(app_module, api
     assert "Ada Lovelace" in parse_mock.await_args.args[0]
     assert "London" in parse_mock.await_args.args[0]
     upsert_mock.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_cv_parser_parse_marks_duplicates_in_response(app_module, api_client, monkeypatch):
+    profile = CandidateProfileExtraction(name="Ada Lovelace", location="London")
+    parse_mock = AsyncMock(return_value=profile)
+    duplicate_candidate = {"id": "candidate-42", "name": "Ada Lovelace"}
+
+    monkeypatch.setattr(app_module.llm_service, "parse_candidate_cv", parse_mock)
+    monkeypatch.setattr(app_module.db_service, "find_candidate_by_source_hash", AsyncMock(return_value=duplicate_candidate))
+    monkeypatch.setattr(app_module.db_service, "find_candidate_by_profile_hash", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        app_module,
+        "extract_document_text",
+        lambda data, content_type: data.decode("utf-8"),
+    )
+    monkeypatch.setattr(app_module.pdf_service, "extract_text", lambda data: data.decode("utf-8"))
+
+    response = await api_client.post(
+        "/cv-parser/parse",
+        params={"persist": "false"},
+        files={"file": ("cv.pdf", b"Ada Lovelace worked as a software engineer.", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["duplicate"] is True
+    assert payload["duplicateCandidate"]["id"] == "candidate-42"
 
 
 @pytest.mark.anyio

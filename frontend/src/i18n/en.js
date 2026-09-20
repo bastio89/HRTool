@@ -226,6 +226,8 @@ export default {
   'form.only_pdf_word': 'Only PDF and Word files are supported',
   'form.cv_failed': 'CV analysis failed',
   'form.cv_success': '"{file}" was analyzed – fields have been auto-filled',
+  'form.cv_duplicate': 'Duplicate detected: {name} was already stored',
+  'form.cv_duplicate_hint': '{name} has already been found in the system',
 
   // Social & Extended
   'form.social_profiles': 'Social Media Profiles',
@@ -997,6 +999,7 @@ export default {
   'batch_import.cancel': 'Cancel',
   'batch_import.close': 'Close',
   'batch_import.error_generic': 'Import failed',
+  'batch_import.duplicate_detected': 'Duplicate detected',
 
   // Batch Job Import
   'batch_job_import.button': 'Job Batch Import',

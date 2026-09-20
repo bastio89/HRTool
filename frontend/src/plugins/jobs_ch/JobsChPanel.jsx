@@ -331,6 +331,11 @@ export default function JobsChPanel() {
                       >
                         {item.imported ? t('tools.jobs_ch_status_imported') : t('tools.jobs_ch_status_failed')}
                       </span>
+                      {item.duplicate && (
+                        <span className="inline-flex items-center rounded-full bg-[#ff9500]/10 px-2.5 py-1 text-[11px] font-semibold text-[#c77700] dark:bg-[#4a2e00]/20 dark:text-[#ffbc4a]">
+                          {t('tools.jobs_ch_status_duplicate')}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {item.error && (

@@ -24,7 +24,7 @@ def _decimal_or_400(value: Any, field_name: str) -> Decimal:
 
 def build_billing_router(settings: Settings, *, postgres_store: PostgresStore) -> APIRouter:
 	router = APIRouter(prefix='/credits', tags=['Credits'])
-	billing_service = BillingService(postgres_store, jwt_secret=getattr(settings, 'jwt_secret', None))
+	billing_service = BillingService(postgres_store)
 
 	async def ensure_enabled() -> None:
 		raw = await postgres_store.get_settings([PLUGIN_SETTING_KEY])

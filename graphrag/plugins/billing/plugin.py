@@ -33,8 +33,7 @@ class BillingPlugin(BasePlugin):
 		)
 
 	def is_enabled(self) -> bool:
-		raw = self.settings.database_url
-		return bool(raw)
+		return True
 
 	def register(self, app: FastAPI) -> None:
 		app.include_router(self._router)

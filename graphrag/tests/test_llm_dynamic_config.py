@@ -76,6 +76,12 @@ async def test_parse_job_description_uses_dynamic_chat_config(monkeypatch) -> No
         api_key="secret-key",
         reasoning_level="none",
     )
+    prompt_service = AsyncMock()
+    prompt_service.get_prompt.side_effect = lambda key, variables=None: {
+        "job_profile_extraction": "Prompt job_profile_extraction",
+        "job_profile_extraction_lightweight": "Prompt job_profile_extraction_lightweight",
+        "json_only_response_instruction": "Antworte ausschließlich mit gültigem JSON und ohne Markdown oder zusätzlichen Text. Wandle die Eingabe in eine strukturierte JSON-Antwort um.",
+    }[key]
 
     service = LLMService(
         base_url="http://ignored",
@@ -84,6 +90,7 @@ async def test_parse_job_description_uses_dynamic_chat_config(monkeypatch) -> No
         embedding_dimensions=3,
         provider="ollama",
         model_config_service=config_service,
+        prompt_service=prompt_service,
     )
     captured: dict[str, object] = {}
 
@@ -113,3 +120,17 @@ async def test_parse_job_description_uses_dynamic_chat_config(monkeypatch) -> No
     assert captured["headers"] == {"Authorization": "Bearer secret-key"}
     assert captured["json"]["model"] == "openrouter/chat-model"
     assert config_service.get_chat_model.await_count == 1
+
+
+@pytest.mark.anyio
+async def test_llm_service_reports_missing_prompt_resolver() -> None:
+    service = LLMService(
+        base_url="http://ignored",
+        chat_model="fallback-chat",
+        embedding_model="fallback-embedding",
+        embedding_dimensions=3,
+        provider="ollama",
+    )
+
+    with pytest.raises(RuntimeError, match="Prompt-Resolver ist nicht konfiguriert"):
+        await service._resolve_prompt("candidate_name_extraction")

@@ -5,10 +5,28 @@ from pathlib import Path
 
 import pytest
 from pypdf import PdfReader
+from unittest.mock import AsyncMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from services.llm import LLMService
+
+
+def make_llm_service() -> LLMService:
+    prompt_service = AsyncMock()
+    prompt_service.get_prompt.side_effect = lambda key, variables=None: {
+        "candidate_profile_extraction": "Prompt candidate_profile_extraction",
+        "candidate_name_extraction": "Prompt candidate_name_extraction",
+        "json_only_response_instruction": "Antworte ausschließlich mit gültigem JSON und ohne Markdown oder zusätzlichen Text. Wandle die Eingabe in eine strukturierte JSON-Antwort um.",
+    }[key]
+
+    return LLMService(
+        base_url="http://fake-ai",
+        chat_model="test-model",
+        embedding_model="test-embedding",
+        embedding_dimensions=8,
+        prompt_service=prompt_service,
+    )
 
 
 @pytest.mark.anyio
@@ -20,12 +38,7 @@ async def test_parse_candidate_cv_recovers_work_history_dates_from_pdf_text() ->
     fixture_path = next(Path(__file__).parent.glob("CV 16*.pdf"))
     raw_text = "\n".join(page.extract_text() or "" for page in PdfReader(str(fixture_path)).pages)
 
-    service = LLMService(
-        base_url="http://fake-ai",
-        chat_model="test-model",
-        embedding_model="test-embedding",
-        embedding_dimensions=8,
-    )
+    service = make_llm_service()
 
     async def fake_generate_json(*args, **kwargs):
         return {
@@ -62,12 +75,7 @@ async def test_parse_candidate_cv_recovers_education_history_dates_from_pdf_text
     fixture_path = next(Path(__file__).parent.glob("CV 16*.pdf"))
     raw_text = "\n".join(page.extract_text() or "" for page in PdfReader(str(fixture_path)).pages)
 
-    service = LLMService(
-        base_url="http://fake-ai",
-        chat_model="test-model",
-        embedding_model="test-embedding",
-        embedding_dimensions=8,
-    )
+    service = make_llm_service()
 
     async def fake_generate_json(*args, **kwargs):
         return {
@@ -94,13 +102,41 @@ async def test_parse_candidate_cv_recovers_education_history_dates_from_pdf_text
 
 
 @pytest.mark.anyio
-async def test_parse_job_description_falls_back_when_ai_returns_non_json() -> None:
-    service = LLMService(
-        base_url="http://fake-ai",
-        chat_model="test-model",
-        embedding_model="test-embedding",
-        embedding_dimensions=8,
+async def test_parse_candidate_cv_recovers_work_history_from_text_when_llm_returns_none() -> None:
+    service = make_llm_service()
+
+    async def fake_generate_json(*args, **kwargs):
+        return {
+            "name": "Alina Moser",
+            "skills": [],
+        }
+
+    service._generate_json = fake_generate_json  # type: ignore[method-assign]
+
+    raw_text = (
+        "Alina Moser\n"
+        "Beruflicher Werdegang\n"
+        "Junior Python Developer, Farmy.ch AG, Zürich\n"
+        "Entwicklung von Backend-Services.\n"
+        "Sprachkompetenzen\n"
+        "Deutsch, Englisch\n"
     )
+
+    try:
+        profile = await service.parse_candidate_cv(raw_text)
+    finally:
+        await service.close()
+
+    assert len(profile.work_history) == 1
+    assert profile.work_history[0].employer == "Farmy.ch AG"
+    assert profile.work_history[0].position == "Junior Python Developer"
+    assert profile.current_employer == "Farmy.ch AG"
+    assert profile.current_position == "Junior Python Developer"
+
+
+@pytest.mark.anyio
+async def test_parse_job_description_falls_back_when_ai_returns_non_json() -> None:
+    service = make_llm_service()
 
     async def fake_generate_json(*args, **kwargs):
         return "unexpected plain text response"

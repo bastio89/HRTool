@@ -10,6 +10,18 @@ from typing import Any
 from services.postgres_store import PostgresStore
 
 
+class PromptServiceError(RuntimeError):
+    pass
+
+
+class PromptServiceUnavailableError(PromptServiceError):
+    pass
+
+
+class PromptNotFoundError(PromptServiceError):
+    pass
+
+
 @dataclass(frozen=True)
 class PromptCache:
     items: list[dict[str, Any]]
@@ -50,7 +62,12 @@ class PromptService:
         if self._cache and self._cache.expires_at > now:
             return self._cache.items
 
-        prompts = await self._postgres_store.list_prompts()
+        try:
+            prompts = await self._postgres_store.list_prompts()
+        except Exception as exc:
+            raise PromptServiceUnavailableError(
+                "Prompt-DB ist nicht verfügbar. Prüfe PostgreSQL und die Tabelle prompts."
+            ) from exc
         self._cache = PromptCache(items=prompts, expires_at=now + self._ttl_seconds)
         return prompts
 
@@ -60,12 +77,12 @@ class PromptService:
     async def get_prompt_record(self, prompt_key: str) -> dict[str, Any]:
         key = str(prompt_key or "").strip()
         if not key:
-            raise KeyError("Prompt key is required")
+            raise PromptNotFoundError("Prompt-Schlüssel ist erforderlich.")
         prompts = await self._load_prompts()
         for prompt in prompts:
             if str(prompt.get("key") or "").strip() == key:
                 return dict(prompt)
-        raise KeyError(f"Prompt not found: {key}")
+        raise PromptNotFoundError(f"Prompt nicht gefunden: {key}")
 
     async def get_prompt(self, prompt_key: str, variables: Mapping[str, Any] | None = None) -> str:
         prompt = await self.get_prompt_record(prompt_key)
@@ -75,7 +92,7 @@ class PromptService:
     async def get_prompt_by_id(self, prompt_id: int) -> dict[str, Any]:
         prompt = await self._postgres_store.get_prompt_by_id(prompt_id)
         if not prompt:
-            raise KeyError(f"Prompt not found: {prompt_id}")
+            raise PromptNotFoundError(f"Prompt nicht gefunden: {prompt_id}")
         return prompt
 
     async def update_prompt(
@@ -93,6 +110,6 @@ class PromptService:
             model_parameters=model_parameters,
         )
         if not updated:
-            raise KeyError(f"Prompt not found: {prompt_id}")
+            raise PromptNotFoundError(f"Prompt nicht gefunden: {prompt_id}")
         self.invalidate()
         return updated

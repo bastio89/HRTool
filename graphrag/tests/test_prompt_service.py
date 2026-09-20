@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from services.prompt_service import PromptService
+from services.prompt_service import PromptNotFoundError, PromptService, PromptServiceUnavailableError
 
 
 class DummyStore:
@@ -83,3 +83,24 @@ async def test_prompt_service_update_invalidates_cache() -> None:
 
     assert rendered == "Welcome Ada"
     assert store.list_calls == 2
+
+
+@pytest.mark.anyio
+async def test_prompt_service_raises_clear_error_when_store_is_unavailable() -> None:
+    class BrokenStore:
+        async def list_prompts(self):
+            raise RuntimeError("db down")
+
+    service = PromptService(BrokenStore(), ttl_seconds=60)
+
+    with pytest.raises(PromptServiceUnavailableError, match="Prompt-DB ist nicht verfügbar"):
+        await service.get_prompt("welcome", {"name": "Ada"})
+
+
+@pytest.mark.anyio
+async def test_prompt_service_raises_clear_error_for_missing_key() -> None:
+    store = DummyStore()
+    service = PromptService(store, ttl_seconds=60)
+
+    with pytest.raises(PromptNotFoundError, match="Prompt nicht gefunden: does-not-exist"):
+        await service.get_prompt("does-not-exist", {"name": "Ada"})

@@ -182,7 +182,7 @@ export default function Layout() {
               )}
 
               {/* Revisor: show audit/reports/ki section */}
-              {isRevisor && (
+              {(isRevisor || isAdmin) && (
                 <div className="mt-2">
                   <p className="px-5 py-2 text-[11px] font-semibold tracking-wider uppercase text-gray-500 dark:text-gray-600">{t('nav.review')}</p>
                   {[

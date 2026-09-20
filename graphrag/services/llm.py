@@ -1073,10 +1073,18 @@ class LLMService:
         job_profile: dict[str, Any],
         candidates: list[dict[str, Any]],
     ) -> LLMRerankResponse:
+        detailed_rerank_instruction = (
+            "Bewerte die Kandidatinnen und Kandidaten relativ zueinander und erkläre die Rangfolge nachvollziehbar. "
+            "Die Antwort muss für jedes Objekt candidate_id, score, explanation, strengths und weaknesses enthalten. "
+            "strengths und weaknesses müssen jeweils Arrays mit 3 bis 5 prägnanten, aber inhaltlich konkreten Punkten sein. "
+            "Jeder Punkt soll eine echte fachliche oder fachnahe Aussage enthalten, keine generischen Floskeln. "
+            "Nenne pro Punkt nach Möglichkeit konkrete Skills, Erfahrungsaspekte, Rollenbezüge, Standort- oder Sprach-Aspekte. "
+            "Die explanation muss 2 bis 4 Sätze lang sein, das Gesamturteil enthalten und auf die wichtigsten Abwägungen eingehen. "
+            "Vermeide Wiederholungen zwischen strengths, weaknesses und explanation. "
+            "Wenn etwas nicht belegt ist, schreibe das explizit als Unsicherheit statt es zu erfinden."
+        )
         parsed = await self._generate_json(
-            system_prompt=await self._resolve_prompt(
-                "matching_rerank",
-            ),
+            system_prompt=f"{await self._resolve_prompt('matching_rerank')}\n\n{detailed_rerank_instruction}",
             user_content=json.dumps(
                 {
                     "job_profile": job_profile,
@@ -1084,7 +1092,7 @@ class LLMService:
                 },
                 ensure_ascii=True,
             ),
-            num_predict=900,
+            num_predict=1400,
             required_keys=("ranked_candidates",),
             call_context="matching-rerank",
         )

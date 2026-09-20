@@ -111,12 +111,35 @@ export default function JobToCandidates() {
       setError('')
       setMatching(true)
       try {
-        const result = await matchingApi.vectorMatch({
-          jobId: selectedJobId,
-          candidateIds: selectedIds,
-          engine: vectorEngine,
+        const selectedJob = jobs.find((job) => job.id === selectedJobId)
+        const batchPairs = selectedIds.map((candidateId) => {
+          const candidate = candidates.find((item) => item.id === candidateId)
+          return {
+            jobId: selectedJobId,
+            jobTitle: selectedJob?.title || jobTitle || '',
+            sourceJobId: selectedJobId,
+            sourceJobTitle: selectedJob?.title || jobTitle || '',
+            candidateId,
+            candidateName: candidate?.name || '',
+          }
         })
-        navigate(`/matching/results/${result.id}`)
+
+        sessionStorage.setItem('hrtool:matching:selected-batch', JSON.stringify({
+          pairs: batchPairs,
+          mode: 'vector',
+          sourceJobDescription: jobDescription,
+          sourceLabel: selectedJob?.title || jobTitle || 'Ausgewählte Stelle',
+          engine: vectorEngine,
+        }))
+
+        navigate('/matching/results/selected', {
+          state: {
+            pairs: batchPairs,
+            mode: 'vector',
+            sourceJobDescription: jobDescription,
+            engine: vectorEngine,
+          },
+        })
       } catch (err) {
         setError(err.message)
       } finally {

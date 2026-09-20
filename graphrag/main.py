@@ -706,11 +706,15 @@ async def match_candidates(job_id: str, request: Request) -> MatchResponse:
 		stage2_profile = stage2_map.get(item.candidate_id)
 		if stage2_profile is None:
 			continue
+		strengths = item.strengths if item.strengths else ["Sehr guter Fit"]
+		weaknesses = item.weaknesses if item.weaknesses else ["Keine wesentlichen Schwächen erkannt"]
 		matches.append(
 			MatchCandidateResponse(
 				candidate_id=item.candidate_id,
 				score=item.score,
 				explanation=item.explanation,
+				strengths=strengths,
+				weaknesses=weaknesses,
 				vector_score=stage2_profile.vector_score,
 				jaccard_score=stage2_profile.jaccard_score,
 				combined_score=stage2_profile.combined_score,

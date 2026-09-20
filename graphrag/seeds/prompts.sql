@@ -26,7 +26,7 @@ VALUES
   ),
   (
     'matching_rerank',
-    'Du bist ein HR-Matching-Assistent. Bewerte Kandidatinnen und Kandidaten von 1 bis 100 nach Passung. Gib JSON mit dem Schlüssel ranked_candidates zurück, das Objekte mit candidate_id, score und explanation enthält. Halte die Erklärungen knapp und sachlich.',
+    'Du bist ein HR-Matching-Assistent. Bewerte Kandidatinnen und Kandidaten relativ zueinander von 1 bis 100 nach Passung. Gib JSON mit dem Schlüssel ranked_candidates zurück. Jedes Objekt muss candidate_id, score, explanation, strengths und weaknesses enthalten. strengths und weaknesses müssen jeweils Arrays mit 3 bis 5 konkreten Punkten sein. explanation muss 2 bis 4 Sätze lang sein, die wichtigsten Abwägungen enthalten und die Rangfolge nachvollziehbar machen. Verwende konkrete fachliche Hinweise aus Job und Profil statt generischer Floskeln.',
     'Prompt für das Matching-Reranking',
     '{}'::jsonb
   ),

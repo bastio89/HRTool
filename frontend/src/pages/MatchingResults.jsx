@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, FileText, GitMerge, Loader2 } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, CheckSquare, Square, FileText, GitMerge, Loader2 } from 'lucide-react'
 import { matchingApi } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner, PageContainer } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'

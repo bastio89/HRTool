@@ -974,63 +974,101 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		postgres_store = getattr(db_service, 'postgres_store', None) or getattr(llm_service, 'postgres_store', None)
 		results: list[KiMatchPairResult] = []
 		failures: list[KiMatchPairFailure] = []
-
+		pairs_by_job: dict[str, list[KiMatchPairInput]] = {}
 		for pair in payload.pairs:
-			job_id = str(pair.job_id).strip()
-			candidate_id = str(pair.candidate_id).strip()
-			try:
-				job_text_payload = await postgres_store.get_job_text(job_id) if postgres_store is not None else None
+			pairs_by_job.setdefault(str(pair.job_id).strip(), []).append(pair)
+
+		for job_id, pairs_for_job in pairs_by_job.items():
+			job_text_payload = await postgres_store.get_job_text(job_id) if postgres_store is not None else None
+			if job_text_payload is None:
+				for pair in pairs_for_job:
+					failures.append(
+						KiMatchPairFailure(
+							jobId=str(pair.job_id).strip() or None,
+							jobTitle=pair.job_title,
+							candidateId=str(pair.candidate_id).strip() or None,
+							candidateName=pair.candidate_name,
+							error='Stelle nicht gefunden',
+						),
+					)
+				continue
+
+			job_profile = job_text_payload.get('parsed_profile_json') or {}
+			job_title = str(job_text_payload.get('title') or pairs_for_job[0].job_title or job_profile.get('title') or job_id).strip()
+			job_description_parts = [
+				str(job_text_payload.get('raw_text')).strip() if job_text_payload.get('raw_text') else '',
+				str(job_text_payload.get('description')).strip() if job_text_payload.get('description') else '',
+				str(job_text_payload.get('requirements')).strip() if job_text_payload.get('requirements') else '',
+			]
+			job_description = '\n\n'.join(part for part in job_description_parts if part)
+			if not job_description:
+				job_description = str(job_profile.get('description') or job_profile.get('title') or job_title).strip()
+
+			job_input = MatchingJobInput(
+				id=job_id,
+				title=job_title,
+				description=job_description or None,
+				requirements=job_text_payload.get('requirements'),
+				location=job_text_payload.get('location'),
+				type=job_text_payload.get('type') or job_profile.get('employment_type'),
+			)
+
+			candidate_inputs: list[MatchingCandidateInput] = []
+			raw_candidate_payloads: list[dict[str, Any]] = []
+			pair_lookup: dict[str, KiMatchPairInput] = {}
+			for pair in pairs_for_job:
+				candidate_id = str(pair.candidate_id).strip()
 				candidate_text_payload = await postgres_store.get_candidate_text(candidate_id) if postgres_store is not None else None
-				if job_text_payload is None:
-					raise ValueError('Stelle nicht gefunden')
 				if candidate_text_payload is None:
-					raise ValueError('Kandidat nicht gefunden')
+					failures.append(
+						KiMatchPairFailure(
+							jobId=job_id or None,
+							jobTitle=pair.job_title,
+							candidateId=candidate_id or None,
+							candidateName=pair.candidate_name,
+							error='Kandidat nicht gefunden',
+						),
+					)
+					continue
 
-				job_profile = job_text_payload.get('parsed_profile_json') or {}
 				candidate_profile = candidate_text_payload.get('profile_json') or {}
-				job_title = str(job_text_payload.get('title') or pair.job_title or job_profile.get('title') or job_id).strip()
 				candidate_name = str(candidate_text_payload.get('candidate_name') or pair.candidate_name or candidate_profile.get('name') or candidate_id).strip()
-
-				job_description_parts = [
-					str(job_text_payload.get('raw_text')).strip() if job_text_payload and job_text_payload.get('raw_text') else '',
-					str(job_text_payload.get('description')).strip() if job_text_payload and job_text_payload.get('description') else '',
-					str(job_text_payload.get('requirements')).strip() if job_text_payload and job_text_payload.get('requirements') else '',
-				]
-				job_description = '\n\n'.join(part for part in job_description_parts if part)
-				if not job_description:
-					job_description = str(job_profile.get('description') or job_profile.get('title') or job_title).strip()
-
 				candidate_text_parts = [
-					str(candidate_text_payload.get('original_text')).strip() if candidate_text_payload and candidate_text_payload.get('original_text') else '',
-					str(candidate_text_payload.get('anonymized_text')).strip() if candidate_text_payload and candidate_text_payload.get('anonymized_text') else '',
+					str(candidate_text_payload.get('original_text')).strip() if candidate_text_payload.get('original_text') else '',
+					str(candidate_text_payload.get('anonymized_text')).strip() if candidate_text_payload.get('anonymized_text') else '',
 					str(candidate_profile.get('experience') or '').strip(),
 					str(candidate_profile.get('education') or '').strip(),
 				]
 				candidate_text = '\n\n'.join(part for part in candidate_text_parts if part)
-
-				job_input = MatchingJobInput(
-					id=job_id,
-					title=job_title,
-					description=job_description or None,
-					requirements=job_text_payload.get('requirements') if job_text_payload else None,
-					location=job_text_payload.get('location'),
-					type=job_text_payload.get('type') or job_profile.get('employment_type'),
+				candidate_inputs.append(
+					MatchingCandidateInput(
+						id=candidate_id,
+						name=candidate_name,
+						location=candidate_profile.get('location'),
+						experience=candidate_text or candidate_profile.get('experience'),
+						education=candidate_profile.get('education'),
+						desired_salary=candidate_profile.get('desired_salary'),
+						availability=candidate_profile.get('availability'),
+						languages=candidate_profile.get('languages'),
+						certificates=None,
+						mobility=None,
+						has_skill=candidate_profile.get('skills'),
+						skills=candidate_profile.get('skills'),
+					),
 				)
-				candidate_input = MatchingCandidateInput(
-					id=candidate_id,
-					name=candidate_name,
-					location=candidate_profile.get('location'),
-					experience=candidate_text or candidate_profile.get('experience'),
-					education=candidate_profile.get('education'),
-					desired_salary=candidate_profile.get('desired_salary'),
-					availability=candidate_profile.get('availability'),
-					languages=candidate_profile.get('languages'),
-					certificates=None,
-					mobility=None,
-					has_skill=candidate_profile.get('skills'),
-					skills=candidate_profile.get('skills'),
-				)
+				raw_candidate_payloads.append({
+					**candidate_profile,
+					'id': candidate_id,
+					'name': candidate_name,
+					'raw_text': candidate_text,
+				})
+				pair_lookup[candidate_id] = pair
 
+			if not candidate_inputs:
+				continue
+
+			ranked_by_candidate: dict[str, KiMatchPairInput] = {}
+			try:
 				ranked = await llm_service.rerank_candidates(
 					{
 						**job_profile,
@@ -1040,38 +1078,34 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 						'requirements': job_input.requirements,
 						'raw_text': job_description,
 					},
-					[
-						{
-							**candidate_profile,
-							'id': candidate_id,
-							'name': candidate_input.name,
-							'raw_text': candidate_text,
-						},
-					],
+					raw_candidate_payloads,
 				)
-				rerank_item = ranked.ranked_candidates[0] if ranked.ranked_candidates else None
+				ranked_by_candidate = {
+					str(item.candidate_id).strip(): item
+					for item in ranked.ranked_candidates
+					if str(item.candidate_id).strip()
+				}
+			except Exception:
+				ranked_by_candidate = {}
+
+			for candidate_input in candidate_inputs:
+				candidate_id = str(candidate_input.id).strip()
+				pair = pair_lookup.get(candidate_id)
+				if pair is None:
+					continue
 				deterministic = score_pair(job_input, candidate_input, payload.weights)
+				rerank_item = ranked_by_candidate.get(candidate_id)
 				results.append(
 					KiMatchPairResult(
-						jobId=job_id,
+						jobId=job_input.id,
 						jobTitle=job_input.title,
-						candidateId=candidate_id,
+						candidateId=candidate_input.id,
 						candidateName=candidate_input.name,
 						score=rerank_item.score if rerank_item is not None else deterministic['score'],
-						strengths=deterministic['strengths'],
-						weaknesses=deterministic['weaknesses'],
+						strengths=(getattr(rerank_item, 'strengths', None) or deterministic['strengths']),
+						weaknesses=(getattr(rerank_item, 'weaknesses', None) or deterministic['weaknesses']),
 						summary=rerank_item.explanation if rerank_item is not None else deterministic['summary'],
 						model=getattr(llm_service, 'chat_model', None),
-					),
-				)
-			except Exception as exc:
-				failures.append(
-					KiMatchPairFailure(
-						jobId=job_id or None,
-						jobTitle=pair.job_title,
-						candidateId=candidate_id or None,
-						candidateName=pair.candidate_name,
-						error=str(exc),
 					),
 				)
 

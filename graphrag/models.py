@@ -661,6 +661,8 @@ class LLMRerankItem(BaseModel):
     candidate_id: str
     score: int = Field(..., ge=1, le=100)
     explanation: str = Field(..., min_length=10)
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
 
 
 class LLMRerankResponse(BaseModel):
@@ -671,6 +673,8 @@ class MatchCandidateResponse(BaseModel):
     candidate_id: str
     score: int = Field(..., ge=1, le=100)
     explanation: str
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
     vector_score: float
     jaccard_score: float
     combined_score: float

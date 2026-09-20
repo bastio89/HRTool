@@ -8,6 +8,8 @@ import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
 import Breadcrumb from './Breadcrumb'
 import NotificationBell from './NotificationBell'
+import { usePlugins } from '../plugins/PluginContext'
+import { getPluginDefinition } from '../plugins/registry'
 
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
 
@@ -19,14 +21,10 @@ const navItems = [
   { to: '/history', icon: History, labelKey: 'nav.history' },
 ]
 
-const toolsItems = [
-  { to: '/tools', icon: Wrench, labelKey: 'nav.jobs_ch' },
-  { to: '/tools/linkedin', icon: Bot, labelKey: 'nav.linkedin' },
-]
-
 const adminItems = [
   { to: '/admin/users', icon: Shield, labelKey: 'nav.users' },
   { to: '/admin/email', icon: Mail, labelKey: 'nav.email' },
+  { to: '/admin/plugins', icon: Wrench, labelKey: 'nav.plugins' },
   { to: '/admin/ai', icon: Cpu, labelKey: 'nav.ai_settings' },
   { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
   { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
@@ -40,12 +38,19 @@ export default function Layout() {
   const { user, logout, isAdmin, isRecruiter, isRevisor, isFachbereich } = useAuth()
   const { isDark, toggleTheme } = useTheme()
   const { locale, changeLocale, t } = useI18n()
+  const { isEnabled } = usePlugins()
   const location = useLocation()
   const isAdminRoute = location.pathname.startsWith('/admin')
   const isToolsRoute = location.pathname.startsWith('/tools')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(isAdminRoute)
   const [toolsOpen, setToolsOpen] = useState(isToolsRoute)
+  const linkedinPlugin = getPluginDefinition('linkedin')
+  const jobsChPlugin = getPluginDefinition('jobs_ch')
+  const toolsItems = [
+    ...(isEnabled('jobs_ch') && jobsChPlugin ? [{ to: jobsChPlugin.navItem.to, icon: jobsChPlugin.navItem.icon, labelKey: jobsChPlugin.navItem.labelKey }] : []),
+    ...(isEnabled('linkedin') && linkedinPlugin ? [{ to: linkedinPlugin.navItem.to, icon: linkedinPlugin.navItem.icon, labelKey: linkedinPlugin.navItem.labelKey }] : []),
+  ]
 
   useEffect(() => {
     if (isAdminRoute) setAdminOpen(true)

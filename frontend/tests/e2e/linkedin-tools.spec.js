@@ -40,6 +40,30 @@ test('searches LinkedIn profiles and exports selected ones as PDF', async ({ pag
       })
     }
 
+    if (path === '/plugins' && request.method() === 'GET') {
+      return fulfillJson({
+        plugins: [
+          {
+            id: 'linkedin',
+            name: 'LinkedIn',
+            enabled: true,
+            uiSlots: ['sidebar', 'tools', 'routes'],
+            routes: ['/tools/linkedin'],
+          },
+        ],
+      })
+    }
+
+    if (path === '/plugins/linkedin' && request.method() === 'GET') {
+      return fulfillJson({
+        id: 'linkedin',
+        name: 'LinkedIn',
+        enabled: true,
+        uiSlots: ['sidebar', 'tools', 'routes'],
+        routes: ['/tools/linkedin'],
+      })
+    }
+
     if (path === '/settings/ai/config' && request.method() === 'GET') {
       return fulfillJson({ provider: 'ollama', baseUrl: 'http://localhost:11434' })
     }
@@ -111,34 +135,36 @@ test('searches LinkedIn profiles and exports selected ones as PDF', async ({ pag
       return fulfillJson({ data: {} })
     }
 
+    if (path === '/plugins/linkedin/people-search.csv' && request.method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/csv; charset=utf-8',
+        headers: {
+          'Content-Disposition': 'attachment; filename="linkedin_search-010126_01.csv"',
+        },
+        body: [
+          'linkedinUrl,firstName,lastName,headline,location,topSkills,currentPosition',
+          '"https://www.linkedin.com/in/ada-lovelace/",Ada,Lovelace,"Senior Treasury Analyst","{\"linkedinText\":\"Zürich Metropolitan Area\",\"parsed\":{\"text\":\"Zürich, Switzerland\"}}","[\"Treasury\",\"SQL\"]","[{\"companyName\":\"Finance AG\",\"position\":\"Lead Analyst\"}]"',
+          '"https://www.linkedin.com/in/maria-stein/",Maria,Stein,"Data Engineer","Zürich","[\"Python\",\"Data Platforms\"]","[{\"companyName\":\"Bank XYZ\",\"position\":\"Engineer\"}]"',
+        ].join('\n'),
+      })
+      return
+    }
+
+    if (path === '/plugins/linkedin/export-pdf' && request.method() === 'POST') {
+      exportPayload = request.postDataJSON()
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/zip',
+        headers: {
+          'Content-Disposition': 'attachment; filename="linkedin-profiles.zip"',
+        },
+        body: Buffer.from('PK\x03\x04fake-zip'),
+      })
+      return
+    }
+
     return fulfillJson({})
-  })
-
-  await page.route('**/graphrag-api/linkedin/people-search.csv', async route => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/csv; charset=utf-8',
-      headers: {
-        'Content-Disposition': 'attachment; filename="linkedin_search-010126_01.csv"',
-      },
-      body: [
-        'linkedinUrl,firstName,lastName,headline,location,topSkills,currentPosition',
-        '"https://www.linkedin.com/in/ada-lovelace/",Ada,Lovelace,"Senior Treasury Analyst","{\"linkedinText\":\"Zürich Metropolitan Area\",\"parsed\":{\"text\":\"Zürich, Switzerland\"}}","[\"Treasury\",\"SQL\"]","[{\"companyName\":\"Finance AG\",\"position\":\"Lead Analyst\"}]"',
-        '"https://www.linkedin.com/in/maria-stein/",Maria,Stein,"Data Engineer","Zürich","[\"Python\",\"Data Platforms\"]","[{\"companyName\":\"Bank XYZ\",\"position\":\"Engineer\"}]"',
-      ].join('\n'),
-    })
-  })
-
-  await page.route('**/api/linkedin/export-pdf', async route => {
-    exportPayload = route.request().postDataJSON()
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/zip',
-      headers: {
-        'Content-Disposition': 'attachment; filename="linkedin-profiles.zip"',
-      },
-      body: Buffer.from('PK\x03\x04fake-zip'),
-    })
   })
 
   await page.addInitScript(() => {

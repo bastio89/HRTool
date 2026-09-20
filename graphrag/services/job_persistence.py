@@ -11,5 +11,6 @@ async def persist_job_profile(
 	job_id: str,
 	raw_text: str,
 	profile: JobProfileExtraction,
+	source: str | None = None,
 ) -> int:
-	return await postgres_store.upsert_job(job_id=job_id, raw_text=raw_text, profile=profile)
+	return await postgres_store.upsert_job(job_id=job_id, raw_text=raw_text, profile=profile, source=source)

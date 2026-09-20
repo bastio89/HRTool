@@ -21,9 +21,6 @@ from models import (
 	JobIngestRequest,
 	JobIngestResponse,
 	JobProfileExtraction,
-	LinkedInPeopleSearchRequest,
-	LinkedInProfileRequest,
-	LinkedInProfileResponse,
 	MatchCandidateResponse,
 	MatchResponse,
 )
@@ -31,8 +28,6 @@ from services.candidate_privacy import CandidatePrivacyService
 from services.candidate_extraction import extract_candidate_profile
 from services.candidate_persistence import persist_candidate_profile
 from services.db import Neo4jService
-from services.linkedin_people_search import LinkedInPeopleSearchService
-from services.linkedin_mcp import LinkedInMCPError, LinkedInMCPService
 from matching_api import create_matching_router
 from services.job_persistence import persist_job_profile
 from services.llm import LLMService
@@ -40,6 +35,7 @@ from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
 from services.candidate_text_renderer import render_candidate_fulltext
+from plugins.registry import build_plugins
 llm_service = LLMService(
 	provider=settings.resolved_provider,
 	base_url=settings.resolved_ai_base_url,
@@ -64,9 +60,8 @@ db_service = Neo4jService(
 	password=settings.neo4j_password,
 	postgres_store=postgres_store,
 )
-linkedin_mcp_service = LinkedInMCPService.from_settings(settings)
-linkedin_people_search_service = LinkedInPeopleSearchService()
 logger = logging.getLogger(__name__)
+plugins = build_plugins(settings, postgres_store, llm_service, db_service)
 
 
 @asynccontextmanager
@@ -80,6 +75,8 @@ async def lifespan(_: FastAPI):
 	await postgres_store.ensure_setting("ai_provider", settings.resolved_provider)
 	await postgres_store.ensure_setting_if_blank("ai_embedding_model", settings.initial_embedding_model)
 	await postgres_store.ensure_setting("ai_reasoning_level", settings.resolved_reasoning_level)
+	await postgres_store.ensure_setting_if_blank("plugin.linkedin.enabled", "1" if settings.linkedin_plugin_enabled else "0")
+	await postgres_store.ensure_setting_if_blank("plugin.jobs_ch.enabled", "1" if settings.jobs_ch_plugin_enabled else "0")
 	yield
 	await db_service.close()
 	await llm_service.close()
@@ -94,6 +91,8 @@ app = FastAPI(
 
 app.include_router(create_matching_router(llm_service, db_service))
 app.include_router(create_legacy_router(postgres_store))
+for plugin in plugins:
+	plugin.register(app)
 
 
 # Bis hierher war kein einziger Endpunkt geschuetzt, waehrend nginx den Dienst
@@ -103,13 +102,10 @@ app.include_router(create_legacy_router(postgres_store))
 # ausschliesslich das Node-Backend.
 #
 # OPEN_PATHS: Statuspruefungen, die ohne Schluessel erreichbar bleiben muessen.
-# BROWSER_PATHS: die beiden Routen, die das Frontend heute direkt aufruft. Sie
-# gehoeren hinter einen authentifizierten Proxy im Node-Backend; bis dahin
-# wuerde ein Schluessel hier nur den CV-Import und die LinkedIn-Suche
-# lahmlegen, ohne etwas zu gewinnen - der Browser koennte ihn ohnehin nicht
-# geheim halten.
+# BROWSER_PATHS: Browser-Aufrufe des Frontends laufen heute nur noch fuer den
+# CV-Parser direkt zum Dienst; LinkedIn wird ueber den Node-Proxy abgewickelt.
 OPEN_PATHS = {"/health", "/health/live", "/docs", "/openapi.json", "/redoc"}
-BROWSER_PATHS = {"/cv-parser/parse", "/linkedin/people-search.csv"}
+BROWSER_PATHS = {"/cv-parser/parse"}
 
 
 @app.middleware("http")
@@ -255,35 +251,6 @@ async def health() -> HealthResponse:
 @app.get("/health/live")
 async def health_live() -> dict[str, str]:
 	return {"status": "ok"}
-
-
-@app.post("/linkedin/profile", response_model=LinkedInProfileResponse, tags=["LinkedIn"])
-async def linkedin_profile(request: LinkedInProfileRequest) -> LinkedInProfileResponse:
-	if not linkedin_mcp_service.is_configured:
-		raise HTTPException(
-			status_code=503,
-			detail="APIFY_LINKEDIN_MCP_COMMAND is not configured.",
-		)
-	try:
-		profile = await linkedin_mcp_service.extract_profile(request.url)
-	except LinkedInMCPError as exc:
-		raise HTTPException(status_code=502, detail=f"LinkedIn MCP extraction failed: {exc}") from exc
-	return LinkedInProfileResponse(source_url=request.url, tool_name="extract_profile", profile=profile)
-
-
-@app.post("/linkedin/people-search.csv", tags=["LinkedIn"])
-async def linkedin_people_search_csv(request: LinkedInPeopleSearchRequest):
-	if not linkedin_people_search_service.is_configured:
-		raise HTTPException(status_code=503, detail="APIFY_TOKEN is not configured.")
-	try:
-		filename, csv_text = linkedin_people_search_service.export_csv(request.model_dump(by_alias=True, exclude_none=True))
-	except RuntimeError as exc:
-		raise HTTPException(status_code=502, detail=f"LinkedIn people search failed: {exc}") from exc
-	return Response(
-		content=csv_text,
-		media_type="text/csv; charset=utf-8",
-		headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-	)
 
 
 @app.post("/candidates/anon", response_model=CandidatePrivacyResponse)

@@ -13,6 +13,33 @@ import { ToastProvider } from '../components/Toast'
 import Tools from './Tools'
 import ToolsLinkedIn from './ToolsLinkedIn'
 
+const memoryStorage = (() => {
+  let store = {}
+  return {
+    getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
+    setItem: (key, value) => {
+      store[key] = String(value)
+    },
+    removeItem: (key) => {
+      delete store[key]
+    },
+    clear: () => {
+      store = {}
+    },
+  }
+})()
+
+Object.defineProperty(globalThis, 'localStorage', {
+  value: memoryStorage,
+  configurable: true,
+})
+
+vi.mock('../plugins/PluginContext', () => ({
+  usePlugins: () => ({
+    isEnabled: (pluginId) => pluginId === 'jobs_ch' || pluginId === 'linkedin',
+  }),
+}))
+
 vi.mock('../api', () => ({
   jobsApi: {},
   linkedinApi: { searchProfiles: vi.fn(), exportProfilesAsPdf: vi.fn() },

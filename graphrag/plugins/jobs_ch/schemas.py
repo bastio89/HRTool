@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class JobsChExportRequest(BaseModel):
+    links: list[str] = Field(default_factory=list)
+
+
+class JobsChImportRequest(BaseModel):
+    links: list[str] = Field(default_factory=list)
+
+
+class JobsChImportItem(BaseModel):
+    link: str
+    job_id: str | None = None
+    title: str | None = None
+    imported: bool = False
+    error: str | None = None
+
+
+class JobsChImportResponse(BaseModel):
+    imported: int
+    failed: int
+    warning: str | None = None
+    items: list[JobsChImportItem] = Field(default_factory=list)

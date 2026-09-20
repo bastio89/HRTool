@@ -149,6 +149,11 @@ export default function Jobs() {
                         </span>
                       )}
                       <span className="text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">{job.type}</span>
+                      {job.source && (
+                        <span className="inline-flex items-center rounded-full bg-[#f5f5f7] px-3 py-1 text-[12px] sm:text-[13px] font-medium text-gray-600 dark:bg-[#2c2c2e] dark:text-gray-300">
+                          {t('jobs.batch')}: {job.source}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{job.candidate_count || 0} {t('jobs.in_pipeline')}
                       </span>

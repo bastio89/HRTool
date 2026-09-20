@@ -186,6 +186,7 @@ class PostgresStore:
                         status TEXT DEFAULT 'Offen',
                         url TEXT,
                         raw_text TEXT,
+                        source TEXT,
                         parsed_profile_json TEXT,
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -227,6 +228,7 @@ class PostgresStore:
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Offen'",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS url TEXT",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS raw_text TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS source TEXT",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS parsed_profile_json TEXT",
                 ):
                     await cursor.execute(column_sql)
@@ -748,7 +750,7 @@ class PostgresStore:
             raise RuntimeError("PostgreSQL did not return a candidate id")
         return dict(row)
 
-    async def _upsert_job_once(self, job_id: str, raw_text: str, profile: JobProfileExtraction) -> int:
+    async def _upsert_job_once(self, job_id: str, raw_text: str, profile: JobProfileExtraction, source: str | None = None) -> int:
         description = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
         requirements = self._summarize_requirements(profile)
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -757,9 +759,9 @@ class PostgresStore:
                     """
                     INSERT INTO jobs (
                         graph_job_id, title, company, recruiter_company, employer_company, description,
-                        requirements, about_us, benefits, location, type, status, url, raw_text,
+                        requirements, about_us, benefits, location, type, status, url, raw_text, source,
                         parsed_profile_json
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', NULL, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', NULL, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -773,6 +775,7 @@ class PostgresStore:
                         profile.location,
                         profile.employment_type or "Vollzeit",
                         raw_text,
+                        source,
                         json.dumps(profile.model_dump(), ensure_ascii=False),
                     ),
                 )
@@ -781,14 +784,14 @@ class PostgresStore:
             raise RuntimeError("PostgreSQL did not return a job id")
         return int(row["id"])
 
-    async def upsert_job(self, job_id: str, raw_text: str, profile: JobProfileExtraction) -> int:
+    async def upsert_job(self, job_id: str, raw_text: str, profile: JobProfileExtraction, source: str | None = None) -> int:
         try:
-            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile)
+            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile, source=source)
         except pg_errors.UndefinedColumn as exc:
-            if "graph_job_id" not in str(exc):
+            if "graph_job_id" not in str(exc) and "source" not in str(exc):
                 raise
             await self.ensure_schema()
-            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile)
+            return await self._upsert_job_once(job_id=job_id, raw_text=raw_text, profile=profile, source=source)
 
     @staticmethod
     def _summarize_requirements(profile: JobProfileExtraction) -> str | None:

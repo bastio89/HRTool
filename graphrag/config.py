@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     graphrag_api_key: str | None = None
     apify_linkedin_mcp_command: str | None = None
     apify_linkedin_mcp_search_tool_name: str = "search_profiles"
+    linkedin_plugin_enabled: bool = True
+    jobs_ch_plugin_enabled: bool = True
 
     # Embedding dimensions persisted in Neo4j vector index.
     embedding_dimensions: int = 1536

@@ -12,6 +12,7 @@ const { promptGuard } = require('../middleware/promptSanitizer');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 const { tmpDir, extractText } = require('../utils/documentText');
 const { graphRagAuthHeaders } = require('../graphragAuth');
+const { forwardJobsChPluginRequest } = require('./plugins');
 
 const router = express.Router();
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -504,65 +505,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
 });
 
 router.post('/export-pdf', (req, res) => {
-  const links = normalizeJobsChLinks(req.body)
-  if (links.length === 0) {
-    return res.status(400).json({ error: 'Mindestens ein jobs.ch-Link ist erforderlich.' })
-  }
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hrtool-jobs-ch-'))
-  const linksFile = path.join(tempDir, 'jobs-ch-links.txt')
-  const zipName = `jobs-ch-pdfs-${Date.now()}.zip`
-  const zipPath = path.join(tempDir, zipName)
-
-  fs.writeFileSync(linksFile, `${links.join('\n')}\n`, 'utf8')
-
-  try {
-    const result = spawnSync('python3', [
-      jobsChExportScript,
-      '--jobs-ch-links-file', linksFile,
-      '--jobs-ch-zip-output', zipPath,
-    ], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      env: process.env,
-      maxBuffer: 10 * 1024 * 1024,
-    })
-
-    const stdout = (result.stdout || '').trim()
-    const stderr = (result.stderr || '').trim()
-
-    if (result.error) {
-      return res.status(502).json({ error: `jobs.ch-Export fehlgeschlagen: ${result.error.message}` })
-    }
-    if (result.status !== 0) {
-      return res.status(502).json({
-        error: 'jobs.ch-Export fehlgeschlagen.',
-        details: stderr || stdout || `Exit code ${result.status}`,
-      })
-    }
-
-    if (!fs.existsSync(zipPath)) {
-      return res.status(502).json({
-        error: 'jobs.ch-Export fehlgeschlagen.',
-        details: stdout || 'Keine ZIP-Datei wurde erzeugt.',
-      })
-    }
-
-    const skippedCount = (stderr.match(/Warnung: jobs\.ch-Link übersprungen:/g) || []).length
-    if (skippedCount > 0) {
-      res.setHeader('X-HRTool-JobsCh-Warning', `${skippedCount} jobs.ch-Link${skippedCount === 1 ? '' : 'e'} wurden übersprungen.`)
-    }
-
-    return res.download(zipPath, zipName, (downloadError) => {
-      if (downloadError && !res.headersSent) {
-        res.status(502).json({ error: `Download fehlgeschlagen: ${downloadError.message}` })
-      }
-    })
-  } finally {
-    setTimeout(() => {
-      fs.rmSync(tempDir, { recursive: true, force: true })
-    }, 30_000)
-  }
+  return forwardJobsChPluginRequest(req, res, '/plugins/jobs_ch/export-pdf')
 });
 
 /**

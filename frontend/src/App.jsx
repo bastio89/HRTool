@@ -1,3 +1,4 @@
+import { useMemo, Suspense } from 'react'
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, Navigate, Outlet } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import { ThemeProvider } from './ThemeContext'
@@ -32,7 +33,10 @@ import DSGVO from './pages/DSGVO'
 import KITransparenz from './pages/KITransparenz'
 import EmailSettings from './pages/EmailSettings'
 import Reports from './pages/Reports'
+import Plugins from './pages/Plugins'
 import AISettings from './pages/AISettings'
+import { PluginProvider, usePlugins } from './plugins/PluginContext'
+import { getPluginDefinition } from './plugins/registry'
 
 function AdminRoute({ children }) {
   const { user } = useAuth()
@@ -60,6 +64,87 @@ function FullPageSpinner() {
   )
 }
 
+function PluginPage({ pluginId }) {
+  const pluginDefinition = getPluginDefinition(pluginId)
+  if (!pluginDefinition) return null
+  const Component = pluginDefinition.route.element
+  return (
+    <Suspense fallback={<FullPageSpinner />}>
+      <Component />
+    </Suspense>
+  )
+}
+
+function AppRouter() {
+  const { user, loading: authLoading } = useAuth()
+  const { loading: pluginsLoading, isEnabled } = usePlugins()
+  const isJobsChEnabled = isEnabled('jobs_ch')
+  const isLinkedInEnabled = isEnabled('linkedin')
+
+  const router = useMemo(() => {
+    const pluginRoutes = []
+    if (isJobsChEnabled) {
+      pluginRoutes.push(
+        <Route key="tools-jobs-ch" path="tools/jobs-ch" element={<ToolsRoute><PluginPage pluginId="jobs_ch" /></ToolsRoute>} />,
+      )
+    }
+    if (isLinkedInEnabled) {
+      pluginRoutes.push(
+        <Route key="tools-linkedin" path="tools/linkedin" element={<ToolsRoute><PluginPage pluginId="linkedin" /></ToolsRoute>} />,
+      )
+    }
+
+    return createBrowserRouter(
+      createRoutesFromElements(
+        <Route element={<ErrorBoundary><Outlet /></ErrorBoundary>}>
+          <Route path="/login" element={<LoginGuard />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="candidates" element={<Candidates />} />
+              <Route path="candidates/new" element={<CandidateForm />} />
+              <Route path="candidates/:id/edit" element={<CandidateForm />} />
+              <Route path="candidates/:id/detail" element={<CandidateDetail />} />
+              <Route path="jobs" element={<Jobs />} />
+              <Route path="jobs/new" element={<JobForm />} />
+              <Route path="jobs/:id/edit" element={<JobForm />} />
+              <Route path="pipeline/:jobId" element={<Pipeline />} />
+              <Route path="pipeline/:jobId/interview-prep/:entryId" element={<InterviewPrep />} />
+              <Route path="matching" element={<MatchingHub />} />
+              <Route path="matching" element={<MatchingLayout />}>
+                <Route path="job" element={<JobToCandidates />} />
+                <Route path="candidate" element={<CandidateToJobs />} />
+                <Route path="matrix" element={<MatrixMatching />} />
+              </Route>
+              <Route path="matching/results/selected" element={<SelectedMatchingResults />} />
+              <Route path="matching/results/:id" element={<MatchingResults />} />
+              <Route path="history" element={<History />} />
+              <Route path="tools" element={<ToolsRoute><Tools /></ToolsRoute>} />
+              {pluginRoutes}
+              <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
+              <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
+              <Route path="admin/audit" element={<RevisorRoute><AuditLog /></RevisorRoute>} />
+              <Route path="admin/dsgvo" element={<AdminRoute><DSGVO /></AdminRoute>} />
+              <Route path="admin/ki-transparenz" element={<RevisorRoute><KITransparenz /></RevisorRoute>} />
+              <Route path="admin/email" element={<AdminRoute><EmailSettings /></AdminRoute>} />
+              <Route path="admin/plugins" element={<AdminRoute><Plugins /></AdminRoute>} />
+              <Route path="admin/ai" element={<AdminRoute><AISettings /></AdminRoute>} />
+              <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />
+            </Route>
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      )
+    )
+  }, [isJobsChEnabled, isLinkedInEnabled])
+
+  if (authLoading || (user && pluginsLoading)) {
+    return <FullPageSpinner />
+  }
+
+  return <RouterProvider router={router} />
+}
+
 /** Gate for everything behind the login. */
 function RequireAuth() {
   const { user, loading } = useAuth()
@@ -75,63 +160,20 @@ function LoginGuard() {
   return <Login />
 }
 
-// A data router (rather than <BrowserRouter>) is what makes useBlocker
-// available, so the unsaved-changes guard can also catch sidebar clicks and the
-// browser's back button - not just the buttons a form controls itself.
-const router = createBrowserRouter(
-  createRoutesFromElements(
-    <Route element={<ErrorBoundary><Outlet /></ErrorBoundary>}>
-      <Route path="/login" element={<LoginGuard />} />
-      <Route element={<RequireAuth />}>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="candidates" element={<Candidates />} />
-          <Route path="candidates/new" element={<CandidateForm />} />
-          <Route path="candidates/:id/edit" element={<CandidateForm />} />
-          <Route path="candidates/:id/detail" element={<CandidateDetail />} />
-          <Route path="jobs" element={<Jobs />} />
-          <Route path="jobs/new" element={<JobForm />} />
-          <Route path="jobs/:id/edit" element={<JobForm />} />
-          <Route path="pipeline/:jobId" element={<Pipeline />} />
-          <Route path="pipeline/:jobId/interview-prep/:entryId" element={<InterviewPrep />} />
-          <Route path="matching" element={<MatchingHub />} />
-          <Route path="matching" element={<MatchingLayout />}>
-            <Route path="job" element={<JobToCandidates />} />
-            <Route path="candidate" element={<CandidateToJobs />} />
-            <Route path="matrix" element={<MatrixMatching />} />
-          </Route>
-          <Route path="matching/results/selected" element={<SelectedMatchingResults />} />
-          <Route path="matching/results/:id" element={<MatchingResults />} />
-          <Route path="history" element={<History />} />
-          <Route path="tools" element={<ToolsRoute><Tools /></ToolsRoute>} />
-          <Route path="tools/linkedin" element={<ToolsRoute><ToolsLinkedIn /></ToolsRoute>} />
-          <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
-          <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
-          <Route path="admin/audit" element={<RevisorRoute><AuditLog /></RevisorRoute>} />
-          <Route path="admin/dsgvo" element={<AdminRoute><DSGVO /></AdminRoute>} />
-          <Route path="admin/ki-transparenz" element={<RevisorRoute><KITransparenz /></RevisorRoute>} />
-          <Route path="admin/email" element={<AdminRoute><EmailSettings /></AdminRoute>} />
-          <Route path="admin/ai" element={<AdminRoute><AISettings /></AdminRoute>} />
-          <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />
-        </Route>
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Route>
-  )
-)
-
 export default function App() {
   return (
     <I18nProvider>
       <ThemeProvider>
         <AuthProvider>
-          <ToastProvider>
-            <ConfirmProvider>
-              <SystemStatusProvider>
-                <RouterProvider router={router} />
-              </SystemStatusProvider>
-            </ConfirmProvider>
-          </ToastProvider>
+          <PluginProvider>
+            <ToastProvider>
+              <ConfirmProvider>
+                <SystemStatusProvider>
+                  <AppRouter />
+                </SystemStatusProvider>
+              </ConfirmProvider>
+            </ToastProvider>
+          </PluginProvider>
         </AuthProvider>
       </ThemeProvider>
     </I18nProvider>

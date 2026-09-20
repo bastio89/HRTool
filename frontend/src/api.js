@@ -290,7 +290,7 @@ export const jobsApi = {
     return response.json();
   },
   exportJobsChPdfs: async (links) => {
-    const response = await fetch(`${API_BASE}/jobs/export-pdf`, {
+    const response = await fetch(`${API_BASE}/plugins/jobs_ch/export-pdf`, {
       method: 'POST',
       headers: {
         ...authHeaders(),
@@ -307,9 +307,27 @@ export const jobsApi = {
 
     return {
       blob: await response.blob(),
-      filename: parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'linkedin-profiles.zip',
-      warning: response.headers.get('X-HRTool-LinkedIn-Warning') || null,
+      filename: parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'jobs-ch-pdfs.zip',
+      warning: response.headers.get('X-HRTool-JobsCh-Warning') || null,
     }
+  },
+  importJobsChDescriptions: async (links) => {
+    const response = await fetch(`${API_BASE}/plugins/jobs_ch/import-db`, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ links }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Import fehlgeschlagen' }))
+      throw new Error(error.error || error.details || `HTTP ${response.status}`)
+    }
+
+    return response.json()
   },
   generateDescription: (data) => request('/jobs/generate-description', { method: 'POST', body: JSON.stringify(data), timeout: 200000 }),
 };
@@ -495,9 +513,15 @@ export const cvParserApi = {
   },
 };
 
+export const pluginsApi = {
+  getAll: () => request('/plugins'),
+  getPlugin: (pluginId) => request(`/plugins/${pluginId}`),
+  setPluginEnabled: (pluginId, enabled) => request(`/plugins/${pluginId}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+};
+
 export const linkedinApi = {
   searchProfiles: async (payload) => {
-    const response = await fetch(`${GRAPHRAG_API_BASE}/linkedin/people-search.csv`, {
+    const response = await fetch(`${API_BASE}/plugins/linkedin/people-search.csv`, {
       method: 'POST',
       headers: {
         ...authHeaders(),
@@ -524,7 +548,7 @@ export const linkedinApi = {
     }
   },
   exportProfilesAsPdf: async (links) => {
-    const response = await fetch(`${API_BASE}/linkedin/export-pdf`, {
+    const response = await fetch(`${API_BASE}/plugins/linkedin/export-pdf`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ links }),

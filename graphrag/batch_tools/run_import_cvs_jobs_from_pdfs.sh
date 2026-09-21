@@ -17,7 +17,7 @@ Examples:
 
 Required on the host:
   - Python 3
-  - an already running GraphRAG HTTP service, typically at http://127.0.0.1:8002
+  - an already running GraphRAG HTTP service, typically at http://127.0.0.1:8000 or http://127.0.0.1:8002
 
 The script does not start GraphRAG, Neo4j, or Postgres itself. It only uploads PDFs
 to the GraphRAG HTTP service. Job imports persist to PostgreSQL and Neo4j by default.

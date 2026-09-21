@@ -608,7 +608,8 @@ function normalizeExternalCandidates(candidates) {
  * /matching/external/run:
  *   post:
  *     summary: Externes Matching per OpenAPI REST starten
- *     description: Matching-only Schnittstelle fuer Kunden, die HRTool ohne UI und ohne lokale Kandidaten-/Stellenspeicherung nutzen moechten.
+ *     deprecated: true
+ *     description: Veralteter Endpunkt. Verwenden Sie stattdessen den GraphRAG-Endpoint /match/external/run direkt.
  *     tags: [Matching]
  *     security:
  *       - ApiKeyAuth: []

@@ -51,6 +51,7 @@ paths:
   /match/external/run:
     post:
       summary: External Run
+      deprecated: true
       operationId: external_run_match_external_run_post
       requestBody:
         content:

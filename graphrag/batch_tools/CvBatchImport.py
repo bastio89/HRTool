@@ -65,8 +65,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "GraphRAG service base URL (default: GRAPHRAG_API_BASE_URL, "
-            "GRAPHRAG_HOST_BASE_URL, or a host-safe fallback to http://127.0.0.1:8002)"
+            "GRAPHRAG_HOST_BASE_URL, or an auto-probed fallback that checks http://127.0.0.1:8000 and http://127.0.0.1:8002)"
         ),
+    )
+    parser.add_argument(
+        "--backend-api-base",
+        default=os.environ.get("HRTOOL_BACKEND_API_BASE", "http://127.0.0.1:3001/api"),
+        help="Backend API base URL used for JWT login (default: HRTOOL_BACKEND_API_BASE or http://127.0.0.1:3001/api)",
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -78,6 +83,21 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Do not call the API and do not move files",
+    )
+    parser.add_argument(
+        "--token",
+        default=None,
+        help="JWT token for authenticated GraphRAG API calls",
+    )
+    parser.add_argument(
+        "--username",
+        default=None,
+        help="Username for GraphRAG /auth/login (used if no token is provided)",
+    )
+    parser.add_argument(
+        "--password",
+        default=None,
+        help="Password for GraphRAG /auth/login (used if no token is provided)",
     )
     parser.add_argument(
         "--recursive",
@@ -145,7 +165,7 @@ def ensure_unique_destination(done_dir: Path, file_name: str) -> Path:
         counter += 1
 
 
-def post_multipart_file(url: str, file_path: Path, timeout_seconds: int) -> dict:
+def post_multipart_file(url: str, file_path: Path, timeout_seconds: int, token: str | None = None) -> dict:
     boundary = f"----graphrag-{os.urandom(8).hex()}"
     file_bytes = file_path.read_bytes()
 
@@ -155,12 +175,11 @@ def post_multipart_file(url: str, file_path: Path, timeout_seconds: int) -> dict
         "Content-Type: application/pdf\r\n\r\n"
     ).encode("utf-8") + file_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
 
-    req = request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        method="POST",
-    )
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    req = request.Request(url, data=body, headers=headers, method="POST")
     try:
         with request.urlopen(req, timeout=timeout_seconds) as resp:
             raw = resp.read().decode("utf-8")
@@ -172,14 +191,13 @@ def post_multipart_file(url: str, file_path: Path, timeout_seconds: int) -> dict
         raise RuntimeError(f"Network error for {url}: {exc.reason}") from exc
 
 
-def post_json(url: str, payload: dict, timeout_seconds: int) -> dict:
+def post_json(url: str, payload: dict, timeout_seconds: int, token: str | None = None) -> dict:
     body = json.dumps(payload).encode("utf-8")
-    req = request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    req = request.Request(url, data=body, headers=headers, method="POST")
     try:
         with request.urlopen(req, timeout=timeout_seconds) as resp:
             raw = resp.read().decode("utf-8")
@@ -213,19 +231,56 @@ def extract_pdf_text(file_path: Path) -> str:
     return extracted
 
 
+def _is_real_pdf_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
+
+    name = path.name
+    if name.startswith("._") or name == ".DS_Store":
+        return False
+
+    return path.suffix.lower() == ".pdf"
+
+
+def resolve_auth_token(args: argparse.Namespace, api_base: str) -> str | None:
+    token = args.token or os.environ.get("GRAPHRAG_API_TOKEN")
+    if token:
+        return token
+
+    username = args.username or os.environ.get("GRAPHRAG_USERNAME")
+    password = args.password or os.environ.get("GRAPHRAG_PASSWORD")
+    if not username and not password:
+        username = "admin"
+        password = "admin123"
+
+    if username and password:
+        login_result = post_json(
+            f"{args.backend_api_base.rstrip('/')}/auth/login",
+            {"username": username, "password": password},
+            args.timeout_seconds,
+        )
+        login_token = str(login_result.get("token") or "").strip()
+        if not login_token:
+            raise RuntimeError("Login succeeded but response has no token")
+        return login_token
+
+    raise RuntimeError(
+        "No GraphRAG auth token available. Set GRAPHRAG_API_TOKEN or provide GRAPHRAG_USERNAME/GRAPHRAG_PASSWORD."
+    )
+
+
 def iter_pdf_files(input_dir: Path, recursive: bool, done_dir: Path) -> list[Path]:
     if recursive:
         done_dir_resolved = done_dir.resolve()
         files = [
             path
             for path in input_dir.rglob("*")
-            if path.is_file()
-            and path.suffix.lower() == ".pdf"
+            if _is_real_pdf_file(path)
             and done_dir_resolved not in path.resolve().parents
             and path.resolve() != done_dir_resolved
         ]
     else:
-        files = [path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() == ".pdf"]
+        files = [path for path in input_dir.iterdir() if _is_real_pdf_file(path)]
     return sorted(files)
 
 
@@ -246,10 +301,8 @@ def main() -> int:
         print(f"No PDF files found in {input_dir}")
         return 0
 
-    if args.dry_run:
-        api_base = (args.api_base or resolve_api_base()).rstrip("/")
-    else:
-        api_base = resolve_reachable_api_base(args.api_base)
+    api_base = resolve_reachable_api_base(args.api_base)
+    token = None if args.dry_run else resolve_auth_token(args, api_base)
     job_persist = args.job_persist
     endpoint = (
         f"{api_base}/cv-parser/parse?persist=true"
@@ -270,10 +323,10 @@ def main() -> int:
             continue
 
         if args.mode == "cv":
-            response = post_multipart_file(endpoint, pdf_path, args.timeout_seconds)
+            response = post_multipart_file(endpoint, pdf_path, args.timeout_seconds, token)
         else:
             extracted_text = extract_pdf_text(pdf_path)
-            response = post_json(endpoint, {"raw_text": extracted_text}, args.timeout_seconds)
+            response = post_json(endpoint, {"raw_text": extracted_text}, args.timeout_seconds, token)
         if not response:
             raise RuntimeError(f"GraphRAG returned an empty response for {pdf_path.name}")
 

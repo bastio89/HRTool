@@ -212,6 +212,17 @@ def _resolve_input_dir(args: argparse.Namespace) -> Path:
     return Path("job_input" if args.mode == "job" else "cv_input")
 
 
+def _is_real_pdf_file(path: Path) -> bool:
+    if not path.is_file():
+        return False
+
+    name = path.name
+    if name.startswith("._") or name == ".DS_Store":
+        return False
+
+    return path.suffix.lower() == ".pdf"
+
+
 def post_json(
     url: str,
     payload: dict,
@@ -539,9 +550,7 @@ async def run_cv_import(args: argparse.Namespace) -> int:
             print(f"Input directory does not exist: {input_dir}")
             return 1
 
-        pdf_files = sorted(
-            p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"
-        )
+        pdf_files = sorted(p for p in input_dir.iterdir() if _is_real_pdf_file(p))
 
         if not pdf_files:
             print(f"No PDF files found in {input_dir}")
@@ -596,9 +605,7 @@ async def run_job_import(args: argparse.Namespace) -> int:
         print(f"Input directory does not exist: {input_dir}")
         return 1
 
-    pdf_files = sorted(
-        p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"
-    )
+    pdf_files = sorted(p for p in input_dir.iterdir() if _is_real_pdf_file(p))
 
     if not pdf_files:
         print(f"No PDF files found in {input_dir}")

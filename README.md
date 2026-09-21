@@ -405,7 +405,7 @@ http://localhost:3001/api/docs
 
 ### Matching-only REST API für Integrationen
 
-Kunden können die Matching-Funktion auch ohne HRTool-Frontend und ohne lokale Bewerber-/Stellenverwaltung verwenden. Dafür steht eine API-Key-geschützte OpenAPI-Schnittstelle bereit:
+Kunden können die Matching-Funktion auch ohne HRTool-Frontend und ohne lokale Bewerber-/Stellenverwaltung verwenden. Die bisherige Schnittstelle ist veraltet; verwenden Sie nach Möglichkeit direkt den GraphRAG-Endpoint. Die API-Key-geschützte Schnittstelle bleibt noch als Legacy-Pfad verfügbar:
 
 ```http
 POST /api/matching/external/run

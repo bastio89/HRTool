@@ -36,6 +36,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    graph_job_id TEXT,
     title TEXT NOT NULL,
     description TEXT,
     requirements TEXT,
@@ -217,6 +218,7 @@ const migrations = [
   `ALTER TABLE pipeline_entries ADD COLUMN rejection_details TEXT`,
   // Matching → Pipeline-Link
   `ALTER TABLE matching_results ADD COLUMN job_id INTEGER`,
+  `ALTER TABLE jobs ADD COLUMN graph_job_id TEXT`,
   // Anrede / Geschlecht
   `ALTER TABLE candidates ADD COLUMN gender TEXT`,
   // CV-Parser: LLM- oder Text-Heuristik-Extraktion

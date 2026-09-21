@@ -386,6 +386,24 @@ class JobIngestResponse(IngestResponse):
     profile: JobProfileExtraction
     persisted: bool = True
 
+
+class JobDeleteRequest(BaseModel):
+    job_id: str | None = None
+    title: str | None = None
+    description: str | None = None
+    requirements: str | None = None
+    about_us: str | None = None
+    benefits: str | None = None
+    location: str | None = None
+    type: str | None = None
+    url: str | None = None
+
+
+class JobDeleteResponse(BaseModel):
+    deleted: bool
+    neo4j_deleted: int = 0
+    postgres_deleted: int = 0
+
 class LegacyHealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     app: str = "HR Graph Matching API"

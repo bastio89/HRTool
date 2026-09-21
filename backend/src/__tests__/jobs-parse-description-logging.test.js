@@ -13,13 +13,21 @@ describe('jobs parse-description logging', () => {
   });
 
   test('logs the AI call and returns a parsed job title', async () => {
+    jest.resetModules();
     const logAiCall = jest.fn();
     jest.doMock('../aiLogger', () => ({ logAiCall }));
+    jest.doMock('../database', () => ({
+      prepare: () => ({ get: () => undefined, all: () => [], run: () => ({}) }),
+      exec: () => ({})
+    }));
     jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
 
     process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
     // Die Route leitet den persist-Wert der Anfrage an GraphRAG weiter:
-    // persist=1 wird zu persist=neo4j, alles andere zu persist=0. Erwartung
+    let jobsRouter;
+    jest.isolateModules(() => {
+      jobsRouter = require('../routes/jobs');
+    });
     // und Anfrage muessen deshalb zusammenpassen - beide haengen an dieser
     // Konstante, damit sie nicht wieder auseinanderlaufen koennen.
     const requestedPersist = '0';
@@ -38,8 +46,6 @@ describe('jobs parse-description logging', () => {
         }),
       };
     });
-
-    const jobsRouter = require('../routes/jobs');
     const app = express();
     app.use(express.json());
     app.use('/api/jobs', jobsRouter);

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Briefcase, MapPin, Users,
-  Clock, Archive, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft, Upload
+  Clock, Archive, Trash2, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft, Upload
 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner, PageContainer, SkeletonList } from '../components/UI'
@@ -64,6 +64,23 @@ export default function Jobs() {
     try {
       await jobsApi.delete(job.id)
       toast.success(t('jobs.archived_success', 'Stelle archiviert'))
+      loadJobs()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleDelete = async (job) => {
+    const ok = await confirm({
+      title: t('jobs.delete'),
+      message: t('jobs.delete_confirm'),
+      confirmLabel: t('jobs.delete'),
+      tone: 'danger',
+    })
+    if (!ok) return
+    try {
+      await jobsApi.delete(job.id)
+      toast.success(t('jobs.deleted_success', 'Stelle gelöscht'))
       loadJobs()
     } catch (err) {
       toast.error(err.message)
@@ -187,6 +204,14 @@ export default function Jobs() {
                       onClick={() => navigate(`/pipeline/${job.id}`)}
                     >
                       {t('jobs.pipeline')} <ChevronRightIcon className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-10 h-10 !p-0 rounded-full hover:bg-red-500/10 hover:text-red-600"
+                      onClick={() => handleDelete(job)}
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                     {job.status !== 'Archiviert' && (
                       <Button

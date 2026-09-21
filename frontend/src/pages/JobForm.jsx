@@ -31,7 +31,9 @@ export default function JobForm() {
   const toast = useToast()
   const confirm = useConfirm()
   const { t } = useI18n()
-  const isEdit = Boolean(id)
+  const [persistedJobId, setPersistedJobId] = useState('')
+  const effectiveJobId = id || persistedJobId
+  const isEdit = Boolean(effectiveJobId)
   const [form, setForm] = useState(emptyJob)
   // Baseline for the unsaved-changes guard: replaced once the record loads.
   const [pristine, setPristine] = useState(emptyJob)
@@ -49,7 +51,7 @@ export default function JobForm() {
   const fileInputRef = useRef(null)
 
   useEffect(() => {
-    if (isEdit) {
+    if (id) {
       jobsApi.getById(id)
         .then(data => {
           const loaded = {
@@ -70,15 +72,15 @@ export default function JobForm() {
         .catch(err => setError(err.message))
         .finally(() => setLoading(false))
     }
-  }, [id, isEdit])
+  }, [id])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSaving(true)
     try {
-      if (isEdit) {
-        await jobsApi.update(id, form)
+      if (effectiveJobId) {
+        await jobsApi.update(effectiveJobId, form)
       } else {
         await jobsApi.create(form)
       }
@@ -125,18 +127,28 @@ export default function JobForm() {
     setError('')
     setUploadingDescription(true)
     try {
-      const parsed = await jobsApi.parseDescriptionFile(file, parseThinking)
+      const parsed = await jobsApi.parseDescriptionFile(file, parseThinking, false, true)
       const importedFilename = parsed.filename || file.name
       const importedTitle = filenameToJobTitle(importedFilename)
-      setForm(current => ({
-        ...current,
-        title: importedTitle || current.title,
-        about_us: parsed.about_us || current.about_us,
-        description: parsed.description || (!parsed.about_us && !parsed.requirements && !parsed.benefits ? (parsed.text || '') : '') || current.description,
-        requirements: parsed.requirements || current.requirements,
-        skills: parsed.skills || current.skills,
-        benefits: parsed.benefits || current.benefits,
-      }))
+      const importedJob = parsed.job || null
+      const importedForm = {
+        title: importedJob?.title || importedTitle || '',
+        about_us: importedJob?.about_us || parsed.about_us || '',
+        description: importedJob?.description || parsed.description || (!parsed.about_us && !parsed.requirements && !parsed.benefits ? (parsed.text || '') : '') || '',
+        requirements: importedJob?.requirements || parsed.requirements || '',
+        skills: importedJob?.skills || parsed.skills || '',
+        benefits: importedJob?.benefits || parsed.benefits || '',
+        location: importedJob?.location || '',
+        type: importedJob?.type || 'Vollzeit',
+        status: importedJob?.status || 'Offen',
+        url: importedJob?.url || '',
+      }
+      setForm(importedForm)
+      setPristine(importedForm)
+      setJustSaved(false)
+      if (importedJob?.id) {
+        setPersistedJobId(String(importedJob.id))
+      }
       setUploadedFilename(importedFilename)
       toast.success(t('jobs.upload_success'))
     } catch (err) {

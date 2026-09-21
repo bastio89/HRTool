@@ -15,6 +15,7 @@ from models import (
 	MatchingMatrixPayload,
 	MatchingMatrixRequest,
 	KiMatchPairFailure,
+	KiMatchPairInput,
 	KiMatchPairResult,
 	KiMatchPairsRequest,
 	KiMatchPairsResponse,
@@ -286,6 +287,23 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			return 0.0
 		return max(0.0, min(1.0, dot_product / (left_norm * right_norm)))
 
+	def lexical_similarity(left_name: str, right_name: str) -> float:
+		left_text = normalize_text(left_name).lower()
+		right_text = normalize_text(right_name).lower()
+		if not left_text or not right_text:
+			return 0.0
+		if left_text == right_text:
+			return 1.0
+		if left_text in right_text or right_text in left_text:
+			return 0.9
+		left_tokens = {token for token in re.split(r'[^\wäöüß]+', left_text) if len(token) > 1}
+		right_tokens = {token for token in re.split(r'[^\wäöüß]+', right_text) if len(token) > 1}
+		if not left_tokens or not right_tokens:
+			return 0.0
+		intersection = len(left_tokens & right_tokens)
+		union = len(left_tokens | right_tokens)
+		return intersection / union if union else 0.0
+
 	def skill_weight(priority: Any) -> float:
 		priority_text = normalize_text(priority).lower().replace('-', '_').replace(' ', '_')
 		if priority_text == 'mandatory':
@@ -335,17 +353,16 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		for job_skill in job_skills:
 			job_name = job_skill['name'].strip().lower()
 			job_vector = job_vectors.get(job_name)
-			if job_vector is None:
-				continue
 			best_similarity = 0.0
 			best_candidate_name = ''
 			best_candidate_category = None
 			for candidate_skill in candidate_skills:
 				candidate_name = candidate_skill['name'].strip().lower()
 				candidate_vector = candidate_vectors.get(candidate_name)
-				if candidate_vector is None:
-					continue
-				similarity = cosine_similarity(job_vector, candidate_vector)
+				if job_vector is not None and candidate_vector is not None:
+					similarity = cosine_similarity(job_vector, candidate_vector)
+				else:
+					similarity = lexical_similarity(job_skill['name'], candidate_skill['name'])
 				if similarity > best_similarity:
 					best_similarity = similarity
 					best_candidate_name = candidate_skill['name']

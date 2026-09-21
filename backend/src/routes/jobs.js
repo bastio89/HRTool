@@ -171,13 +171,18 @@ function findDuplicateJob(job) {
 function persistLocalJob(job) {
   const duplicate = findDuplicateJob(job);
   if (duplicate) {
+    if (job.graph_job_id && !duplicate.graph_job_id) {
+      db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(job.graph_job_id, duplicate.id);
+      return db.prepare('SELECT * FROM jobs WHERE id = ?').get(duplicate.id);
+    }
     return { ...duplicate, duplicate: true };
   }
 
   const result = db.prepare(`
-    INSERT INTO jobs (title, about_us, description, requirements, skills, benefits, location, type, status, url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (graph_job_id, title, about_us, description, requirements, skills, benefits, location, type, status, url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
+    job.graph_job_id || null,
     job.title,
     job.about_us || null,
     job.description || null,
@@ -206,6 +211,39 @@ async function ingestIntoGraphRag(req, rawText, persist = true) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
       body: JSON.stringify({ raw_text: rawText }),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`GraphRAG HTTP ${response.status}: ${payload.detail || payload.error || 'Unbekannter Fehler'}`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function deleteJobFromGraphRag(req, job) {
+  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
+  if (!baseUrl) return null;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
+      body: JSON.stringify({
+        job_id: job.graph_job_id || null,
+        title: job.title || null,
+        description: job.description || null,
+        requirements: job.requirements || null,
+        about_us: job.about_us || null,
+        benefits: job.benefits || null,
+        location: job.location || null,
+        type: job.type || null,
+        url: job.url || null,
+      }),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
@@ -351,7 +389,14 @@ router.post('/', (req, res) => {
       console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
       return { error: graphRagErr.message };
     }).then((graphRag) => {
-      res.status(201).json({ ...job, graphRag });
+      if (graphRag?.id) {
+        db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(graphRag.id, job.id);
+      }
+      const savedJob = db.prepare('SELECT * FROM jobs WHERE id = ?').get(job.id);
+      res.status(201).json({
+        ...savedJob,
+        graphRag,
+      });
     });
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Erstellen der Stelle' });
@@ -441,6 +486,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       : filenameTitle;
     const parsedJob = persist
       ? persistLocalJob({
+        graph_job_id: graphRag?.id || null,
         title: resolvedTitle,
         about_us: profile.about_us || '',
         description: profile.description || '',
@@ -574,15 +620,29 @@ router.put('/:id', (req, res) => {
  *     responses:
  *       200: { description: Erfolgreich gelöscht }
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     if (!job) return res.status(404).json({ error: 'Stelle nicht gefunden' });
-    db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run('Archiviert', req.params.id);
-    logAudit(req, 'archiviert', 'Job', req.params.id, job?.title);
-    res.json({ success: true });
+
+    const graphRag = await deleteJobFromGraphRag(req, job);
+    db.prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);
+    logAudit(req, 'gelöscht', 'Job', req.params.id, job?.title);
+
+    res.json({
+      success: true,
+      graphRag,
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Fehler beim Archivieren der Stelle' });
+    console.error('Job delete error:', err);
+    const message = String(err?.message || '');
+    if (message.includes('GraphRAG HTTP 502: Job deletion failed:')) {
+      return res.status(502).json({
+        error: 'GraphRAG-Löschung fehlgeschlagen',
+        detail: message.replace(/^GraphRAG HTTP 502: Job deletion failed:\s*/, ''),
+      });
+    }
+    res.status(500).json({ error: 'Fehler beim Löschen der Stelle', detail: message || 'Unbekannter Fehler' });
   }
 });
 

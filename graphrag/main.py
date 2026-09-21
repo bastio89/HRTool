@@ -23,6 +23,8 @@ from models import (
 	IngestResponse,
 	JobIngestRequest,
 	JobIngestResponse,
+	JobDeleteRequest,
+	JobDeleteResponse,
 	JobProfileExtraction,
 	MatchCandidateResponse,
 	MatchResponse,
@@ -649,6 +651,48 @@ async def ingest_job(
 			raise HTTPException(status_code=503, detail=f"Job persistence failed: {exc}") from exc
 
 	return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=True)
+
+
+@app.delete("/ingest/job", response_model=JobDeleteResponse)
+async def delete_job(payload: JobDeleteRequest) -> JobDeleteResponse:
+	if not any(
+		str(value).strip()
+		for value in (
+			payload.job_id,
+			payload.title,
+			payload.description,
+			payload.requirements,
+			payload.about_us,
+			payload.benefits,
+			payload.location,
+			payload.type,
+			payload.url,
+		)
+	):
+		raise HTTPException(status_code=400, detail="Provide job_id or job metadata to delete.")
+
+	neo4j_deleted = await db_service.delete_job(
+		payload.job_id,
+		title=payload.title,
+		location=payload.location,
+		employment_type=payload.type,
+	)
+	postgres_deleted = await postgres_store.delete_job(
+		payload.job_id,
+		title=payload.title,
+		description=payload.description,
+		requirements=payload.requirements,
+		about_us=payload.about_us,
+		benefits=payload.benefits,
+		location=payload.location,
+		job_type=payload.type,
+		url=payload.url,
+	)
+	return JobDeleteResponse(
+		deleted=bool(neo4j_deleted or postgres_deleted),
+		neo4j_deleted=neo4j_deleted,
+		postgres_deleted=postgres_deleted,
+	)
 
 
 @app.post("/match/{job_id}", response_model=MatchResponse)

@@ -1215,6 +1215,58 @@ class PostgresStore:
             "parsed_profile_json": json.loads(parsed_profile_json) if isinstance(parsed_profile_json, str) and parsed_profile_json.strip() else None,
         }
 
+    async def delete_job(
+        self,
+        job_id: str | None = None,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        requirements: str | None = None,
+        about_us: str | None = None,
+        benefits: str | None = None,
+        location: str | None = None,
+        job_type: str | None = None,
+        url: str | None = None,
+    ) -> int:
+        if job_id:
+            async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                async with connection.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        DELETE FROM jobs
+                        WHERE graph_job_id = %s OR id::text = %s
+                        """,
+                        (job_id, job_id),
+                    )
+                    return cursor.rowcount or 0
+
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        def add_condition(column: str, value: str | None) -> None:
+            if value is None or not str(value).strip():
+                return
+            conditions.append(f"COALESCE(LOWER({column}), '') = LOWER(%s)")
+            params.append(str(value).strip())
+
+        add_condition("title", title)
+        add_condition("description", description)
+        add_condition("requirements", requirements)
+        add_condition("about_us", about_us)
+        add_condition("benefits", benefits)
+        add_condition("location", location)
+        add_condition("type", job_type)
+        add_condition("url", url)
+
+        if not conditions:
+            return 0
+
+        query = f"DELETE FROM jobs WHERE {' AND '.join(conditions)}"
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(query, params)
+                return cursor.rowcount or 0
+
     async def search_compat_matchings(self, search: str, *, limit: int | None = None) -> list[dict[str, Any]]:
         terms = self._split_search_terms(search)
         if not terms:

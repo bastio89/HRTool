@@ -99,7 +99,7 @@ class Neo4jService:
         WITH c
         UNWIND $skills AS skill
             MERGE (s:Skill {name: toLower(skill.name)})
-            ON CREATE SET s.embedding = $skill_embeddings[toLower(skill.name)]
+            SET s.embedding = coalesce($skill_embeddings[toLower(skill.name)], s.embedding)
             SET s.category = skill.category
             MERGE (c)-[hs:HAS_SKILL]->(s)
             SET hs.yearsOfExperience = skill.experience_years,
@@ -668,7 +668,7 @@ class Neo4jService:
         WITH j
         UNWIND $required_skills AS req
             MERGE (s:Skill {name: toLower(req.name)})
-            ON CREATE SET s.embedding = $skill_embeddings[toLower(req.name)]
+            SET s.embedding = coalesce($skill_embeddings[toLower(req.name)], s.embedding)
             SET s.category = req.category
             MERGE (j)-[rs:REQUIRES_SKILL]->(s)
             MERGE (j)-[ns:NEED_SKILL]->(s)
@@ -935,6 +935,52 @@ class Neo4jService:
                     if industry.get("name") is not None
                 ],
             }
+
+    async def delete_job(
+        self,
+        job_id: str | None = None,
+        *,
+        title: str | None = None,
+        company: str | None = None,
+        location: str | None = None,
+        employment_type: str | None = None,
+    ) -> int:
+        if job_id:
+            query = """
+            MATCH (j:Job {id: $job_id})
+            DETACH DELETE j
+            """
+            async with self.driver.session() as session:
+                result = await session.run(query, job_id=job_id)
+                summary = await result.consume()
+            return summary.counters.nodes_deleted
+
+        conditions = []
+        params: dict[str, str] = {}
+
+        def add_condition(field: str, value: str | None) -> None:
+            if value is None or not str(value).strip():
+                return
+            params[field] = str(value).strip()
+            conditions.append(f"toLower(coalesce(j.{field}, '')) = toLower(${field})")
+
+        add_condition("title", title)
+        add_condition("company", company)
+        add_condition("location", location)
+        add_condition("employment_type", employment_type)
+
+        if not conditions:
+            return 0
+
+        query = f"""
+        MATCH (j:Job)
+        WHERE {' AND '.join(conditions)}
+        DETACH DELETE j
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, **params)
+            summary = await result.consume()
+        return summary.counters.nodes_deleted
 
     async def stage1_filter_candidates(
         self,

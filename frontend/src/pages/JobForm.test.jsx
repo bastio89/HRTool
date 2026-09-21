@@ -44,11 +44,25 @@ describe('JobForm', () => {
 
   test('übernimmt geparste Stellenbeschreibung und Anforderungen nach Dateiupload ins Formular', async () => {
     jobsApi.parseDescriptionFile.mockResolvedValue({
+      id: 'job-123',
       filename: 'Java Developer Sopra Steria.pdf',
       text: 'Java Developer Sopra Steria Gesamtdokument',
       description: 'Java Developer bei Sopra Steria mit Fokus auf Beratung und Software-Entwicklung.',
       requirements: 'Java\nSpring Boot\nDeutsch C1',
       skills: 'Java, Spring Boot, REST APIs',
+      job: {
+        id: 'job-123',
+        title: 'Java Developer Sopra Steria',
+        description: 'Java Developer bei Sopra Steria mit Fokus auf Beratung und Software-Entwicklung.',
+        requirements: 'Java\nSpring Boot\nDeutsch C1',
+        skills: 'Java, Spring Boot, REST APIs',
+        benefits: '',
+        about_us: '',
+        location: '',
+        type: 'Vollzeit',
+        status: 'Offen',
+        url: '',
+      },
     })
 
     const { container } = renderJobForm()
@@ -62,7 +76,7 @@ describe('JobForm', () => {
     fireEvent.change(fileInput, { target: { files: [file] } })
 
     await waitFor(() => {
-      expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false)
+      expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, false, true)
     })
 
     await waitFor(() => {
@@ -70,6 +84,14 @@ describe('JobForm', () => {
       expect(descriptionField).toHaveValue('Java Developer bei Sopra Steria mit Fokus auf Beratung und Software-Entwicklung.')
       expect(requirementsField).toHaveValue('Java\nSpring Boot\nDeutsch C1')
       expect(skillsField).toHaveValue('Java, Spring Boot, REST APIs')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /aktualisieren|speichern/i }))
+
+    await waitFor(() => {
+      expect(jobsApi.update).toHaveBeenCalledWith('job-123', expect.objectContaining({
+        title: 'Java Developer Sopra Steria',
+      }))
     })
 
     expect(screen.getByText('Java Developer Sopra Steria.pdf')).toBeInTheDocument()

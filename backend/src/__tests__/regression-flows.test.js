@@ -382,26 +382,33 @@ function createMockDb(seed = {}) {
           }
 
           if (q.includes('INSERT INTO jobs')) {
-            const [
-              title,
-              maybeAboutUs,
-              maybeDescription,
-              maybeRequirements,
-              maybeBenefits,
-              maybeLocation,
-              maybeType,
-              maybeStatus,
-              maybeUrl,
-            ] = args;
+            let graphJobId = null;
+            let title;
+            let maybeAboutUs;
+            let maybeDescription;
+            let maybeRequirements;
+            let maybeSkills;
+            let maybeBenefits;
+            let maybeLocation;
+            let maybeType;
+            let maybeStatus;
+            let maybeUrl;
 
-            // Support both legacy 7-arg and current 9-arg INSERT signatures.
+            if (args.length >= 11) {
+              [graphJobId, title, maybeAboutUs, maybeDescription, maybeRequirements, maybeSkills, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
+            } else {
+              [title, maybeAboutUs, maybeDescription, maybeRequirements, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
+            }
+
             const hasExtendedShape = args.length >= 9;
             const row = {
               id: state.seq.jobId++,
+              graph_job_id: graphJobId || null,
               title,
               about_us: hasExtendedShape ? maybeAboutUs : null,
               description: hasExtendedShape ? maybeDescription : maybeAboutUs,
               requirements: hasExtendedShape ? maybeRequirements : maybeDescription,
+              skills: hasExtendedShape ? maybeSkills : null,
               benefits: hasExtendedShape ? maybeBenefits : null,
               location: hasExtendedShape ? maybeLocation : maybeRequirements,
               type: hasExtendedShape ? maybeType : maybeLocation,
@@ -412,6 +419,23 @@ function createMockDb(seed = {}) {
             };
             state.jobs.push(row);
             return { lastInsertRowid: row.id };
+          }
+
+          if (q.includes('UPDATE jobs SET graph_job_id = ? WHERE id = ?')) {
+            const [graphJobId, id] = args;
+            const job = state.jobs.find(item => String(item.id) === String(id));
+            if (job) {
+              job.graph_job_id = graphJobId || null;
+              job.updated_at = new Date().toISOString();
+            }
+            return { changes: job ? 1 : 0 };
+          }
+
+          if (q.includes('DELETE FROM jobs WHERE id = ?')) {
+            const [id] = args;
+            const before = state.jobs.length;
+            state.jobs = state.jobs.filter(item => String(item.id) !== String(id));
+            return { changes: before - state.jobs.length };
           }
 
           if (q.includes('INSERT INTO matching_results')) {
@@ -1210,6 +1234,65 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.graphRag).toEqual({ id: 'graph-job-1', message: 'Job ingested successfully', persisted: true });
     expect(mockDb.__state.jobs).toHaveLength(1);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('Jobs delete API removes job from GraphRAG and PostgreSQL', async () => {
+    const mockDb = createMockDb();
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    global.fetch = jest.fn(async (url, options) => {
+      const requestUrl = new URL(String(url));
+      if (requestUrl.pathname === '/ingest/job' && options?.method === 'POST') {
+        return {
+          ok: true,
+          json: async () => ({ id: 'graph-job-delete-me', message: 'Job ingested successfully', persisted: true }),
+        };
+      }
+
+      if (requestUrl.pathname === '/ingest/job' && options?.method === 'DELETE') {
+        const payload = JSON.parse(options.body);
+        expect(payload.job_id).toBe('graph-job-delete-me');
+        expect(payload.title).toBe('Delete Me');
+        expect(payload.location).toBe('Berlin');
+        return {
+          ok: true,
+          json: async () => ({ deleted: true, neo4j_deleted: 1, postgres_deleted: 1 }),
+        };
+      }
+
+      return { ok: false, text: async () => 'unexpected fetch call' };
+    });
+
+    const jobsRouter = require('../routes/jobs');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const createResponse = await request(app)
+      .post('/api/jobs')
+      .send({
+        title: 'Delete Me',
+        description: 'Node.js, APIs, Skalierung',
+        requirements: '5+ Jahre Erfahrung',
+        location: 'Berlin',
+        type: 'Vollzeit',
+        status: 'Offen',
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(mockDb.__state.jobs).toHaveLength(1);
+    expect(mockDb.__state.jobs[0].graph_job_id).toBe('graph-job-delete-me');
+
+    const deleteResponse = await request(app).delete(`/api/jobs/${createResponse.body.id}`);
+
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body.success).toBe(true);
+    expect(deleteResponse.body.graphRag).toEqual({ deleted: true, neo4j_deleted: 1, postgres_deleted: 1 });
+    expect(mockDb.__state.jobs).toHaveLength(0);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   test('Jobs endpoint returns 400 when title is missing', async () => {

@@ -34,7 +34,8 @@ db.exec(`
   )
 `);
 
-const RUN_ROLES = ['admin', 'recruiter'];
+// Der Datenexport liegt in der Administration und ist damit Admins vorbehalten.
+const RUN_ROLES = ['admin'];
 const MANAGE_ROLES = ['admin'];
 
 const externalRateLimiter = createRateLimiter({

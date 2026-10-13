@@ -28,6 +28,7 @@ const adminItems = [
   { to: '/admin/credits', icon: Wallet, labelKey: 'nav.credits' },
   { to: '/admin/ai', icon: Cpu, labelKey: 'nav.ai_settings' },
   { to: '/admin/prompts', icon: Code2, labelKey: 'nav.prompts' },
+  { to: '/admin/export', icon: FileOutput, labelKey: 'nav.data_export' },
   { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
   { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
   { to: '/admin/dsgvo', icon: ShieldAlert, labelKey: 'nav.dsgvo' },
@@ -54,7 +55,6 @@ export default function Layout() {
   const toolsItems = [
     ...(isEnabled('jobs_ch') && jobsChPlugin ? [{ to: jobsChPlugin.navItem.to, icon: jobsChPlugin.navItem.icon, labelKey: jobsChPlugin.navItem.labelKey }] : []),
     ...(isEnabled('linkedin') && linkedinPlugin ? [{ to: linkedinPlugin.navItem.to, icon: linkedinPlugin.navItem.icon, labelKey: linkedinPlugin.navItem.labelKey }] : []),
-    { to: '/tools/export', icon: FileOutput, labelKey: 'nav.data_export' },
   ]
 
   useEffect(() => {
@@ -269,7 +269,7 @@ export default function Layout() {
                     </span>
                     <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${adminOpen ? 'rotate-180' : ''}`} />
                   </button>
-                  <div className={`overflow-hidden transition duration-300 ease-in-out ${adminOpen ? 'max-h-[360px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+                  <div className={`overflow-hidden transition duration-300 ease-in-out ${adminOpen ? 'max-h-[520px] opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
                     <div className="space-y-1 pl-4">
                       {adminItems.map(({ to, icon: Icon, labelKey }) => (
                         <NavLink

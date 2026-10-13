@@ -123,7 +123,6 @@ function AppRouter() {
               <Route path="matching/results/:id" element={<MatchingResults />} />
               <Route path="history" element={<History />} />
               <Route path="tools" element={<ToolsRoute><Tools /></ToolsRoute>} />
-              <Route path="tools/export" element={<ToolsRoute><DataExport /></ToolsRoute>} />
               {pluginRoutes}
               <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
               <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />
@@ -136,6 +135,7 @@ function AppRouter() {
               <Route path="admin/ai" element={<AdminRoute><AISettings /></AdminRoute>} />
               <Route path="admin/prompts" element={<AdminRoute><Prompts /></AdminRoute>} />
               <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />
+              <Route path="admin/export" element={<AdminRoute><DataExport /></AdminRoute>} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

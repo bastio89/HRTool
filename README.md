@@ -94,7 +94,7 @@
 - **CSV-Export** — Bewerberlisten und Matching-Ergebnisse als CSV herunterladen
 - **CSV-Import** — Massenhafter Bewerber-Upload mit automatischer Duplikat-Erkennung
 - **Datenbank-Backup** — JSON-Backup der PostgreSQL-Daten als Download (Admin)
-- **Generische Export-Schnittstelle** — Bewerberdaten mit frei wählbaren Feldern, Zielfeld-Mapping und Filtern als CSV, JSON, NDJSON oder XML exportieren; als Profil speichern und optional per API-Key für Fremdsysteme freigeben (Tools → Datenexport)
+- **Generische Export-Schnittstelle** — Bewerberdaten mit frei wählbaren Feldern, Zielfeld-Mapping und Filtern als CSV, JSON, NDJSON oder XML exportieren; als Profil speichern und optional per API-Key für Fremdsysteme freigeben (Administration → Datenexport, nur Admins)
 
 ### 🔐 Sicherheit & Compliance
 - **JWT-Authentifizierung** — Sichere Token-basierte Anmeldung
@@ -468,7 +468,7 @@ Bewerberdaten lassen sich über eine generische Schnittstelle in andere Tools ü
 
 - `key` ist ein internes Feld (Liste: `GET /api/exports/schema`, inkl. benutzerdefinierter Felder als `custom.<id>`), `as` der Feldname im Zielsystem. Punkte erzeugen in JSON/XML verschachtelte Objekte.
 - Formate: `csv` (Trennzeichen komma/semikolon/tab), `json`, `ndjson`, `xml`.
-- Gespeicherte **Export-Profile** (Admin) können Recruiter in der Oberfläche ausführen – auch für eine Auswahl aus der Bewerberliste.
+- Der Datenexport liegt unter **Administration → Datenexport** und ist Admins vorbehalten. Gespeicherte **Export-Profile** lassen sich dort ausführen – auch für eine Auswahl aus der Bewerberliste.
 - Für **Pull durch Fremdsysteme** ein Profil freigeben und `EXTERNAL_API_KEY` setzen:
 
 ```http

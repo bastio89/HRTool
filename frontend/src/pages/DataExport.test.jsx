@@ -16,7 +16,8 @@ const { exportsApi } = vi.hoisted(() => ({
 }))
 
 vi.mock('../api', () => ({ exportsApi }))
-vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: 'recruiter' } }) }))
+const auth = vi.hoisted(() => ({ role: 'admin' }))
+vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: auth.role } }) }))
 vi.mock('../components/Toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
 vi.mock('../components/ConfirmDialog', () => ({ useConfirm: () => vi.fn().mockResolvedValue(true) }))
 
@@ -38,7 +39,7 @@ const schema = {
   ],
 }
 
-function renderPage(url = '/tools/export') {
+function renderPage(url = '/admin/export') {
   return render(
     <MemoryRouter initialEntries={[url]}>
       <DataExport />
@@ -49,13 +50,14 @@ function renderPage(url = '/tools/export') {
 describe('DataExport', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.role = 'admin'
     exportsApi.getSchema.mockResolvedValue(schema)
     exportsApi.getProfiles.mockResolvedValue([])
     exportsApi.run.mockResolvedValue({ count: 2, filename: 'x.csv' })
   })
 
   it('sends the mapped fields and the candidate selection from the URL', async () => {
-    renderPage('/tools/export?ids=4,7')
+    renderPage('/admin/export?ids=4,7')
     await screen.findByText('Verfügbare Felder')
 
     fireEvent.click(screen.getByLabelText(/^Telefon/))
@@ -72,7 +74,15 @@ describe('DataExport', () => {
     })
   })
 
-  it('hides profile management from recruiters', async () => {
+  it('offers profile management to admins', async () => {
+    renderPage()
+    await screen.findByText('Verfügbare Felder')
+    expect(screen.getByRole('button', { name: /Als Profil speichern/ })).toBeTruthy()
+    expect(screen.getByText(/Fremdsysteme freigeben/)).toBeTruthy()
+  })
+
+  it('hides profile management from non-admins', async () => {
+    auth.role = 'recruiter'
     renderPage()
     await screen.findByText('Verfügbare Felder')
     expect(screen.queryByRole('button', { name: /Als Profil speichern/ })).toBeNull()

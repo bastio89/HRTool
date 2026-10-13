@@ -59,7 +59,7 @@ const onlyOurs = { tags: [marker] };
 
 describe('export schema', () => {
   test('lists candidate fields including custom fields, and formats', async () => {
-    const res = await request(buildApp(recruiter)).get('/api/exports/schema');
+    const res = await request(buildApp(admin)).get('/api/exports/schema');
     expect(res.status).toBe(200);
     const candidates = res.body.entities.find(entity => entity.key === 'candidates');
     const keys = candidates.fields.map(field => field.key);
@@ -68,14 +68,16 @@ describe('export schema', () => {
   });
 
   test('is closed to roles without export permission', async () => {
-    const res = await request(buildApp(fachbereich)).get('/api/exports/schema');
-    expect(res.status).toBe(403);
+    for (const user of [recruiter, fachbereich]) {
+      const res = await request(buildApp(user)).get('/api/exports/schema');
+      expect(res.status).toBe(403);
+    }
   });
 });
 
 describe('ad-hoc export', () => {
   test('maps fields to target names and nests them in JSON', async () => {
-    const res = await request(buildApp(recruiter)).post('/api/exports/run').send({
+    const res = await request(buildApp(admin)).post('/api/exports/run').send({
       format: 'json',
       fields: [
         { key: 'id', as: 'externalId' },
@@ -102,7 +104,7 @@ describe('ad-hoc export', () => {
   });
 
   test('renders CSV with chosen delimiter and neutralises spreadsheet formulas', async () => {
-    const res = await request(buildApp(recruiter)).post('/api/exports/run').send({
+    const res = await request(buildApp(admin)).post('/api/exports/run').send({
       format: 'csv',
       format_options: { delimiter: 'semicolon', bom: false },
       fields: ['name', { key: 'phone', as: 'Telefon' }, { key: 'skills_list', as: 'Skills' }],
@@ -116,7 +118,7 @@ describe('ad-hoc export', () => {
   });
 
   test('renders XML', async () => {
-    const res = await request(buildApp(recruiter)).post('/api/exports/run').send({
+    const res = await request(buildApp(admin)).post('/api/exports/run').send({
       format: 'xml',
       format_options: { root: 'Bewerber', item: 'Person' },
       fields: [{ key: 'email', as: 'kontakt.email' }],
@@ -128,7 +130,7 @@ describe('ad-hoc export', () => {
   });
 
   test('rejects unknown fields, duplicate targets and unknown filters', async () => {
-    const app = buildApp(recruiter);
+    const app = buildApp(admin);
     const unknownField = await request(app).post('/api/exports/run').send({ fields: ['password_hash'] });
     expect(unknownField.status).toBe(400);
     const duplicate = await request(app).post('/api/exports/run').send({ fields: [{ key: 'name', as: 'x' }, { key: 'email', as: 'x' }] });
@@ -138,14 +140,14 @@ describe('ad-hoc export', () => {
   });
 
   test('writes an audit entry for every export', async () => {
-    await request(buildApp(recruiter)).post('/api/exports/run').send({ fields: ['email'], filters: { ids: [anna] } });
+    await request(buildApp(admin)).post('/api/exports/run').send({ fields: ['email'], filters: { ids: [anna] } });
     const entry = db.prepare(`SELECT * FROM audit_log WHERE action = 'export' ORDER BY id DESC LIMIT 1`).get();
     const details = JSON.parse(entry.details);
     expect(details).toMatchObject({ channel: 'ui', entity: 'candidates', count: 1, fields: ['email'] });
   });
 
   test('an id selection without valid ids exports nothing instead of everyone', async () => {
-    const res = await request(buildApp(recruiter)).post('/api/exports/preview').send({ fields: ['id'], filters: { ids: ['abc'] } });
+    const res = await request(buildApp(admin)).post('/api/exports/preview').send({ fields: ['id'], filters: { ids: ['abc'] } });
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(0);
   });
@@ -155,7 +157,7 @@ describe('ad-hoc export', () => {
     try {
       db.prepare('INSERT INTO pipeline_entries (job_id, candidate_id, stage) VALUES (?, ?, ?)').run(jobId, anna, 'Hired');
       db.prepare('INSERT INTO pipeline_entries (job_id, candidate_id, stage) VALUES (?, ?, ?)').run(jobId, ben, 'Interview');
-      const res = await request(buildApp(recruiter)).post('/api/exports/preview').send({
+      const res = await request(buildApp(admin)).post('/api/exports/preview').send({
         fields: ['id', 'pipeline'],
         filters: { job_id: jobId, stage: ['Hired'] },
       });
@@ -169,7 +171,7 @@ describe('ad-hoc export', () => {
   });
 
   test('preview returns the first mapped records as JSON', async () => {
-    const res = await request(buildApp(recruiter)).post('/api/exports/preview').send({
+    const res = await request(buildApp(admin)).post('/api/exports/preview').send({
       fields: [{ key: 'last_name', as: 'nachname' }],
       filters: onlyOurs,
     });
@@ -180,7 +182,7 @@ describe('ad-hoc export', () => {
 });
 
 describe('export profiles', () => {
-  test('only admins manage profiles; recruiters may run them with extra filters', async () => {
+  test('only admins manage and run profiles, with extra filters at run time', async () => {
     const spec = {
       name: `Lohnbuchhaltung ${marker}`,
       format: 'csv',
@@ -195,7 +197,7 @@ describe('export profiles', () => {
     profileIds.push(created.body.id);
     expect(created.body.fields).toEqual([{ key: 'email', as: 'Mail' }]);
 
-    const run = await request(buildApp(recruiter))
+    const run = await request(buildApp(admin))
       .post(`/api/exports/profiles/${created.body.id}/run`)
       .send({ filters: { ids: [ben] } });
     expect(run.status).toBe(200);

@@ -37,6 +37,7 @@ import Plugins from './pages/Plugins'
 import AISettings from './pages/AISettings'
 import Prompts from './pages/Prompts'
 import AdminCreditsPage from './pages/AdminCreditsPage'
+import DataExport from './pages/DataExport'
 import { PluginProvider, usePlugins } from './plugins/PluginContext'
 import { getPluginDefinition } from './plugins/registry'
 
@@ -122,6 +123,7 @@ function AppRouter() {
               <Route path="matching/results/:id" element={<MatchingResults />} />
               <Route path="history" element={<History />} />
               <Route path="tools" element={<ToolsRoute><Tools /></ToolsRoute>} />
+              <Route path="tools/export" element={<ToolsRoute><DataExport /></ToolsRoute>} />
               {pluginRoutes}
               <Route path="admin" element={<AdminRoute><Navigate to="/admin/users" replace /></AdminRoute>} />
               <Route path="admin/users" element={<AdminRoute><UserManagement /></AdminRoute>} />

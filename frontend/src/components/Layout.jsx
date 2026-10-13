@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Avatar from './Avatar'
 import SystemStatusChip from './SystemStatus'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Wrench, Code2, Wallet, Loader2 } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Wrench, Code2, Wallet, Loader2, FileOutput } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
@@ -54,6 +54,7 @@ export default function Layout() {
   const toolsItems = [
     ...(isEnabled('jobs_ch') && jobsChPlugin ? [{ to: jobsChPlugin.navItem.to, icon: jobsChPlugin.navItem.icon, labelKey: jobsChPlugin.navItem.labelKey }] : []),
     ...(isEnabled('linkedin') && linkedinPlugin ? [{ to: linkedinPlugin.navItem.to, icon: linkedinPlugin.navItem.icon, labelKey: linkedinPlugin.navItem.labelKey }] : []),
+    { to: '/tools/export', icon: FileOutput, labelKey: 'nav.data_export' },
   ]
 
   useEffect(() => {

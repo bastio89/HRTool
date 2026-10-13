@@ -8,6 +8,8 @@ const PUBLIC_PATHS = [
   '/api/docs',
   '/api/docs.json',
   '/api/matching/external',
+  // Fremdsysteme authentifizieren sich dort per API-Key (siehe routes/exports.js).
+  '/api/exports/external',
 ];
 
 function isPublicPath(path) {

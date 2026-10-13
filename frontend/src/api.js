@@ -461,6 +461,41 @@ export const auditApi = {
   },
 };
 
+// Generische Export-Schnittstelle
+async function downloadExport(url, body) {
+  const response = await fetch(`${API_BASE}${url}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body || {}),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Export fehlgeschlagen' }));
+    throw new Error(normalizeErrorMessage(error, 'Export fehlgeschlagen'));
+  }
+  const blob = await response.blob();
+  const filename = parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || 'export';
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+  return { filename, count: Number(response.headers.get('X-Export-Count')) || 0 };
+}
+
+export const exportsApi = {
+  getSchema: () => request('/exports/schema'),
+  getProfiles: () => request('/exports/profiles'),
+  createProfile: (data) => request('/exports/profiles', { method: 'POST', body: JSON.stringify(data) }),
+  updateProfile: (id, data) => request(`/exports/profiles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProfile: (id) => request(`/exports/profiles/${id}`, { method: 'DELETE' }),
+  preview: (spec) => request('/exports/preview', { method: 'POST', body: JSON.stringify(spec) }),
+  run: (spec) => downloadExport('/exports/run', spec),
+  runProfile: (id, filters = {}) => downloadExport(`/exports/profiles/${id}/run`, { filters }),
+};
+
 export const searchApi = {
   global: (query, limit = 10) => {
     const q = new URLSearchParams();

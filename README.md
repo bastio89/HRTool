@@ -94,6 +94,7 @@
 - **CSV-Export** — Bewerberlisten und Matching-Ergebnisse als CSV herunterladen
 - **CSV-Import** — Massenhafter Bewerber-Upload mit automatischer Duplikat-Erkennung
 - **Datenbank-Backup** — JSON-Backup der PostgreSQL-Daten als Download (Admin)
+- **Generische Export-Schnittstelle** — Bewerberdaten mit frei wählbaren Feldern, Zielfeld-Mapping und Filtern als CSV, JSON, NDJSON oder XML exportieren; als Profil speichern und optional per API-Key für Fremdsysteme freigeben (Tools → Datenexport)
 
 ### 🔐 Sicherheit & Compliance
 - **JWT-Authentifizierung** — Sichere Token-basierte Anmeldung
@@ -446,6 +447,36 @@ Beispiel-Request:
 ```
 
 Die Antwort enthält Score, Stärken, Schwächen und Kurzbegründung je Kandidat. Die Daten werden nicht als Bewerber oder Stelle im HRTool gespeichert; die Schnittstelle nutzt nur das konfigurierte lokale KI-Modell.
+
+### Datenexport für Fremdsysteme
+
+Bewerberdaten lassen sich über eine generische Schnittstelle in andere Tools übertragen (Lohnbuchhaltung, HRIS, CRM …). Ein Export wird durch eine Spezifikation beschrieben:
+
+```json
+{
+  "entity": "candidates",
+  "format": "json",
+  "fields": [
+    { "key": "id", "as": "personalId" },
+    { "key": "first_name", "as": "person.vorname" },
+    { "key": "email", "as": "kontakt.email" },
+    { "key": "work_history", "as": "werdegang" }
+  ],
+  "filters": { "status": ["Aktiv"], "updated_since": "2026-01-01T00:00:00Z" }
+}
+```
+
+- `key` ist ein internes Feld (Liste: `GET /api/exports/schema`, inkl. benutzerdefinierter Felder als `custom.<id>`), `as` der Feldname im Zielsystem. Punkte erzeugen in JSON/XML verschachtelte Objekte.
+- Formate: `csv` (Trennzeichen komma/semikolon/tab), `json`, `ndjson`, `xml`.
+- Gespeicherte **Export-Profile** (Admin) können Recruiter in der Oberfläche ausführen – auch für eine Auswahl aus der Bewerberliste.
+- Für **Pull durch Fremdsysteme** ein Profil freigeben und `EXTERNAL_API_KEY` setzen:
+
+```http
+GET /api/exports/external/profiles/{id}?limit=500&offset=0&updated_since=2026-01-01T00:00:00Z
+X-API-Key: ihr-externer-api-key
+```
+
+Die Antwort trägt `X-Total-Count` für das seitenweise Abholen. Jeder Export – über die Oberfläche wie per API – wird mit Feldern, Filtern und Anzahl im Audit-Log protokolliert. Neue Entitäten (z. B. Stellen) werden in `backend/src/exports/index.js` registriert und nutzen dieselben Formate, Profile und Endpunkte.
 
 ### Übersicht: 63+ Endpunkte
 

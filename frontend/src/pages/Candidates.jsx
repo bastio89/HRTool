@@ -643,6 +643,8 @@ export default function Candidates() {
                     variant="ghost"
                     size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full"
+                    title={t('candidates.edit')}
+                    aria-label={t('candidates.edit')}
                     onClick={(e) => { e.stopPropagation(); navigate(`/candidates/${candidate.id}/edit`) }}
                   >
                     <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -651,6 +653,8 @@ export default function Candidates() {
                     variant="ghost"
                     size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#ff3b30]/10 hover:text-[#ff3b30]"
+                    title={t('candidates.delete')}
+                    aria-label={t('candidates.delete')}
                     onClick={(e) => { e.stopPropagation(); handleDelete(candidate) }}
                   >
                     <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />

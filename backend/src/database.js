@@ -227,6 +227,10 @@ const migrations = [
   `ALTER TABLE jobs ADD COLUMN about_us TEXT`,
   `ALTER TABLE jobs ADD COLUMN benefits TEXT`,
   `ALTER TABLE jobs ADD COLUMN skills TEXT`,
+  // Firmenname der Stelle: wird vom Duplikat-Check genutzt. GraphRAG legt die
+  // Spalte ebenfalls an; das Backend muss sie aber selbst mitbringen, damit
+  // das Anlegen einer Stelle nicht davon abhängt, ob GraphRAG schon lief.
+  `ALTER TABLE jobs ADD COLUMN company TEXT`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }
@@ -402,6 +406,23 @@ const upsertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VA
 for (const [key, value] of defaultSettings) {
   upsertSetting.run(key, value);
 }
+
+// Volltexte der Bewerber. Die Tabelle gehört zu GraphRAG (Befüllung beim
+// CV-Import), wird aber vom Backend bei der Bewerbersuche gelesen. Ohne sie
+// würde jede Suche mit einem Serverfehler enden, solange GraphRAG nie lief.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS candidate_texts (
+    candidate_id TEXT PRIMARY KEY,
+    candidate_name TEXT,
+    source TEXT,
+    original_text TEXT NOT NULL,
+    anonymized_text TEXT,
+    anonymization_map TEXT,
+    profile_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
 
 // --- Scorecard tables for Interview-Bewertungsbögen ---
 db.exec(`

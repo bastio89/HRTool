@@ -296,12 +296,18 @@ router.get('/', (req, res) => {
   try {
     const { status, page, limit } = req.query;
     
-    let whereClause = '';
+    const conditions = [];
     const params = [];
     if (status) {
-      whereClause = ' WHERE j.status = ?';
+      conditions.push('j.status = ?');
       params.push(status);
     }
+    // Fachbereich sieht nur die ihm zugewiesenen Stellen.
+    if (req.user?.role === 'fachbereich') {
+      conditions.push('j.id IN (SELECT job_id FROM user_job_access WHERE user_id = ?)');
+      params.push(req.user.id);
+    }
+    const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
     
     // Total count
     const total = db.prepare(`SELECT COUNT(*) as count FROM jobs j${whereClause}`).get(...params).count;
@@ -357,6 +363,12 @@ router.get('/:id', (req, res) => {
       FROM jobs j WHERE j.id = ?
     `).get(req.params.id);
     if (!job) return res.status(404).json({ error: 'Stelle nicht gefunden' });
+    // Fremde Stellen erscheinen für Fachbereich wie nicht vorhandene (404), damit
+    // sich ihre Existenz nicht abfragen lässt.
+    if (req.user?.role === 'fachbereich') {
+      const access = db.prepare('SELECT 1 FROM user_job_access WHERE user_id = ? AND job_id = ?').get(req.user.id, job.id);
+      if (!access) return res.status(404).json({ error: 'Stelle nicht gefunden' });
+    }
     res.json(job);
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Laden der Stelle' });
@@ -399,6 +411,7 @@ router.post('/', (req, res) => {
       });
     });
   } catch (err) {
+    console.error('Job creation error:', err);
     res.status(500).json({ error: 'Fehler beim Erstellen der Stelle' });
   }
 });

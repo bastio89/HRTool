@@ -9,6 +9,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import CandidatePrintProfile from '../components/CandidatePrintProfile'
 import { useI18n } from '../I18nContext'
+import { useAuth } from '../AuthContext'
 
 const STATUS_OPTIONS = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist']
 const STATUS_STYLE = {
@@ -51,6 +52,8 @@ export default function Candidates() {
   const [tagInput, setTagInput] = useState('')
   const [availableTags, setAvailableTags] = useState([])
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const canExport = user?.role === 'admin'
   const toast = useToast()
   const confirm = useConfirm()
   const { t } = useI18n()
@@ -488,6 +491,12 @@ export default function Candidates() {
                 → {s}
               </button>
             ))}
+            {canExport && <button
+              onClick={() => navigate(`/admin/export?ids=${[...selectedIds].join(',')}`)}
+              className="px-4 py-2 rounded-full bg-white text-black text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" /> {t('candidates.export_selected')}
+            </button>}
             <button
               onClick={handleBatchDelete}
               className="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition flex items-center gap-1.5"
@@ -634,6 +643,8 @@ export default function Candidates() {
                     variant="ghost"
                     size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full"
+                    title={t('candidates.edit')}
+                    aria-label={t('candidates.edit')}
                     onClick={(e) => { e.stopPropagation(); navigate(`/candidates/${candidate.id}/edit`) }}
                   >
                     <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -642,6 +653,8 @@ export default function Candidates() {
                     variant="ghost"
                     size="sm"
                     className="w-10 h-10 sm:w-12 sm:h-12 !p-0 rounded-full hover:bg-[#ff3b30]/10 hover:text-[#ff3b30]"
+                    title={t('candidates.delete')}
+                    aria-label={t('candidates.delete')}
                     onClick={(e) => { e.stopPropagation(); handleDelete(candidate) }}
                   >
                     <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />

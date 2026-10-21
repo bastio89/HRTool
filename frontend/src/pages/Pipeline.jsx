@@ -50,11 +50,19 @@ export default function Pipeline() {
   const touchRef = useRef(null)
 
   const loadBoard = async () => {
-    const [jobData, pipelineData, candidateData] = await Promise.all([
-      jobsApi.getById(jobId),
-      pipelineApi.getByJob(jobId),
-      candidatesApi.getAll(),
-    ])
+    let jobData, pipelineData, candidateData
+    try {
+      ;[jobData, pipelineData, candidateData] = await Promise.all([
+        jobsApi.getById(jobId),
+        pipelineApi.getByJob(jobId),
+        candidatesApi.getAll(),
+      ])
+    } catch (err) {
+      // Unbekannte oder gelöschte Stelle: Ladezustand beenden statt endlos zu drehen.
+      toast.error(`${t('common.error')}: ${err.message}`)
+      setLoading(false)
+      return
+    }
     setJob(jobData)
     setBoard(pipelineData.board || {})
     setAllCandidates(candidateData.data || [])

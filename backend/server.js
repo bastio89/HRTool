@@ -29,6 +29,7 @@ const searchRouter = require('./src/routes/search');
 const addJobRouter = require('./src/routes/add-job');
 const linkedinRouter = require('./src/routes/linkedin');
 const serverLogsRouter = require('./src/routes/server-logs');
+const exportsRouter = require('./src/routes/exports');
 const authMiddleware = require('./src/middleware/auth');
 const { installServerFileLogger } = require('./src/serverLogger');
 const db = require('./src/database');
@@ -94,6 +95,7 @@ app.use('/api/search', searchRouter);
 app.use('/api/add/job', addJobRouter);
 app.use('/api/linkedin', linkedinRouter);
 app.use('/api/server-logs', serverLogsRouter);
+app.use('/api/exports', exportsRouter);
 
 /**
  * @swagger

@@ -1063,18 +1063,59 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
  *     responses:
  *       200: { description: Liste vergangener Matchings }
  */
+function summarizeMatchingResult(row) {
+  const result = JSON.parse(row.results);
+  const matchRows = Array.isArray(result.results)
+    ? result.results
+    : Array.isArray(result.matrix)
+      ? result.matrix
+      : [];
+  const getScore = (value) => {
+    const score = Number(value);
+    if (!Number.isFinite(score)) return 0;
+    return score > 1 ? score / 100 : score;
+  };
+  const candidateNames = [...new Set([
+    ...(Array.isArray(result.candidates) ? result.candidates.map((candidate) => candidate?.name) : []),
+    ...matchRows.map((match) => match?.candidateName),
+  ].filter((name) => typeof name === 'string' && name.trim()).map((name) => name.trim()))];
+  let totalScore = 0;
+  const topCandidates = [];
+  for (const match of matchRows) {
+    const candidate = { candidateName: match?.candidateName || '', score: getScore(match?.score) };
+    totalScore += candidate.score;
+
+    const insertAt = topCandidates.findIndex((current) => candidate.score > current.score);
+    if (insertAt >= 0) topCandidates.splice(insertAt, 0, candidate);
+    else if (topCandidates.length < 3) topCandidates.push(candidate);
+    if (topCandidates.length > 3) topCandidates.pop();
+  }
+
+  return {
+    id: row.id,
+    job_title: row.job_title,
+    created_at: row.created_at,
+    human_reviewed: row.human_reviewed,
+    reviewed_by: row.reviewed_by,
+    reviewed_at: row.reviewed_at,
+    review_notes: row.review_notes,
+    summary: {
+      candidateCount: Array.isArray(result.candidates) ? result.candidates.length : candidateNames.length || matchRows.length,
+      candidateNames,
+      topScore: topCandidates[0]?.score || 0,
+      averageScore: matchRows.length ? Number((totalScore / matchRows.length).toFixed(4)) : 0,
+      topCandidates,
+    },
+  };
+}
+
 router.get('/history', (req, res) => {
   try {
     const results = db.prepare(
       'SELECT id, job_title, created_at, results, human_reviewed, reviewed_by, reviewed_at, review_notes FROM matching_results ORDER BY created_at DESC LIMIT 50'
     ).all();
-    
-    const parsed = results.map(r => ({
-      ...r,
-      results: JSON.parse(r.results),
-    }));
-    
-    res.json({ data: parsed });
+
+    res.json({ data: results.map(summarizeMatchingResult) });
   } catch (error) {
     console.error('Error fetching matching history:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Historie' });

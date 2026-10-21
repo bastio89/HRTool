@@ -726,9 +726,7 @@ function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
         ) : (
           <div className="space-y-4">
             {matches.map((match) => {
-              const allScores = (match.results?.results || []).map(r => r.score || 0)
-              const rawScore = allScores.length > 0 ? Math.max(...allScores) : 0
-              const topScore = rawScore > 1 ? rawScore / 100 : rawScore
+              const topScore = match.summary?.topScore || 0
               return (
                 <Link key={match.id} to={`/matching/results/${match.id}`} className="block">
                   <div className="flex items-center justify-between p-6 rounded-[24px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition duration-300 border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50">

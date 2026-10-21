@@ -188,7 +188,11 @@ function createMockDb(seed = {}) {
           if (q.includes('FROM matching_results ORDER BY created_at DESC LIMIT 50')) {
             return [...state.matchingResults]
               .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-              .slice(0, 50);
+              .slice(0, 50)
+              .map((row) => ({
+                ...row,
+                legacy_results: row.results_summary ? null : row.results,
+              }));
           }
 
           if (q.includes('FROM jobs j') && q.includes('LOWER(COALESCE(')) {
@@ -445,17 +449,25 @@ function createMockDb(seed = {}) {
           }
 
           if (q.includes('INSERT INTO matching_results')) {
-            const [jobDescription, jobTitle, results, jobId] = args;
+            const [jobDescription, jobTitle, results, resultsSummary, jobId] = args;
             const row = {
               id: state.seq.matchingId++,
               job_description: jobDescription,
               job_title: jobTitle,
               results,
+              results_summary: resultsSummary,
               job_id: jobId,
               created_at: new Date().toISOString(),
             };
             state.matchingResults.push(row);
             return { lastInsertRowid: row.id };
+          }
+
+          if (q.includes('UPDATE matching_results SET results_summary = ? WHERE id = ?')) {
+            const [resultsSummary, id] = args;
+            const row = state.matchingResults.find((item) => String(item.id) === String(id));
+            if (row) row.results_summary = resultsSummary;
+            return { changes: row ? 1 : 0 };
           }
 
           return { lastInsertRowid: 0 };

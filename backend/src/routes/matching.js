@@ -3,6 +3,7 @@ const db = require('../database');
 const { logAiCall } = require('../aiLogger');
 const { logAudit } = require('./audit');
 const { matchingRateLimiter } = require('../middleware/rateLimiter');
+const { buildMatchingSummary } = require('../utils/matchingSummary');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
@@ -772,9 +773,9 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
 
     const storedJobId = Number.isFinite(Number(resolvedJob.id || jobId)) ? Number(resolvedJob.id || jobId) : null;
     const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, job_id)
-      VALUES (?, ?, ?, ?)
-    `).run(resolvedJob.description || buildJobDescription(resolvedJob), resolvedJob.title, JSON.stringify(matchingResults), storedJobId);
+      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(resolvedJob.description || buildJobDescription(resolvedJob), resolvedJob.title, JSON.stringify(matchingResults), JSON.stringify(buildMatchingSummary(matchingResults)), storedJobId);
 
     logAiCall({
       userId: req.user?.id,
@@ -910,12 +911,13 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber, ${engine === 'neo4j' ? 'Neo4j' : 'Python'})`;
 
     const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, job_id)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+      VALUES (?, ?, ?, ?, ?)
     `).run(
       `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
       resultTitle,
       JSON.stringify(graphRagResult),
+      JSON.stringify(buildMatchingSummary(graphRagResult)),
       null
     );
 
@@ -974,13 +976,15 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       const { candidate, jobs, graphRagResult } = await runVectorMatch(req, { direction, candidateId, candidateName, candidateIds, engine });
       const resultTitle = `Bewerber → alle Stellen: ${candidate?.name || 'Unbenannter Bewerber'}`;
 
+      const matchingResult = { ...graphRagResult, direction };
       const saveResult = db.prepare(`
-        INSERT INTO matching_results (job_description, job_title, results, job_id)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+        VALUES (?, ?, ?, ?, ?)
       `).run(
         `Vector-Matching (${engine}) für ${candidate?.name || 'Unbenannter Bewerber'}`,
         resultTitle,
-        JSON.stringify({ ...graphRagResult, direction }),
+        JSON.stringify(matchingResult),
+        JSON.stringify(buildMatchingSummary(matchingResult)),
         null,
       );
 
@@ -995,7 +999,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       return res.json({
         id: saveResult.lastInsertRowid,
         jobTitle: resultTitle,
-        results: { ...graphRagResult, direction },
+        results: matchingResult,
         candidateCount: 1,
         jobCount: jobs.length,
         engine,
@@ -1015,13 +1019,15 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
     const resultTitle = `Stelle → Kandidaten: ${job.title || 'Unbenannte Stelle'}`;
     const storedJobId = Number.isFinite(Number(job.id)) ? Number(job.id) : null;
 
+    const matchingResult = { ...graphRagResult, direction };
     const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, job_id)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+      VALUES (?, ?, ?, ?, ?)
     `).run(
       `Vector-Matching (${engine}) für ${job.title || 'Unbenannte Stelle'}`,
       resultTitle,
-      JSON.stringify({ ...graphRagResult, direction }),
+      JSON.stringify(matchingResult),
+      JSON.stringify(buildMatchingSummary(matchingResult)),
       storedJobId,
     );
 
@@ -1063,34 +1069,13 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
  *     responses:
  *       200: { description: Liste vergangener Matchings }
  */
-function summarizeMatchingResult(row) {
-  const result = JSON.parse(row.results);
-  const matchRows = Array.isArray(result.results)
-    ? result.results
-    : Array.isArray(result.matrix)
-      ? result.matrix
-      : [];
-  const getScore = (value) => {
-    const score = Number(value);
-    if (!Number.isFinite(score)) return 0;
-    return score > 1 ? score / 100 : score;
-  };
-  const candidateNames = [...new Set([
-    ...(Array.isArray(result.candidates) ? result.candidates.map((candidate) => candidate?.name) : []),
-    ...matchRows.map((match) => match?.candidateName),
-  ].filter((name) => typeof name === 'string' && name.trim()).map((name) => name.trim()))];
-  let totalScore = 0;
-  const topCandidates = [];
-  for (const match of matchRows) {
-    const candidate = { candidateName: match?.candidateName || '', score: getScore(match?.score) };
-    totalScore += candidate.score;
-
-    const insertAt = topCandidates.findIndex((current) => candidate.score > current.score);
-    if (insertAt >= 0) topCandidates.splice(insertAt, 0, candidate);
-    else if (topCandidates.length < 3) topCandidates.push(candidate);
-    if (topCandidates.length > 3) topCandidates.pop();
+function serializeMatchingHistoryRow(row) {
+  let summary = row.results_summary ? JSON.parse(row.results_summary) : null;
+  if (!summary && row.legacy_results) {
+    summary = buildMatchingSummary(JSON.parse(row.legacy_results));
+    db.prepare('UPDATE matching_results SET results_summary = ? WHERE id = ?')
+      .run(JSON.stringify(summary), row.id);
   }
-
   return {
     id: row.id,
     job_title: row.job_title,
@@ -1099,23 +1084,20 @@ function summarizeMatchingResult(row) {
     reviewed_by: row.reviewed_by,
     reviewed_at: row.reviewed_at,
     review_notes: row.review_notes,
-    summary: {
-      candidateCount: Array.isArray(result.candidates) ? result.candidates.length : candidateNames.length || matchRows.length,
-      candidateNames,
-      topScore: topCandidates[0]?.score || 0,
-      averageScore: matchRows.length ? Number((totalScore / matchRows.length).toFixed(4)) : 0,
-      topCandidates,
-    },
+    summary: summary || buildMatchingSummary(),
   };
 }
 
 router.get('/history', (req, res) => {
   try {
     const results = db.prepare(
-      'SELECT id, job_title, created_at, results, human_reviewed, reviewed_by, reviewed_at, review_notes FROM matching_results ORDER BY created_at DESC LIMIT 50'
+      `SELECT id, job_title, created_at, results_summary,
+        CASE WHEN results_summary IS NULL THEN results ELSE NULL END AS legacy_results,
+        human_reviewed, reviewed_by, reviewed_at, review_notes
+       FROM matching_results ORDER BY created_at DESC LIMIT 50`
     ).all();
 
-    res.json({ data: results.map(summarizeMatchingResult) });
+    res.json({ data: results.map(serializeMatchingHistoryRow) });
   } catch (error) {
     console.error('Error fetching matching history:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Historie' });

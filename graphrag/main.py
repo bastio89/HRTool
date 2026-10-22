@@ -12,6 +12,7 @@ from uuid import uuid4
 from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 
 from config import settings
+from fast_cvjob_parsing.app.router import create_cv_job_parser_router
 from legacy_api import create_legacy_router
 from models import (
 	CandidateIngestRequest,
@@ -123,7 +124,7 @@ def _has_valid_user_jwt(request: Request) -> bool:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
 	if not (settings.graphrag_api_key or "").strip():
 		logging.getLogger(__name__).warning(
 			"GRAPHRAG_API_KEY ist nicht gesetzt - die API nimmt Anfragen ohne Authentifizierung entgegen."
@@ -137,7 +138,11 @@ async def lifespan(_: FastAPI):
 	await postgres_store.ensure_setting_if_blank("plugin.billing.enabled", "1")
 	await postgres_store.ensure_setting_if_blank("plugin.linkedin.enabled", "1" if settings.linkedin_plugin_enabled else "0")
 	await postgres_store.ensure_setting_if_blank("plugin.jobs_ch.enabled", "1" if settings.jobs_ch_plugin_enabled else "0")
+	from fast_cvjob_parsing.app.parser import ResumeJobParser
+
+	app.state.cv_job_parser = await asyncio.to_thread(ResumeJobParser.load)
 	yield
+	app.state.cv_job_parser = None
 	await db_service.close()
 	await llm_service.close()
 
@@ -152,6 +157,7 @@ app = FastAPI(
 app.include_router(create_matching_router(llm_service, db_service))
 app.include_router(create_legacy_router(postgres_store))
 app.include_router(create_prompts_router(prompt_service))
+app.include_router(create_cv_job_parser_router())
 for plugin in plugins:
 	plugin.register(app)
 

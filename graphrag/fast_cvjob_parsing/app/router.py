@@ -15,6 +15,10 @@ logger = logging.getLogger("resume_parser.api")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
 
 
+async def parse_cv_bytes(parser: "ResumeJobParser", pdf_bytes: bytes) -> CVResponse:
+    return await run_in_threadpool(parser.parse_cv, pdf_bytes)
+
+
 def create_cv_job_parser_router() -> APIRouter:
     router = APIRouter(tags=["CV and Job Description Parser"])
 
@@ -45,7 +49,7 @@ def create_cv_job_parser_router() -> APIRouter:
         pdf_bytes = await read_pdf(file)
         parser = get_parser(request)
         try:
-            return await run_in_threadpool(parser.parse_cv, pdf_bytes)
+            return await parse_cv_bytes(parser, pdf_bytes)
         except InvalidPDFError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:

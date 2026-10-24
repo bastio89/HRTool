@@ -101,8 +101,7 @@ export default function CandidateForm() {
   // AI CV parsing
   const handleCVUpload = async (file) => {
     if (!file) return
-    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp']
-    if (!allowed.includes(file.type)) { setError(t('form.only_pdf_word')); return }
+    if (file.type !== 'application/pdf') { setError(t('form.only_pdf')); return }
     setParsing(true); setError(''); setParseSuccess(''); setParseDuplicate(false); setParseDuplicateName(''); setParseProgress({ step: 'upload', detail: t('cv.progress_uploading'), progress: 2 })
     try {
       const result = await cvParserApi.parse(file, (evt) => {
@@ -304,7 +303,7 @@ export default function CandidateForm() {
               <div onDrop={handleFileDrop} onDragOver={(e) => e.preventDefault()} onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center py-10 gap-4 cursor-pointer rounded-[20px] border-2 border-dashed border-gray-300 hover:border-[#0071e3]/40 hover:bg-[#0071e3]/5 transition">
                 <div className="w-16 h-16 bg-white dark:bg-[#1c1c1e] rounded-[20px] shadow-sm flex items-center justify-center border border-gray-200 dark:border-gray-700"><Upload className="w-7 h-7 text-[#0071e3]" /></div>
                 <div className="text-center"><p className="text-[16px] font-semibold text-black dark:text-white">{t('cv.drop_hint')}</p><p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('cv.click_hint')}</p></div>
-                <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileSelect} className="hidden" />
+                <input ref={fileInputRef} type="file" accept=".pdf" onChange={handleFileSelect} className="hidden" />
               </div>
             )}
             {parseSuccess && (

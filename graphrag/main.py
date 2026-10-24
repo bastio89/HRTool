@@ -260,10 +260,10 @@ for plugin in plugins:
 # ausschliesslich das Node-Backend.
 #
 # OPEN_PATHS: Statuspruefungen, die ohne Schluessel erreichbar bleiben muessen.
-# BROWSER_PATHS: Browser-Aufrufe des Frontends laufen heute nur noch fuer den
-# CV-Parser direkt zum Dienst; LinkedIn wird ueber den Node-Proxy abgewickelt.
+# BROWSER_PATHS: Der CV-Importer wird direkt vom Browser aufgerufen; LinkedIn
+# wird ueber den Node-Proxy abgewickelt.
 OPEN_PATHS = {"/health", "/health/live", "/docs", "/openapi.json", "/redoc"}
-BROWSER_PATHS = {"/cv-parser/parse"}
+BROWSER_PATHS = {"/cv-parser/parse", "/cv-fast-importer/import"}
 
 
 @app.middleware("http")
@@ -434,7 +434,8 @@ async def deanonymize_candidate(request: CandidatePrivacyRequest) -> CandidatePr
 @app.post(
 	"/cv-parser/parse",
 	tags=["CV Parser"],
-	summary="CV parsen und optional in Neo4j speichern",
+	summary="Veraltet: CV parsen und optional speichern",
+	description="Verwenden Sie stattdessen POST /cv-fast-importer/import.",
 deprecated=True,
 	responses={
 		400: {"description": "Keine Datei oder ungültiges Format"},

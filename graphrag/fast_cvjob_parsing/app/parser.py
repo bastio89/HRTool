@@ -9,7 +9,8 @@ import fitz
 import torch
 from gliner import GLiNER
 
-from app.schemas import (
+from .errors import InvalidPDFError
+from .schemas import (
     CVResponse,
     CategorizedSkills,
     Education,
@@ -67,10 +68,6 @@ SKILL_LABELS = {
 }
 SKILL_THRESHOLD = 0.35
 ENTITY_THRESHOLD = 0.45
-
-
-class InvalidPDFError(ValueError):
-    """Raised when the uploaded bytes are not a usable text PDF."""
 
 
 @dataclass

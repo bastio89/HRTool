@@ -663,7 +663,9 @@ paths:
     post:
       tags:
       - CV Parser
-      summary: CV parsen und optional in Neo4j speichern
+      summary: Veraltet: CV parsen und optional speichern
+      description: Verwenden Sie stattdessen POST /cv-fast-importer/import.
+      deprecated: true
       operationId: parse_cv_cv_parser_parse_post
       parameters:
       - name: persist

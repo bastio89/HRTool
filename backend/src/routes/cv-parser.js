@@ -560,14 +560,14 @@ ${truncated}`;
  *   post:
  *     summary: CV parsen und optional zentral speichern (veraltet)
  *     deprecated: true
- *     description: Veralteter Endpunkt. Verwenden Sie stattdessen POST http://localhost:8002/cv-parser/parse im GraphRAG-Service.
+ *     description: Veralteter Endpunkt. Verwenden Sie stattdessen POST http://localhost:8002/cv-fast-importer/import im GraphRAG-Service. Der neue Dienst akzeptiert PDF-Dateien.
  *     tags: [CV Parser]
  *     requestBody:
  *       content:
  *         multipart/form-data:
  *           schema:
  *             properties:
- *               file: { type: string, format: binary, description: PDF, Word oder Bilddatei (auch mehrere) }
+ *               file: { type: string, format: binary, description: PDF-Datei }
  *     responses:
  *       200: { description: Extrahierte Bewerberdaten mit strukturiertem Werdegang }
  *       400: { description: Keine Datei oder ungültiges Format }

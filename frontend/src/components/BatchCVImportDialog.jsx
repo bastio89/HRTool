@@ -7,15 +7,7 @@ import { useI18n } from '../I18nContext'
 import { useSystemStatus } from './SystemStatus'
 import { localeTag } from '../utils/format'
 
-const ALLOWED_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/webp',
-]
+const ALLOWED_TYPES = ['application/pdf']
 
 const STATUS = {
   PENDING: 'pending',
@@ -250,7 +242,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+              accept=".pdf"
               onChange={handleFileSelect}
               className="hidden"
             />

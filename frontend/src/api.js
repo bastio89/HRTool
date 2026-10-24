@@ -543,7 +543,7 @@ export const cvParserApi = {
     if (onProgress) {
       headers['Accept'] = 'text/event-stream';
     }
-    const response = await fetch(`${GRAPHRAG_API_BASE}/cv-parser/parse?persist=${persist}`, {
+    const response = await fetch(`${GRAPHRAG_API_BASE}/cv-fast-importer/import?persist=${persist}`, {
       method: 'POST',
       headers,
       body: formData,
@@ -567,8 +567,8 @@ export const cvParserApi = {
           } catch (e) { if (e.message && !e.message.includes('JSON')) throw e; }
         }
       }
-      const error = await response.json().catch(() => ({ error: 'CV-Analyse fehlgeschlagen' }));
-      throw new Error(error.error || error.detail || `HTTP ${response.status}`);
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.error || error?.detail || `CV-Analyse fehlgeschlagen (HTTP ${response.status})`);
     }
     // Stream mode: parse SSE events (only if server actually returns SSE)
     const contentType = response.headers.get('content-type') || '';

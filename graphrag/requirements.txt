@@ -12,3 +12,4 @@ Pillow>=10.4.0
 python-docx>=1.1.2
 pytesseract>=0.3.13
 reportlab>=4.2.2
+-r fast_cvjob_parsing/requirements.txt

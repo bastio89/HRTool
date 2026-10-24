@@ -13,6 +13,7 @@ export default function SelectedMatchingResults() {
   const { t } = useI18n()
   const [payload, setPayload] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMode, setLoadingMode] = useState(location.state?.mode || null)
   const [error, setError] = useState('')
   const [selectedRowKeys, setSelectedRowKeys] = useState([])
 
@@ -29,6 +30,7 @@ export default function SelectedMatchingResults() {
         const fromStatePairs = location.state?.pairs
         const pairs = fromStatePairs || parsed.pairs || []
         const mode = location.state?.mode || parsed.mode || 'ai'
+        setLoadingMode(mode)
         const precomputed = location.state?.precomputed
         const sourceJobDescription = location.state?.sourceJobDescription || parsed.sourceJobDescription || ''
 
@@ -111,7 +113,9 @@ export default function SelectedMatchingResults() {
   const bestScore = results[0]?.score || 0
   const modeLabel = payload?.mode === 'vector' ? '3D-Matching' : 'KI-Matching'
   const pageTitle = payload?.mode === 'vector' ? t('selected_results.title_vector') : t('selected_results.title_ai')
-  const loadingLabel = payload?.mode === 'vector' ? t('selected_results.loading_vector') : t('selected_results.loading_ai')
+  const loadingLabel = (loadingMode ?? payload?.mode) === 'vector'
+    ? t('selected_results.loading_vector')
+    : t('selected_results.loading_ai')
   const isVectorMode = payload?.mode === 'vector'
   const getRowKey = (row) => `${row.jobId}-${row.candidateId}`
   const selectedRows = results.filter((row) => selectedRowKeys.includes(getRowKey(row)))
@@ -135,6 +139,7 @@ export default function SelectedMatchingResults() {
   const handleRunSelectedAiMatching = async () => {
     if (selectedRows.length === 0) return
 
+    setLoadingMode('ai')
     setLoading(true)
     setError('')
 

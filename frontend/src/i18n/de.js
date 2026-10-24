@@ -1721,7 +1721,7 @@ export default {
   // Selected matching results & progress
   'selected_results.title_ai': 'KI-Matching: Auswahl',
   'selected_results.title_vector': '3D-Matching: Auswahl',
-  'selected_results.loading_ai': 'KI-Matching wird geladen...',
+  'selected_results.loading_ai': 'KI-Matching in Arbeit ...',
   'selected_results.loading_vector': '3D-Matching wird geladen...',
   'selected_results.summary': '{hits} Treffer, {errors} Fehler',
   'selected_results.new_selection': 'Neue Auswahl',

@@ -12,6 +12,8 @@ Starts the HRTool stack with Docker Compose.
 
 Environment variables:
   START_CADDY=1    Start the Caddy reverse proxy as well
+  FRONTEND_VERSION_LABEL  Optional version name shown in the GUI
+  FRONTEND_APP_REVISION   Optional revision shown in the GUI (defaults to Git SHA)
 
 Behavior:
   - checks that Docker and Docker Compose v2 are available
@@ -68,6 +70,11 @@ if [ -z "${FRONTEND_APP_VERSION:-}" ]; then
     FRONTEND_APP_VERSION="${git_branch//[^a-zA-Z0-9._-]/-}-${git_count}"
     export FRONTEND_APP_VERSION
   fi
+fi
+
+if [ -z "${FRONTEND_APP_REVISION:-}" ]; then
+  FRONTEND_APP_REVISION="$(git rev-parse --short HEAD 2>/dev/null || true)"
+  export FRONTEND_APP_REVISION
 fi
 
 docker compose config --quiet

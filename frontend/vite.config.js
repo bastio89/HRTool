@@ -34,12 +34,27 @@ function readGitBuildVersion() {
   }
 }
 
-const appVersion = readGitBuildVersion()
+function readGitRevision() {
+  const injectedRevision = process.env.FRONTEND_APP_REVISION?.trim()
+  if (injectedRevision) {
+    return injectedRevision
+  }
+
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim() || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+const appVersion = process.env.FRONTEND_VERSION_LABEL?.trim() || readGitBuildVersion()
+const appRevision = readGitRevision()
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __APP_REVISION__: JSON.stringify(appRevision),
   },
   test: {
     environment: 'jsdom',

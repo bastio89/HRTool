@@ -151,6 +151,42 @@ function normalizeKey(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+const MAX_STORED_MATCH_ROWS = 100;
+
+function compactStoredMatchingResult(result, { direction, engine } = {}) {
+  const matrix = Array.isArray(result?.matrix) ? result.matrix : [];
+  const storedMatrix = [...matrix]
+    .sort((left, right) => (Number(right?.score) || 0) - (Number(left?.score) || 0))
+    .slice(0, MAX_STORED_MATCH_ROWS)
+    .map((row) => ({
+      jobId: row.jobId,
+      candidateId: row.candidateId,
+      sourceJobId: row.sourceJobId,
+      sourceCandidateId: row.sourceCandidateId,
+      jobTitle: row.jobTitle,
+      candidateName: row.candidateName,
+      score: row.score,
+      vectorScore: row.vectorScore,
+      hardSkillScore: row.hardSkillScore,
+      softSkillScore: row.softSkillScore,
+      summary: typeof row.summary === 'string' ? row.summary.slice(0, 240) : undefined,
+    }));
+
+  return {
+    type: result?.type,
+    mode: result?.mode,
+    model: result?.model,
+    matchedAt: result?.matchedAt,
+    embeddingModel: result?.embeddingModel,
+    direction: direction ?? result?.direction,
+    engine,
+    totalPairCount: matrix.length,
+    storedPairCount: storedMatrix.length,
+    truncated: matrix.length > storedMatrix.length,
+    matrix: storedMatrix,
+  };
+}
+
 function remapVectorMatchIds(graphRagResult, { direction, jobRecord, candidateRecords, jobs, candidateRecord }) {
   const matrix = Array.isArray(graphRagResult?.matrix) ? graphRagResult.matrix : [];
 
@@ -915,7 +951,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
     `).run(
       `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
       resultTitle,
-      JSON.stringify(graphRagResult),
+      JSON.stringify(compactStoredMatchingResult(graphRagResult, { engine })),
       null
     );
 
@@ -980,7 +1016,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       `).run(
         `Vector-Matching (${engine}) für ${candidate?.name || 'Unbenannter Bewerber'}`,
         resultTitle,
-        JSON.stringify({ ...graphRagResult, direction }),
+        JSON.stringify(compactStoredMatchingResult(graphRagResult, { direction, engine })),
         null,
       );
 
@@ -1021,7 +1057,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
     `).run(
       `Vector-Matching (${engine}) für ${job.title || 'Unbenannte Stelle'}`,
       resultTitle,
-      JSON.stringify({ ...graphRagResult, direction }),
+      JSON.stringify(compactStoredMatchingResult(graphRagResult, { direction, engine })),
       storedJobId,
     );
 

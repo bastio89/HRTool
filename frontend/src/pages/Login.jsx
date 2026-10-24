@@ -4,6 +4,7 @@ import { useI18n } from '../I18nContext'
 import { Command, LogIn, AlertCircle } from 'lucide-react'
 
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+const appRevision = typeof __APP_REVISION__ !== 'undefined' ? __APP_REVISION__ : 'unknown'
 
 export default function Login() {
   const fieldIdPrefix = useId()
@@ -30,7 +31,7 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[#f5f5f7] dark:bg-black flex items-center justify-center selection:bg-[#0071e3] selection:text-white relative" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif' }}>
       <span className="pointer-events-none absolute right-4 top-3 text-[10px] sm:text-[11px] font-medium tracking-[0.18em] uppercase text-gray-400 dark:text-gray-500">
-        v{appVersion}
+        v{appVersion} · rev {appRevision}
       </span>
       <div className="w-full max-w-[420px] mx-4">
         {/* Logo */}

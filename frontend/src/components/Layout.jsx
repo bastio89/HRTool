@@ -13,6 +13,7 @@ import { usePlugins } from '../plugins/PluginContext'
 import { getPluginDefinition } from '../plugins/registry'
 
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+const appRevision = typeof __APP_REVISION__ !== 'undefined' ? __APP_REVISION__ : 'unknown'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, labelKey: 'nav.overview' },
@@ -327,7 +328,7 @@ export default function Layout() {
         {/* Top Bar */}
         <header className="h-16 sm:h-24 flex items-center justify-between lg:justify-end px-4 sm:px-8 lg:px-14 flex-shrink-0 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-2xl border-b border-gray-100/50 dark:border-gray-800/50 layer-sticky sticky top-0 relative">
           <span className="pointer-events-none absolute right-4 top-2 sm:right-8 sm:top-3 text-[10px] sm:text-[11px] font-medium tracking-[0.18em] uppercase text-gray-400 dark:text-gray-500">
-            v{appVersion}
+            v{appVersion} · rev {appRevision}
           </span>
           {/* Mobile hamburger */}
           <button

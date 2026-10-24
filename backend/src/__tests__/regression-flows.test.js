@@ -2025,22 +2025,20 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
             matchedAt: '2026-09-18T00:00:00.000Z',
             jobs: [{ id: 'graph-job-1', title: 'Backend Engineer' }],
             candidates: [{ id: 'graph-cand-1', name: 'Ada Lovelace' }],
-            matrix: [
-              {
+            matrix: Array.from({ length: 105 }, (_, index) => ({
                 jobId: 'graph-job-1',
                 jobTitle: 'Backend Engineer',
-                candidateId: 'graph-cand-1',
-                candidateName: 'Ada Lovelace',
-                score: 93,
-                vectorScore: 0.93,
+                candidateId: index === 0 ? 'graph-cand-1' : `graph-cand-${index + 1}`,
+                candidateName: index === 0 ? 'Ada Lovelace' : `Candidate ${index}`,
+                score: index === 0 ? 93 : index,
+                vectorScore: index / 100,
                 hardSkillScore: 0.9,
                 softSkillScore: 0.8,
                 strengths: ['Starke Backend-Erfahrung'],
                 weaknesses: [],
-                summary: 'Sehr guter Fit',
-                matchedSkills: [],
-              },
-            ],
+                summary: index === 0 ? 'Sehr guter Fit' : 'x'.repeat(300),
+                matchedSkills: [{ jobSkill: 'Node.js', candidateSkill: 'Node.js' }],
+              })),
             jobsRanked: [{ jobId: 'graph-job-1', jobTitle: 'Backend Engineer', results: [] }],
             candidatesRanked: [{ candidateId: 'graph-cand-1', candidateName: 'Ada Lovelace', results: [] }],
           }),
@@ -2064,13 +2062,22 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       });
 
     expect(response.status).toBe(200, response.text);
-    expect(response.body.results.matrix).toHaveLength(1);
+    expect(response.body.results.matrix).toHaveLength(105);
     expect(response.body.results.matrix[0].jobId).toBe(2);
     expect(response.body.results.matrix[0].candidateId).toBe(7);
     expect(response.body.results.matrix[0].sourceJobId).toBe('graph-job-1');
     expect(response.body.results.matrix[0].sourceCandidateId).toBe('graph-cand-1');
     expect(response.body.results.jobsRanked[0].jobId).toBe(2);
     expect(response.body.results.candidatesRanked[0].candidateId).toBe(7);
+
+    const storedResult = JSON.parse(mockDb.__state.matchingResults[0].results);
+    expect(storedResult.matrix).toHaveLength(100);
+    expect(storedResult.totalPairCount).toBe(105);
+    expect(storedResult.truncated).toBe(true);
+    expect(storedResult.matrix[0].score).toBe(104);
+    expect(storedResult.matrix[0].summary).toHaveLength(240);
+    expect(storedResult.matrix[0]).not.toHaveProperty('matchedSkills');
+    expect(storedResult).not.toHaveProperty('jobsRanked');
   });
 
   test('Selected matching batch prefers structured job skills over free-text requirements', async () => {

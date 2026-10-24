@@ -322,26 +322,102 @@ export const jobsApi = {
     notifyCreditRefresh({ source: 'jobsApi.addPlainTextJob' })
     return json;
   },
-  parseDescriptionFile: async (file, thinking = false, extractOnly = false, persist = false) => {
+  parseDescriptionFile: async (file, extractOnly = false, persist = false) => {
+    if (!/\.pdf$/i.test(file.name || '') && file.type !== 'application/pdf') {
+      throw new Error('Nur PDF-Dateien werden unterstützt');
+    }
+
     const formData = new FormData();
     formData.append('file', file);
-    const params = new URLSearchParams();
-    if (thinking) params.set('thinking', '1');
-    if (extractOnly) params.set('extractOnly', '1');
-    if (persist) params.set('persist', '1');
-    const url = `${API_BASE}/jobs/parse-description${params.toString() ? `?${params.toString()}` : ''}`;
-    const response = await fetch(url, {
+    const response = await fetch(`${GRAPHRAG_API_BASE}/api/v1/parse/job`, {
       method: 'POST',
       headers: authHeaders(),
       body: formData,
     });
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload fehlgeschlagen' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.detail || error?.error || `Job-Analyse fehlgeschlagen (HTTP ${response.status})`);
     }
-    const json = await response.json();
+    const parsed = await response.json();
+    const profile = parsed.profile || {};
+    const filename = file.name || 'job.pdf';
+    const title = String(profile.job_title || filename.replace(/\.pdf$/i, '').replace(/[-_]+/g, ' ')).trim();
+    const skills = Object.values(profile.required_skills || {})
+      .flat()
+      .filter(value => typeof value === 'string' && value.trim())
+      .join(', ');
+    const requirements = [
+      profile.workload_pensum && `Pensum: ${profile.workload_pensum}`,
+      profile.remote_work && `Arbeitsmodell: ${profile.remote_work}`,
+    ].filter(Boolean).join('\n');
+    const categorizedSkills = profile.required_skills || {};
+    const graphRagProfile = {
+      title,
+      company: profile.company_name || null,
+      location: profile.location || null,
+      description: parsed.raw_text || '',
+      requirements,
+      required_skills: Object.entries(categorizedSkills)
+        .filter(([category]) => category !== 'language_skills')
+        .flatMap(([category, values]) => (Array.isArray(values) ? values : [])
+          .filter(value => typeof value === 'string' && value.trim())
+          .map(name => ({
+            name,
+            category: category === 'soft_skills' ? 'SoftSkill' : 'HardSkill',
+            priority: 'Mandatory',
+          }))),
+      required_languages: (Array.isArray(categorizedSkills.language_skills) ? categorizedSkills.language_skills : [])
+        .filter(value => typeof value === 'string' && value.trim())
+        .map(name => ({ name })),
+    };
+    const jobData = {
+      title,
+      about_us: '',
+      description: parsed.raw_text || '',
+      requirements,
+      skills,
+      benefits: '',
+      location: profile.location || '',
+      type: 'Vollzeit',
+      status: 'Offen',
+      url: '',
+      graphRagProfile,
+    };
+
+    if (extractOnly) {
+      return {
+        success: true,
+        filename,
+        id: null,
+        job: null,
+        text: parsed.raw_text || '',
+        ...jobData,
+        graphRag: null,
+      };
+    }
+
+    const job = persist ? await jobsApi.create(jobData) : null;
     notifyCreditRefresh({ source: 'jobsApi.parseDescriptionFile' })
-    return json;
+    return {
+      success: true,
+      filename,
+      id: job?.id || null,
+      job,
+      profile,
+      text: parsed.raw_text || '',
+      title: job?.title || title,
+      about_us: job?.about_us || jobData.about_us,
+      description: job?.description || jobData.description,
+      requirements: job?.requirements || jobData.requirements,
+      skills: job?.skills || jobData.skills,
+      benefits: job?.benefits || jobData.benefits,
+      graphRag: job?.graphRag || null,
+      importSteps: {
+        aiParsed: true,
+        graphRagSaved: Boolean(job?.graphRag && !job.graphRag.error),
+        dbSaved: Boolean(job?.id),
+      },
+    };
   },
   exportJobsChPdfs: async (links) => {
     const response = await fetch(`${API_BASE}/plugins/jobs_ch/export-pdf`, {

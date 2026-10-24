@@ -198,7 +198,7 @@ function persistLocalJob(job) {
   return db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
 }
 
-async function ingestIntoGraphRag(req, rawText, persist = true) {
+async function ingestIntoGraphRag(req, rawText, persist = true, profile = null) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   if (!baseUrl) return null;
 
@@ -210,7 +210,7 @@ async function ingestIntoGraphRag(req, rawText, persist = true) {
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${encodeURIComponent(persistValue)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
-      body: JSON.stringify({ raw_text: rawText }),
+      body: JSON.stringify(profile ? { profile } : { raw_text: rawText }),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
@@ -391,13 +391,13 @@ router.get('/:id', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { title, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
+    const { title, description, requirements, skills, location, type, status, url, about_us, benefits, graphRagProfile } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
     const job = persistLocalJob({ title, about_us, description, requirements, skills, benefits, location, type, status, url });
     logAudit(req, job.duplicate ? 'duplikat' : 'erstellt', 'Job', job.id, job.title);
 
-    ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j').catch((graphRagErr) => {
+    ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j', graphRagProfile).catch((graphRagErr) => {
       console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
       return { error: graphRagErr.message };
     }).then((graphRag) => {
@@ -422,7 +422,7 @@ router.post('/', (req, res) => {
  *   post:
  *     summary: Stellenbeschreibung aus Datei extrahieren (veraltet)
  *     deprecated: true
- *     description: Veralteter Endpunkt. Verwenden Sie stattdessen den GraphRAG-Service zur Extraktion und Persistenz.
+ *     description: Veralteter Endpunkt. Zur Extraktion und optionalen lokalen Persistenz wird jetzt POST /api/v1/parse/job im Fast CV and Job Parser verwendet. Der neue Parser akzeptiert PDF-Dateien.
  *     tags: [Jobs]
  *     requestBody:
  *       required: true

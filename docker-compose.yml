@@ -78,6 +78,9 @@ services:
         FRONTEND_APP_REVISION: ${FRONTEND_APP_REVISION:-}
     container_name: hrtool-frontend
     restart: unless-stopped
+    depends_on:
+      graphrag:
+        condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-5173}:80"
 

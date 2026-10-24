@@ -15,7 +15,7 @@ def build_app(api_key: str | None):
     """Mirrors the middleware from main.py without booting the whole service."""
     app = FastAPI()
     OPEN_PATHS = {"/health", "/health/live", "/docs", "/openapi.json", "/redoc"}
-    BROWSER_PATHS = {"/cv-parser/parse", "/cv-fast-importer/import"}
+    BROWSER_PATHS = {"/cv-parser/parse", "/cv-fast-importer/import", "/api/v1/parse/job"}
 
     @app.middleware("http")
     async def require_api_key(request: Request, call_next):
@@ -28,7 +28,7 @@ def build_app(api_key: str | None):
         return await call_next(request)
 
     for route in ["/health", "/health/live", "/cv-parser/parse",
-                  "/cv-fast-importer/import", "/linkedin/people-search.csv", "/candidates/deanon",
+                  "/cv-fast-importer/import", "/api/v1/parse/job", "/linkedin/people-search.csv", "/candidates/deanon",
                   "/candidates/anon", "/ingest/candidate", "/ingest/job",
                   "/add/job/", "/match/7", "/linkedin/profile"]:
         app.add_api_route(route, lambda: {"ok": True}, methods=["GET"])
@@ -37,7 +37,7 @@ def build_app(api_key: str | None):
 
 GUARDED = ["/candidates/deanon", "/candidates/anon", "/ingest/candidate",
            "/ingest/job", "/add/job/", "/match/7", "/linkedin/profile", "/linkedin/people-search.csv"]
-OPEN = ["/health", "/health/live", "/cv-parser/parse", "/cv-fast-importer/import"]
+OPEN = ["/health", "/health/live", "/cv-parser/parse", "/cv-fast-importer/import", "/api/v1/parse/job"]
 
 
 @pytest.mark.parametrize("path", GUARDED)
@@ -81,4 +81,4 @@ def test_path_lists_match_the_real_service():
                 found[name] = set(ast.literal_eval(node.value))
 
     assert found["OPEN_PATHS"] == {"/health", "/health/live", "/docs", "/openapi.json", "/redoc"}
-    assert found["BROWSER_PATHS"] == {"/cv-parser/parse", "/cv-fast-importer/import"}
+    assert found["BROWSER_PATHS"] == {"/cv-parser/parse", "/cv-fast-importer/import", "/api/v1/parse/job"}

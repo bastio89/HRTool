@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 from starlette.concurrency import run_in_threadpool
 
 from .errors import InvalidPDFError
-from .schemas import CVResponse, JobResponse
+from .schemas import CVResponse, JobParseResponse, JobResponse
 
 logger = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
@@ -51,12 +51,13 @@ def create_cv_job_parser_router() -> APIRouter:
             logger.exception("CV parsing failed")
             raise HTTPException(status_code=500, detail="CV parsing failed.") from exc
 
-    @router.post("/job", response_model=JobResponse)
-    async def parse_job(request: Request, file: UploadFile = File(...)) -> JobResponse:
+    @router.post("/job", response_model=JobParseResponse)
+    async def parse_job(request: Request, file: UploadFile = File(...)) -> JobParseResponse:
         pdf_bytes = await _read_pdf(file)
         parser = _get_parser(request)
         try:
-            return await run_in_threadpool(parser.parse_job, pdf_bytes)
+            profile, raw_text = await run_in_threadpool(parser.parse_job_with_text, pdf_bytes)
+            return JobParseResponse(profile=profile, raw_text=raw_text)
         except InvalidPDFError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:

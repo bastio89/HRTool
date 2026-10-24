@@ -5,15 +5,9 @@ import { Button } from './UI'
 import Modal from './Modal'
 import { useI18n } from '../I18nContext'
 
-const ALLOWED_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain',
-  'text/markdown',
-]
+const ALLOWED_TYPES = ['application/pdf']
 
-const ALLOWED_EXT = /\.(pdf|doc|docx|txt|md)$/i
+const ALLOWED_EXT = /\.pdf$/i
 
 const STATUS = {
   PENDING: 'pending',
@@ -50,7 +44,6 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([])
   const [running, setRunning] = useState(false)
-  const [thinking, setThinking] = useState(false)
   const fileInputRef = useRef(null)
   const timerRef = useRef(null)
 
@@ -115,7 +108,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
     for (const item of pending) {
       updateFile(item.id, { status: STATUS.PROCESSING, error: null, startedAt: Date.now(), elapsed: 0 })
       try {
-        const created = await jobsApi.parseDescriptionFile(item.file, thinking, false, true)
+        const created = await jobsApi.parseDescriptionFile(item.file, false, true)
         const title = created.title || created.job?.title || filenameToTitle(item.file.name) || item.file.name
 
         const elapsed = item.startedAt ? Math.floor((Date.now() - item.startedAt) / 1000) : null
@@ -165,19 +158,6 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
         {allDone ? t('batch_job_import.close') : t('batch_job_import.cancel')}
       </Button>
       <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => setThinking(v => !v)}
-          disabled={running}
-          className="flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
-        >
-          <div className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ${thinking ? 'bg-[#5e5ce6]' : 'bg-gray-200 dark:bg-gray-600'}`}>
-            <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform ring-0 transition duration-200 ${thinking ? 'translate-x-4' : 'translate-x-0'}`} />
-          </div>
-          <span className="text-[12px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
-            {thinking ? t('batch_job_import.reasoning_on') : t('batch_job_import.reasoning_off')}
-          </span>
-        </button>
         <Button variant="dark" size="md" onClick={processAll} disabled={!canRun}>
         {running ? (
           <>
@@ -234,7 +214,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".pdf,.doc,.docx,.txt,.md"
+              accept=".pdf"
               onChange={handleFileSelect}
               className="hidden"
             />

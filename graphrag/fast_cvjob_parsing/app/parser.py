@@ -307,6 +307,9 @@ class ResumeJobParser:
         )
 
     def parse_job(self, pdf_bytes: bytes) -> JobResponse:
+        return self.parse_job_with_text(pdf_bytes)[0]
+
+    def parse_job_with_text(self, pdf_bytes: bytes) -> tuple[JobResponse, str]:
         blocks = extract_text_blocks(pdf_bytes)
         self._annotate(blocks, JOB_LABELS)
         document_text = self._document_text(blocks)
@@ -321,12 +324,15 @@ class ResumeJobParser:
             elif "on-site" in normalized_remote or "onsite" in normalized_remote or "office" in normalized_remote:
                 remote = "On-Site"
 
-        return JobResponse(
-            company_name=_first_entity(blocks, "hiring company"),
-            location=_first_entity(blocks, "work location"),
-            job_title=_first_entity(blocks, "job title"),
-            required_skills=_skill_values(blocks),
-            remote_work=remote,
-            workload_pensum=_first_entity(blocks, "workload pensum")
-            or (pensum_match.group(0) if pensum_match else None),
+        return (
+            JobResponse(
+                company_name=_first_entity(blocks, "hiring company"),
+                location=_first_entity(blocks, "work location"),
+                job_title=_first_entity(blocks, "job title"),
+                required_skills=_skill_values(blocks),
+                remote_work=remote,
+                workload_pensum=_first_entity(blocks, "workload pensum")
+                or (pensum_match.group(0) if pensum_match else None),
+            ),
+            document_text,
         )

@@ -24,7 +24,10 @@ def test_cv_and_job_routes_use_the_injected_parser():
         "skills": {},
     }
     job_response = {"required_skills": {}}
-    parser = SimpleNamespace(parse_cv=Mock(return_value=cv_response), parse_job=Mock(return_value=job_response))
+    parser = SimpleNamespace(
+        parse_cv=Mock(return_value=cv_response),
+        parse_job_with_text=Mock(return_value=(job_response, "job description")),
+    )
     client = build_client(parser)
 
     cv = client.post("/api/v1/parse/cv", files={"file": ("cv.pdf", b"pdf", "application/pdf")})
@@ -34,10 +37,11 @@ def test_cv_and_job_routes_use_the_injected_parser():
     assert cv.json()["work_experience"] == []
     assert cv.json()["personal_data"]["full_name"] is None
     assert job.status_code == 200
-    assert job.json()["required_skills"]["soft_skills"] == []
-    assert job.json()["company_name"] is None
+    assert job.json()["profile"]["required_skills"]["soft_skills"] == []
+    assert job.json()["profile"]["company_name"] is None
+    assert job.json()["raw_text"] == "job description"
     parser.parse_cv.assert_called_once_with(b"pdf")
-    parser.parse_job.assert_called_once_with(b"pdf")
+    parser.parse_job_with_text.assert_called_once_with(b"pdf")
 
 
 @pytest.mark.parametrize(

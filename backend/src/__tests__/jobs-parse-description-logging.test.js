@@ -71,4 +71,61 @@ describe('jobs parse-description logging', () => {
       success: true,
     }));
   });
+
+  test('sends a supplied fast-parser profile to GraphRAG without raw text', async () => {
+    jest.resetModules();
+    const savedJob = {
+      id: 42,
+      title: 'Senior Backend Engineer',
+      description: 'Full extracted job description',
+      requirements: 'Pensum: 80–100 %',
+    };
+    jest.doMock('../aiLogger', () => ({ logAiCall: jest.fn() }));
+    jest.doMock('../database', () => ({
+      prepare: (sql) => {
+        if (sql.startsWith('INSERT INTO jobs')) {
+          return { run: () => ({ lastInsertRowid: savedJob.id }) };
+        }
+        if (sql.startsWith('SELECT * FROM jobs WHERE id = ?')) {
+          return { get: () => savedJob };
+        }
+        return { get: () => undefined, all: () => [], run: () => ({}) };
+      },
+      exec: () => ({}),
+    }));
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    let jobsRouter;
+    jest.isolateModules(() => {
+      jobsRouter = require('../routes/jobs');
+    });
+
+    const graphRagProfile = {
+      title: savedJob.title,
+      description: savedJob.description,
+      required_skills: [{ name: 'Python', category: 'HardSkill', priority: 'Mandatory' }],
+    };
+    global.fetch = jest.fn(async (url, options) => {
+      expect(String(url)).toBe('http://fake-graphrag/ingest/job?persist=neo4j');
+      expect(JSON.parse(options.body)).toEqual({ profile: graphRagProfile });
+      return {
+        ok: true,
+        json: async () => ({ id: 'graph-job-42', message: 'Job ingested successfully' }),
+      };
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const response = await request(app).post('/api/jobs').send({
+      title: savedJob.title,
+      description: savedJob.description,
+      graphRagProfile,
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.graphRag.id).toBe('graph-job-42');
+  });
 });

@@ -48,3 +48,8 @@ class JobResponse(BaseModel):
     required_skills: CategorizedSkills
     remote_work: Optional[str] = None
     workload_pensum: Optional[str] = None
+
+
+class JobParseResponse(BaseModel):
+    profile: JobResponse
+    raw_text: str

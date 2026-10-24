@@ -47,7 +47,6 @@ export default function JobForm() {
   const [aiKeywords, setAiKeywords] = useState('')
   const [aiModel, setAiModel] = useState('')
   const [error, setError] = useState('')
-  const [parseThinking, setParseThinking] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -124,10 +123,14 @@ export default function JobForm() {
 
   const handleDescriptionUpload = async (file) => {
     if (!file) return
+    if (!/\.pdf$/i.test(file.name || '') && file.type !== 'application/pdf') {
+      setError(t('jobs.pdf_only'))
+      return
+    }
     setError('')
     setUploadingDescription(true)
     try {
-      const parsed = await jobsApi.parseDescriptionFile(file, parseThinking, false, true)
+      const parsed = await jobsApi.parseDescriptionFile(file, false, true)
       const importedFilename = parsed.filename || file.name
       const importedTitle = filenameToJobTitle(importedFilename)
       const importedJob = parsed.job || null
@@ -320,26 +323,10 @@ export default function JobForm() {
               <span id={`${fieldIdPrefix}-upload-label`} className="block text-[15px] font-medium text-gray-600 dark:text-gray-400 ml-2">
                 {t('jobs.upload_label')}
               </span>
-              <div role="group" aria-labelledby={`${fieldIdPrefix}-upload-label`} className="flex items-center gap-3 ml-1">
-                <button
-                  type="button"
-                  onClick={() => setParseThinking(v => !v)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                    parseThinking ? 'bg-[#5e5ce6]' : 'bg-gray-200 dark:bg-gray-600'
-                  }`}
-                >
-                  <span className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ${
-                    parseThinking ? 'translate-x-5' : 'translate-x-0'
-                  }`} />
-                </button>
-                <span className="text-[13px] text-gray-500 dark:text-gray-400">
-                  {parseThinking ? 'Mit Reasoning (langsamer, genauer)' : 'Ohne Reasoning (schneller)'}
-                </span>
-              </div>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.txt,.md"
+                accept=".pdf"
                 onChange={handleSelect}
                 className="hidden"
               />

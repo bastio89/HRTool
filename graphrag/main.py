@@ -263,7 +263,7 @@ for plugin in plugins:
 # BROWSER_PATHS: Der CV-Importer wird direkt vom Browser aufgerufen; LinkedIn
 # wird ueber den Node-Proxy abgewickelt.
 OPEN_PATHS = {"/health", "/health/live", "/docs", "/openapi.json", "/redoc"}
-BROWSER_PATHS = {"/cv-parser/parse", "/cv-fast-importer/import"}
+BROWSER_PATHS = {"/cv-parser/parse", "/cv-fast-importer/import", "/api/v1/parse/job"}
 
 
 @app.middleware("http")

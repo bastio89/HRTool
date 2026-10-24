@@ -63,7 +63,7 @@ describe('BatchJobImportDialog', () => {
       expect(screen.getByText(syncError)).toBeInTheDocument()
     })
 
-    expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, false, true)
+    expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, true)
     expect(onImported).toHaveBeenCalledTimes(1)
   })
 })

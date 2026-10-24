@@ -5,13 +5,17 @@ import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fast_cvjob_parsing.app.errors import InvalidPDFError
+from fast_cvjob_parsing.app.schemas import CVResponse
 
 from config import settings
+from fast_cvjob_parsing.app.router import create_cv_job_parser_router, parse_cv_bytes
 from legacy_api import create_legacy_router
 from models import (
 	CandidateIngestRequest,
@@ -105,6 +109,94 @@ def _normalized_profile_hash(profile: Any) -> str | None:
 		return None
 
 
+def _fast_cv_response_to_candidate_profile(parsed: CVResponse, filename: str) -> CandidateProfileExtraction:
+	personal = parsed.personal_data
+	work_history = [
+		{
+			"employer": item.employer,
+			"position": item.job_title,
+			"from_date": item.start_date,
+			"to_date": item.end_date,
+			"is_current": (item.end_date or "").casefold() in {"present", "current", "today", "heute", "aktuell"},
+			"description": "\n".join(item.tasks_summary) or None,
+		}
+		for item in parsed.work_experience
+	]
+	education_history = [
+		{
+			"institution": item.institution,
+			"degree": item.degree_or_title,
+			"field_of_study": item.degree_or_title,
+			"from_date": item.start_date,
+			"to_date": item.end_date,
+		}
+		for item in parsed.education
+	]
+	skill_groups = (
+		(parsed.skills.soft_skills, "SoftSkill"),
+		(parsed.skills.it_skills, "HardSkill"),
+		(parsed.skills.method_skills, "HardSkill"),
+		(parsed.skills.tool_skills, "HardSkill"),
+	)
+	skills = [
+		{"name": name, "category": category}
+		for values, category in skill_groups
+		for name in values
+	]
+	work_summaries = [
+		" - ".join(part for part in (item.job_title, item.employer, "; ".join(item.tasks_summary)) if part)
+		for item in parsed.work_experience
+	]
+	education_summaries = [
+		" - ".join(part for part in (item.degree_or_title, item.institution) if part)
+		for item in parsed.education
+	]
+	first_work = next((item for item in parsed.work_experience if item.employer or item.job_title), None)
+	return CandidateProfileExtraction(
+		name=personal.full_name or Path(filename).stem or "Unknown candidate",
+		email=personal.email,
+		phone=personal.phone,
+		location=personal.location or personal.address,
+		current_employer=first_work.employer if first_work else None,
+		current_position=first_work.job_title if first_work else None,
+		parsing_method="fast_gliner",
+		skills=skills,
+		languages=[{"name": name} for name in parsed.skills.language_skills],
+		work_history=work_history,
+		education_history=education_history,
+		experience="\n".join(work_summaries) or None,
+		education="\n".join(education_summaries) or None,
+	)
+
+
+def _merge_fast_cv_profiles(profiles: list[CandidateProfileExtraction]) -> CandidateProfileExtraction:
+	if len(profiles) == 1:
+		return profiles[0]
+
+	merged = profiles[0].model_dump(mode="json")
+	list_fields = {
+		"skills", "languages", "educations", "industries", "work_history", "education_history", "preferred_roles",
+	}
+	joined_fields = {"experience", "education", "tags", "notes"}
+	for field_name in merged:
+		values = [getattr(profile, field_name) for profile in profiles]
+		if field_name in list_fields:
+			unique_values = []
+			seen = set()
+			for value in values:
+				for item in value:
+					key = json.dumps(item.model_dump(mode="json") if hasattr(item, "model_dump") else item, sort_keys=True)
+					if key not in seen:
+						seen.add(key)
+						unique_values.append(item.model_dump(mode="json") if hasattr(item, "model_dump") else item)
+			merged[field_name] = unique_values
+		elif field_name in joined_fields:
+			merged[field_name] = "\n".join(dict.fromkeys(value for value in values if value)) or None
+		else:
+			merged[field_name] = next((value for value in values if value not in (None, "")), None)
+	return CandidateProfileExtraction.model_validate(merged)
+
+
 def _has_valid_user_jwt(request: Request) -> bool:
 	authorization = request.headers.get("authorization", "").strip()
 	if not authorization.lower().startswith("bearer "):
@@ -123,7 +215,7 @@ def _has_valid_user_jwt(request: Request) -> bool:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
 	if not (settings.graphrag_api_key or "").strip():
 		logging.getLogger(__name__).warning(
 			"GRAPHRAG_API_KEY ist nicht gesetzt - die API nimmt Anfragen ohne Authentifizierung entgegen."
@@ -137,7 +229,11 @@ async def lifespan(_: FastAPI):
 	await postgres_store.ensure_setting_if_blank("plugin.billing.enabled", "1")
 	await postgres_store.ensure_setting_if_blank("plugin.linkedin.enabled", "1" if settings.linkedin_plugin_enabled else "0")
 	await postgres_store.ensure_setting_if_blank("plugin.jobs_ch.enabled", "1" if settings.jobs_ch_plugin_enabled else "0")
+	from fast_cvjob_parsing.app.parser import ResumeJobParser
+
+	app.state.cv_job_parser = await asyncio.to_thread(ResumeJobParser.load)
 	yield
+	app.state.cv_job_parser = None
 	await db_service.close()
 	await llm_service.close()
 
@@ -152,6 +248,7 @@ app = FastAPI(
 app.include_router(create_matching_router(llm_service, db_service))
 app.include_router(create_legacy_router(postgres_store))
 app.include_router(create_prompts_router(prompt_service))
+app.include_router(create_cv_job_parser_router())
 for plugin in plugins:
 	plugin.register(app)
 
@@ -338,6 +435,7 @@ async def deanonymize_candidate(request: CandidatePrivacyRequest) -> CandidatePr
 	"/cv-parser/parse",
 	tags=["CV Parser"],
 	summary="CV parsen und optional in Neo4j speichern",
+deprecated=True,
 	responses={
 		400: {"description": "Keine Datei oder ungültiges Format"},
 		422: {"description": "Kein lesbarer Text gefunden"},
@@ -451,6 +549,143 @@ async def parse_cv(
 		"profile": profile_payload,
 		"persisted": persist,
 	}
+	return {
+		"success": True,
+		"filenames": filenames,
+		"filename": filenames[0],
+		"candidate": candidate_payload,
+		"profile": profile_payload,
+		"localCandidate": candidate_payload if postgres_candidate_id else None,
+		"duplicate": duplicate_candidate is not None,
+		"duplicateCandidate": duplicate_candidate,
+		"graphRag": graph_rag,
+		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": graph_candidate_id is not None},
+		"textLength": len(combined_text),
+		"persisted": persist,
+		"parsingMethod": profile.parsing_method,
+	}
+
+
+@app.post(
+	"/cv-fast-importer/import",
+	tags=["Fast CV Importer"],
+	summary="CV mit dem Fast-Parser parsen und optional speichern",
+	responses={
+		400: {"description": "Keine Datei oder ungültiges PDF"},
+		413: {"description": "Datei überschreitet 20 MB"},
+		503: {"description": "Parser nicht bereit oder Speicherung fehlgeschlagen"},
+	},
+)
+async def import_fast_cv(
+	request: Request,
+	file: list[UploadFile] | None = File(default=None),
+	persist: bool = Query(default=False),
+) -> dict[str, Any]:
+	files = file or []
+	if not files:
+		raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
+	if len(files) > 10:
+		raise HTTPException(status_code=400, detail="Maximal 10 Dateien erlaubt")
+
+	parser = getattr(request.app.state, "cv_job_parser", None)
+	if parser is None:
+		raise HTTPException(status_code=503, detail="Fast CV parser is not ready.")
+
+	uploads: list[tuple[str, bytes]] = []
+	for uploaded_file in files:
+		filename = uploaded_file.filename or "unbenannt.pdf"
+		content_type = (uploaded_file.content_type or "application/octet-stream").lower()
+		try:
+			if content_type not in {"application/pdf", "application/octet-stream"}:
+				raise HTTPException(status_code=400, detail="Fast CV importer accepts PDF files only.")
+			data = await uploaded_file.read(20 * 1024 * 1024 + 1)
+			if len(data) > 20 * 1024 * 1024:
+				raise HTTPException(status_code=413, detail="Datei zu groß (max. 20 MB)")
+			if not data:
+				raise HTTPException(status_code=400, detail="Uploaded PDF is empty.")
+			uploads.append((filename, data))
+		finally:
+			await uploaded_file.close()
+
+	profiles: list[CandidateProfileExtraction] = []
+	text_parts: list[str] = []
+	for filename, data in uploads:
+		try:
+			parsed = await parse_cv_bytes(parser, data)
+		except InvalidPDFError as exc:
+			raise HTTPException(status_code=400, detail=str(exc)) from exc
+		except Exception as exc:
+			logger.exception("Fast CV parsing failed")
+			raise HTTPException(status_code=502, detail="Fast CV parsing failed.") from exc
+
+		profiles.append(_fast_cv_response_to_candidate_profile(parsed, filename))
+		try:
+			text = await asyncio.to_thread(pdf_service.extract_text, data)
+		except ValueError:
+			text = ""
+		if text.strip():
+			text_parts.append(text.strip())
+
+	profile = _merge_fast_cv_profiles(profiles)
+	combined_text = "\n\n".join(text_parts)
+	await billing_service.charge(request, "-1.00", "CV_PARSE", note="Fast CV import")
+
+	text_hash = _normalized_text_hash(combined_text)
+	profile_hash = _normalized_profile_hash(profile)
+	duplicate_candidate = None
+	try:
+		if text_hash:
+			duplicate_candidate = await db_service.find_candidate_by_source_hash(text_hash)
+		if duplicate_candidate is None and profile_hash:
+			duplicate_candidate = await db_service.find_candidate_by_profile_hash(profile_hash)
+		if duplicate_candidate is None:
+			name = str(profile.name or "").strip()
+			email = str(profile.email or "").strip()
+			phone = str(profile.phone or "").strip()
+			if name or email or phone:
+				duplicate_candidate = await postgres_store._find_existing_candidate(profile)
+	except Exception:
+		logger.warning("fast CV importer duplicate lookup failed; continuing without dedupe", exc_info=True)
+		duplicate_candidate = None
+
+	graph_candidate_id: str | None = None
+	postgres_candidate_id: int | None = None
+	if persist:
+		graph_candidate_id = duplicate_candidate["id"] if duplicate_candidate else str(uuid4())
+		try:
+			embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
+			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
+			await db_service.upsert_candidate(
+				candidate_id=graph_candidate_id,
+				profile=profile,
+				embedding=embedding,
+				skill_embeddings=skill_embeddings,
+			)
+			candidate_text = combined_text or render_candidate_fulltext(
+				profile.model_dump(mode="json"),
+				work_history=[item.model_dump(mode="json") for item in profile.work_history],
+				education_history=[item.model_dump(mode="json") for item in profile.education_history],
+			)
+			postgres_candidate_id = await persist_candidate_profile(
+				postgres_store=postgres_store,
+				candidate_privacy_service=candidate_privacy_service,
+				profile=profile,
+				candidate_text=candidate_text,
+				source="CV-Fast-Import",
+			)
+		except Exception as exc:
+			logger.exception("Fast candidate persistence failed")
+			raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
+
+	profile_payload = profile.model_dump(mode="json")
+	candidate_payload = {**profile_payload, **({"id": postgres_candidate_id} if postgres_candidate_id else {})}
+	graph_rag = {
+		"id": graph_candidate_id,
+		"message": "Candidate ingested successfully" if persist else "Candidate parsed successfully",
+		"profile": profile_payload,
+		"persisted": persist,
+	}
+	filenames = [filename for filename, _ in uploads]
 	return {
 		"success": True,
 		"filenames": filenames,

@@ -1,0 +1,13 @@
+services:
+  parser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      CORS_ORIGINS: "*"
+      MODEL_CACHE_DIR: /app/model_cache
+      TORCH_NUM_THREADS: "2"
+    restart: unless-stopped
+    init: true

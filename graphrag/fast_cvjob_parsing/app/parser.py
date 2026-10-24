@@ -18,6 +18,7 @@ from .schemas import (
     PersonalData,
     WorkExperience,
 )
+from .skill_sections import extract_required_skill_sections
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,9 @@ def _skill_values(blocks: Sequence[TextBlock]) -> CategorizedSkills:
             field_name = SKILL_LABELS.get(entity["label"])
             if field_name:
                 categorized[field_name].append(entity.get("text", ""))
+    section_skills = extract_required_skill_sections(block.text for block in blocks)
+    for field_name, values in section_skills.items():
+        categorized[field_name].extend(values)
     return CategorizedSkills(**{key: _unique(values) for key, values in categorized.items()})
 
 

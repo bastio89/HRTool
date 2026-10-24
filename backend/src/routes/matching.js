@@ -574,12 +574,19 @@ async function runVectorMatch(req, { direction = 'job_to_candidates', jobId, job
       candidateNames: [resolvedCandidateName].filter(Boolean),
       engine,
     });
+    const normalizedGraphRagResult = remapVectorMatchIds(graphRagResult, {
+      direction,
+      jobRecord: null,
+      candidateRecords: [],
+      jobs,
+      candidateRecord,
+    });
 
     return {
       direction,
       candidate: candidateRecord,
       jobs,
-      graphRagResult,
+      graphRagResult: normalizedGraphRagResult,
     };
   }
 
@@ -869,7 +876,7 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
       pairs: pairs.map((pair) => ({
         jobId: pair.sourceJobId || pair.jobId,
         jobTitle: pair.jobTitle,
-        candidateId: pair.sourceCandidateId || pair.candidateId,
+        candidateId: pair.candidateId || pair.sourceCandidateId,
         candidateName: pair.candidateName,
       })),
       weights,
@@ -1020,6 +1027,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
         resultTitle,
         JSON.stringify(compactStoredMatchingResult(graphRagResult, { direction, engine })),
         null,
+        null,
       );
 
       logAudit(req, 'ki-matching-vector', 'Matching', saveResult.lastInsertRowid, resultTitle, {
@@ -1061,6 +1069,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       `Vector-Matching (${engine}) für ${job.title || 'Unbenannte Stelle'}`,
       resultTitle,
       JSON.stringify(compactStoredMatchingResult(graphRagResult, { direction, engine })),
+      null,
       storedJobId,
     );
 

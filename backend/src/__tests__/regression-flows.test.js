@@ -2143,6 +2143,8 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.results.candidatesRanked[0].candidateId).toBe(7);
 
     const storedResult = JSON.parse(mockDb.__state.matchingResults[0].results);
+    expect(mockDb.__state.matchingResults[0].results_summary).toBeNull();
+    expect(mockDb.__state.matchingResults[0].job_id).toBe(2);
     expect(storedResult.matrix).toHaveLength(100);
     expect(storedResult.totalPairCount).toBe(105);
     expect(storedResult.truncated).toBe(true);
@@ -2150,6 +2152,29 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(storedResult.matrix[0].summary).toHaveLength(240);
     expect(storedResult.matrix[0]).not.toHaveProperty('matchedSkills');
     expect(storedResult).not.toHaveProperty('jobsRanked');
+
+    const candidateToJobsResponse = await request(app)
+      .post('/api/matching/vectormatch')
+      .send({ direction: 'candidate_to_jobs', candidateId: 7, candidateName: 'Ada Lovelace', engine: 'python' });
+
+    expect(candidateToJobsResponse.status).toBe(200, candidateToJobsResponse.text);
+    const candidateRow = candidateToJobsResponse.body.results.matrix.find(
+      (row) => row.sourceCandidateId === 'graph-cand-1',
+    );
+    expect(candidateRow).toEqual(expect.objectContaining({
+      candidateId: 7,
+      sourceCandidateId: 'graph-cand-1',
+      jobId: 2,
+      sourceJobId: 'graph-job-1',
+    }));
+
+    const reverseResponse = await request(app)
+      .post('/api/matching/vectormatch')
+      .send({ direction: 'candidate_to_jobs', candidateId: 7, engine: 'python' });
+
+    expect(reverseResponse.status).toBe(200, reverseResponse.text);
+    expect(mockDb.__state.matchingResults[1].results_summary).toBeNull();
+    expect(mockDb.__state.matchingResults[1].job_id).toBeNull();
   });
 
   test('Selected matching batch prefers structured job skills over free-text requirements', async () => {
@@ -2257,12 +2282,12 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       .send({
         pairs: [
           {
-            jobId: 'graph-job-1',
-            sourceJobId: 2,
+            jobId: 2,
+            sourceJobId: 'graph-job-1',
             jobTitle: 'Java Developer Sopra Steria',
             jobDescription: 'Java Developer description',
-            candidateId: 'graph-cand-1',
-            sourceCandidateId: 99,
+            candidateId: 99,
+            sourceCandidateId: 'graph-cand-1',
             candidateName: 'Thomas Zimmermann',
           },
         ],
@@ -2277,7 +2302,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     const requestBody = JSON.parse(requestOptions.body);
     expect(requestBody.pairs).toEqual([
       {
-        jobId: 2,
+        jobId: 'graph-job-1',
         jobTitle: 'Java Developer Sopra Steria',
         candidateId: 99,
         candidateName: 'Thomas Zimmermann',

@@ -3,6 +3,7 @@ const db = require('../database');
 const { logAiCall } = require('../aiLogger');
 const { logAudit } = require('./audit');
 const { matchingRateLimiter } = require('../middleware/rateLimiter');
+const { buildMatchingSummary } = require('../utils/matchingSummary');
 const { promptGuard } = require('../middleware/promptSanitizer');
 const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
@@ -808,9 +809,9 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
 
     const storedJobId = Number.isFinite(Number(resolvedJob.id || jobId)) ? Number(resolvedJob.id || jobId) : null;
     const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, job_id)
-      VALUES (?, ?, ?, ?)
-    `).run(resolvedJob.description || buildJobDescription(resolvedJob), resolvedJob.title, JSON.stringify(matchingResults), storedJobId);
+      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(resolvedJob.description || buildJobDescription(resolvedJob), resolvedJob.title, JSON.stringify(matchingResults), JSON.stringify(buildMatchingSummary(matchingResults)), storedJobId);
 
     logAiCall({
       userId: req.user?.id,
@@ -946,8 +947,8 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber, ${engine === 'neo4j' ? 'Neo4j' : 'Python'})`;
 
     const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, job_id)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+      VALUES (?, ?, ?, ?, ?)
     `).run(
       `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
       resultTitle,
@@ -1010,9 +1011,10 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       const { candidate, jobs, graphRagResult } = await runVectorMatch(req, { direction, candidateId, candidateName, candidateIds, engine });
       const resultTitle = `Bewerber → alle Stellen: ${candidate?.name || 'Unbenannter Bewerber'}`;
 
+      const matchingResult = { ...graphRagResult, direction };
       const saveResult = db.prepare(`
-        INSERT INTO matching_results (job_description, job_title, results, job_id)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+        VALUES (?, ?, ?, ?, ?)
       `).run(
         `Vector-Matching (${engine}) für ${candidate?.name || 'Unbenannter Bewerber'}`,
         resultTitle,
@@ -1031,7 +1033,7 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       return res.json({
         id: saveResult.lastInsertRowid,
         jobTitle: resultTitle,
-        results: { ...graphRagResult, direction },
+        results: matchingResult,
         candidateCount: 1,
         jobCount: jobs.length,
         engine,
@@ -1051,9 +1053,10 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
     const resultTitle = `Stelle → Kandidaten: ${job.title || 'Unbenannte Stelle'}`;
     const storedJobId = Number.isFinite(Number(job.id)) ? Number(job.id) : null;
 
+    const matchingResult = { ...graphRagResult, direction };
     const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, job_id)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
+      VALUES (?, ?, ?, ?, ?)
     `).run(
       `Vector-Matching (${engine}) für ${job.title || 'Unbenannte Stelle'}`,
       resultTitle,
@@ -1099,18 +1102,35 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
  *     responses:
  *       200: { description: Liste vergangener Matchings }
  */
+function serializeMatchingHistoryRow(row) {
+  let summary = row.results_summary ? JSON.parse(row.results_summary) : null;
+  if (!summary && row.legacy_results) {
+    summary = buildMatchingSummary(JSON.parse(row.legacy_results));
+    db.prepare('UPDATE matching_results SET results_summary = ? WHERE id = ?')
+      .run(JSON.stringify(summary), row.id);
+  }
+  return {
+    id: row.id,
+    job_title: row.job_title,
+    created_at: row.created_at,
+    human_reviewed: row.human_reviewed,
+    reviewed_by: row.reviewed_by,
+    reviewed_at: row.reviewed_at,
+    review_notes: row.review_notes,
+    summary: summary || buildMatchingSummary(),
+  };
+}
+
 router.get('/history', (req, res) => {
   try {
     const results = db.prepare(
-      'SELECT id, job_title, created_at, results, human_reviewed, reviewed_by, reviewed_at, review_notes FROM matching_results ORDER BY created_at DESC LIMIT 50'
+      `SELECT id, job_title, created_at, results_summary,
+        CASE WHEN results_summary IS NULL THEN results ELSE NULL END AS legacy_results,
+        human_reviewed, reviewed_by, reviewed_at, review_notes
+       FROM matching_results ORDER BY created_at DESC LIMIT 50`
     ).all();
-    
-    const parsed = results.map(r => ({
-      ...r,
-      results: JSON.parse(r.results),
-    }));
-    
-    res.json({ data: parsed });
+
+    res.json({ data: results.map(serializeMatchingHistoryRow) });
   } catch (error) {
     console.error('Error fetching matching history:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Historie' });

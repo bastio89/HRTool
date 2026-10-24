@@ -31,6 +31,7 @@ db.exec(`
     job_description TEXT NOT NULL,
     job_title TEXT,
     results TEXT NOT NULL,
+    results_summary TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -182,6 +183,7 @@ const migrations = [
   `ALTER TABLE matching_results ADD COLUMN reviewed_by TEXT`,
   `ALTER TABLE matching_results ADD COLUMN reviewed_at DATETIME`,
   `ALTER TABLE matching_results ADD COLUMN review_notes TEXT`,
+  `ALTER TABLE matching_results ADD COLUMN results_summary TEXT`,
   `ALTER TABLE ai_logs ADD COLUMN skills TEXT`,
   // --- Erweiterung Bewerberprofil ---
   // Social-Media-Profile (#3)
@@ -234,6 +236,23 @@ const migrations = [
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }
+}
+
+db.exec('CREATE INDEX IF NOT EXISTS idx_matching_results_created_at ON matching_results(created_at DESC)');
+const { buildMatchingSummary } = require('./utils/matchingSummary');
+const matchingRowsToSummarize = db.prepare(`
+  SELECT id, results FROM matching_results
+  WHERE results_summary IS NULL
+  ORDER BY created_at DESC
+  LIMIT 50
+`).all();
+const saveMatchingSummary = db.prepare('UPDATE matching_results SET results_summary = ? WHERE id = ?');
+for (const row of matchingRowsToSummarize) {
+  try {
+    saveMatchingSummary.run(JSON.stringify(buildMatchingSummary(JSON.parse(row.results))), row.id);
+  } catch (error) {
+    console.warn(`Could not backfill matching summary ${row.id}:`, error.message);
+  }
 }
 
 // --- Neue Tabellen für strukturierten Werdegang, Ausbildung, Custom Fields ---

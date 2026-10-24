@@ -38,7 +38,7 @@ export default function History() {
       const q = search.toLowerCase().trim()
       list = list.filter(r => {
         const jobMatch = r.job_title?.toLowerCase().includes(q)
-        const candidateMatch = (r.results?.results || []).some(c => c.candidateName?.toLowerCase().includes(q))
+        const candidateMatch = (r.summary?.candidateNames || []).some(name => name.toLowerCase().includes(q))
         return jobMatch || candidateMatch
       })
     }
@@ -47,12 +47,10 @@ export default function History() {
       if (sort === 'newest') return new Date(b.created_at) - new Date(a.created_at)
       if (sort === 'oldest') return new Date(a.created_at) - new Date(b.created_at)
       if (sort === 'score') {
-        const scoreA = Math.max(...(a.results?.results || []).map(r => r.score || 0), 0)
-        const scoreB = Math.max(...(b.results?.results || []).map(r => r.score || 0), 0)
-        return scoreB - scoreA
+        return (b.summary?.topScore || 0) - (a.summary?.topScore || 0)
       }
       if (sort === 'candidates') {
-        return (b.results?.results || []).length - (a.results?.results || []).length
+        return (b.summary?.candidateCount || 0) - (a.summary?.candidateCount || 0)
       }
       return 0
     })
@@ -135,18 +133,14 @@ export default function History() {
       ) : (
         <div className="space-y-5 sm:space-y-8">
           {filtered.map((result) => {
-            const matchResults = (result.results?.results || []).map(r => ({
-              ...r,
-              score: r.score > 1 ? r.score / 100 : r.score,
-            })).sort((a, b) => b.score - a.score)
-            const topScore = matchResults[0]?.score || 0
-            const avgScore = matchResults.length > 0 ? matchResults.reduce((s, r) => s + r.score, 0) / matchResults.length : 0
+            const summary = result.summary || {}
+            const topCandidates = summary.topCandidates || []
 
             return (
               <Card key={result.id} className="p-5 sm:p-10" hover>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-10">
                   <div className="flex items-center gap-5 sm:gap-0">
-                    <ScoreRing score={topScore} size={64} strokeWidth={5} />
+                    <ScoreRing score={summary.topScore || 0} size={64} strokeWidth={5} />
                     <h3 className="text-[18px] font-semibold tracking-tight text-black dark:text-white sm:hidden ml-2">{result.job_title}</h3>
                   </div>
 
@@ -159,16 +153,16 @@ export default function History() {
                       </span>
                       <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        {t('history.candidates_count').replace('{count}', matchResults.length)}
+                        {t('history.candidates_count').replace('{count}', summary.candidateCount || 0)}
                       </span>
                       <span className="text-[13px] sm:text-[15px] font-semibold text-[#0071e3]">
-                        ∅ {(avgScore * 100).toFixed(0)}%
+                        ∅ {((summary.averageScore || 0) * 100).toFixed(0)}%
                       </span>
                     </div>
 
-                    {matchResults.length > 0 && (
+                    {topCandidates.length > 0 && (
                       <div className="flex items-center gap-3 sm:gap-5 mt-3 sm:mt-4 flex-wrap">
-                        {matchResults.slice(0, 3).map((r, i) => (
+                        {topCandidates.map((r, i) => (
                           <span key={i} className="text-[12px] sm:text-[14px] font-medium text-gray-500 dark:text-gray-400">
                             {i + 1}. {r.candidateName} 
                             <span className={`ml-1 sm:ml-1.5 font-semibold ${r.score >= 0.7 ? 'text-[#34c759]' : 'text-[#ff9f0a]'}`}>

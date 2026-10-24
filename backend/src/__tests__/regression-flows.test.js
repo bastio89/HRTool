@@ -185,6 +185,16 @@ function createMockDb(seed = {}) {
         },
 
         all: (...args) => {
+          if (q.includes('FROM matching_results ORDER BY created_at DESC LIMIT 50')) {
+            return [...state.matchingResults]
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+              .slice(0, 50)
+              .map((row) => ({
+                ...row,
+                legacy_results: row.results_summary ? null : row.results,
+              }));
+          }
+
           if (q.includes('FROM jobs j') && q.includes('LOWER(COALESCE(')) {
             const queryTerms = args
               .slice(0, Math.max(0, args.length - 1))
@@ -439,17 +449,25 @@ function createMockDb(seed = {}) {
           }
 
           if (q.includes('INSERT INTO matching_results')) {
-            const [jobDescription, jobTitle, results, jobId] = args;
+            const [jobDescription, jobTitle, results, resultsSummary, jobId] = args;
             const row = {
               id: state.seq.matchingId++,
               job_description: jobDescription,
               job_title: jobTitle,
               results,
+              results_summary: resultsSummary,
               job_id: jobId,
               created_at: new Date().toISOString(),
             };
             state.matchingResults.push(row);
             return { lastInsertRowid: row.id };
+          }
+
+          if (q.includes('UPDATE matching_results SET results_summary = ? WHERE id = ?')) {
+            const [resultsSummary, id] = args;
+            const row = state.matchingResults.find((item) => String(item.id) === String(id));
+            if (row) row.results_summary = resultsSummary;
+            return { changes: row ? 1 : 0 };
           }
 
           return { lastInsertRowid: 0 };
@@ -1738,6 +1756,60 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.results.results[0].score).toBe(87);
     expect(mockDb.__state.matchingResults).toHaveLength(1);
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('Matching history returns compact summaries for regular and matrix results', async () => {
+    const mockDb = createMockDb({
+      matchingResults: [
+        {
+          id: 1,
+          job_title: 'Backend Engineer',
+          created_at: '2026-10-20T12:00:00.000Z',
+          results: JSON.stringify({
+            results: [
+              { candidateName: 'Ada Lovelace', score: 87, summary: 'Large payload omitted from history' },
+              { candidateName: 'Grace Hopper', score: 65 },
+            ],
+          }),
+        },
+        {
+          id: 2,
+          job_title: 'Matrix Matching',
+          created_at: '2026-10-21T12:00:00.000Z',
+          results: JSON.stringify({
+            candidates: [{ name: 'Ada Lovelace' }, { name: 'Grace Hopper' }],
+            matrix: [
+              { candidateName: 'Ada Lovelace', score: 91 },
+              { candidateName: 'Grace Hopper', score: 81 },
+            ],
+          }),
+        },
+      ],
+    });
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    const matchingRouter = require('../routes/matching');
+    const app = express();
+    app.use('/api/matching', matchingRouter);
+
+    const response = await request(app).get('/api/matching/history');
+
+    expect(response.status).toBe(200);
+    expect(response.body.data[0].summary).toEqual({
+      candidateCount: 2,
+      candidateNames: ['Ada Lovelace', 'Grace Hopper'],
+      topScore: 0.91,
+      averageScore: 0.86,
+      topCandidates: [
+        { candidateName: 'Ada Lovelace', score: 0.91 },
+        { candidateName: 'Grace Hopper', score: 0.81 },
+      ],
+    });
+    expect(response.body.data[1].summary.topScore).toBe(0.87);
+    expect(response.body.data[1].summary.averageScore).toBe(0.76);
+    expect(response.body.data[1].summary.candidateCount).toBe(2);
+    expect(response.body.data[1]).not.toHaveProperty('results');
   });
 
   test('Matching run resolves job and candidate data from SQL when jobId and candidateId are provided', async () => {

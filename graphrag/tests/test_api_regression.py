@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from models import (
@@ -19,6 +20,9 @@ from models import (
     Stage2Candidate,
     LinkedInPeopleSearchRequest,
 )
+from plugins.billing.service import BillingService
+import services.linkedin_people_search as linkedin_people_search_module
+from services.linkedin_people_search import LinkedInPeopleSearchService
 
 
 def assert_candidate_inserted(postgres_mock, expected_payload):
@@ -416,13 +420,14 @@ async def test_linkedin_profile_endpoint_uses_mcp_service(app_module, api_client
 
 @pytest.mark.anyio
 async def test_linkedin_people_search_csv_endpoint_uses_service(app_module, api_client, monkeypatch):
-    fake_service = type("FakeService", (), {})()
-    fake_service.is_configured = True
-    fake_service.export_csv = lambda payload: ("linkedin_search-010126_01.csv", "name,location\nAda,London\n")
-    monkeypatch.setattr(app_module, "linkedin_people_search_service", fake_service)
+    monkeypatch.setattr(app_module.settings, "graphrag_api_key", "test-key")
+    monkeypatch.setattr(BillingService, "charge", AsyncMock(return_value={}))
+    monkeypatch.setattr(LinkedInPeopleSearchService, "is_configured", property(lambda _self: True))
+    export_csv = AsyncMock(return_value=("linkedin_search-010126_01.csv", "name,location\nAda,London\n"))
+    monkeypatch.setattr(LinkedInPeopleSearchService, "export_csv", export_csv)
 
     response = await api_client.post(
-        "/linkedin/people-search.csv",
+        "/plugins/linkedin/people-search.csv",
         json={
             "enrichEmails": True,
             "keywords": "treasury",
@@ -430,12 +435,42 @@ async def test_linkedin_people_search_csv_endpoint_uses_service(app_module, api_
             "maxResults": 5,
             "mode": "public",
         },
+        headers={"X-API-Key": "test-key"},
     )
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
     assert "linkedin_search-010126_01.csv" in response.headers["content-disposition"]
     assert response.text == "name,location\nAda,London\n"
+    export_csv.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_linkedin_people_search_uses_async_apify_client(monkeypatch, caplog):
+    requests = []
+
+    async def handle_request(request):
+        requests.append(request)
+        return httpx.Response(200, json=[{"name": "Ada Lovelace"}])
+
+    real_async_client = httpx.AsyncClient
+
+    def async_client_factory(**kwargs):
+        assert kwargs["timeout"].connect == 10.0
+        assert kwargs["timeout"].read == 120.0
+        return real_async_client(transport=httpx.MockTransport(handle_request), **kwargs)
+
+    monkeypatch.setattr(linkedin_people_search_module.httpx, "AsyncClient", async_client_factory)
+    service = LinkedInPeopleSearchService(actor_url="https://apify.test/run-sync-get-dataset-items")
+    monkeypatch.setattr(LinkedInPeopleSearchService, "_resolve_token", staticmethod(lambda: "test-token"))
+
+    items = await service.fetch_items({"keywords": "treasury", "maxResults": 5})
+
+    assert items == [{"name": "Ada Lovelace"}]
+    assert len(requests) == 1
+    assert requests[0].headers["authorization"] == "Bearer test-token"
+    assert b'"keywords":"treasury"' in requests[0].content
+    assert "LinkedIn people search completed" in caplog.text
 
 
 @pytest.mark.anyio

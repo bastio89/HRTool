@@ -62,7 +62,9 @@ def build_linkedin_router(settings: Settings, postgres_store: PostgresStore) -> 
             raise HTTPException(status_code=503, detail="APIFY_TOKEN is not configured.")
         try:
             await billing_service.charge(http_request, '-1.00', 'LINKEDIN_CALL', note='linkedin people search')
-            filename, csv_text = linkedin_people_search_service.export_csv(request.model_dump(by_alias=True, exclude_none=True))
+            filename, csv_text = await linkedin_people_search_service.export_csv(
+                request.model_dump(by_alias=True, exclude_none=True)
+            )
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=f"LinkedIn people search failed: {exc}") from exc
         return Response(

@@ -3,14 +3,16 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 import os
 import ssl
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+import httpx
 
 from config import settings
 
@@ -21,6 +23,7 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
 
 
 APIFY_ACTOR_URL = "https://api.apify.com/v2/acts/memo23~linkedin-people-search/run-sync-get-dataset-items"
+logger = logging.getLogger(__name__)
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -57,29 +60,35 @@ class LinkedInPeopleSearchService:
     def is_configured(self) -> bool:
         return self._resolve_token() is not None
 
-    def fetch_items(self, payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    async def fetch_items(self, payload: Mapping[str, Any]) -> list[dict[str, Any]]:
         token = self._resolve_token()
         if not token:
             raise RuntimeError("APIFY_TOKEN is not configured.")
 
-        request = Request(
-            f"{self.actor_url}?token={token}",
-            data=json.dumps(dict(payload)).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
-        )
+        started_at = time.perf_counter()
         try:
-            with urlopen(request, timeout=120, context=_ssl_context()) as response:
-                raw = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
-        except (HTTPError, URLError, TimeoutError) as exc:
+            timeout = httpx.Timeout(120.0, connect=10.0)
+            async with httpx.AsyncClient(timeout=timeout, verify=_ssl_context()) as client:
+                response = await client.post(
+                    self.actor_url,
+                    json=dict(payload),
+                    headers={"Accept": "application/json", "Authorization": f"Bearer {token}"},
+                )
+                response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            elapsed = time.perf_counter() - started_at
+            logger.warning("LinkedIn people search failed after %.2fs: %s", elapsed, exc)
             raise RuntimeError(f"Apify actor request failed: {exc}") from exc
 
-        data = json.loads(raw)
         if not isinstance(data, list):
             raise RuntimeError("Unexpected Apify response format.")
-        return [item for item in data if isinstance(item, dict)]
+        items = [item for item in data if isinstance(item, dict)]
+        logger.info("LinkedIn people search completed in %.2fs (items=%d)", time.perf_counter() - started_at, len(items))
+        return items
 
-    def export_csv(self, payload: Mapping[str, Any]) -> tuple[str, str]:
-        rows = self.fetch_items(payload)
+    async def export_csv(self, payload: Mapping[str, Any]) -> tuple[str, str]:
+        rows = await self.fetch_items(payload)
         if not rows:
             raise RuntimeError("Apify returned no rows to export.")
 

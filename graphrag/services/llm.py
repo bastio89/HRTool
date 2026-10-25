@@ -1049,8 +1049,24 @@ class LLMService:
                     await asyncio.sleep(delay_seconds)
                     continue
                 if not allow_fallback and provider != "ollama":
+                    error_message = ""
+                    try:
+                        error_payload = exc.response.json()
+                        error_value = error_payload.get("error") if isinstance(error_payload, dict) else None
+                        if isinstance(error_value, dict):
+                            error_message = error_value.get("message", "")
+                        elif isinstance(error_value, str):
+                            error_message = error_value
+                        elif isinstance(error_payload, dict):
+                            error_message = error_payload.get("message", "")
+                    except (ValueError, AttributeError):
+                        pass
+                    error_message = " ".join(str(error_message).split())[:300]
+                    status_detail = f", status={status_code}" if status_code is not None else ""
+                    message_detail = f": {error_message}" if error_message else ""
                     raise RuntimeError(
                         f"Embedding generation failed for provider={provider}, model={embedding_model}"
+                        f"{status_detail}{message_detail}"
                     ) from exc
                 logger.warning("embedding_fallback provider=%s model=%s: %s", provider, embedding_model, exc)
                 return self._deterministic_fallback_embedding(payload_text)

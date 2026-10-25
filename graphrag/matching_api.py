@@ -357,8 +357,8 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			best_candidate_name = ''
 			best_candidate_category = None
 			for candidate_skill in candidate_skills:
-				candidate_name = candidate_skill['name'].strip().lower()
-				candidate_vector = candidate_vectors.get(candidate_name)
+				candidate_skill_key = candidate_skill['name'].strip().lower()
+				candidate_vector = candidate_vectors.get(candidate_skill_key)
 				if job_vector is not None and candidate_vector is not None:
 					similarity = cosine_similarity(job_vector, candidate_vector)
 				else:

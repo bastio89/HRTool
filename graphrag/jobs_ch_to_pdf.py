@@ -138,6 +138,27 @@ class DescriptionParser(HTMLParser):
 	def handle_data(self, data: str) -> None:
 		self._current.append(data)
 
+	def close(self) -> None:
+		super().close()
+		self._flush_text()
+		if self._list_items is not None:
+			if self._list_items:
+				self.blocks.append((f"list:{self._list_type}", self._list_items))
+			self._list_items = None
+
+
+def description_to_text(description: str) -> str:
+	parser = DescriptionParser()
+	parser.feed(description or "")
+	parser.close()
+	lines: list[str] = []
+	for kind, content in parser.blocks:
+		if kind.startswith("list:"):
+			lines.extend(f"- {item}" for item in content)  # type: ignore[union-attr]
+		else:
+			lines.append(str(content))
+	return "\n".join(line for line in lines if line.strip()).strip()
+
 
 def _walk_json(value: object):
 	if isinstance(value, dict):
@@ -319,6 +340,7 @@ def write_pdf(job: JobPosting, output: Path) -> None:
 	story.append(Spacer(1, 8))
 	description_parser = DescriptionParser()
 	description_parser.feed(job.description)
+	description_parser.close()
 	for kind, content in description_parser.blocks:
 		if kind == "heading":
 			story.append(_paragraph(str(content), heading_style))

@@ -156,22 +156,31 @@ const MAX_STORED_MATCH_ROWS = 100;
 
 function compactStoredMatchingResult(result, { direction, engine } = {}) {
   const matrix = Array.isArray(result?.matrix) ? result.matrix : [];
+  const compactRow = (row) => ({
+    jobId: row.jobId,
+    candidateId: row.candidateId,
+    sourceJobId: row.sourceJobId,
+    sourceCandidateId: row.sourceCandidateId,
+    jobTitle: row.jobTitle,
+    candidateName: row.candidateName,
+    score: row.score,
+    vectorScore: row.vectorScore,
+    hardSkillScore: row.hardSkillScore,
+    softSkillScore: row.softSkillScore,
+    summary: typeof row.summary === 'string' ? row.summary.slice(0, 240) : undefined,
+  });
   const storedMatrix = [...matrix]
     .sort((left, right) => (Number(right?.score) || 0) - (Number(left?.score) || 0))
     .slice(0, MAX_STORED_MATCH_ROWS)
-    .map((row) => ({
-      jobId: row.jobId,
-      candidateId: row.candidateId,
-      sourceJobId: row.sourceJobId,
-      sourceCandidateId: row.sourceCandidateId,
-      jobTitle: row.jobTitle,
-      candidateName: row.candidateName,
-      score: row.score,
-      vectorScore: row.vectorScore,
-      hardSkillScore: row.hardSkillScore,
-      softSkillScore: row.softSkillScore,
-      summary: typeof row.summary === 'string' ? row.summary.slice(0, 240) : undefined,
-    }));
+    .map(compactRow);
+  const compactRankings = (groups, idKey, nameKey) => (Array.isArray(groups) ? groups : []).map((group) => ({
+    [idKey]: group[idKey],
+    [nameKey]: group[nameKey],
+    results: [...(Array.isArray(group.results) ? group.results : [])]
+      .sort((left, right) => (Number(right?.score) || 0) - (Number(left?.score) || 0))
+      .slice(0, 5)
+      .map(compactRow),
+  }));
 
   return {
     type: result?.type,
@@ -181,6 +190,10 @@ function compactStoredMatchingResult(result, { direction, engine } = {}) {
     embeddingModel: result?.embeddingModel,
     direction: direction ?? result?.direction,
     engine,
+    jobs: (Array.isArray(result?.jobs) ? result.jobs : []).map(({ id, title }) => ({ id, title })),
+    candidates: (Array.isArray(result?.candidates) ? result.candidates : []).map(({ id, name }) => ({ id, name })),
+    jobsRanked: compactRankings(result?.jobsRanked, 'jobId', 'jobTitle'),
+    candidatesRanked: compactRankings(result?.candidatesRanked, 'candidateId', 'candidateName'),
     totalPairCount: matrix.length,
     storedPairCount: storedMatrix.length,
     truncated: matrix.length > storedMatrix.length,
@@ -960,6 +973,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
       resultTitle,
       JSON.stringify(compactStoredMatchingResult(graphRagResult, { engine })),
+      null,
       null
     );
 
@@ -1130,6 +1144,43 @@ function serializeMatchingHistoryRow(row) {
   };
 }
 
+function hydrateMatrixCandidateNames(results) {
+  if (results?.type !== 'matrix' || !Array.isArray(results.matrix)) return results;
+
+  const candidateIds = [...new Set(results.matrix
+    .map((row) => Number(row.candidateId))
+    .filter(Number.isInteger))];
+  const candidates = candidateIds.length > 0
+    ? db.prepare(`SELECT id, name FROM candidates WHERE id IN (${candidateIds.map(() => '?').join(',')})`).all(...candidateIds)
+    : [];
+  const candidateNames = new Map(candidates.map((candidate) => [String(candidate.id), candidate.name]));
+  const matrix = results.matrix.map((row) => ({
+    ...row,
+    candidateName: candidateNames.get(String(row.candidateId)) || row.candidateName,
+  }));
+  const buildRankings = (idKey, nameKey) => {
+    const groups = new Map();
+    matrix.forEach((row) => {
+      const id = row[idKey];
+      if (id == null) return;
+      const key = String(id);
+      if (!groups.has(key)) groups.set(key, { [idKey]: id, [nameKey]: row[nameKey], results: [] });
+      groups.get(key).results.push(row);
+    });
+    return [...groups.values()].map((group) => ({
+      ...group,
+      results: group.results.sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0)).slice(0, 5),
+    }));
+  };
+
+  return {
+    ...results,
+    matrix,
+    jobsRanked: results.jobsRanked?.length ? results.jobsRanked : buildRankings('jobId', 'jobTitle'),
+    candidatesRanked: results.candidatesRanked?.length ? results.candidatesRanked : buildRankings('candidateId', 'candidateName'),
+  };
+}
+
 router.get('/history', (req, res) => {
   try {
     const results = db.prepare(
@@ -1169,7 +1220,7 @@ router.get('/history/:id', (req, res) => {
     }
     res.json({ 
       ...result, 
-      results: JSON.parse(result.results),
+      results: hydrateMatrixCandidateNames(JSON.parse(result.results)),
       human_reviewed: !!result.human_reviewed,
       reviewed_by: result.reviewed_by,
       reviewed_at: result.reviewed_at,

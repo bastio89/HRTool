@@ -72,6 +72,75 @@ describe('jobs parse-description logging', () => {
     }));
   });
 
+  test('fills missing skills when the parsed job already exists locally', async () => {
+    jest.resetModules();
+    const existingJob = {
+      id: 19,
+      graph_job_id: 'graph-job-existing',
+      title: 'Fachkundiger Projektleiter Elektroplanung',
+      company: 'Dottikon Exclusive Synthesis AG',
+      location: 'Dottikon',
+      source: 'Jobs.ch-import',
+      skills: '',
+    };
+    const updateSkills = jest.fn((skills) => {
+      existingJob.skills = skills;
+    });
+    jest.doMock('../aiLogger', () => ({ logAiCall: jest.fn() }));
+    jest.doMock('../database', () => ({
+      prepare: (sql) => {
+        if (sql.includes('SELECT * FROM jobs WHERE LOWER(title)')) {
+          return { get: () => existingJob };
+        }
+        if (sql === 'UPDATE jobs SET skills = ? WHERE id = ?') {
+          return { run: updateSkills };
+        }
+        if (sql.startsWith('SELECT * FROM jobs WHERE id = ?')) {
+          return { get: () => existingJob };
+        }
+        return { get: () => undefined, all: () => [], run: () => ({}) };
+      },
+      exec: () => ({}),
+    }));
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    let jobsRouter;
+    jest.isolateModules(() => {
+      jobsRouter = require('../routes/jobs');
+    });
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 'graph-job-existing',
+        profile: {
+          title: existingJob.title,
+          company: existingJob.company,
+          location: existingJob.location,
+          required_skills: [
+            { name: 'Elektroplanung', category: 'HardSkill', priority: 'Mandatory' },
+            { name: 'MSR-Technik', category: 'HardSkill', priority: 'Mandatory' },
+          ],
+        },
+      }),
+    }));
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hrtool-job-'));
+    const filePath = path.join(tempDir, 'job.txt');
+    fs.writeFileSync(filePath, 'Fachkundiger Projektleiter Elektroplanung');
+
+    const response = await request(app)
+      .post('/api/jobs/parse-description?persist=1')
+      .attach('file', filePath, { contentType: 'text/plain' });
+
+    expect(response.status).toBe(200);
+    expect(updateSkills).toHaveBeenCalledWith('Elektroplanung, MSR-Technik', existingJob.id);
+    expect(response.body.job.skills).toBe('Elektroplanung, MSR-Technik');
+  });
+
   test('sends a supplied fast-parser profile to GraphRAG without raw text', async () => {
     jest.resetModules();
     const savedJob = {

@@ -177,6 +177,10 @@ function persistLocalJob(job) {
       db.prepare('UPDATE jobs SET source = ? WHERE id = ?').run(job.source, duplicate.id);
       duplicate.source = job.source;
     }
+    if (job.skills && !String(duplicate.skills || '').trim()) {
+      db.prepare('UPDATE jobs SET skills = ? WHERE id = ?').run(job.skills, duplicate.id);
+      duplicate.skills = job.skills;
+    }
     if (job.graph_job_id && !duplicate.graph_job_id) {
       db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(job.graph_job_id, duplicate.id);
       return db.prepare('SELECT * FROM jobs WHERE id = ?').get(duplicate.id);
@@ -292,6 +296,10 @@ function normalizeJobsChLinks(body) {
  *         name: status
  *         schema: { type: string, enum: [Offen, Besetzt, Pausiert, Archiviert] }
  *       - in: query
+ *         name: search
+ *         description: Stichworte werden über Titel, Firma, Skills, Standort und Beschreibungstexte gesucht.
+ *         schema: { type: string }
+ *       - in: query
  *         name: page
  *         schema: { type: integer }
  *       - in: query
@@ -302,13 +310,22 @@ function normalizeJobsChLinks(body) {
  */
 router.get('/', (req, res) => {
   try {
-    const { status, page, limit } = req.query;
+    const { status, search, page, limit } = req.query;
     
     const conditions = [];
     const params = [];
     if (status) {
       conditions.push('j.status = ?');
       params.push(status);
+    }
+    const searchableFields = [
+      'j.title', 'j.company', 'j.skills', 'j.location', 'j.description',
+      'j.requirements', 'j.about_us', 'j.benefits', 'j.type', 'j.status', 'j.url', 'j.source',
+    ];
+    const searchTerms = String(search || '').trim().split(/[\s,]+/).filter(Boolean);
+    for (const term of searchTerms) {
+      conditions.push(`(${searchableFields.map((field) => `LOWER(COALESCE(${field}, '')) LIKE ?`).join(' OR ')})`);
+      params.push(...searchableFields.map(() => `%${term.toLowerCase()}%`));
     }
     // Fachbereich sieht nur die ihm zugewiesenen Stellen.
     if (req.user?.role === 'fachbereich') {

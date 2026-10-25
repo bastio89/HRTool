@@ -36,6 +36,8 @@ describe('JobsChPanel', () => {
       </I18nProvider>
     )
 
+    expect(screen.getByRole('button', { name: /LLM-Import/i })).toHaveAttribute('aria-pressed', 'true')
+
     fireEvent.change(screen.getByPlaceholderText(/stellenangebote\/detail/i), {
       target: { value: 'https://www.jobs.ch/de/stellenangebote/detail/12345/' },
     })
@@ -43,8 +45,31 @@ describe('JobsChPanel', () => {
     fireEvent.click(screen.getByTestId('jobs-ch-import'))
 
     await waitFor(() => {
-      expect(jobsApi.importJobsChDescriptions).toHaveBeenCalledWith(['https://www.jobs.ch/de/stellenangebote/detail/12345/'])
+      expect(jobsApi.importJobsChDescriptions).toHaveBeenCalledWith(['https://www.jobs.ch/de/stellenangebote/detail/12345/'], 'llm_import')
       expect(toastMock.success).toHaveBeenCalled()
+    })
+  })
+
+  test('passes the selected LLM import mode to the API', async () => {
+    jobsApi.importJobsChDescriptions.mockResolvedValue({ imported: 1, failed: 0, warning: null, items: [] })
+
+    render(
+      <I18nProvider>
+        <JobsChPanel />
+      </I18nProvider>
+    )
+
+    fireEvent.change(screen.getByPlaceholderText(/stellenangebote\/detail/i), {
+      target: { value: 'https://www.jobs.ch/de/stellenangebote/detail/12345/' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /LLM-Import/i }))
+    fireEvent.click(screen.getByTestId('jobs-ch-import'))
+
+    await waitFor(() => {
+      expect(jobsApi.importJobsChDescriptions).toHaveBeenCalledWith(
+        ['https://www.jobs.ch/de/stellenangebote/detail/12345/'],
+        'llm_import'
+      )
     })
   })
 
@@ -73,7 +98,7 @@ describe('JobsChPanel', () => {
       target: { value: 'https://www.jobs.ch/de/stellenangebote/detail/12345/' },
     })
 
-    fireEvent.click(screen.getAllByRole('button', { name: /In die Datenbank laden/i })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /Jetzt importieren/i })[0])
 
     expect(await screen.findByText(/Rückmeldung/i)).toBeInTheDocument()
     expect(screen.getByText(/Gelesen/i)).toBeInTheDocument()
@@ -114,7 +139,7 @@ describe('JobsChPanel', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Ausgewählte importieren/i })[0])
 
     await waitFor(() => {
-      expect(jobsApi.importJobsChDescriptions).toHaveBeenCalledWith(['https://www.jobs.ch/de/stellenangebote/detail/abc123/'])
+      expect(jobsApi.importJobsChDescriptions).toHaveBeenCalledWith(['https://www.jobs.ch/de/stellenangebote/detail/abc123/'], 'llm_import')
     })
   })
 
@@ -155,13 +180,13 @@ describe('JobsChPanel', () => {
     expect(await screen.findByText(/Pflegefachperson HF/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox'))
 
-    fireEvent.click(screen.getAllByRole('button', { name: /In die Datenbank laden/i })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /Jetzt importieren/i })[0])
 
     await waitFor(() => {
       expect(jobsApi.importJobsChDescriptions).toHaveBeenCalledWith([
         'https://www.jobs.ch/de/stellenangebote/detail/12345/',
         'https://www.jobs.ch/de/stellenangebote/detail/abc123/',
-      ])
+      ], 'llm_import')
     })
 
     fireEvent.click(screen.getByTestId('jobs-ch-export'))

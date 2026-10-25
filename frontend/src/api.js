@@ -299,6 +299,7 @@ export const jobsApi = {
   getAll: (params = {}) => {
     const q = new URLSearchParams();
     if (params.status) q.set('status', params.status);
+    if (params.search) q.set('search', params.search);
     if (params.page) q.set('page', params.page);
     if (params.limit) q.set('limit', params.limit);
     const qs = q.toString();
@@ -471,7 +472,7 @@ export const jobsApi = {
       warning: response.headers.get('X-HRTool-JobsCh-Warning') || null,
     }
   },
-  importJobsChDescriptions: async (links) => {
+  importJobsChDescriptions: async (links, importMode = 'llm_import') => {
     const response = await fetch(`${API_BASE}/plugins/jobs_ch/import-db`, {
       method: 'POST',
       headers: {
@@ -479,7 +480,7 @@ export const jobsApi = {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({ links }),
+      body: JSON.stringify({ links, import_mode: importMode }),
     })
 
     if (!response.ok) {

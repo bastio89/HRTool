@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Briefcase, MapPin, Users,
-  Clock, Archive, Trash2, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft, Upload
+  Clock, Archive, Trash2, ChevronRight as ChevronRightIcon, ExternalLink, ChevronLeft, Upload, Search, X,
+  CheckSquare, Square, MinusSquare, Zap
 } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner, PageContainer, SkeletonList } from '../components/UI'
@@ -30,28 +31,58 @@ export default function Jobs() {
   const { t, locale } = useI18n()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
   const [showBatchImport, setShowBatchImport] = useState(false)
+  const requestSequence = useRef(0)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setSearchQuery(searchInput.trim()), 300)
+    return () => clearTimeout(timeout)
+  }, [searchInput])
 
   const loadJobs = useCallback(async () => {
+    const requestId = ++requestSequence.current
     setLoading(true)
     try {
-      const data = await jobsApi.getAll({ status: filterStatus, page: currentPage, limit: PAGE_SIZE })
-      setJobs(data.data || [])
-      setTotalCount(data.total || 0)
-      setTotalPages(data.totalPages || 1)
+      const data = await jobsApi.getAll({ status: filterStatus, search: searchQuery, page: currentPage, limit: PAGE_SIZE })
+      if (requestId === requestSequence.current) {
+        setJobs(data.data || [])
+        setTotalCount(data.total || 0)
+        setTotalPages(data.totalPages || 1)
+      }
     } catch (err) {
-      console.error(err)
+      if (requestId === requestSequence.current) console.error(err)
     } finally {
-      setLoading(false)
+      if (requestId === requestSequence.current) setLoading(false)
     }
-  }, [filterStatus, currentPage])
+  }, [filterStatus, currentPage, searchQuery])
 
   useEffect(() => { loadJobs() }, [loadJobs])
   useEffect(() => { setCurrentPage(1) }, [filterStatus])
+
+  const toggleSelect = (id) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectVisible = () => {
+    const visibleIds = jobs.map((job) => job.id)
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
+    setSelectedIds((previous) => {
+      const next = new Set(previous)
+      visibleIds.forEach((id) => allVisibleSelected ? next.delete(id) : next.add(id))
+      return next
+    })
+  }
 
   const handleArchive = async (job) => {
     const ok = await confirm({
@@ -108,6 +139,39 @@ export default function Jobs() {
         </div>
       </div>
 
+      <div className="mb-5 sm:mb-7">
+        <div className="relative max-w-3xl">
+          <Search aria-hidden="true" className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(event) => {
+              setSearchInput(event.target.value)
+              setCurrentPage(1)
+            }}
+            placeholder={t('jobs.search_placeholder')}
+            aria-label={t('jobs.search_placeholder')}
+            autoComplete="off"
+            className="h-14 w-full rounded-2xl border border-gray-200 bg-white pl-12 pr-12 text-[16px] text-gray-900 shadow-sm outline-none transition placeholder:text-gray-400 focus:border-black dark:border-[#3a3a3c] dark:bg-[#1c1c1e] dark:text-white dark:focus:border-white"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput('')
+                setSearchQuery('')
+                setCurrentPage(1)
+              }}
+              aria-label={t('jobs.search_clear')}
+              title={t('jobs.search_clear')}
+              className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-black dark:hover:bg-[#2c2c2e] dark:hover:text-white"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Status Filter */}
       <div className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-10 flex-wrap">
         {[{val:'', label: t('common.all')}, {val:'Offen', label: t('jobs.status_open')}, {val:'Besetzt', label: t('jobs.status_filled')}, {val:'Pausiert', label: t('jobs.status_paused')}, {val:'Archiviert', label: t('jobs.status_archived')}].map(s => (
@@ -125,27 +189,95 @@ export default function Jobs() {
         ))}
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="mb-6 flex flex-col gap-4 rounded-[20px] bg-black p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex items-center gap-4">
+            <span className="text-[15px] font-semibold text-white sm:text-[17px]">
+              {t('jobs.selection_selected').replace('{count}', selectedIds.size)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="cursor-pointer text-[14px] text-white/60 transition-colors hover:text-white"
+            >
+              {t('jobs.selection_deselect')}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/matching/job', { state: { jobIds: [...selectedIds] } })}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-[14px] font-semibold text-black transition hover:bg-gray-100"
+          >
+            <Zap aria-hidden="true" className="h-4 w-4" />
+            {t('jobs.selection_matching')}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <SkeletonList rows={4} />
       ) : jobs.length === 0 ? (
         <Card className="p-16">
           <EmptyState
             icon={Briefcase}
-            title={t('jobs.no_jobs')}
-            description={t('jobs.no_jobs_desc')}
-            action={
+            title={searchQuery ? t('jobs.search_no_results') : t('jobs.no_jobs')}
+            description={searchQuery ? t('jobs.search_no_results_desc') : t('jobs.no_jobs_desc')}
+            action={searchQuery ? (
+              <Button size="md" variant="secondary" onClick={() => {
+                setSearchInput('')
+                setSearchQuery('')
+                setCurrentPage(1)
+              }}>
+                {t('jobs.search_clear')}
+              </Button>
+            ) : (
               <Button size="lg" variant="dark" onClick={() => navigate('/jobs/new')}>
                 <Plus className="w-5 h-5" /> {t('jobs.create_job')}
               </Button>
-            }
+            )}
           />
         </Card>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-3 px-2">
+            <button
+              type="button"
+              onClick={toggleSelectVisible}
+              aria-label={t('jobs.select_all')}
+              title={t('jobs.select_all')}
+              className="cursor-pointer text-gray-500 transition-colors hover:text-black dark:text-gray-400 dark:hover:text-white"
+            >
+              {jobs.length > 0 && jobs.every((job) => selectedIds.has(job.id)) ? (
+                <CheckSquare className="h-5 w-5 text-[#0071e3]" />
+              ) : jobs.some((job) => selectedIds.has(job.id)) ? (
+                <MinusSquare className="h-5 w-5 text-[#0071e3]" />
+              ) : (
+                <Square className="h-5 w-5" />
+              )}
+            </button>
+            <span className="text-[14px] font-medium text-gray-500 dark:text-gray-400">
+              {selectedIds.size > 0
+                ? t('jobs.selection_selected').replace('{count}', selectedIds.size)
+                : t('jobs.select_all')}
+            </span>
+          </div>
           {jobs.map(job => (
-            <Card key={job.id} className="p-0 overflow-hidden" hover>
+            <Card key={job.id} className={`!p-0 overflow-hidden ${selectedIds.has(job.id) ? 'ring-2 ring-[#0071e3]/40' : ''}`} hover>
               {(
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 p-5 sm:p-8">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 px-5 py-3 sm:px-8 sm:py-8">
+                  <button
+                    type="button"
+                    onClick={() => toggleSelect(job.id)}
+                    aria-label={`${t('jobs.select_job')}: ${job.title}`}
+                    aria-pressed={selectedIds.has(job.id)}
+                    className="flex-shrink-0 cursor-pointer self-start text-gray-300 transition-colors hover:text-[#0071e3] sm:self-center"
+                  >
+                    {selectedIds.has(job.id) ? (
+                      <CheckSquare className="h-5 w-5 text-[#0071e3]" />
+                    ) : (
+                      <Square className="h-5 w-5" />
+                    )}
+                  </button>
                   {/* Icon */}
                   <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-[16px] sm:rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e] flex items-center justify-center flex-shrink-0">
                     <Briefcase className="w-6 h-6 sm:w-7 sm:h-7 text-gray-600 dark:text-gray-400" />

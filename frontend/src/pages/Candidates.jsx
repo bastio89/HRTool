@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer, Star, Tag } from 'lucide-react'
+import { Plus, Search, Trash2, Edit3, MapPin, Briefcase, GraduationCap, Globe, Award, Car, ChevronDown, Activity, SlidersHorizontal, X, ArrowUpDown, Download, ChevronLeft, ChevronRight, CheckSquare, Square, MinusSquare, Upload, Printer, Star, Tag, Zap } from 'lucide-react'
 import { candidatesApi, ratingsApi } from '../api'
 import { Card, Button, EmptyState, LoadingSpinner, PageContainer, SkeletonList } from '../components/UI'
 import CSVImportDialog from '../components/CSVImportDialog'
@@ -491,6 +491,12 @@ export default function Candidates() {
                 → {s}
               </button>
             ))}
+            <button
+              onClick={() => navigate('/matching/job', { state: { candidateIds: [...selectedIds] } })}
+              className="px-4 py-2 rounded-full bg-white text-black text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition flex items-center gap-1.5"
+            >
+              <Zap className="w-3.5 h-3.5" /> {t('nav.matching')}
+            </button>
             {canExport && <button
               onClick={() => navigate(`/admin/export?ids=${[...selectedIds].join(',')}`)}
               className="px-4 py-2 rounded-full bg-white text-black text-[13px] sm:text-[14px] font-semibold cursor-pointer hover:opacity-80 transition flex items-center gap-1.5"
@@ -524,7 +530,7 @@ export default function Candidates() {
           />
         </Card>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-3">
           {/* Select All */}
           {filtered.length > 0 && (
             <div className="flex items-center gap-3 px-2">
@@ -543,10 +549,10 @@ export default function Candidates() {
             </div>
           )}
           {filtered.map((candidate) => (
-            <Card key={candidate.id} className="overflow-hidden p-0" hover>
+            <Card key={candidate.id} className="!p-0 overflow-hidden" hover>
               {/* Main row */}
               <div 
-                className="flex flex-col sm:flex-row sm:items-center justify-between p-5 sm:p-8 cursor-pointer gap-4 sm:gap-0"
+                className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-3 sm:px-8 sm:py-5 cursor-pointer gap-4 sm:gap-0"
                 onClick={() => setExpandedId(expandedId === candidate.id ? null : candidate.id)}
               >
                 <div className="flex items-start sm:items-center gap-4 sm:gap-8 flex-1 min-w-0">

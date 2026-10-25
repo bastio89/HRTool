@@ -15,6 +15,7 @@ export default function JobsChPanel() {
   const [searching, setSearching] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [importMode, setImportMode] = useState('llm_import')
   const [importResult, setImportResult] = useState(null)
 
   const getManualLinks = () => linksText
@@ -110,7 +111,7 @@ export default function JobsChPanel() {
 
     setImporting(true)
     try {
-      const result = await jobsApi.importJobsChDescriptions(combinedLinks)
+      const result = await jobsApi.importJobsChDescriptions(combinedLinks, importMode)
       setImportResult(result)
       const imported = t('tools.jobs_ch_import_success').replace('{count}', result.imported || 0)
       if (result.warning) {
@@ -158,7 +159,7 @@ export default function JobsChPanel() {
 
     setImporting(true)
     try {
-      const result = await jobsApi.importJobsChDescriptions(selectedSearchResultLinks)
+      const result = await jobsApi.importJobsChDescriptions(selectedSearchResultLinks, importMode)
       setImportResult(result)
       const imported = t('tools.jobs_ch_import_success').replace('{count}', result.imported || 0)
       if (result.warning) {
@@ -273,6 +274,35 @@ export default function JobsChPanel() {
             className="w-full px-5 py-4 rounded-2xl bg-[#f5f5f7] dark:bg-[#2c2c2e] text-black dark:text-white border border-transparent focus:outline-none focus:ring-4 focus:ring-[#0071e3]/10 focus:border-[#0071e3]/30 resize-y font-mono text-[13px] leading-6"
           />
         </label>
+
+        <div>
+          <p id="jobs-ch-import-mode-label" className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mb-2">
+            {t('batch_job_import.mode_label')}
+          </p>
+          <div role="group" aria-labelledby="jobs-ch-import-mode-label" className="inline-flex rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-1">
+            {[
+              ['fast_import', 'batch_job_import.mode_fast'],
+              ['llm_import', 'batch_job_import.mode_llm'],
+            ].map(([mode, labelKey]) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={importMode === mode}
+                disabled={importing}
+                onClick={() => setImportMode(mode)}
+                className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-colors disabled:opacity-60 ${importMode === mode
+                  ? 'bg-white dark:bg-[#48484a] text-black dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
+          <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-2">
+            {t(importMode === 'fast_import' ? 'batch_job_import.mode_fast_description' : 'batch_job_import.mode_llm_description')}
+          </p>
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-gray-500 dark:text-gray-400">

@@ -365,6 +365,7 @@ class PostgresStore:
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS employer_company TEXT",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS description TEXT",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS requirements TEXT",
+                    "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS skills TEXT",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS about_us TEXT",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS benefits TEXT",
                     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS location TEXT",
@@ -1387,7 +1388,18 @@ class PostgresStore:
         profile_hash: str | None = None,
     ) -> int:
         existing = await self._find_existing_job(job_id, profile, source=source)
+        skills = self._job_skills_text(profile)
         if existing is not None:
+            if skills:
+                async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                    await connection.execute(
+                        """
+                        UPDATE jobs
+                        SET skills = %s
+                        WHERE id = %s AND COALESCE(BTRIM(skills), '') = ''
+                        """,
+                        (skills, int(existing["id"])),
+                    )
             return int(existing["id"])
 
         description = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
@@ -1398,9 +1410,9 @@ class PostgresStore:
                     """
                     INSERT INTO jobs (
                         graph_job_id, title, company, recruiter_company, employer_company, description,
-                        requirements, about_us, benefits, location, type, status, url, raw_text, source,
+                        requirements, skills, about_us, benefits, location, type, status, url, raw_text, source,
                         parsed_profile_json
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', NULL, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', NULL, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -1411,6 +1423,7 @@ class PostgresStore:
                         profile.employer_company,
                         description,
                         requirements,
+                        skills or None,
                         profile.location,
                         profile.employment_type or "Vollzeit",
                         raw_text,
@@ -1488,6 +1501,18 @@ class PostgresStore:
         if profile.industries:
             parts.append("Industries: " + ", ".join(item.name for item in profile.industries))
         return " | ".join(parts) if parts else None
+
+    @staticmethod
+    def _job_skills_text(profile: JobProfileExtraction) -> str:
+        names: list[str] = []
+        seen: set[str] = set()
+        for item in profile.required_skills:
+            name = item.name.strip()
+            key = name.casefold()
+            if name and key not in seen:
+                seen.add(key)
+                names.append(name)
+        return ", ".join(names)
 
     @staticmethod
     def _render_plain_text(profile: JobProfileExtraction) -> str:

@@ -47,6 +47,31 @@ async def test_health_ok(api_client):
 
 
 @pytest.mark.anyio
+async def test_external_matrix_preserves_candidate_name():
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from matching_api import create_matching_router
+
+    app = FastAPI()
+    app.include_router(create_matching_router())
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/match/external/matrix",
+            json={
+                "jobs": [{"id": 1, "title": "Python Engineer", "required_skills": [{"name": "Python"}]}],
+                "candidates": [{"id": 7, "name": "Ada Lovelace", "has_skill": [{"name": "Python"}]}],
+            },
+        )
+
+    assert response.status_code == 200
+    row = response.json()["matrix"][0]
+    assert row["candidateName"] == "Ada Lovelace"
+    assert row["summary"].startswith("Ada Lovelace ")
+
+
+@pytest.mark.anyio
 async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch):
     fake_profile = CandidateProfileExtraction(
         name="Max Mustermann",

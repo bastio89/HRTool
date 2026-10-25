@@ -17,6 +17,8 @@ def make_llm_service() -> LLMService:
     prompt_service.get_prompt.side_effect = lambda key, variables=None: {
         "candidate_profile_extraction": "Prompt candidate_profile_extraction",
         "candidate_name_extraction": "Prompt candidate_name_extraction",
+        "job_profile_extraction": "Prompt job_profile_extraction",
+        "job_profile_extraction_lightweight": "Prompt job_profile_extraction_lightweight",
         "json_only_response_instruction": "Antworte ausschließlich mit gültigem JSON und ohne Markdown oder zusätzlichen Text. Wandle die Eingabe in eine strukturierte JSON-Antwort um.",
     }[key]
 
@@ -150,3 +152,35 @@ async def test_parse_job_description_falls_back_when_ai_returns_non_json() -> No
 
     assert profile.title == "Senior Backend Engineer"
     assert profile.required_skills == []
+
+
+@pytest.mark.anyio
+async def test_parse_job_description_keeps_skills_when_llm_omits_priority() -> None:
+    service = make_llm_service()
+
+    async def fake_generate_json(*args, **kwargs):
+        return {
+            "title": "Fachkundiger Projektleiter Elektroplanung",
+            "required_skills": [
+                {"name": "Elektroplanung", "category": "hard_skill"},
+                {"skill": "MSR-Technik", "importance": "nice to have", "category": "HardSkill"},
+                {"name": "Teamfähigkeit", "category": "soft skill"},
+            ],
+        }
+
+    service._generate_json = fake_generate_json  # type: ignore[method-assign]
+
+    try:
+        profile = await service.parse_job_description(
+            "Fachkundiger Projektleiter Elektroplanung\n"
+            "Leiten von Projekten im Bereich Elektro- und MSR-Technik.\n"
+            "Ihr Profil: abgeschlossene Ausbildung als Elektroplaner; teamfähig."
+        )
+    finally:
+        await service.close()
+
+    assert [(skill.name, skill.priority, skill.category) for skill in profile.required_skills] == [
+        ("Elektroplanung", "Mandatory", "HardSkill"),
+        ("MSR-Technik", "NiceToHave", "HardSkill"),
+        ("Teamfähigkeit", "Mandatory", "SoftSkill"),
+    ]

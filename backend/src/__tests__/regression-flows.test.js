@@ -39,6 +39,7 @@ const CANDIDATE_SEARCH_FIELD_WIDTH = CANDIDATE_SEARCH_FIELDS.length + 4;
 const JOB_SEARCH_FIELDS = [
   'title',
   'company',
+  'skills',
   'description',
   'requirements',
   'about_us',
@@ -47,6 +48,7 @@ const JOB_SEARCH_FIELDS = [
   'type',
   'status',
   'url',
+  'source',
 ];
 const JOB_SEARCH_FIELD_WIDTH = JOB_SEARCH_FIELDS.length;
 const MATCHING_SEARCH_FIELDS = [
@@ -124,8 +126,8 @@ function createMockDb(seed = {}) {
                   type: job.type,
                   status: job.status,
                   url: job.url,
-                  experience: null,
                   skills: job.skills,
+                  source: job.source,
                 },
                 queryTerms,
                 null,
@@ -181,6 +183,10 @@ function createMockDb(seed = {}) {
             return state.jobs.find((j) => j.id === Number(args[0]));
           }
 
+          if (q.includes('SELECT * FROM matching_results WHERE id = ?')) {
+            return state.matchingResults.find((row) => row.id === Number(args[0]));
+          }
+
           return undefined;
         },
 
@@ -212,8 +218,8 @@ function createMockDb(seed = {}) {
                 type: job.type,
                 status: job.status,
                 url: job.url,
-                experience: null,
                 skills: job.skills,
+                  source: job.source,
               },
               queryTerms,
               null,
@@ -1131,6 +1137,47 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.body.error).toMatch(/Nur PDF, Word und Bilddateien erlaubt/i);
   });
 
+  test('Jobs endpoint searches every keyword across job fields', async () => {
+    const mockDb = createMockDb({
+      jobs: [
+        { id: 1, title: 'Frontend Engineer', company: 'Acme', skills: 'React', location: 'Zürich', status: 'Offen' },
+        { id: 2, title: 'React Engineer', company: 'Acme', skills: 'TypeScript', location: 'Bern', status: 'Offen' },
+        { id: 3, title: 'Backend Engineer', company: 'Acme', skills: 'Python', location: 'Zürich', description: 'Python experience preferred', status: 'Offen' },
+      ],
+    });
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      generatorRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+    }));
+    jest.doMock('../aiConfig', () => ({
+      getAiConfig: () => ({ baseUrl: 'http://fake-ai', model: 'test-model' }),
+      stripReasoningTags: (text) => text,
+      resolveAiProvider: async () => 'ollama',
+      buildAiRequest: () => ({ url: 'http://fake-ai', body: {} }),
+      extractAiText: () => ({ text: '{}' }),
+      pingAiService: async () => true,
+    }));
+
+    const jobsRouter = require('../routes/jobs');
+    const app = express();
+    app.use('/api/jobs', jobsRouter);
+
+    const response = await request(app).get('/api/jobs?search=React%20Z%C3%BCrich');
+
+    expect(response.status).toBe(200);
+    expect(response.body.total).toBe(1);
+    expect(response.body.data.map((job) => job.id)).toEqual([1]);
+
+    const fullTextResponse = await request(app).get('/api/jobs?search=Python%20experience');
+    expect(fullTextResponse.status).toBe(200);
+    expect(fullTextResponse.body.data.map((job) => job.id)).toEqual([3]);
+  });
+
   test('Jobs endpoint stores uploaded job description payload', async () => {
     const mockDb = createMockDb();
 
@@ -1797,6 +1844,75 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  test('Matrix matching saves its result with an unassigned job id', async () => {
+    const mockDb = createMockDb({
+      jobs: [{ id: 1, title: 'Backend Engineer', description: 'Build APIs', requirements: 'Node.js', skills: 'JavaScript', location: 'Zürich', type: 'Vollzeit', status: 'Offen' }],
+      candidates: [{ id: 1, name: 'Ada Lovelace', location: 'Zürich', experience: 'Backend', skills: 'Node.js', education: 'ETH', status: 'Aktiv' }],
+    });
+    const matrixResult = {
+      type: 'matrix',
+      mode: 'all_jobs_all_candidates',
+      model: 'graph-rag-vector-matrix',
+      jobs: [{ id: 1, title: 'Backend Engineer' }],
+      candidates: [{ id: 1, name: 'Ada Lovelace' }],
+      matrix: [{ jobId: '1', candidateId: '1', score: 90 }],
+      jobsRanked: [],
+      candidatesRanked: [],
+    };
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../middleware/rateLimiter', () => ({
+      matchingRateLimiter: (req, res, next) => next(),
+    }));
+    jest.doMock('../middleware/promptSanitizer', () => ({
+      promptGuard: () => (req, res, next) => next(),
+      sanitizeObject: (value) => value,
+    }));
+    jest.doMock('../graphragAuth', () => ({ graphRagAuthHeaders: () => ({}) }));
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => matrixResult }));
+
+    const matchingRouter = require('../routes/matching');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/matching', matchingRouter);
+
+    const response = await request(app)
+      .post('/api/matching/run-matrix')
+      .send({ mode: 'all_jobs_all_candidates', engine: 'python' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.pairCount).toBe(1);
+    expect(mockDb.__state.matchingResults).toHaveLength(1);
+    expect(mockDb.__state.matchingResults[0].job_id).toBeNull();
+  });
+
+  test('Matching result restores candidate names from saved candidate ids', async () => {
+    const mockDb = createMockDb({
+      candidates: [{ id: 12, name: 'Daniel Huber' }],
+      matchingResults: [{
+        id: 42,
+        job_title: 'N:N Matching',
+        results: JSON.stringify({
+          type: 'matrix',
+          matrix: [{ jobId: '3', candidateId: '12', candidateName: 'copilot', score: 79 }],
+        }),
+      }],
+    });
+
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    const matchingRouter = require('../routes/matching');
+    const app = express();
+    app.use('/api/matching', matchingRouter);
+
+    const response = await request(app).get('/api/matching/history/42');
+
+    expect(response.status).toBe(200);
+    expect(response.body.results.matrix[0].candidateName).toBe('Daniel Huber');
+  });
+
   test('Matching history returns compact summaries for regular and matrix results', async () => {
     const mockDb = createMockDb({
       matchingResults: [
@@ -2150,8 +2266,16 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
                 summary: index === 0 ? 'Sehr guter Fit' : 'x'.repeat(300),
                 matchedSkills: [{ jobSkill: 'Node.js', candidateSkill: 'Node.js' }],
               })),
-            jobsRanked: [{ jobId: 'graph-job-1', jobTitle: 'Backend Engineer', results: [] }],
-            candidatesRanked: [{ candidateId: 'graph-cand-1', candidateName: 'Ada Lovelace', results: [] }],
+            jobsRanked: [{
+              jobId: 'graph-job-1',
+              jobTitle: 'Backend Engineer',
+              results: [{ jobId: 'graph-job-1', candidateId: 'graph-cand-1', jobTitle: 'Backend Engineer', candidateName: 'Ada Lovelace', score: 93 }],
+            }],
+            candidatesRanked: [{
+              candidateId: 'graph-cand-1',
+              candidateName: 'Ada Lovelace',
+              results: [{ jobId: 'graph-job-1', candidateId: 'graph-cand-1', jobTitle: 'Backend Engineer', candidateName: 'Ada Lovelace', score: 93 }],
+            }],
           }),
         };
       }
@@ -2190,7 +2314,10 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(storedResult.matrix[0].score).toBe(104);
     expect(storedResult.matrix[0].summary).toHaveLength(240);
     expect(storedResult.matrix[0]).not.toHaveProperty('matchedSkills');
-    expect(storedResult).not.toHaveProperty('jobsRanked');
+    expect(storedResult.jobs).toEqual([{ id: 'graph-job-1', title: 'Backend Engineer' }]);
+    expect(storedResult.candidates).toEqual([{ id: 'graph-cand-1', name: 'Ada Lovelace' }]);
+    expect(storedResult.jobsRanked[0].results[0].candidateName).toBe('Ada Lovelace');
+    expect(storedResult.candidatesRanked[0].results[0].jobTitle).toBe('Backend Engineer');
 
     const candidateToJobsResponse = await request(app)
       .post('/api/matching/vectormatch')

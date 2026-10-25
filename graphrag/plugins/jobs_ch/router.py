@@ -52,9 +52,12 @@ def build_jobs_ch_router(settings: Settings, *, llm_service: LLMService, postgre
     @router.post("/import-db")
     async def import_to_database(request: JobsChImportRequest, http_request: Request):
         await ensure_enabled()
+        fast_parser = getattr(http_request.app.state, 'cv_job_parser', None)
+        if request.import_mode == 'fast_import' and fast_parser is None:
+            raise HTTPException(status_code=503, detail='Fast-Parser ist nicht bereit.')
         try:
             await billing_service.charge(http_request, '-0.10', 'JOBS_CH_CALL', note='jobs.ch import-db')
-            result = await import_service.import_links(request)
+            result = await import_service.import_links(request, fast_parser=fast_parser)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except RuntimeError as exc:

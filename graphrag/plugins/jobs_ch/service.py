@@ -10,8 +10,10 @@ import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
+from fast_cvjob_parsing.app.schemas import JobResponse
 import jobs_ch_to_pdf
 
 from models import JobProfileExtraction
@@ -149,17 +151,46 @@ class JobsChImportService:
 
     @staticmethod
     def _build_raw_text(job: jobs_ch_to_pdf.JobPosting) -> str:
+        description = jobs_ch_to_pdf.description_to_text(job.description)
         sections = [
-            f"Jobtitel: {job.title}",
-            f"Unternehmen: {job.company}" if job.company else "",
-            f"Standort: {job.location}" if job.location else "",
-            f"Anstellungsart: {job.employment_type}" if job.employment_type else "",
+            job.title,
+            job.company or "",
+            job.location or "",
+            job.employment_type or "",
             f"Veröffentlicht: {job.date_posted}" if job.date_posted else "",
-            f"Quelle: {job.source_url}" if job.source_url else "",
             "",
-            job.description,
+            description,
+            "",
+            f"Quelle: {job.source_url}" if job.source_url else "",
         ]
         return "\n".join(section for section in sections if section is not None).strip()
+
+    @staticmethod
+    def _profile_from_fast_parser(job: jobs_ch_to_pdf.JobPosting, parsed_profile: JobResponse, raw_text: str) -> JobProfileExtraction:
+        categorized_skills = parsed_profile.required_skills.model_dump()
+        required_skills = [
+            {
+                'name': name,
+                'category': 'SoftSkill' if category == 'soft_skills' else 'HardSkill',
+                'priority': 'Mandatory',
+            }
+            for category, names in categorized_skills.items()
+            for name in names
+        ]
+        requirements = [
+            f"Pensum: {parsed_profile.workload_pensum}" if parsed_profile.workload_pensum else None,
+            f"Arbeitsmodell: {parsed_profile.remote_work}" if parsed_profile.remote_work else None,
+        ]
+        return JobProfileExtraction.model_validate({
+            'title': job.title or parsed_profile.job_title or 'Unknown Job',
+            'company': job.company or parsed_profile.company_name,
+            'location': job.location or parsed_profile.location,
+            'employment_type': job.employment_type,
+            'description': raw_text,
+            'requirements': '\n'.join(item for item in requirements if item),
+            'required_skills': required_skills,
+            'required_languages': [{'name': name} for name in categorized_skills.get('language_skills', [])],
+        })
 
     @staticmethod
     def _normalized_text_hash(text: str | None) -> str | None:
@@ -208,7 +239,7 @@ class JobsChImportService:
             for item in results
         ]
 
-    async def import_links(self, payload: JobsChImportRequest) -> JobsChImportResult:
+    async def import_links(self, payload: JobsChImportRequest, *, fast_parser: Any | None = None) -> JobsChImportResult:
         links = self._normalize_links(payload)
         if not links:
             raise ValueError("Mindestens ein jobs.ch-Link ist erforderlich.")
@@ -225,16 +256,23 @@ class JobsChImportService:
                 if not raw_text.strip():
                     raise RuntimeError("jobs.ch-Seite liefert keinen verwertbaren Text.")
 
-                parsed_profile = await self.llm_service.parse_job_description(raw_text)
-                profile_data = parsed_profile.model_dump()
-                profile_data["title"] = job.title or profile_data.get("title") or "Unknown Job"
-                if job.company:
-                    profile_data["company"] = job.company
-                if job.location:
-                    profile_data["location"] = job.location
-                if job.employment_type:
-                    profile_data["employment_type"] = job.employment_type
-                profile = JobProfileExtraction.model_validate(profile_data)
+                if payload.import_mode == 'fast_import':
+                    with tempfile.TemporaryDirectory(prefix='hrtool-jobs-ch-import-') as temp_dir:
+                        pdf_path = Path(temp_dir) / 'job.pdf'
+                        jobs_ch_to_pdf.write_pdf(job, pdf_path)
+                        parsed_profile, _ = await asyncio.to_thread(fast_parser.parse_job_with_text, pdf_path.read_bytes())
+                    profile = self._profile_from_fast_parser(job, parsed_profile, raw_text)
+                else:
+                    parsed_profile = await self.llm_service.parse_job_description(raw_text)
+                    profile_data = parsed_profile.model_dump()
+                    profile_data["title"] = job.title or profile_data.get("title") or "Unknown Job"
+                    if job.company:
+                        profile_data["company"] = job.company
+                    if job.location:
+                        profile_data["location"] = job.location
+                    if job.employment_type:
+                        profile_data["employment_type"] = job.employment_type
+                    profile = JobProfileExtraction.model_validate(profile_data)
 
                 source_hash = self._normalized_text_hash(raw_text)
                 profile_hash = self._normalized_profile_hash(profile)

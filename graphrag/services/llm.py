@@ -30,6 +30,51 @@ from models import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_job_skill_items(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    normalized: list[dict[str, Any]] = []
+    skill_indexes: dict[str, int] = {}
+    for item in value:
+        if isinstance(item, str):
+            skill = {'name': item}
+        elif isinstance(item, dict):
+            skill = item
+        else:
+            continue
+
+        name = skill.get('name') or skill.get('skill') or skill.get('text')
+        if not isinstance(name, str) or not name.strip():
+            continue
+        name = re.sub(r'\s+', ' ', name).strip()
+
+        raw_priority = str(skill.get('priority') or skill.get('importance') or '').strip().lower()
+        normalized_priority = re.sub(r'[^a-z0-9]+', '_', raw_priority).strip('_')
+        priority = 'NiceToHave' if any(token in normalized_priority for token in ('nice', 'optional', 'preferred', 'desirable')) else 'Mandatory'
+
+        raw_category = str(skill.get('category') or '').strip().lower()
+        normalized_category = re.sub(r'[^a-z]+', '', raw_category)
+        category = 'SoftSkill' if normalized_category in {'soft', 'softskill'} else 'HardSkill' if normalized_category in {'hard', 'hardskill'} else None
+
+        key = name.casefold()
+        if key in skill_indexes:
+            existing = normalized[skill_indexes[key]]
+            if priority == 'Mandatory':
+                existing['priority'] = 'Mandatory'
+            if existing.get('category') is None and category is not None:
+                existing['category'] = category
+            continue
+
+        skill_data: dict[str, Any] = {'name': name, 'priority': priority}
+        if category is not None:
+            skill_data['category'] = category
+        skill_indexes[key] = len(normalized)
+        normalized.append(skill_data)
+
+    return normalized
+
+
 def _configure_logging() -> None:
     level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
@@ -923,6 +968,7 @@ class LLMService:
                 num_predict=3200,
                 required_keys=(
                     "title",
+                    "required_skills",
                 ),
                 call_context="job-parser",
                 preferred_keys=(
@@ -948,7 +994,7 @@ class LLMService:
                     ),
                     user_content=raw_text,
                     num_predict=1500,
-                    required_keys=("title",),
+                    required_keys=("title", "required_skills"),
                     call_context="job-parser",
                     preferred_keys=("title", "company", "location", "required_skills", "required_languages"),
                     min_preferred_key_matches=0,
@@ -991,6 +1037,8 @@ class LLMService:
                 type(parsed).__name__,
             )
             parsed = minimal_profile
+
+        parsed['required_skills'] = _normalize_job_skill_items(parsed.get('required_skills'))
 
         try:
             result = JobProfileExtraction.model_validate(parsed)

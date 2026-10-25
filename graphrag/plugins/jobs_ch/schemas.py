@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +11,7 @@ class JobsChExportRequest(BaseModel):
 
 class JobsChImportRequest(BaseModel):
     links: list[str] = Field(default_factory=list)
+    import_mode: Literal['fast_import', 'llm_import'] = 'llm_import'
 
 
 class JobsChImportItem(BaseModel):

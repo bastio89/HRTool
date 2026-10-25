@@ -83,3 +83,24 @@ describe('jobsApi.parseDescriptionFile', () => {
     expect(result).toEqual(legacyResponse)
   })
 })
+
+describe('jobsApi.getAll', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    localStorage.clear()
+  })
+
+  test('forwards search terms together with status and pagination', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [], total: 0 }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await jobsApi.getAll({ search: 'React Zürich', status: 'Offen', page: 2, limit: 20 })
+
+    const url = new URL(fetchMock.mock.calls[0][0], 'http://localhost')
+    expect(url.pathname).toBe('/api/jobs')
+    expect(url.searchParams.get('search')).toBe('React Zürich')
+    expect(url.searchParams.get('status')).toBe('Offen')
+    expect(url.searchParams.get('page')).toBe('2')
+    expect(url.searchParams.get('limit')).toBe('20')
+  })
+})

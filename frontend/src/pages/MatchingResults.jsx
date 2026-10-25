@@ -101,6 +101,12 @@ export default function MatchingResults() {
     const isVectorMatching = matrixData.type === 'vectormatch' || matrixData.type === 'vectormatch_neo4j'
     const embeddingModelLabel = matrixData.embeddingModel || 'unbekannt'
     const pairCount = matrixRows.length
+    const jobCount = matrixData.jobs?.length || matrixData.jobsRanked?.length || new Set(
+      matrixRows.map((row) => String(row.jobId ?? row.jobTitle ?? '')).filter(Boolean)
+    ).size
+    const candidateCount = matrixData.candidates?.length || matrixData.candidatesRanked?.length || new Set(
+      matrixRows.map((row) => String(row.candidateId ?? row.candidateName ?? '')).filter(Boolean)
+    ).size
     const getPairKey = (row) => `${row.jobId}-${row.candidateId}`
     const selectedPairs = matrixRows.filter((row) => selectedPairKeys.includes(getPairKey(row)))
     const allPairsSelected = matrixRows.length > 0 && selectedPairKeys.length === matrixRows.length
@@ -116,6 +122,8 @@ export default function MatchingResults() {
 
     const handleRunSelectedMatching = async () => {
       if (selectedPairs.length === 0) return
+      setSelectedBatchLoading(true)
+      setSelectedBatchError('')
       try {
         const sourceJobDescription = data?.job_description || data?.jobDescription || ''
         const batchPayload = selectedPairs.map((row) => ({
@@ -140,6 +148,8 @@ export default function MatchingResults() {
         navigate('/matching/results/selected', { state: { pairs: batchPayload, sourceJobDescription, precomputed: response, mode: 'ai' } })
       } catch (err) {
         setSelectedBatchError(err.message)
+      } finally {
+        setSelectedBatchLoading(false)
       }
     }
 
@@ -255,13 +265,13 @@ export default function MatchingResults() {
         <KiDisclaimer feature="matching" className="mb-6" />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
-          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.jobs?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_jobs')}</p></Card>
-          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{matrixData.candidates?.length || 0}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_candidates')}</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{jobCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_jobs')}</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{candidateCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_candidates')}</p></Card>
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">{pairCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_pairs')}</p></Card>
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">{bestScoreMatrix}%</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_best_match')}</p></Card>
         </div>
 
-        <Card className="p-8 sm:p-10 mb-12 min-h-[calc(100dvh-24rem)] flex flex-col">
+        <Card className="min-w-0 overflow-hidden p-8 sm:p-10 mb-12 min-h-[calc(100dvh-24rem)] flex flex-col">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
             <div>
               <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white">{t('matching.best_pairs_overall')}</h2>
@@ -271,7 +281,8 @@ export default function MatchingResults() {
               <Button size="md" variant="secondary" onClick={toggleAllPairs} disabled={matrixRows.length === 0}>
                 {allPairsSelected ? 'Auswahl löschen' : 'Alle auswählen'}
               </Button>
-              <Button size="md" variant="dark" onClick={handleRunSelectedMatching} disabled={selectedBatchLoading || selectedPairs.length === 0}>
+              <Button size="md" variant="dark" onClick={handleRunSelectedMatching} disabled={selectedBatchLoading || selectedPairs.length === 0} aria-busy={selectedBatchLoading}>
+                {selectedBatchLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 {selectedBatchLoading ? 'KI-Matching läuft...' : 'KI-Matching selektierte'}
               </Button>
             </div>
@@ -281,14 +292,19 @@ export default function MatchingResults() {
               {matchingError}
             </div>
           )}
-          <div className="space-y-4">
+          {selectedBatchError && (
+            <div role="alert" className="p-4 rounded-[14px] bg-[#ff3b30]/10 text-[#ff3b30] text-[14px] font-medium mb-4">
+              {selectedBatchError}
+            </div>
+          )}
+          <div className="min-h-0 max-h-[780px] flex-1 space-y-4 overflow-y-auto pr-2">
             {topRows.map((row, idx) => {
               const isLoading = matchingRow === `${row.candidateId}-${row.jobId}`
               const isSelected = selectedPairKeys.includes(getPairKey(row))
               return (
                 <div
                   key={`${row.jobId}-${row.candidateId}-${idx}`}
-                  className={`w-full grid grid-cols-1 lg:grid-cols-[56px_64px_1fr_1fr_180px] gap-4 items-center p-5 rounded-[20px] transition-colors text-left ${isSelected ? 'bg-[#0071e3]/5 dark:bg-[#0071e3]/10 ring-1 ring-[#0071e3]/20' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c]'}`}
+                  className={`w-full min-w-0 grid grid-cols-1 lg:grid-cols-[56px_64px_minmax(0,1fr)_minmax(0,1fr)_180px] gap-4 items-center p-5 rounded-[20px] transition-colors text-left ${isSelected ? 'bg-[#0071e3]/5 dark:bg-[#0071e3]/10 ring-1 ring-[#0071e3]/20' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c]'}`}
                 >
                   <button
                     type="button"
@@ -311,12 +327,12 @@ export default function MatchingResults() {
                   >
                     #{idx + 1}
                   </button>
-                  <div>
-                    <p className="text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p>
+                  <div className="min-w-0">
+                    <p className="break-words text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p>
                     <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_candidate')}</p>
                   </div>
-                  <div>
-                    <p className="text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p>
+                  <div className="min-w-0">
+                    <p className="break-words text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p>
                     <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_job')}</p>
                   </div>
                   <div className="flex items-center justify-end gap-3">
@@ -351,20 +367,20 @@ export default function MatchingResults() {
           </div>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <Card className="p-8 sm:p-10">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-8 lg:grid-cols-2">
+          <Card className="flex min-w-0 flex-col overflow-hidden p-8 sm:p-10">
             <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('matching.ranking_per_job')}</h2>
-            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2 flex-1">
+            <div className="min-h-0 max-h-[780px] flex-1 space-y-6 overflow-y-auto pr-2">
               {(matrixData.jobsRanked || []).map((job) => (
                 <div key={job.jobId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
-                  <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{job.jobTitle}</h3>
+                  <h3 className="break-words text-[17px] font-semibold text-black dark:text-white mb-3">{job.jobTitle}</h3>
                   <div className="space-y-2">
                     {job.results.slice(0, 5).map((row, idx) => (
                       <div key={`${job.jobId}-${row.candidateId}`} className="text-[14px]">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.candidateName}</span>
+                        <div className="flex min-w-0 items-center justify-between gap-4">
+                          <span className="min-w-0 flex-1 truncate font-medium text-gray-600 dark:text-gray-300">{idx + 1}. {row.candidateName}</span>
                           {isVectorMatching ? (
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="flex shrink-0 flex-col items-end gap-1">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#0071e3]/10 text-[#0071e3]">
                                 HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
                               </span>
@@ -385,19 +401,19 @@ export default function MatchingResults() {
             </div>
           </Card>
 
-          <Card className="p-8 sm:p-10">
+          <Card className="flex min-w-0 flex-col overflow-hidden p-8 sm:p-10">
             <h2 className="text-[24px] font-semibold tracking-tight text-black dark:text-white mb-6">{t('matching.ranking_per_candidate')}</h2>
-            <div className="space-y-6 max-h-[780px] overflow-y-auto pr-2 flex-1">
+            <div className="min-h-0 max-h-[780px] flex-1 space-y-6 overflow-y-auto pr-2">
               {(matrixData.candidatesRanked || []).map((candidate) => (
                 <div key={candidate.candidateId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
                   <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{candidate.candidateName}</h3>
                   <div className="space-y-2">
                     {candidate.results.slice(0, 5).map((row, idx) => (
                       <div key={`${candidate.candidateId}-${row.jobId}`} className="text-[14px]">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="font-medium text-gray-600 dark:text-gray-300 truncate">{idx + 1}. {row.jobTitle}</span>
+                        <div className="flex min-w-0 items-center justify-between gap-4">
+                          <span className="min-w-0 flex-1 truncate font-medium text-gray-600 dark:text-gray-300">{idx + 1}. {row.jobTitle}</span>
                           {isVectorMatching ? (
-                            <div className="flex flex-col items-end gap-1">
+                            <div className="flex shrink-0 flex-col items-end gap-1">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#0071e3]/10 text-[#0071e3]">
                                 HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
                               </span>

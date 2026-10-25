@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { FileText, Users, Loader2, Zap, Briefcase, PenLine } from 'lucide-react'
 import { candidatesApi, matchingApi, jobsApi, pipelineApi } from '../api'
 import { Card, Button, Textarea, Input, LoadingSpinner } from '../components/UI'
@@ -11,8 +11,11 @@ import { useI18n } from '../I18nContext'
 
 export default function JobToCandidates() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { t } = useI18n()
-  const [jobMode, setJobMode] = useState('manual') // 'manual' | 'existing'
+  const initialJobIds = location.state?.jobIds || null
+  const initialCandidateIds = location.state?.candidateIds || null
+  const [jobMode, setJobMode] = useState(() => initialJobIds?.length || initialCandidateIds?.length ? 'existing' : 'manual') // 'manual' | 'existing'
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [candidates, setCandidates] = useState([])
@@ -38,8 +41,13 @@ export default function JobToCandidates() {
       candidatesApi.getAll({ fields: 'matching' }),
       jobsApi.getAll({}).catch(() => ({ data: [] })),
     ]).then(([candidateData, jobsData]) => {
-        setCandidates(candidateData.data || [])
-        setSelectedIds([])
+        const availableCandidates = candidateData.data || []
+        setCandidates(availableCandidates)
+        setSelectedIds(initialCandidateIds?.length
+          ? availableCandidates
+            .filter((candidate) => initialCandidateIds.some((id) => String(id) === String(candidate.id)))
+            .map((candidate) => candidate.id)
+          : [])
         setJobs(jobsData.data || [])
       })
       .catch(err => setError(err.message))
@@ -65,8 +73,12 @@ export default function JobToCandidates() {
         .map(entry => entry.candidate_id)
         .filter(Boolean)
       const uniqueIds = [...new Set(candidateIdsFromPipeline)]
-      setPipelineCandidateIds(uniqueIds)
-      setSelectedIds(uniqueIds)
+      if (initialCandidateIds?.length) {
+        setPipelineCandidateIds([])
+      } else {
+        setPipelineCandidateIds(uniqueIds)
+        setSelectedIds(uniqueIds)
+      }
       setSelectAll(false)
     } catch (_) {
       setPipelineCandidateIds([])
@@ -74,6 +86,12 @@ export default function JobToCandidates() {
       setPipelineLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (initialJobIds?.length !== 1 || !jobs.length || selectedJobId) return
+    const initialJob = jobs.find((job) => String(job.id) === String(initialJobIds[0]))
+    if (initialJob) handleSelectJob(initialJob)
+  }, [initialJobIds, jobs, selectedJobId])
 
   const handleModeSwitch = (mode) => {
     setJobMode(mode)
@@ -222,7 +240,9 @@ export default function JobToCandidates() {
             {jobMode === 'existing' && (
               <div className="mb-10">
                 <JobPicker
-                  jobs={jobs}
+                  jobs={initialJobIds?.length
+                    ? jobs.filter((job) => initialJobIds.some((id) => String(id) === String(job.id)))
+                    : jobs}
                   selectedJobId={selectedJobId}
                   onSelect={handleSelectJob}
                   search={jobSearch}

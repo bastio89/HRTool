@@ -59,7 +59,7 @@ describe('BatchCVImportDialog', () => {
     })
   })
 
-  test('routes selected LLM imports through the deprecated parser', async () => {
+  test('defaults to routing CV imports through the deprecated LLM parser', async () => {
     cvParserApi.parse.mockResolvedValue({
       candidate: { id: 'candidate-123', name: 'Nina Example' },
       persisted: true,
@@ -72,7 +72,6 @@ describe('BatchCVImportDialog', () => {
       </I18nProvider>
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'LLM-Import (Legacy)' }))
     const file = new File(['cv data'], 'nina-example.pdf', { type: 'application/pdf' })
     fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } })
     fireEvent.click(screen.getByRole('button', { name: '1 CVs importieren' }))

@@ -21,7 +21,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
   const { t, locale } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([]) // { file, id, status, progress, candidate, error }
-  const [importMode, setImportMode] = useState('fast_import')
+  const [importMode, setImportMode] = useState('llm_import')
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   // Reads the shared system status instead of polling on its own.

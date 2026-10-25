@@ -148,9 +148,14 @@ services:
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       GRAPHRAG_API_KEY: ${GRAPHRAG_API_KEY:-}
+      MODEL_CACHE_DIR: /app/model_cache
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       APIFY_LINKEDIN_MCP_COMMAND: ${APIFY_LINKEDIN_MCP_COMMAND:-"npx -y @apify/actors-mcp-server --actors curious_coder/linkedin-profile-scraper"}
       APIFY_LINKEDIN_MCP_SEARCH_TOOL_NAME: ${APIFY_LINKEDIN_MCP_SEARCH_TOOL_NAME:-search_profiles}
+    volumes:
+      - graphrag-model-cache:/app/model_cache
     ports:
       - "${GRAPHRAG_PORT:-8002}:8000"
     extra_hosts:
@@ -168,5 +173,6 @@ volumes:
   pgadmin-data:
   neo4j-data:
   neo4j-logs:
+  graphrag-model-cache:
   caddy-data:
   caddy-config:

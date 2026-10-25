@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { deleteGraphCandidate, deleteGraphCandidates } = require('../utils/graphRagCandidate');
 
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '..', '..', 'data', 'uploads');
@@ -843,13 +844,14 @@ router.put('/:id', (req, res) => {
  *       200: { description: Erfolgreich gelöscht }
  *       404: { description: Nicht gefunden }
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const existing = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);
     if (!existing) {
       return res.status(404).json({ error: 'Bewerber nicht gefunden' });
     }
 
+    await deleteGraphCandidate(existing, req);
     // Clean up physical files before DB deletion (CASCADE deletes candidate_files rows)
     cleanupCandidateFiles(parseInt(req.params.id));
 
@@ -880,17 +882,20 @@ router.delete('/:id', (req, res) => {
  *     responses:
  *       200: { description: Anzahl gelöschter Bewerber }
  */
-router.post('/batch/delete', (req, res) => {
+router.post('/batch/delete', async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Keine IDs angegeben' });
     }
 
+    const placeholders = ids.map(() => '?').join(',');
+    const candidates = db.prepare(`SELECT * FROM candidates WHERE id IN (${placeholders})`).all(...ids);
+    await deleteGraphCandidates(candidates, req);
+
     // Clean up physical files before DB deletion
     cleanupCandidateFiles(ids);
 
-    const placeholders = ids.map(() => '?').join(',');
     const result = db.prepare(`DELETE FROM candidates WHERE id IN (${placeholders})`).run(...ids);
     logAudit(req, 'batch-gelöscht', 'Candidate', null, null, { ids, count: result.changes });
     res.json({ deleted: result.changes });

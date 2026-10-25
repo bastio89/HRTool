@@ -29,6 +29,54 @@ class Neo4jService:
     async def close(self) -> None:
         await self.driver.close()
 
+    async def delete_candidate(
+        self,
+        candidate_id: str | None = None,
+        *,
+        email: str | None = None,
+        phone: str | None = None,
+        name: str | None = None,
+        location: str | None = None,
+    ) -> int:
+        if candidate_id:
+            query = """
+            MATCH (c:Candidate {id: $candidate_id})
+            DETACH DELETE c
+            """
+            params = {"candidate_id": candidate_id}
+        elif email and email.strip():
+            query = """
+            MATCH (c:Candidate)
+            WHERE toLower(coalesce(c.email, '')) = toLower($email)
+            DETACH DELETE c
+            """
+            params = {"email": email.strip()}
+        elif phone and phone.strip():
+            query = """
+            MATCH (c:Candidate)
+            WHERE coalesce(c.phone, '') = $phone
+            DETACH DELETE c
+            """
+            params = {"phone": phone.strip()}
+        elif name and name.strip() and location and location.strip():
+            query = """
+            MATCH (c:Candidate)
+            WHERE toLower(coalesce(c.name, '')) = toLower($name)
+              AND toLower(coalesce(c.location, '')) = toLower($location)
+            WITH collect(c) AS candidates
+            WHERE size(candidates) = 1
+            UNWIND candidates AS candidate
+            DETACH DELETE candidate
+            """
+            params = {"name": name.strip(), "location": location.strip()}
+        else:
+            return 0
+
+        async with self.driver.session() as session:
+            result = await session.run(query, **params)
+            summary = await result.consume()
+        return summary.counters.nodes_deleted
+
     async def upsert_candidate(
         self,
         candidate_id: str,

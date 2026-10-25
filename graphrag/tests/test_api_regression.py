@@ -61,6 +61,7 @@ async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
     postgres_mock = AsyncMock(return_value=42)
+    graph_id_mock = AsyncMock()
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
@@ -68,6 +69,7 @@ async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
     monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
+    monkeypatch.setattr(app_module.postgres_store, "set_candidate_graph_id", graph_id_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -82,16 +84,18 @@ async def test_ingest_candidate_accepts_json(app_module, api_client, monkeypatch
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "id": "cand-123",
-        "message": "Candidate ingested successfully",
-    }
+    payload = response.json()
+    assert payload["id"] == "cand-123"
+    assert payload["message"] == "Candidate ingested successfully"
+    assert payload["profile"]["name"] == "Max Mustermann"
+    assert payload["persisted"] is True
     parse_mock.assert_awaited_once()
     assert embedding_mock.await_count == 2
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
     assert embedding_mock.await_args_list[1].args == ({"entity": "skill", "name": "python"},)
     upsert_mock.assert_awaited_once()
     postgres_mock.assert_awaited_once_with(fake_profile, source="Candidate-Ingest")
+    graph_id_mock.assert_awaited_once_with(42, "cand-123")
     store_text_mock.assert_awaited_once()
     anonymize_mock.assert_awaited_once_with("42")
 
@@ -122,6 +126,7 @@ async def test_ingest_candidate_uses_structured_profile_payload(app_module, api_
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
     postgres_mock = AsyncMock(return_value=43)
+    graph_id_mock = AsyncMock()
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
@@ -129,6 +134,7 @@ async def test_ingest_candidate_uses_structured_profile_payload(app_module, api_
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
     monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
+    monkeypatch.setattr(app_module.postgres_store, "set_candidate_graph_id", graph_id_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -140,10 +146,10 @@ async def test_ingest_candidate_uses_structured_profile_payload(app_module, api_
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "id": "cand-structured-123",
-        "message": "Candidate ingested successfully",
-    }
+    payload = response.json()
+    assert payload["id"] == "cand-structured-123"
+    assert payload["profile"]["name"] == "Max Mustermann"
+    assert payload["persisted"] is True
     parse_mock.assert_not_awaited()
     assert embedding_mock.await_count == 2
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
@@ -160,6 +166,7 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
     postgres_mock = AsyncMock(return_value=44)
+    graph_id_mock = AsyncMock()
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
@@ -167,6 +174,7 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
     monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
+    monkeypatch.setattr(app_module.postgres_store, "set_candidate_graph_id", graph_id_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -188,10 +196,10 @@ async def test_ingest_candidate_accepts_backend_style_string_profile_fields(app_
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "id": "cand-string-123",
-        "message": "Candidate ingested successfully",
-    }
+    payload = response.json()
+    assert payload["id"] == "cand-string-123"
+    assert payload["profile"]["name"] == "Max Mustermann"
+    assert payload["persisted"] is True
     parse_mock.assert_not_awaited()
     assert embedding_mock.await_count == 4
     profile_payload = embedding_mock.await_args_list[0].args[0]
@@ -211,6 +219,7 @@ async def test_ingest_candidate_forwards_work_history(app_module, api_client, mo
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
     postgres_mock = AsyncMock(return_value=45)
+    graph_id_mock = AsyncMock()
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
@@ -218,6 +227,7 @@ async def test_ingest_candidate_forwards_work_history(app_module, api_client, mo
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
     monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
+    monkeypatch.setattr(app_module.postgres_store, "set_candidate_graph_id", graph_id_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -261,6 +271,7 @@ async def test_ingest_candidate_forwards_education_history(app_module, api_clien
     embedding_mock = AsyncMock(return_value=[0.1, 0.2, 0.3])
     upsert_mock = AsyncMock()
     postgres_mock = AsyncMock(return_value=46)
+    graph_id_mock = AsyncMock()
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
 
@@ -268,6 +279,7 @@ async def test_ingest_candidate_forwards_education_history(app_module, api_clien
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
     monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
+    monkeypatch.setattr(app_module.postgres_store, "set_candidate_graph_id", graph_id_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -692,6 +704,7 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     upsert_mock = AsyncMock()
     anonymize_mock = AsyncMock()
     store_text_mock = AsyncMock()
+    graph_id_mock = AsyncMock()
     # Fehlte hier als einzigem Test dieser Reihe - die Zuweisung und das
     # Patchen von insert_candidate waren beim Kopieren verlorengegangen,
     # weshalb die Zusicherung unten auf einen undefinierten Namen zugriff.
@@ -701,6 +714,7 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding_mock)
     monkeypatch.setattr(app_module.db_service, "upsert_candidate", upsert_mock)
     monkeypatch.setattr(app_module.postgres_store, "insert_candidate", postgres_mock)
+    monkeypatch.setattr(app_module.postgres_store, "set_candidate_graph_id", graph_id_mock)
     monkeypatch.setattr(app_module.postgres_store, "store_candidate_text", store_text_mock)
     monkeypatch.setattr(app_module.candidate_privacy_service, "anonymize_candidate", anonymize_mock)
 
@@ -710,10 +724,11 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "id": "cand-pdf-123",
-        "message": "Candidate ingested successfully",
-    }
+    payload = response.json()
+    assert payload["id"] == "cand-pdf-123"
+    assert payload["message"] == "Candidate ingested successfully"
+    assert payload["profile"]["name"] == "Max Mustermann"
+    assert payload["persisted"] is True
     parse_mock.assert_awaited_once()
     assert embedding_mock.await_count == 2
     assert embedding_mock.await_args_list[0].args == (fake_profile.model_dump(),)
@@ -722,6 +737,28 @@ async def test_ingest_candidate_accepts_pdf_upload(app_module, api_client, monke
     postgres_mock.assert_awaited_once_with(fake_profile, source="Candidate-Ingest")
     store_text_mock.assert_awaited_once()
     anonymize_mock.assert_awaited_once_with("43")
+
+
+@pytest.mark.anyio
+async def test_delete_candidate_removes_neo4j_node(app_module, api_client, monkeypatch):
+    delete_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr(app_module.db_service, "delete_candidate", delete_mock)
+
+    response = await api_client.request(
+        "DELETE",
+        "/ingest/candidate",
+        json={"candidate_id": "graph-candidate-123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": True, "neo4j_deleted": 1}
+    delete_mock.assert_awaited_once_with(
+        "graph-candidate-123",
+        email=None,
+        phone=None,
+        name=None,
+        location=None,
+    )
 
 
 @pytest.mark.anyio

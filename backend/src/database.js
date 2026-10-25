@@ -221,6 +221,8 @@ const migrations = [
   // Matching → Pipeline-Link
   `ALTER TABLE matching_results ADD COLUMN job_id INTEGER`,
   `ALTER TABLE jobs ADD COLUMN graph_job_id TEXT`,
+  `ALTER TABLE candidates ADD COLUMN graph_candidate_id TEXT`,
+  `ALTER TABLE candidates ADD COLUMN graph_candidate_ids TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
   // Anrede / Geschlecht
   `ALTER TABLE candidates ADD COLUMN gender TEXT`,
   // CV-Parser: LLM- oder Text-Heuristik-Extraktion

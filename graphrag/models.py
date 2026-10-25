@@ -369,6 +369,19 @@ class CandidateIngestResponse(IngestResponse):
     persisted: bool = True
 
 
+class CandidateDeleteRequest(BaseModel):
+    candidate_id: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    name: str | None = None
+    location: str | None = None
+
+
+class CandidateDeleteResponse(BaseModel):
+    deleted: bool
+    neo4j_deleted: int = 0
+
+
 class CandidatePrivacyRequest(BaseModel):
     candidate_id: str = Field(..., min_length=1)
 

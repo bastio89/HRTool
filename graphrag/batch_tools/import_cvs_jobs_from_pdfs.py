@@ -440,6 +440,7 @@ async def process_cv_file(
                 profile=profile,
                 candidate_text=extracted_text,
                 source="CV-Batch-Import",
+                graph_candidate_id=existing_candidate["id"],
             )
         except Exception as exc:
             return False, f"duplicate backfill failed: {exc}"
@@ -486,6 +487,7 @@ async def process_cv_file(
             profile=profile,
             candidate_text=extracted_text,
             source="CV-Batch-Import",
+            graph_candidate_id=candidate_id,
         )
     except Exception as exc:
         return False, f"candidate embedding creation failed: {exc}"

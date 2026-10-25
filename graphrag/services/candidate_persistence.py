@@ -13,8 +13,11 @@ async def persist_candidate_profile(
 	profile: CandidateProfileExtraction,
 	candidate_text: str,
 	source: str,
+	graph_candidate_id: str | None = None,
 ) -> int:
 	postgres_candidate_id = await postgres_store.insert_candidate(profile, source=source)
+	if graph_candidate_id:
+		await postgres_store.set_candidate_graph_id(postgres_candidate_id, graph_candidate_id)
 	await postgres_store.store_candidate_text(
 		str(postgres_candidate_id),
 		candidate_text,

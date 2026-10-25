@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { deleteGraphCandidates } = require('../utils/graphRagCandidate');
 const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, resolveAiRuntimeBaseUrl, buildAiRequest, extractAiText, stripReasoningTags, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, invalidateAiConfigCache, OPENROUTER_BASE_URL } = require('../aiConfig');
 
 const router = express.Router();
@@ -740,19 +741,21 @@ router.get('/dsgvo/expired', (req, res) => {
  *     responses:
  *       200: { description: Anzahl gelöschter Bewerber }
  */
-router.delete('/dsgvo/delete-expired', (req, res) => {
+router.delete('/dsgvo/delete-expired', async (req, res) => {
   try {
     const retentionSetting = db.prepare("SELECT value FROM settings WHERE key = 'dsgvo_retention_months'").get();
     const months = parseInt(retentionSetting?.value) || 6;
 
     const expired = db.prepare(`
-      SELECT id, name FROM candidates
+      SELECT * FROM candidates
       WHERE COALESCE(updated_at, created_at) + (? * INTERVAL '1 month') < CURRENT_TIMESTAMP
     `).all(months);
 
     if (expired.length === 0) {
       return res.json({ deleted: 0, message: 'Keine abgelaufenen Bewerber vorhanden' });
     }
+
+    await deleteGraphCandidates(expired, req);
 
     const deleteTransaction = db.transaction(() => {
       const ids = expired.map(c => c.id);

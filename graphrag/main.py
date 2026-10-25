@@ -19,12 +19,14 @@ from fast_cvjob_parsing.app.router import create_cv_job_parser_router, parse_cv_
 from legacy_api import create_legacy_router
 from models import (
 	CandidateIngestRequest,
+	CandidateIngestResponse,
+	CandidateDeleteRequest,
+	CandidateDeleteResponse,
 	CandidatePrivacyRequest,
 	CandidatePrivacyResponse,
 	CandidateProfileExtraction,
 	AiUsageMetrics,
 	HealthResponse,
-	IngestResponse,
 	JobIngestRequest,
 	JobIngestResponse,
 	JobDeleteRequest,
@@ -537,6 +539,7 @@ async def parse_cv(
 				profile=profile,
 				candidate_text=candidate_text,
 				source="CV-Import",
+				graph_candidate_id=graph_candidate_id,
 			)
 		except Exception as exc:
 			logger.exception("Candidate persistence failed")
@@ -673,6 +676,7 @@ async def import_fast_cv(
 				profile=profile,
 				candidate_text=candidate_text,
 				source="CV-Fast-Import",
+				graph_candidate_id=graph_candidate_id,
 			)
 		except Exception as exc:
 			logger.exception("Fast candidate persistence failed")
@@ -704,10 +708,10 @@ async def import_fast_cv(
 	}
 
 
-@app.post("/ingest/candidate", response_model=IngestResponse)
+@app.post("/ingest/candidate", response_model=CandidateIngestResponse)
 async def ingest_candidate(
 	request: Request,
-) -> IngestResponse:
+) -> CandidateIngestResponse:
 	text, provided_profile = await _extract_candidate_payload_from_request(request=request)
 	try:
 		if provided_profile is None:
@@ -758,12 +762,41 @@ async def ingest_candidate(
 			profile=profile,
 			candidate_text=candidate_text,
 			source="Candidate-Ingest",
+			graph_candidate_id=candidate_id,
 		)
 	except Exception as exc:
 		logger.exception("Candidate persistence failed")
 		raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
 
-	return IngestResponse(id=candidate_id, message="Candidate ingested successfully")
+	return CandidateIngestResponse(
+		id=candidate_id,
+		message="Candidate ingested successfully",
+		profile=profile,
+		persisted=True,
+	)
+
+
+@app.delete("/ingest/candidate", response_model=CandidateDeleteResponse)
+async def delete_candidate(payload: CandidateDeleteRequest) -> CandidateDeleteResponse:
+	if not any(
+		str(value or "").strip()
+		for value in (payload.candidate_id, payload.email, payload.phone)
+	) and not (payload.name and payload.location):
+		raise HTTPException(status_code=400, detail="Provide candidate_id or a unique candidate identity.")
+
+	try:
+		neo4j_deleted = await db_service.delete_candidate(
+			payload.candidate_id,
+			email=payload.email,
+			phone=payload.phone,
+			name=payload.name,
+			location=payload.location,
+		)
+	except Exception as exc:
+		logger.exception("Candidate deletion failed")
+		raise HTTPException(status_code=503, detail=f"Candidate deletion failed: {exc}") from exc
+
+	return CandidateDeleteResponse(deleted=neo4j_deleted > 0, neo4j_deleted=neo4j_deleted)
 
 
 @app.post("/add/job/", response_model=JobIngestResponse, status_code=201)

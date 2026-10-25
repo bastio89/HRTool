@@ -229,6 +229,7 @@ const migrations = [
   `ALTER TABLE jobs ADD COLUMN about_us TEXT`,
   `ALTER TABLE jobs ADD COLUMN benefits TEXT`,
   `ALTER TABLE jobs ADD COLUMN skills TEXT`,
+  `ALTER TABLE jobs ADD COLUMN source TEXT`,
   // Firmenname der Stelle: wird vom Duplikat-Check genutzt. GraphRAG legt die
   // Spalte ebenfalls an; das Backend muss sie aber selbst mitbringen, damit
   // das Anlegen einer Stelle nicht davon abhängt, ob GraphRAG schon lief.

@@ -379,6 +379,8 @@ export default {
   'jobs.created': 'Stelle erstellt',
   'jobs.deleted_success': 'Stelle gelöscht',
   'jobs.batch': 'Batch',
+  'jobs.import_fast': 'Job-Fast-Import',
+  'jobs.import_llm': 'Job-LLM-Import',
   'jobs.in_pipeline': 'in Pipeline',
   'jobs.edit_btn': 'Bearbeiten',
   'jobs.pipeline': 'Pipeline',

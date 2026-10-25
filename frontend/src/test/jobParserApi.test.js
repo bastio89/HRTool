@@ -24,6 +24,7 @@ describe('jobsApi.parseDescriptionFile', () => {
       id: 41,
       title: 'Senior Backend Engineer',
       company: 'Acme AG',
+      source: 'Job-Fast-Import',
       description: parsedProfile.raw_text,
       graphRag: { id: 'graph-job-41', message: 'Job ingested successfully' },
     }

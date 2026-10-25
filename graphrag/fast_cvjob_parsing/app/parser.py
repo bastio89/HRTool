@@ -3,6 +3,7 @@ import os
 import re
 import threading
 from dataclasses import dataclass, field
+from statistics import median
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import fitz
@@ -69,6 +70,14 @@ SKILL_LABELS = {
 }
 SKILL_THRESHOLD = 0.35
 ENTITY_THRESHOLD = 0.45
+JOB_TITLE_HEADING_RE = re.compile(
+    r"^(?:job title|jobtitel|stellenbeschreibung|job description|"
+    r"unternehmensbeschreibung|qualifikationen?|qualifications|"
+    r"anforderungen|requirements|aufgaben|responsibilities|unser angebot|our offer|"
+    r"über den job|about the job|about us|über uns|your role|your job|deine rolle|"
+    r"ihre rolle|job overview|role overview|position overview|stellenübersicht)$",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -77,6 +86,7 @@ class TextBlock:
     bbox: Tuple[float, float, float, float]
     text: str
     entities: List[Dict[str, Any]] = field(default_factory=list)
+    font_size: float = 0.0
 
 
 def extract_text_blocks(pdf_bytes: bytes) -> List[TextBlock]:
@@ -93,15 +103,30 @@ def extract_text_blocks(pdf_bytes: bytes) -> List[TextBlock]:
         if document.is_encrypted:
             raise InvalidPDFError("Password-protected PDFs are not supported.")
         for page_number, page in enumerate(document):
-            for raw_block in page.get_text("blocks"):
-                x0, y0, x1, y1, text = raw_block[:5]
-                cleaned_text = " ".join(text.split())
+            for raw_block in page.get_text("dict")["blocks"]:
+                if raw_block.get("type") != 0:
+                    continue
+                x0, y0, x1, y1 = raw_block["bbox"]
+                lines = [
+                    "".join(span.get("text", "") for span in line.get("spans", []))
+                    for line in raw_block.get("lines", [])
+                ]
+                cleaned_text = " ".join(" ".join(lines).split())
                 if cleaned_text:
+                    font_size = max(
+                        (
+                            float(span.get("size", 0.0))
+                            for line in raw_block.get("lines", [])
+                            for span in line.get("spans", [])
+                        ),
+                        default=0.0,
+                    )
                     blocks.append(
                         TextBlock(
                             page=page_number,
                             bbox=(x0, y0, x1, y1),
                             text=cleaned_text,
+                            font_size=font_size,
                         )
                     )
     finally:
@@ -144,6 +169,38 @@ def _first_entity(blocks: Sequence[TextBlock], label: str) -> Optional[str]:
         ),
         None,
     )
+
+
+def _headline_job_title(blocks: Sequence[TextBlock], company: Optional[str]) -> Optional[str]:
+    first_page = [block for block in blocks if block.page == 0 and block.font_size > 0]
+    if not first_page:
+        return None
+
+    baseline = median(block.font_size for block in first_page)
+    top_region = max(block.bbox[3] for block in first_page) * 0.3
+    company_key = company.casefold() if company else None
+
+    for block in sorted(first_page, key=lambda item: (item.bbox[1], item.bbox[0])):
+        if block.bbox[1] > top_region or block.font_size < baseline * 1.25:
+            continue
+        candidate = _clean(block.text)
+        if not candidate or len(candidate) > 120 or len(candidate.split()) > 12:
+            continue
+        candidate = re.sub(
+            r"^(?:job title|jobtitel|position|gesucht)\s*[:|–-]\s*",
+            "",
+            candidate,
+            flags=re.IGNORECASE,
+        ).strip()
+        if not candidate or JOB_TITLE_HEADING_RE.fullmatch(candidate):
+            continue
+        if company_key and candidate.casefold() == company_key:
+            continue
+        if candidate.endswith((".", "!", "?", ";")):
+            continue
+        candidate = re.sub(r"\s+\d{2,3}(?:\s*[-–]\s*\d{2,3})?\s*%(?!\w)\s*$", "", candidate).strip()
+        return candidate
+    return None
 
 
 def _skill_values(blocks: Sequence[TextBlock]) -> CategorizedSkills:
@@ -318,6 +375,8 @@ class ResumeJobParser:
         self._annotate(blocks, JOB_LABELS)
         document_text = self._document_text(blocks)
         pensum_match = PENSUM_RE.search(document_text)
+        company = _first_entity(blocks, "hiring company")
+        job_title = _headline_job_title(blocks, company) or _first_entity(blocks, "job title")
         remote = _first_entity(blocks, "remote policy")
         if remote:
             normalized_remote = remote.casefold()
@@ -330,9 +389,9 @@ class ResumeJobParser:
 
         return (
             JobResponse(
-                company_name=_first_entity(blocks, "hiring company"),
+                company_name=company,
                 location=_first_entity(blocks, "work location"),
-                job_title=_first_entity(blocks, "job title"),
+                job_title=job_title,
                 required_skills=_skill_values(blocks),
                 remote_work=remote,
                 workload_pensum=_first_entity(blocks, "workload pensum")

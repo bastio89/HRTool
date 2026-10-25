@@ -173,6 +173,10 @@ function findDuplicateJob(job) {
 function persistLocalJob(job) {
   const duplicate = findDuplicateJob(job);
   if (duplicate) {
+    if (job.source && !duplicate.source) {
+      db.prepare('UPDATE jobs SET source = ? WHERE id = ?').run(job.source, duplicate.id);
+      duplicate.source = job.source;
+    }
     if (job.graph_job_id && !duplicate.graph_job_id) {
       db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(job.graph_job_id, duplicate.id);
       return db.prepare('SELECT * FROM jobs WHERE id = ?').get(duplicate.id);
@@ -181,8 +185,8 @@ function persistLocalJob(job) {
   }
 
   const result = db.prepare(`
-    INSERT INTO jobs (graph_job_id, company, title, about_us, description, requirements, skills, benefits, location, type, status, url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (graph_job_id, company, title, about_us, description, requirements, skills, benefits, location, type, status, url, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.graph_job_id || null,
     job.company || null,
@@ -196,6 +200,7 @@ function persistLocalJob(job) {
     job.type || 'Vollzeit',
     job.status || 'Offen',
     job.url || null,
+    job.source || null,
   );
 
   return db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
@@ -394,10 +399,10 @@ router.get('/:id', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { title, company, description, requirements, skills, location, type, status, url, about_us, benefits, graphRagProfile } = req.body;
+    const { title, company, description, requirements, skills, location, type, status, url, about_us, benefits, source, graphRagProfile } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
-    const job = persistLocalJob({ title, company, about_us, description, requirements, skills, benefits, location, type, status, url });
+    const job = persistLocalJob({ title, company, about_us, description, requirements, skills, benefits, location, type, status, url, source });
     logAudit(req, job.duplicate ? 'duplikat' : 'erstellt', 'Job', job.id, job.title);
 
     ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j', graphRagProfile).catch((graphRagErr) => {
@@ -505,6 +510,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
         graph_job_id: graphRag?.id || null,
         title: resolvedTitle,
         company: profile.company || profile.company_name || '',
+        source: 'Job-LLM-Import',
         about_us: profile.about_us || '',
         description: profile.description || '',
         requirements: profile.requirements || '',

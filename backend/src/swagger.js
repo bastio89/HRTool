@@ -56,6 +56,7 @@ const options = {
             id: { type: 'integer' },
             title: { type: 'string', example: 'Frontend Developer' },
             company: { type: 'string', example: 'Acme AG' },
+            source: { type: 'string', example: 'Job-Fast-Import' },
             description: { type: 'string' },
             requirements: { type: 'string' },
             location: { type: 'string' },

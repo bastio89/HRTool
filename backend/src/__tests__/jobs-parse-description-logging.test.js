@@ -78,6 +78,7 @@ describe('jobs parse-description logging', () => {
       id: 42,
       title: 'Senior Backend Engineer',
       company: 'Acme AG',
+      source: 'Job-Fast-Import',
       description: 'Full extracted job description',
       requirements: 'Pensum: 80–100 %',
     };
@@ -106,6 +107,7 @@ describe('jobs parse-description logging', () => {
     const graphRagProfile = {
       title: savedJob.title,
       company: savedJob.company,
+      source: savedJob.source,
       description: savedJob.description,
       required_skills: [{ name: 'Python', category: 'HardSkill', priority: 'Mandatory' }],
     };
@@ -125,6 +127,7 @@ describe('jobs parse-description logging', () => {
     const response = await request(app).post('/api/jobs').send({
       title: savedJob.title,
       company: savedJob.company,
+      source: savedJob.source,
       description: savedJob.description,
       graphRagProfile,
     });
@@ -132,6 +135,7 @@ describe('jobs parse-description logging', () => {
     expect(response.status).toBe(201);
     expect(response.body.graphRag.id).toBe('graph-job-42');
     expect(insertJob.mock.calls[0][1]).toBe(savedJob.company);
+    expect(insertJob.mock.calls[0].at(-1)).toBe('Job-Fast-Import');
   });
 
   test('updates a job employer company', async () => {

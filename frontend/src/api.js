@@ -373,6 +373,7 @@ export const jobsApi = {
     const jobData = {
       title,
       company: profile.company_name || '',
+      source: 'Job-Fast-Import',
       about_us: '',
       description: parsed.raw_text || '',
       requirements,

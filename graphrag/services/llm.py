@@ -242,6 +242,8 @@ class LLMService:
         min_preferred_key_matches: int = 0,
         call_context: str | None = None,
         use_reasoning: bool | None = None,
+        _auth_retry: bool = False,
+        _chat_config_override: ModelRuntimeConfig | None = None,
     ) -> dict[str, Any]:
         def _matches_required_keys(payload_obj: dict[str, Any]) -> bool:
             if not required_keys:
@@ -312,7 +314,7 @@ class LLMService:
 
             return max(matching, key=_score)
 
-        chat_config = await self._resolve_chat_config()
+        chat_config = _chat_config_override or await self._resolve_chat_config()
         provider = chat_config.provider
         base_url = chat_config.base_url or self.base_url
         chat_model = chat_config.model or self.chat_model
@@ -369,6 +371,22 @@ class LLMService:
 
         try:
             response = await self.client.post(request_url, headers=headers, json=request_body)
+            if getattr(response, "status_code", None) == 401 and not _auth_retry and self.model_config_service is not None:
+                self.model_config_service.invalidate("chat")
+                refreshed_config = await self._resolve_chat_config()
+                if refreshed_config != chat_config:
+                    return await self._generate_json(
+                        system_prompt,
+                        user_content,
+                        num_predict=num_predict,
+                        required_keys=required_keys,
+                        preferred_keys=preferred_keys,
+                        min_preferred_key_matches=min_preferred_key_matches,
+                        call_context=call_context,
+                        use_reasoning=use_reasoning,
+                        _auth_retry=True,
+                        _chat_config_override=refreshed_config,
+                    )
             response.raise_for_status()
 
             payload = response.json()
@@ -1003,15 +1021,17 @@ class LLMService:
         embedding_model = embedding_config.model or self.embedding_model
         api_key = embedding_config.api_key if embedding_config.api_key is not None else self.api_key
         logger.info(
-            "embedding_call provider=%s model=%s allow_fallback=%s payload_keys=%s entity=%s name=%s",
+            "embedding_call provider=%s model=%s allow_fallback=%s api_key_configured=%s payload_keys=%s entity=%s name=%s",
             provider,
             embedding_model,
             allow_fallback,
+            bool(api_key),
             sorted(payload.keys()),
             payload.get("entity"),
             payload.get("name"),
         )
         max_attempts = 3
+        auth_refresh_attempted = False
         for attempt in range(1, max_attempts + 1):
             try:
                 if provider == "openrouter":
@@ -1034,6 +1054,27 @@ class LLMService:
                     return self._normalize_embedding([float(item) for item in embedding])
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code if exc.response is not None else None
+                if (
+                    status_code == 401
+                    and not auth_refresh_attempted
+                    and self.model_config_service is not None
+                ):
+                    self.model_config_service.invalidate("embedding")
+                    refreshed_config = await self._resolve_embedding_config()
+                    if refreshed_config != embedding_config:
+                        embedding_config = refreshed_config
+                        provider = embedding_config.provider
+                        base_url = embedding_config.base_url or self.base_url
+                        embedding_model = embedding_config.model or self.embedding_model
+                        api_key = embedding_config.api_key if embedding_config.api_key is not None else self.api_key
+                        auth_refresh_attempted = True
+                        logger.warning(
+                            "embedding_config_refreshed_after_unauthorized provider=%s model=%s api_key_configured=%s",
+                            provider,
+                            embedding_model,
+                            bool(api_key),
+                        )
+                        continue
                 should_retry = status_code in {429, 500, 502, 503, 504} and attempt < max_attempts
                 if should_retry:
                     delay_seconds = 0.75 * attempt

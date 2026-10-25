@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -66,6 +67,53 @@ async def test_create_embedding_uses_dynamic_model_config(monkeypatch) -> None:
 
 
 @pytest.mark.anyio
+async def test_create_embedding_refreshes_stale_config_after_unauthorized() -> None:
+    old_config = ModelRuntimeConfig(
+        task="embedding",
+        provider="openrouter",
+        base_url="https://openrouter.ai/api/v1",
+        model="openai/text-embedding-3-small",
+        api_key=None,
+    )
+    fresh_config = ModelRuntimeConfig(**{**old_config.__dict__, "api_key": "fresh-secret"})
+    config_service = AsyncMock()
+    config_service.invalidate = Mock()
+    config_service.get_embedding_model.side_effect = [old_config, fresh_config]
+    service = LLMService(
+        base_url="http://ignored",
+        chat_model="chat-model",
+        embedding_model="embedding-model",
+        embedding_dimensions=3,
+        model_config_service=config_service,
+    )
+    captured_headers: list[dict[str, str]] = []
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/embeddings")
+    unauthorized = httpx.Response(
+        401,
+        json={"error": {"message": "Missing Authentication header"}},
+        request=request,
+    )
+
+    async def fake_post(url, headers=None, json=None):
+        captured_headers.append(headers or {})
+        if len(captured_headers) == 1:
+            raise httpx.HTTPStatusError("unauthorized", request=request, response=unauthorized)
+        return FakeResponse({"data": [{"embedding": [0.1, 0.2, 0.3]}]})
+
+    service.client.post = fake_post
+
+    try:
+        vector = await service.create_embedding({"entity": "candidate"}, allow_fallback=False)
+    finally:
+        await service.close()
+
+    assert vector == [0.1, 0.2, 0.3]
+    assert captured_headers == [{}, {"Authorization": "Bearer fresh-secret"}]
+    config_service.invalidate.assert_called_once_with("embedding")
+    assert config_service.get_embedding_model.await_count == 2
+
+
+@pytest.mark.anyio
 async def test_parse_job_description_uses_dynamic_chat_config(monkeypatch) -> None:
     config_service = AsyncMock()
     config_service.get_chat_model.return_value = ModelRuntimeConfig(
@@ -120,6 +168,56 @@ async def test_parse_job_description_uses_dynamic_chat_config(monkeypatch) -> No
     assert captured["headers"] == {"Authorization": "Bearer secret-key"}
     assert captured["json"]["model"] == "openrouter/chat-model"
     assert config_service.get_chat_model.await_count == 1
+
+
+@pytest.mark.anyio
+async def test_chat_request_refreshes_stale_config_after_unauthorized() -> None:
+    old_config = ModelRuntimeConfig(
+        task="chat",
+        provider="openrouter",
+        base_url="https://openrouter.ai/api/v1",
+        model="openrouter/chat-model",
+        api_key=None,
+    )
+    fresh_config = ModelRuntimeConfig(**{**old_config.__dict__, "api_key": "fresh-secret"})
+    config_service = AsyncMock()
+    config_service.get_chat_model.side_effect = [old_config, fresh_config]
+    config_service.invalidate = Mock()
+    prompt_service = AsyncMock()
+    prompt_service.get_prompt.return_value = "Return valid JSON only."
+    service = LLMService(
+        base_url="http://ignored",
+        chat_model="fallback-chat",
+        embedding_model="embedding-model",
+        embedding_dimensions=3,
+        model_config_service=config_service,
+        prompt_service=prompt_service,
+    )
+    captured_headers: list[dict[str, str]] = []
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    unauthorized = httpx.Response(
+        401,
+        json={"error": {"message": "Missing Authentication header"}},
+        request=request,
+    )
+
+    async def fake_post(url, headers=None, json=None):
+        captured_headers.append(headers or {})
+        if len(captured_headers) == 1:
+            return unauthorized
+        return FakeResponse({"choices": [{"message": {"content": '{"name":"Ada"}'}}]})
+
+    service.client.post = fake_post
+
+    try:
+        result = await service._generate_json("Extract name", "Ada Lovelace", required_keys=("name",))
+    finally:
+        await service.close()
+
+    assert result == {"name": "Ada"}
+    assert captured_headers == [{}, {"Authorization": "Bearer fresh-secret"}]
+    config_service.invalidate.assert_called_once_with("chat")
+    assert config_service.get_chat_model.await_count == 2
 
 
 @pytest.mark.anyio

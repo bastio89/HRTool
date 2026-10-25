@@ -53,6 +53,7 @@ describe('JobForm', () => {
       job: {
         id: 'job-123',
         title: 'Java Developer Sopra Steria',
+        company: 'Sopra Steria',
         description: 'Java Developer bei Sopra Steria mit Fokus auf Beratung und Software-Entwicklung.',
         requirements: 'Java\nSpring Boot\nDeutsch C1',
         skills: 'Java, Spring Boot, REST APIs',
@@ -68,6 +69,7 @@ describe('JobForm', () => {
     const { container } = renderJobForm()
     const fileInput = container.querySelector('input[type="file"]')
     const titleField = screen.getByPlaceholderText('z.B. Senior Frontend Developer (m/w/d)')
+    const companyField = screen.getByLabelText('Arbeitgeber (Company)')
     const descriptionField = screen.getByPlaceholderText('Was sind die Hauptaufgaben und Verantwortlichkeiten dieser Rolle?')
     const requirementsField = screen.getByPlaceholderText('Welche Skills, Erfahrungen und Qualifikationen werden erwartet?')
     const skillsField = screen.getByPlaceholderText('JavaScript, React, Node.js, Python (kommagetrennt)')
@@ -81,6 +83,7 @@ describe('JobForm', () => {
 
     await waitFor(() => {
       expect(titleField).toHaveValue('Java Developer Sopra Steria')
+      expect(companyField).toHaveValue('Sopra Steria')
       expect(descriptionField).toHaveValue('Java Developer bei Sopra Steria mit Fokus auf Beratung und Software-Entwicklung.')
       expect(requirementsField).toHaveValue('Java\nSpring Boot\nDeutsch C1')
       expect(skillsField).toHaveValue('Java, Spring Boot, REST APIs')
@@ -91,6 +94,7 @@ describe('JobForm', () => {
     await waitFor(() => {
       expect(jobsApi.update).toHaveBeenCalledWith('job-123', expect.objectContaining({
         title: 'Java Developer Sopra Steria',
+        company: 'Sopra Steria',
       }))
     })
 

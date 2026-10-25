@@ -394,6 +394,7 @@ function createMockDb(seed = {}) {
           if (q.includes('INSERT INTO jobs')) {
             let graphJobId = null;
             let title;
+            let maybeCompany;
             let maybeAboutUs;
             let maybeDescription;
             let maybeRequirements;
@@ -404,7 +405,9 @@ function createMockDb(seed = {}) {
             let maybeStatus;
             let maybeUrl;
 
-            if (args.length >= 11) {
+            if (args.length >= 12) {
+              [graphJobId, title, maybeCompany, maybeAboutUs, maybeDescription, maybeRequirements, maybeSkills, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
+            } else if (args.length >= 11) {
               [graphJobId, title, maybeAboutUs, maybeDescription, maybeRequirements, maybeSkills, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
             } else {
               [title, maybeAboutUs, maybeDescription, maybeRequirements, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
@@ -415,6 +418,7 @@ function createMockDb(seed = {}) {
               id: state.seq.jobId++,
               graph_job_id: graphJobId || null,
               title,
+              company: maybeCompany || null,
               about_us: hasExtendedShape ? maybeAboutUs : null,
               description: hasExtendedShape ? maybeDescription : maybeAboutUs,
               requirements: hasExtendedShape ? maybeRequirements : maybeDescription,
@@ -437,6 +441,18 @@ function createMockDb(seed = {}) {
             if (job) {
               job.graph_job_id = graphJobId || null;
               job.updated_at = new Date().toISOString();
+            }
+            return { changes: job ? 1 : 0 };
+          }
+
+          if (q.startsWith('UPDATE jobs SET title=?, company=?')) {
+            const [title, company, aboutUs, description, requirements, skills, benefits, location, type, status, url, id] = args;
+            const job = state.jobs.find(item => String(item.id) === String(id));
+            if (job) {
+              Object.assign(job, {
+                title, company, about_us: aboutUs, description, requirements, skills, benefits, location, type, status, url,
+                updated_at: new Date().toISOString(),
+              });
             }
             return { changes: job ? 1 : 0 };
           }
@@ -1119,6 +1135,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     const payload = {
       title: 'Senior Backend Engineer',
+      company: 'Acme GmbH',
       description: 'Node.js, APIs, Skalierung',
       requirements: '5+ Jahre Erfahrung',
       location: 'Berlin',
@@ -1131,9 +1148,17 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     expect(response.status).toBe(201);
     expect(response.body.title).toBe(payload.title);
+    expect(response.body.company).toBe(payload.company);
     expect(response.body.description).toBe(payload.description);
     expect(response.body.requirements).toBe(payload.requirements);
     expect(mockDb.__state.jobs).toHaveLength(1);
+
+    const updatedPayload = { ...payload, company: 'Acme Solutions AG' };
+    const updateResponse = await request(app).put(`/api/jobs/${response.body.id}`).send(updatedPayload);
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.company).toBe(updatedPayload.company);
+    expect(mockDb.__state.jobs[0].company).toBe(updatedPayload.company);
   });
 
   test('Jobs generate-description API flow persists generated job data in database', async () => {

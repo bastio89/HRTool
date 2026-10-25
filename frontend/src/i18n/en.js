@@ -1769,6 +1769,8 @@ export default {
   'form.education_placeholder': 'B.Sc. Computer Science, University of Berlin',
   'form.institution_placeholder': 'University of Berlin',
   'job.section_general': 'General information',
+  'job.company_label': 'Employer (Company)',
+  'job.company_placeholder': 'Name of the company advertising this position',
   'job.employment_type': 'Employment type',
   'job.section_details': 'Details',
   'job.url_label': 'Link to the job ad',

@@ -14,7 +14,7 @@ const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstuden
 const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
 
 const emptyJob = {
-  title: '', about_us: '', description: '', requirements: '', skills: '', benefits: '',
+  title: '', company: '', about_us: '', description: '', requirements: '', skills: '', benefits: '',
   location: '', type: 'Vollzeit', status: 'Offen', url: ''
 }
 
@@ -56,6 +56,7 @@ export default function JobForm() {
         .then(data => {
           const loaded = {
             title: data.title || '',
+            company: data.company || '',
             about_us: data.about_us || '',
             description: data.description || '',
             requirements: data.requirements || '',
@@ -133,6 +134,7 @@ export default function JobForm() {
       const importedJob = parsed.job || null
       const importedForm = {
         title: importedJob?.title || importedTitle || '',
+        company: importedJob?.company || '',
         about_us: importedJob?.about_us || parsed.about_us || '',
         description: importedJob?.description || parsed.description || (!parsed.about_us && !parsed.requirements && !parsed.benefits ? (parsed.text || '') : '') || '',
         requirements: importedJob?.requirements || parsed.requirements || '',
@@ -221,6 +223,12 @@ export default function JobForm() {
               value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
               required
+            />
+            <Input
+              label={t('job.company_label')}
+              placeholder={t('job.company_placeholder')}
+              value={form.company}
+              onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
             />
             <Input
               label={t('form.location')}

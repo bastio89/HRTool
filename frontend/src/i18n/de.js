@@ -1770,6 +1770,8 @@ export default {
   'form.education_placeholder': 'B.Sc. Informatik, Universität Berlin',
   'form.institution_placeholder': 'Universität Berlin',
   'job.section_general': 'Allgemeine Angaben',
+  'job.company_label': 'Arbeitgeber (Company)',
+  'job.company_placeholder': 'Name des Unternehmens, das die Stelle ausschreibt',
   'job.employment_type': 'Anstellungsart',
   'job.section_details': 'Details',
   'job.url_label': 'Link zur Stelle',

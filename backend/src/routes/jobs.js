@@ -112,6 +112,7 @@ function splitJobTextSections(text) {
 function buildGraphRagJobText(job) {
   const sections = [
     `Jobtitel: ${job.title || ''}`,
+    job.company ? `\nArbeitgeber: ${job.company}` : '',
     job.about_us ? `\nÜber uns:\n${job.about_us}` : '',
     job.description ? `\nBeschreibung:\n${job.description}` : '',
     job.requirements ? `\nAnforderungen:\n${job.requirements}` : '',
@@ -128,6 +129,7 @@ function buildGraphRagJobText(job) {
 function buildGraphRagJobProfile(job) {
   return {
     title: String(job.title || '').trim(),
+    company: job.company || null,
     location: job.location || null,
     employment_type: job.type || null,
   };
@@ -179,11 +181,12 @@ function persistLocalJob(job) {
   }
 
   const result = db.prepare(`
-    INSERT INTO jobs (graph_job_id, title, about_us, description, requirements, skills, benefits, location, type, status, url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (graph_job_id, title, company, about_us, description, requirements, skills, benefits, location, type, status, url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     job.graph_job_id || null,
     job.title,
+    job.company || null,
     job.about_us || null,
     job.description || null,
     job.requirements || null,
@@ -391,10 +394,10 @@ router.get('/:id', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { title, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
+    const { title, company, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
-    const job = persistLocalJob({ title, about_us, description, requirements, skills, benefits, location, type, status, url });
+    const job = persistLocalJob({ title, company, about_us, description, requirements, skills, benefits, location, type, status, url });
     logAudit(req, job.duplicate ? 'duplikat' : 'erstellt', 'Job', job.id, job.title);
 
     ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j').catch((graphRagErr) => {
@@ -604,12 +607,12 @@ router.post('/export-pdf', (req, res) => {
  */
 router.put('/:id', (req, res) => {
   try {
-    const { title, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
+    const { title, company, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
     db.prepare(`
-      UPDATE jobs SET title=?, about_us=?, description=?, requirements=?, skills=?, benefits=?, location=?, type=?, status=?, url=?,
+      UPDATE jobs SET title=?, company=?, about_us=?, description=?, requirements=?, skills=?, benefits=?, location=?, type=?, status=?, url=?,
         updated_at=CURRENT_TIMESTAMP
       WHERE id=?
-    `).run(title, about_us || null, description || null, requirements || null, skills || null, benefits || null,
+    `).run(title, company || null, about_us || null, description || null, requirements || null, skills || null, benefits || null,
       location || null, type || 'Vollzeit', status || 'Offen', url || null, req.params.id);
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     logAudit(req, 'aktualisiert', 'Job', job.id, job.title);

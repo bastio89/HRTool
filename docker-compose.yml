@@ -149,8 +149,8 @@ services:
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       GRAPHRAG_API_KEY: ${GRAPHRAG_API_KEY:-}
       MODEL_CACHE_DIR: /app/model_cache
-      HF_HUB_OFFLINE: "1"
-      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      TRANSFORMERS_OFFLINE: ${TRANSFORMERS_OFFLINE:-0}
       APIFY_TOKEN: ${APIFY_TOKEN:-}
       APIFY_LINKEDIN_MCP_COMMAND: ${APIFY_LINKEDIN_MCP_COMMAND:-"npx -y @apify/actors-mcp-server --actors curious_coder/linkedin-profile-scraper"}
       APIFY_LINKEDIN_MCP_SEARCH_TOOL_NAME: ${APIFY_LINKEDIN_MCP_SEARCH_TOOL_NAME:-search_profiles}
@@ -165,7 +165,7 @@ services:
       interval: 20s
       timeout: 10s
       retries: 15
-      start_period: 30s
+      start_period: 10m
 
 volumes:
   hrtool-data:

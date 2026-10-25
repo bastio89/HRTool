@@ -21,6 +21,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
   const { t, locale } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([]) // { file, id, status, progress, candidate, error }
+  const [importMode, setImportMode] = useState('fast_import')
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   // Reads the shared system status instead of polling on its own.
@@ -93,7 +94,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
         // Step 1: Parse CV
         const result = await cvParserApi.parse(item.file, (evt) => {
           updateFile(item.id, { progress: Math.round(evt.progress * 0.8) }) // 0-80% for parsing
-        }, true)
+        }, true, importMode)
 
         if (result.error) throw new Error(result.error)
 
@@ -217,6 +218,31 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
       footer={footer}
     >
       <div>
+      <div className="mb-5">
+        <p id="batch-cv-import-mode-label" className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mb-2">
+          {t('batch_import.mode_label')}
+        </p>
+        <div role="group" aria-labelledby="batch-cv-import-mode-label" className="inline-flex rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-1">
+          {['fast_import', 'llm_import'].map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={importMode === mode}
+              disabled={running}
+              onClick={() => setImportMode(mode)}
+              className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-colors disabled:opacity-60 ${importMode === mode
+                ? 'bg-white dark:bg-[#48484a] text-black dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+              }`}
+            >
+              {t(mode === 'fast_import' ? 'batch_import.mode_fast' : 'batch_import.mode_llm')}
+            </button>
+          ))}
+        </div>
+        <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-2">
+          {t(importMode === 'fast_import' ? 'batch_import.mode_fast_description' : 'batch_import.mode_llm_description')}
+        </p>
+      </div>
       {/* Drop zone */}
       {!running && (
         <div>

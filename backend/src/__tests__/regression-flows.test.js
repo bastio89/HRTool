@@ -635,6 +635,41 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  test('legacy CV import falls back to the candidate name in the PDF filename', async () => {
+    const mockDb = createMockDb();
+    mockDb.transaction = (callback) => () => callback();
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../aiLogger', () => ({ logAiCall: jest.fn() }));
+    jest.doMock('pdf-parse', () => jest.fn(async () => ({ text: 'Daniel Huber\ndaniel@example.com' })));
+
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 'graph-cand-daniel',
+        message: 'Candidate ingested successfully',
+        profile: { email: 'daniel@example.com' },
+        persisted: true,
+      }),
+    }));
+
+    const cvParserRouter = require('../routes/cv-parser');
+    const app = express();
+    app.use('/api/cv-parser', cvParserRouter);
+
+    const response = await request(app)
+      .post('/api/cv-parser/parse?persist=1')
+      .attach('file', Buffer.from('%PDF-1.4 fake pdf content'), {
+        filename: 'CV 2 - Daniel Huber - Google Docs.pdf',
+        contentType: 'application/pdf',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.candidate.name).toBe('Daniel Huber');
+    expect(mockDb.__state.candidates[0].name).toBe('Daniel Huber');
+  });
+
   test('candidate search is case-insensitive and combines profile fields', async () => {
     const mockDb = createMockDb({
       candidates: [

@@ -219,6 +219,32 @@ function summarizeEducation(profile) {
   return null;
 }
 
+function resolveCandidateName(profile, filename) {
+  const directName = [profile.name, profile.full_name, profile.candidate_name]
+    .map((value) => String(value || '').trim())
+    .find((value) => value && !/^(?:unknown|unknown candidate|unbekannt|n\/a|null)$/i.test(value));
+  if (directName) return directName;
+
+  const composedName = [profile.first_name || profile.firstName, profile.last_name || profile.lastName]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' ');
+  if (composedName) return composedName;
+
+  const originalName = String(filename || '');
+  const filenameName = path.basename(originalName, path.extname(originalName))
+    .replace(/^(?:cv|lebenslauf)(?:[\s_-]*\d+)?[\s_-]+/i, '')
+    .replace(/[\s_-]+(?:google docs|microsoft word|word document).*$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!filenameName || /^(?:cv|lebenslauf|resume|bewerbung|candidate)(?:\s+\d+)?$/i.test(filenameName)) {
+    return null;
+  }
+  return filenameName;
+}
+
 function findDuplicateCandidate(row) {
   if (row.email && String(row.email).trim()) {
     const existing = db.prepare(
@@ -407,7 +433,7 @@ function persistCandidate(profile, req) {
   };
 }
 
-async function ingestIntoGraphRag(rawText, persist) {
+async function ingestIntoGraphRag(rawText, persist, req) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim();
   if (!baseUrl) {
     throw new Error('GraphRAG ist nicht konfiguriert');
@@ -652,11 +678,13 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     sendProgress('extract_done', `${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert`, 35);
 
     sendProgress('graphrag_connect', 'CV wird an GraphRAG übergeben...', 40);
-    const graphRag = await ingestIntoGraphRag(combinedText.trim(), persist);
+    const graphRag = await ingestIntoGraphRag(combinedText.trim(), persist, req);
 
     sendProgress('graphrag_done', 'GraphRAG-Analyse abgeschlossen', 75);
 
     const profile = graphRag.profile || {};
+    const candidateName = resolveCandidateName(profile, filenames[0]);
+    if (candidateName) profile.name = candidateName;
     if (!Array.isArray(profile.work_history) || profile.work_history.length === 0) {
       const recoveredWorkHistory = extractWorkHistoryFromText(combinedText);
       if (recoveredWorkHistory.length > 0) {
@@ -682,6 +710,12 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     let storedInPostgres = false;
     let storedInNeo4j = Boolean(graphRag.persisted);
     if (persist) {
+      if (!candidateName) {
+        return sendError(422, {
+          error: 'Kandidatenname konnte nicht ermittelt werden',
+          details: 'Das LLM hat keinen Namen erkannt und der Dateiname enthält keinen verwendbaren Kandidatennamen.',
+        });
+      }
       sendProgress('postgres_save', 'Speichere Kandidat in PostgreSQL...', 85);
       try {
         localCandidate = persistCandidate(profile, req);

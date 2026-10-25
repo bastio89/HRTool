@@ -1,7 +1,8 @@
-import { render, waitFor, screen } from '@testing-library/react'
+import { render, waitFor, screen, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
 import BatchCVImportDialog from './BatchCVImportDialog'
 import { I18nProvider } from '../I18nContext'
+import { cvParserApi, uploadsApi } from '../api'
 
 vi.mock('../api', () => ({
   cvParserApi: {
@@ -55,6 +56,32 @@ describe('BatchCVImportDialog', () => {
     await waitFor(() => {
       expect(dialog).toHaveAttribute('aria-modal', 'true')
       expect(dialog).toHaveAttribute('aria-labelledby')
+    })
+  })
+
+  test('routes selected LLM imports through the deprecated parser', async () => {
+    cvParserApi.parse.mockResolvedValue({
+      candidate: { id: 'candidate-123', name: 'Nina Example' },
+      persisted: true,
+      storage: { postgres: true, neo4j: true },
+    })
+    uploadsApi.upload.mockResolvedValue({})
+    render(
+      <I18nProvider>
+        <BatchCVImportDialog onClose={vi.fn()} onImported={vi.fn()} />
+      </I18nProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'LLM-Import (Legacy)' }))
+    const file = new File(['cv data'], 'nina-example.pdf', { type: 'application/pdf' })
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } })
+    fireEvent.click(screen.getByRole('button', { name: '1 CVs importieren' }))
+
+    await waitFor(() => {
+      expect(cvParserApi.parse).toHaveBeenCalledWith(file, expect.any(Function), true, 'llm_import')
+    })
+    await waitFor(() => {
+      expect(uploadsApi.upload).toHaveBeenCalledWith('candidate-123', file)
     })
   })
 })

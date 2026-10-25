@@ -638,7 +638,7 @@ export const uploadsApi = {
 
 // CV Parser API
 export const cvParserApi = {
-  parse: async (file, onProgress, persist = false) => {
+  parse: async (file, onProgress, persist = false, importMode = 'fast_import') => {
     const formData = new FormData();
     formData.append('file', file);
     const headers = authHeaders();
@@ -646,7 +646,10 @@ export const cvParserApi = {
     if (onProgress) {
       headers['Accept'] = 'text/event-stream';
     }
-    const response = await fetch(`${GRAPHRAG_API_BASE}/cv-fast-importer/import?persist=${persist}`, {
+    const importUrl = importMode === 'llm_import'
+      ? `${API_BASE}/cv-parser/parse?persist=${persist}`
+      : `${GRAPHRAG_API_BASE}/cv-fast-importer/import?persist=${persist}`;
+    const response = await fetch(importUrl, {
       method: 'POST',
       headers,
       body: formData,
@@ -666,12 +669,14 @@ export const cvParserApi = {
         if (errLine) {
           try {
             const evt = JSON.parse(errLine.slice(6));
-            if (evt.error) throw new Error(evt.error);
+            if (evt.details || evt.detail || evt.error) {
+              throw new Error(evt.details || evt.detail || evt.error);
+            }
           } catch (e) { if (e.message && !e.message.includes('JSON')) throw e; }
         }
       }
       const error = await response.json().catch(() => null);
-      throw new Error(error?.error || error?.detail || `CV-Analyse fehlgeschlagen (HTTP ${response.status})`);
+      throw new Error(error?.details || error?.detail || error?.error || `CV-Analyse fehlgeschlagen (HTTP ${response.status})`);
     }
     // Stream mode: parse SSE events (only if server actually returns SSE)
     const contentType = response.headers.get('content-type') || '';
@@ -695,7 +700,7 @@ export const cvParserApi = {
               } else if (event.type === 'result') {
                 result = event;
               } else if (event.type === 'error') {
-                throw new Error(event.error || 'CV-Analyse fehlgeschlagen');
+                throw new Error(event.details || event.detail || event.error || 'CV-Analyse fehlgeschlagen');
               }
             } catch (e) {
               if (e.message && !e.message.includes('JSON')) throw e;

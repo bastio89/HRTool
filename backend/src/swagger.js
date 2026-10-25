@@ -55,6 +55,7 @@ const options = {
           properties: {
             id: { type: 'integer' },
             title: { type: 'string', example: 'Frontend Developer' },
+            company: { type: 'string', example: 'Acme AG' },
             description: { type: 'string' },
             requirements: { type: 'string' },
             location: { type: 'string' },

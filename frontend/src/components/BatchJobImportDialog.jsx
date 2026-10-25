@@ -43,6 +43,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
   const { t } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([])
+  const [importMode, setImportMode] = useState('fast')
   const [running, setRunning] = useState(false)
   const fileInputRef = useRef(null)
   const timerRef = useRef(null)
@@ -108,7 +109,9 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
     for (const item of pending) {
       updateFile(item.id, { status: STATUS.PROCESSING, error: null, startedAt: Date.now(), elapsed: 0 })
       try {
-        const created = await jobsApi.parseDescriptionFile(item.file, false, true)
+        const created = importMode === 'llm'
+          ? await jobsApi.parseDescriptionFileLegacy(item.file, false, true)
+          : await jobsApi.parseDescriptionFile(item.file, false, true)
         const title = created.title || created.job?.title || filenameToTitle(item.file.name) || item.file.name
 
         const elapsed = item.startedAt ? Math.floor((Date.now() - item.startedAt) / 1000) : null
@@ -189,6 +192,31 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
       footer={footer}
     >
       <div>
+      <div className="mb-5">
+        <p id="batch-job-import-mode-label" className="text-[13px] font-medium text-gray-500 dark:text-gray-400 mb-2">
+          {t('batch_job_import.mode_label')}
+        </p>
+        <div role="group" aria-labelledby="batch-job-import-mode-label" className="inline-flex rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-1">
+          {['fast', 'llm'].map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={importMode === mode}
+              disabled={running}
+              onClick={() => setImportMode(mode)}
+              className={`px-4 py-2 rounded-[10px] text-[13px] font-semibold transition-colors disabled:opacity-60 ${importMode === mode
+                ? 'bg-white dark:bg-[#48484a] text-black dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
+              }`}
+            >
+              {t(`batch_job_import.mode_${mode}`)}
+            </button>
+          ))}
+        </div>
+        <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-2">
+          {t(`batch_job_import.mode_${importMode}_description`)}
+        </p>
+      </div>
       {/* Drop zone */}
       {!running && (
         <div>

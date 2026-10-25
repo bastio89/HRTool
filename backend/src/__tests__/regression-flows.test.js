@@ -393,6 +393,7 @@ function createMockDb(seed = {}) {
 
           if (q.includes('INSERT INTO jobs')) {
             let graphJobId = null;
+            let company = null;
             let title;
             let maybeAboutUs;
             let maybeDescription;
@@ -404,7 +405,9 @@ function createMockDb(seed = {}) {
             let maybeStatus;
             let maybeUrl;
 
-            if (args.length >= 11) {
+            if (args.length >= 12) {
+              [graphJobId, company, title, maybeAboutUs, maybeDescription, maybeRequirements, maybeSkills, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
+            } else if (args.length >= 11) {
               [graphJobId, title, maybeAboutUs, maybeDescription, maybeRequirements, maybeSkills, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
             } else {
               [title, maybeAboutUs, maybeDescription, maybeRequirements, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
@@ -414,6 +417,7 @@ function createMockDb(seed = {}) {
             const row = {
               id: state.seq.jobId++,
               graph_job_id: graphJobId || null,
+              company,
               title,
               about_us: hasExtendedShape ? maybeAboutUs : null,
               description: hasExtendedShape ? maybeDescription : maybeAboutUs,

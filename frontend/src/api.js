@@ -372,6 +372,7 @@ export const jobsApi = {
     };
     const jobData = {
       title,
+      company: profile.company_name || '',
       about_us: '',
       description: parsed.raw_text || '',
       requirements,
@@ -406,6 +407,7 @@ export const jobsApi = {
       profile,
       text: parsed.raw_text || '',
       title: job?.title || title,
+      company: job?.company || jobData.company,
       about_us: job?.about_us || jobData.about_us,
       description: job?.description || jobData.description,
       requirements: job?.requirements || jobData.requirements,
@@ -418,6 +420,31 @@ export const jobsApi = {
         dbSaved: Boolean(job?.id),
       },
     };
+  },
+  parseDescriptionFileLegacy: async (file, extractOnly = false, persist = false) => {
+    if (!/\.pdf$/i.test(file.name || '') && file.type !== 'application/pdf') {
+      throw new Error('Nur PDF-Dateien werden unterstützt');
+    }
+
+    const query = new URLSearchParams({
+      extractOnly: extractOnly ? '1' : '0',
+      persist: persist ? '1' : '0',
+    });
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/jobs/parse-description?${query}`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.detail || error?.error || `Job-Analyse fehlgeschlagen (HTTP ${response.status})`);
+    }
+
+    const parsed = await response.json();
+    notifyCreditRefresh({ source: 'jobsApi.parseDescriptionFileLegacy' });
+    return parsed;
   },
   exportJobsChPdfs: async (links) => {
     const response = await fetch(`${API_BASE}/plugins/jobs_ch/export-pdf`, {

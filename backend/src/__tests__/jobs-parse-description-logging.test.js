@@ -77,14 +77,16 @@ describe('jobs parse-description logging', () => {
     const savedJob = {
       id: 42,
       title: 'Senior Backend Engineer',
+      company: 'Acme AG',
       description: 'Full extracted job description',
       requirements: 'Pensum: 80–100 %',
     };
+    const insertJob = jest.fn(() => ({ lastInsertRowid: savedJob.id }));
     jest.doMock('../aiLogger', () => ({ logAiCall: jest.fn() }));
     jest.doMock('../database', () => ({
       prepare: (sql) => {
-        if (sql.startsWith('INSERT INTO jobs')) {
-          return { run: () => ({ lastInsertRowid: savedJob.id }) };
+        if (sql.includes('INSERT INTO jobs')) {
+          return { run: insertJob };
         }
         if (sql.startsWith('SELECT * FROM jobs WHERE id = ?')) {
           return { get: () => savedJob };
@@ -103,6 +105,7 @@ describe('jobs parse-description logging', () => {
 
     const graphRagProfile = {
       title: savedJob.title,
+      company: savedJob.company,
       description: savedJob.description,
       required_skills: [{ name: 'Python', category: 'HardSkill', priority: 'Mandatory' }],
     };
@@ -121,11 +124,55 @@ describe('jobs parse-description logging', () => {
 
     const response = await request(app).post('/api/jobs').send({
       title: savedJob.title,
+      company: savedJob.company,
       description: savedJob.description,
       graphRagProfile,
     });
 
     expect(response.status).toBe(201);
     expect(response.body.graphRag.id).toBe('graph-job-42');
+    expect(insertJob.mock.calls[0][1]).toBe(savedJob.company);
+  });
+
+  test('updates a job employer company', async () => {
+    jest.resetModules();
+    const company = 'Updated Employer GmbH';
+    const updateJob = jest.fn();
+    const updatedJob = { id: 42, title: 'Backend Engineer', company };
+    jest.doMock('../database', () => ({
+      prepare: (sql) => {
+        if (sql.includes('UPDATE jobs SET title=?, company=?')) return { run: updateJob };
+        if (sql.includes('SELECT * FROM jobs WHERE id = ?')) return { get: () => updatedJob };
+        return { get: () => undefined, all: () => [], run: () => ({}) };
+      },
+      exec: () => ({}),
+    }));
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+
+    let jobsRouter;
+    jest.isolateModules(() => {
+      jobsRouter = require('../routes/jobs');
+    });
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const response = await request(app).put('/api/jobs/42').send({
+      title: updatedJob.title,
+      company,
+      about_us: '',
+      description: '',
+      requirements: '',
+      skills: '',
+      benefits: '',
+      location: '',
+      type: 'Vollzeit',
+      status: 'Offen',
+      url: '',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.company).toBe(company);
+    expect(updateJob.mock.calls[0][1]).toBe(company);
   });
 });

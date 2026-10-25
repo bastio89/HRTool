@@ -8,6 +8,7 @@ import de from '../i18n/de'
 vi.mock('../api', () => ({
   jobsApi: {
     parseDescriptionFile: vi.fn(),
+    parseDescriptionFileLegacy: vi.fn(),
   },
 }))
 
@@ -64,6 +65,31 @@ describe('BatchJobImportDialog', () => {
     })
 
     expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, true)
+    expect(onImported).toHaveBeenCalledTimes(1)
+  })
+
+  test('sends LLM import mode to the deprecated legacy route', async () => {
+    jobsApi.parseDescriptionFileLegacy.mockResolvedValue({
+      id: 'legacy-job-1',
+      title: 'Legacy Job',
+      graphRag: { message: 'Job ingested successfully' },
+    })
+    const onImported = vi.fn()
+    render(
+      <I18nProvider>
+        <BatchJobImportDialog onClose={vi.fn()} onImported={onImported} />
+      </I18nProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: de['batch_job_import.mode_llm'] }))
+    const file = new File(['job text'], 'legacy-job.pdf', { type: 'application/pdf' })
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } })
+    fireEvent.click(screen.getByRole('button', { name: de['batch_job_import.start'].replace('{n}', '1') }))
+
+    await waitFor(() => {
+      expect(jobsApi.parseDescriptionFileLegacy).toHaveBeenCalledWith(file, false, true)
+    })
+    expect(jobsApi.parseDescriptionFile).not.toHaveBeenCalled()
     expect(onImported).toHaveBeenCalledTimes(1)
   })
 })

@@ -56,4 +56,26 @@ describe('job access for fachbereich', () => {
     const res = await request(appAs({ id: 1, role: 'recruiter' })).get(`/api/jobs/${jobIds[1]}`);
     expect(res.status).toBe(200);
   });
+
+  test('updating a job persists its employer company', async () => {
+    const company = `Employer ${marker}`;
+    const res = await request(appAs({ id: 1, role: 'recruiter' }))
+      .put(`/api/jobs/${jobIds[0]}`)
+      .send({
+        title: `Zugewiesen ${marker}`,
+        company,
+        about_us: '',
+        description: '',
+        requirements: '',
+        skills: '',
+        benefits: '',
+        location: 'Zürich',
+        type: 'Vollzeit',
+        status: 'Offen',
+        url: '',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.company).toBe(company);
+  });
 });

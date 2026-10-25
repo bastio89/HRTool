@@ -12,6 +12,7 @@ describe('jobsApi.parseDescriptionFile', () => {
     const parsedProfile = {
       profile: {
         job_title: 'Senior Backend Engineer',
+        company_name: 'Acme AG',
         location: 'Luzern',
         remote_work: 'Hybrid',
         workload_pensum: '80–100 %',
@@ -22,6 +23,7 @@ describe('jobsApi.parseDescriptionFile', () => {
     const persistedJob = {
       id: 41,
       title: 'Senior Backend Engineer',
+      company: 'Acme AG',
       description: parsedProfile.raw_text,
       graphRag: { id: 'graph-job-41', message: 'Job ingested successfully' },
     }
@@ -64,5 +66,19 @@ describe('jobsApi.parseDescriptionFile', () => {
 
     await expect(jobsApi.parseDescriptionFile(file)).rejects.toThrow('Nur PDF-Dateien')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  test('uses the deprecated jobs route for legacy LLM imports', async () => {
+    const legacyResponse = { success: true, id: 12, title: 'Legacy Job' }
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => legacyResponse })
+    vi.stubGlobal('fetch', fetchMock)
+    const file = new File(['pdf bytes'], 'legacy-job.pdf', { type: 'application/pdf' })
+
+    const result = await jobsApi.parseDescriptionFileLegacy(file, false, true)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/jobs/parse-description?extractOnly=0&persist=1')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(fetchMock.mock.calls[0][1].body.get('file')).toBe(file)
+    expect(result).toEqual(legacyResponse)
   })
 })

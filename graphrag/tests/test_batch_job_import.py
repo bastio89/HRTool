@@ -1,4 +1,4 @@
-"""Tests fuer den Batch-Import von Stellen-PDFs.
+"""Tests fuer den Batch-Import von Stellen-PDFs. 
 
 Der Importer orchestrierte frueher LLM, Neo4j und Postgres selbst. Inzwischen
 schickt er die Datei an /jobs/parse-description im Backend und verschiebt sie

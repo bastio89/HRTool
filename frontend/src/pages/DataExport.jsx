@@ -9,27 +9,48 @@ import { useConfirm } from '../components/ConfirmDialog'
 import { useI18n } from '../I18nContext'
 
 const STATUS_OPTIONS = ['Aktiv', 'Passiv', 'In Prozess', 'Blacklist']
+const CANDIDATES = 'candidates'
 
 const EMPTY_FILTERS = { status: [], source: '', tags: '', created_from: '', created_to: '', updated_since: '', ids: '' }
+
+// Bewerber haben eine eigene Filtermaske; fuer alle anderen Entitaeten
+// (KI-/3D-Matching) wird sie aus den Filterdefinitionen des Schemas gebaut.
+const isCandidates = (entity) => !entity || entity.key === CANDIDATES
+
+function emptyFilters(entity) {
+  if (isCandidates(entity)) return { ...EMPTY_FILTERS }
+  return Object.fromEntries((entity.filters || []).map(def => [def.key, def.type === 'list' && def.options ? [] : '']))
+}
 
 function emptyDraft(entity) {
   return {
     id: null,
     name: '',
     description: '',
-    entity: entity?.key || 'candidates',
-    format: 'csv',
+    entity: entity?.key || CANDIDATES,
+    format: entity?.defaultFormat || 'csv',
     format_options: {},
     fields: (entity?.defaultFields || []).map(key => ({ key, as: key })),
-    filters: { ...EMPTY_FILTERS },
+    filters: emptyFilters(entity),
     external_enabled: false,
   }
 }
 
 const listText = (value) => (Array.isArray(value) ? value.join(', ') : String(value || ''))
+const splitList = (value) => String(value || '').split(',').map(item => item.trim()).filter(Boolean)
 
-function draftFromProfile(profile) {
+function draftFromProfile(profile, entity) {
   const filters = profile.filters || {}
+  if (!isCandidates(entity)) {
+    const draftFilters = emptyFilters(entity)
+    for (const def of entity.filters || []) {
+      const value = filters[def.key]
+      if (value === undefined || value === null) continue
+      if (def.type === 'list') draftFilters[def.key] = def.options ? [].concat(value) : listText(value)
+      else draftFilters[def.key] = String(value)
+    }
+    return { ...profile, filters: draftFilters }
+  }
   return {
     ...profile,
     filters: {
@@ -44,15 +65,36 @@ function draftFromProfile(profile) {
 }
 
 // Leere Eingaben fallen weg; Komma-Listen werden zu Arrays.
-function filtersForApi(filters) {
+function filtersForApi(entity, filters) {
+  if (!isCandidates(entity)) return schemaFiltersForApi(entity, filters)
   const out = {}
-  const list = (value) => String(value || '').split(',').map(item => item.trim()).filter(Boolean)
+  const list = splitList
   if (filters.status?.length) out.status = filters.status
   if (list(filters.source).length) out.source = list(filters.source)
   if (list(filters.tags).length) out.tags = list(filters.tags)
   if (list(filters.ids).length) out.ids = list(filters.ids).map(Number).filter(Number.isFinite)
   for (const key of ['created_from', 'created_to', 'updated_since']) {
     if (filters[key]) out[key] = filters[key]
+  }
+  return out
+}
+
+function schemaFiltersForApi(entity, filters) {
+  const out = {}
+  for (const def of entity.filters || []) {
+    const value = filters[def.key]
+    if (def.type === 'list') {
+      const items = Array.isArray(value) ? value : splitList(value)
+      if (items.length) out[def.key] = items.map(item => (/^\d+$/.test(item) ? Number(item) : item))
+    } else if (def.type === 'number') {
+      if (value === '' || value === undefined || value === null) continue
+      // Ungueltige Eingaben unveraendert senden: das Backend lehnt sie mit
+      // einer Meldung ab, statt stillschweigend alles zu exportieren.
+      const number = Number(String(value).replace(',', '.'))
+      out[def.key] = Number.isFinite(number) ? number : String(value)
+    } else if (value) {
+      out[def.key] = value
+    }
   }
   return out
 }
@@ -65,6 +107,81 @@ function previewCell(value) {
 
 const selectClass = 'w-full px-5 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[16px] text-black dark:text-white text-[15px] focus:outline-none focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10'
 const labelClass = 'block text-[13px] font-medium text-gray-500 dark:text-gray-400 ml-1 mb-1.5'
+
+// Filter fuer die N:N-Matching-Abzuege, aus dem Schema gebaut. Der
+// Schwellwert ("nur Matchingwert groesser als X %") steht als Hauptfilter oben.
+function MatchingFilters({ entity, filters, onChange, t }) {
+  const definitions = entity.filters || []
+  const primary = definitions.filter(def => def.primary)
+  const others = definitions.filter(def => !def.primary)
+  const label = (def) => t(`export.mfilter_${def.key}`, def.label)
+
+  return (
+    <Card className="space-y-5 !p-5 sm:!p-8">
+      <h2 className="text-[17px] font-semibold text-black dark:text-white">{t('export.filters_matching')}</h2>
+
+      {primary.map(def => (
+        <div key={def.key} className="rounded-[18px] bg-[#0071e3]/5 border border-[#0071e3]/15 p-4 sm:p-5">
+          <label className="block text-[15px] font-semibold text-black dark:text-white mb-2" htmlFor={`export-filter-${def.key}`}>{label(def)}</label>
+          <div className="flex items-center gap-3">
+            <input
+              id={`export-filter-${def.key}`}
+              type="number"
+              inputMode="decimal"
+              min={def.min}
+              max={def.max}
+              step="any"
+              placeholder={t('export.score_above_placeholder')}
+              className={`${selectClass} max-w-[180px] text-[17px] font-semibold`}
+              value={filters[def.key] ?? ''}
+              onChange={e => onChange(def.key, e.target.value)}
+            />
+            {def.unit && <span className="text-[17px] font-semibold text-gray-500 dark:text-gray-400">{def.unit}</span>}
+          </div>
+          <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2">{t('export.score_above_hint')}</p>
+        </div>
+      ))}
+
+      {others.filter(def => def.type === 'list' && def.options).map(def => (
+        <div key={def.key}>
+          <span className={labelClass}>{label(def)}</span>
+          <div className="flex flex-wrap gap-2">
+            {def.options.map(option => {
+              const selected = filters[def.key] || []
+              const active = selected.includes(option)
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => onChange(def.key, active ? selected.filter(item => item !== option) : [...selected, option])}
+                  className={`px-4 py-1.5 rounded-full text-[13px] font-medium cursor-pointer transition ${active ? 'bg-[#0071e3] text-white' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] text-gray-700 dark:text-gray-300'}`}
+                >
+                  {option}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        {others.filter(def => !(def.type === 'list' && def.options)).map(def => (
+          <div key={def.key}>
+            <label className={labelClass} htmlFor={`export-filter-${def.key}`}>{label(def)}</label>
+            <input
+              id={`export-filter-${def.key}`}
+              type={def.type === 'date' || def.type === 'datetime' ? 'date' : def.type === 'number' ? 'number' : 'text'}
+              className={selectClass}
+              value={filters[def.key] ?? ''}
+              onChange={e => onChange(def.key, e.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
 
 export default function DataExport() {
   const { t } = useI18n()
@@ -106,10 +223,13 @@ export default function DataExport() {
       .then(([schemaData, profileData]) => {
         setSchema(schemaData)
         setProfiles(profileData || [])
-        const base = emptyDraft(schemaData.entities[0])
+        // ?entity=matching_vector oeffnet direkt den gewuenschten Abzug
+        // (z. B. aus der Matrix-Matching-Seite).
+        const requested = schemaData.entities.find(item => item.key === searchParams.get('entity'))
+        const base = emptyDraft(requested || schemaData.entities[0])
         // Aus der Bewerberliste uebergebene Auswahl vorbelegen.
         const ids = searchParams.get('ids')
-        if (ids) base.filters.ids = ids
+        if (ids && base.entity === CANDIDATES) base.filters.ids = ids
         setDraft(base)
       })
       .catch(err => setError(err.message))
@@ -121,6 +241,18 @@ export default function DataExport() {
     setPreview(null)
   }
   const updateFilter = (key, value) => update({ filters: { ...draft.filters, [key]: value } })
+  const entityByKey = (key) => schema?.entities.find(item => item.key === key) || null
+  const openProfile = (profile) => setDraft(draftFromProfile(profile, entityByKey(profile.entity)))
+
+  // Ein Wechsel der Datenquelle beginnt einen neuen Entwurf: Felder und
+  // Filter unterscheiden sich je Quelle.
+  const selectEntity = (key) => {
+    if (key === draft.entity) return
+    setDraft(emptyDraft(entityByKey(key)))
+    setPreview(null)
+    setFieldSearch('')
+    setError('')
+  }
   const updateFormatOption = (key, value) => update({ format_options: { ...draft.format_options, [key]: value } })
 
   const toggleField = (key) => {
@@ -141,7 +273,7 @@ export default function DataExport() {
     format: draft.format,
     format_options: draft.format_options,
     fields: draft.fields.map(field => ({ key: field.key, as: field.as.trim() || field.key })),
-    filters: filtersForApi(draft.filters),
+    filters: filtersForApi(entity, draft.filters),
   })
 
   const run = async (label, action) => {
@@ -168,7 +300,7 @@ export default function DataExport() {
     const payload = { ...spec(), name: draft.name, description: draft.description, external_enabled: draft.external_enabled }
     const saved = draft.id ? await exportsApi.updateProfile(draft.id, payload) : await exportsApi.createProfile(payload)
     setProfiles(await exportsApi.getProfiles())
-    setDraft(draftFromProfile(saved))
+    openProfile(saved)
     toast.success(t('export.saved'))
   })
 
@@ -214,14 +346,16 @@ export default function DataExport() {
             {profiles.map(profile => (
               <button
                 key={profile.id}
-                onClick={() => { setDraft(draftFromProfile(profile)); setPreview(null); setError('') }}
+                onClick={() => { openProfile(profile); setPreview(null); setError('') }}
                 className={`w-full text-left px-4 py-3 rounded-[14px] transition cursor-pointer ${draft.id === profile.id ? 'bg-[#0071e3]/10 text-[var(--apple-blue-text)]' : 'hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] text-black dark:text-white'}`}
               >
                 <div className="font-medium text-[15px] flex items-center gap-2">
                   {profile.name}
                   {profile.external_enabled && <Globe className="w-3.5 h-3.5 text-[#34c759]" aria-label={t('export.external')} />}
                 </div>
-                <div className="text-[12px] text-gray-500 dark:text-gray-400">{profile.format.toUpperCase()} · {profile.fields.length} {t('export.fields_count')}</div>
+                <div className="text-[12px] text-gray-500 dark:text-gray-400">
+                  {t(`export.entity_${profile.entity}`, entityByKey(profile.entity)?.label || profile.entity)} · {profile.format.toUpperCase()} · {profile.fields.length} {t('export.fields_count')}
+                </div>
               </button>
             ))}
           </div>
@@ -229,6 +363,28 @@ export default function DataExport() {
 
         <div className="space-y-6 min-w-0">
           <Card className="space-y-5 !p-5 sm:!p-8">
+            <div>
+              <span className={labelClass} id="export-source-label">{t('export.source')}</span>
+              <div role="radiogroup" aria-labelledby="export-source-label" className="inline-flex flex-wrap gap-1.5 p-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[18px]">
+                {schema.entities.map(item => {
+                  const active = item.key === draft.entity
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => selectEntity(item.key)}
+                      className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition cursor-pointer ${active ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+                    >
+                      {t(`export.entity_${item.key}`, item.label)}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 ml-1">{t(`export.entity_desc_${entity?.key}`, entity?.description || '')}</p>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <Input label={t('export.name')} value={draft.name} onChange={e => update({ name: e.target.value })} placeholder={t('export.name_placeholder')} disabled={!isAdmin} />
               <Input label={t('export.description')} value={draft.description} onChange={e => update({ description: e.target.value })} disabled={!isAdmin} />
@@ -317,6 +473,9 @@ export default function DataExport() {
             </Card>
           </div>
 
+          {!isCandidates(entity) ? (
+            <MatchingFilters entity={entity} filters={draft.filters} onChange={updateFilter} t={t} />
+          ) : (
           <Card className="space-y-4 !p-5 sm:!p-8">
             <h2 className="text-[17px] font-semibold text-black dark:text-white">{t('export.filters')}</h2>
             <div>
@@ -352,6 +511,7 @@ export default function DataExport() {
               ))}
             </div>
           </Card>
+          )}
 
           {isAdmin && (
             <Card className="space-y-3 !p-5 sm:!p-8">

@@ -12,22 +12,22 @@
 // "as" bildet ein internes Feld auf den Feldnamen des Zielsystems ab. Punkte
 // erzeugen in JSON/XML verschachtelte Objekte. Weitere Entitaeten (z. B.
 // Stellen) werden in ENTITIES registriert und nutzen dieselbe Schnittstelle.
+//
+// Neben den Bewerbern gibt es die Matching-Ergebnisse als N:N-Abzug
+// (eine Zeile je Paarung Bewerber x Stelle), getrennt nach KI- und
+// 3D-Matching; siehe entities/matchings.js.
 
 const { getFormat, listFormats } = require('./formats');
+const { ExportValidationError } = require('./errors');
+const { aiMatchingEntity, vectorMatchingEntity } = require('./entities/matchings');
 
 const ENTITIES = {
   candidates: require('./entities/candidates'),
+  [aiMatchingEntity.key]: aiMatchingEntity,
+  [vectorMatchingEntity.key]: vectorMatchingEntity,
 };
 
 const MAX_ROWS = 50000;
-
-class ExportValidationError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ExportValidationError';
-    this.status = 400;
-  }
-}
 
 function getEntity(key) {
   return Object.prototype.hasOwnProperty.call(ENTITIES, key) ? ENTITIES[key] : null;
@@ -37,6 +37,8 @@ function describeEntities(db) {
   return Object.values(ENTITIES).map(entity => ({
     key: entity.key,
     label: entity.label,
+    description: entity.description || '',
+    defaultFormat: entity.defaultFormat || 'csv',
     defaultFields: entity.defaultFields,
     filters: entity.filters,
     fields: entity.fields(db).map(({ key, label, group, type }) => ({ key, label, group, type })),

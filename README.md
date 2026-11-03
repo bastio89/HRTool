@@ -95,6 +95,7 @@
 - **CSV-Import** — Massenhafter Bewerber-Upload mit automatischer Duplikat-Erkennung
 - **Datenbank-Backup** — JSON-Backup der PostgreSQL-Daten als Download (Admin)
 - **Generische Export-Schnittstelle** — Bewerberdaten mit frei wählbaren Feldern, Zielfeld-Mapping und Filtern als CSV, JSON, NDJSON oder XML exportieren; als Profil speichern und optional per API-Key für Fremdsysteme freigeben (Administration → Datenexport, nur Admins)
+- **N:N-Matching-Export** — Ergebnisse von KI-Matching und 3D-Matching als Liste Bewerber × Stelle (eine Zeile je Paarung, letztes Ergebnis) exportieren, optional nur Paarungen mit einem Matchingwert größer X % (Administration → Datenexport → Datenquelle „KI-Matching“ bzw. „3D-Matching“)
 
 ### 🔐 Sicherheit & Compliance
 - **JWT-Authentifizierung** — Sichere Token-basierte Anmeldung
@@ -477,6 +478,23 @@ X-API-Key: ihr-externer-api-key
 ```
 
 Die Antwort trägt `X-Total-Count` für das seitenweise Abholen. Jeder Export – über die Oberfläche wie per API – wird mit Feldern, Filtern und Anzahl im Audit-Log protokolliert. Neue Entitäten (z. B. Stellen) werden in `backend/src/exports/index.js` registriert und nutzen dieselben Formate, Profile und Endpunkte.
+
+#### Matching-Ergebnisse (N:N)
+
+Neben `candidates` gibt es die Entitäten `matching_ai` (KI-Matching) und `matching_vector` (3D-Matching). Sie liefern eine Zeile je Paarung Bewerber × Stelle mit dem jeweils **letzten** Ergebnis – über alle Läufe hinweg (Matrix „Alle Kandidaten : Alle Stellen“, Stelle → Kandidaten, Kandidat → Stellen, KI-Matching selektierter Paarungen).
+
+```json
+{
+  "entity": "matching_vector",
+  "format": "csv",
+  "fields": ["candidate_id", "candidate_uuid", "candidate_name", "job_id", "job_uuid", "job_title", "score", "hard_skill_score", "soft_skill_score", "matched_at"],
+  "filters": { "score_above": 70, "job_status": ["Offen"] }
+}
+```
+
+- `score_above`: nur Paarungen mit Matchingwert **größer als** dem Wert (0–100, in %). Weitere Filter: `job_ids`, `candidate_ids`, `job_status`, `candidate_status`, `updated_since` (gematcht seit).
+- IDs: `candidate_id` und `job_id` sind die PostgreSQL-Primärschlüssel des HRTool und eindeutig. `candidate_uuid` bzw. `job_uuid` sind die GraphRAG/Neo4j-UUIDs (`candidates.graph_candidate_id`, `jobs.graph_job_id`); sie können leer sein (ältere oder manuell angelegte Datensätze) und sind in PostgreSQL nicht als eindeutig abgesichert – als Schlüssel im Zielsystem daher die PostgreSQL-IDs verwenden.
+- Grundlage ist die Tabelle `matching_pair_results` (je Methode und Paarung genau ein Eintrag). Läufe aus der Matching-Historie, die vor dieser Tabelle entstanden sind, werden beim ersten Matching-Export automatisch übernommen – bei 3D-Läufen aus dieser Zeit allerdings nur die dort gespeicherten (besten 100) Paarungen. Wird ein Lauf aus der Historie, ein Bewerber oder eine Stelle gelöscht, verschwinden die zugehörigen Paarungen mit.
 
 ### Übersicht: 63+ Endpunkte
 

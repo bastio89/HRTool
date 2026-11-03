@@ -194,7 +194,7 @@ router.get('/profiles/:id', requireRole(RUN_ROLES), (req, res) => {
  *             properties:
  *               name: { type: string }
  *               description: { type: string }
- *               entity: { type: string, example: candidates }
+ *               entity: { type: string, enum: [candidates, matching_ai, matching_vector], example: candidates }
  *               format: { type: string, enum: [json, ndjson, csv, xml] }
  *               format_options: { type: object }
  *               fields:
@@ -310,7 +310,7 @@ router.post('/preview', requireRole(RUN_ROLES), (req, res) => {
  *         application/json:
  *           schema:
  *             properties:
- *               entity: { type: string, example: candidates }
+ *               entity: { type: string, enum: [candidates, matching_ai, matching_vector], example: candidates }
  *               format: { type: string, enum: [json, ndjson, csv, xml] }
  *               format_options: { type: object }
  *               fields: { type: array, items: { type: object } }

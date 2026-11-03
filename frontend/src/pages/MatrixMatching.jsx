@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GitCompare, Briefcase, Users, Loader2, Zap, AlertTriangle } from 'lucide-react'
+import { GitCompare, Briefcase, Users, Loader2, Zap, AlertTriangle, Download } from 'lucide-react'
 import { candidatesApi, matchingApi, jobsApi } from '../api'
+import { useAuth } from '../AuthContext'
 import { Card, Button, LoadingSpinner } from '../components/UI'
 import MatchingWeights from '../components/MatchingWeights'
 import MatchingProgress from '../components/MatchingProgress'
@@ -10,6 +11,7 @@ import { useI18n } from '../I18nContext'
 export default function MatrixMatching() {
   const navigate = useNavigate()
   const { t } = useI18n()
+  const { user } = useAuth()
   const [candidates, setCandidates] = useState([])
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -165,6 +167,23 @@ export default function MatrixMatching() {
           </Button>
 
           <MatchingProgress running={matching} totalPairs={pairCount} color="#8b5cf6" />
+
+          {user?.role === 'admin' && (
+            <Card className="p-8 space-y-4">
+              <div>
+                <p className="text-[16px] font-semibold text-black dark:text-white">{t('matrix.export_title')}</p>
+                <p className="text-[14px] text-gray-500 dark:text-gray-400 mt-1">{t('matrix.export_desc')}</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button variant="secondary" size="sm" onClick={() => navigate('/admin/export?entity=matching_vector')}>
+                  <Download className="w-4 h-4" /> {t('matrix.export_vector')}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => navigate('/admin/export?entity=matching_ai')}>
+                  <Download className="w-4 h-4" /> {t('matrix.export_ai')}
+                </Button>
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

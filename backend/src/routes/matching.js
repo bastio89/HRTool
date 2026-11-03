@@ -9,6 +9,12 @@ const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 const { graphRagAuthHeaders } = require('../graphragAuth');
+// Alle Paarungen eines Laufs landen zusaetzlich in matching_pair_results,
+// damit sie als N:N-Export (Administration -> Datenexport) abrufbar sind.
+// Das Speichern ist fehlertolerant: Ein Fehler dort laesst kein Matching
+// scheitern, der Lauf wird dann beim naechsten Export aus der Historie
+// nachgetragen.
+const { recordMatchingPairsSafely } = require('../matchingPairs');
 
 const router = express.Router();
 
@@ -833,6 +839,19 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
       VALUES (?, ?, ?, ?, ?)
     `).run(resolvedJob.description || buildJobDescription(resolvedJob), resolvedJob.title, JSON.stringify(matchingResults), JSON.stringify(buildMatchingSummary(matchingResults)), storedJobId);
 
+    // Nur Stellen aus dem Tool gehoeren in die N:N-Uebersicht; ein Matching
+    // gegen eine frei eingegebene Beschreibung hat keine Stelle.
+    if (jobRecord) {
+      recordMatchingPairsSafely(db, 'ai', matchingResults.results, {
+        matchingResultId: saveResult.lastInsertRowid,
+        jobId: jobRecord.id,
+        candidateIds: candidates.map(candidate => candidate.id),
+        model: OLLAMA_MODEL,
+      });
+    } else {
+      recordMatchingPairsSafely(db, 'ai', [], { matchingResultId: saveResult.lastInsertRowid });
+    }
+
     logAiCall({
       userId: req.user?.id,
       feature: 'matching',
@@ -894,6 +913,8 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
       })),
       weights,
     });
+
+    recordMatchingPairsSafely(db, 'ai', graphRagResult?.results, { model: graphRagResult?.model || null });
 
     logAudit(req, 'ki-matching-batch', 'Matching', null, 'KI-Matching selektierte Paarungen', {
       selectedCount: pairs.length,
@@ -977,6 +998,16 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       null
     );
 
+    // Die Historie behaelt nur die besten Paarungen; fuer den N:N-Export
+    // werden hier alle Paarungen des Laufs gespeichert.
+    recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
+      matchingResultId: saveResult.lastInsertRowid,
+      jobIds: jobs.map(job => job.id),
+      candidateIds: candidates.map(candidate => candidate.id),
+      model: graphRagResult.model || null,
+      engine,
+    });
+
     logAudit(req, 'ki-matching-matrix', 'Matching', saveResult.lastInsertRowid, resultTitle, {
       jobCount: jobs.length,
       candidateCount: candidates.length,
@@ -1044,6 +1075,17 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
         null,
       );
 
+      // Nicht per Titel gemappte Stellen tragen noch die Neo4j-UUID; sie
+      // werden ueber graph_job_id zugeordnet. Der Bewerber ist bekannt.
+      recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
+        matchingResultId: saveResult.lastInsertRowid,
+        candidateId: candidate?.id ?? null,
+        jobIds: jobs.map(job => job.id),
+        allowNameLookup: true,
+        model: graphRagResult.model || null,
+        engine,
+      });
+
       logAudit(req, 'ki-matching-vector', 'Matching', saveResult.lastInsertRowid, resultTitle, {
         engine,
         direction,
@@ -1086,6 +1128,15 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       null,
       storedJobId,
     );
+
+    recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
+      matchingResultId: saveResult.lastInsertRowid,
+      jobId: storedJobId,
+      candidateIds,
+      allowNameLookup: true,
+      model: graphRagResult.model || null,
+      engine,
+    });
 
     logAudit(req, 'ki-matching-vector', 'Matching', saveResult.lastInsertRowid, resultTitle, {
       engine,

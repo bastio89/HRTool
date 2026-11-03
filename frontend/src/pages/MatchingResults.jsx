@@ -264,6 +264,23 @@ export default function MatchingResults() {
 
         <KiDisclaimer feature="matching" className="mb-6" />
 
+        {Array.isArray(matrixData.missing) && matrixData.missing.length > 0 && (
+          <div role="status" className="p-5 rounded-[20px] bg-[#ff9500]/10 border border-[#ff9500]/20 mb-8">
+            <p className="text-[15px] font-semibold text-[#a35b00] dark:text-[#ffb340]">
+              {t('matching.missing_title').replace('{n}', matrixData.missing.length)}
+            </p>
+            <ul className="mt-2 space-y-1 text-[13px] text-gray-700 dark:text-gray-300">
+              {matrixData.missing.map((entry) => (
+                <li key={`${entry.type}-${entry.id}`}>
+                  {entry.type === 'job' ? t('matching.missing_job') : t('matching.missing_candidate')}{' '}
+                  <span className="font-semibold">{entry.name || `#${entry.id}`}</span>
+                  {entry.reason ? ` – ${entry.reason}` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{jobCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_jobs')}</p></Card>
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{candidateCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_candidates')}</p></Card>

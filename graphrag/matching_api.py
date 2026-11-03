@@ -34,6 +34,43 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 	billing_store = getattr(db_service, 'postgres_store', None) or getattr(llm_service, 'postgres_store', None)
 	billing_service = BillingService(billing_store) if billing_store is not None else None
 
+	async def resolve_graph_ids(table: str, requested: list[Any]) -> dict[str, str]:
+		"""Angefragte ID -> ID des Neo4j-Knotens. PostgreSQL-IDs (Zahlen) werden
+		in die UUID des Datensatzes uebersetzt, UUIDs bleiben unveraendert. So
+		findet das Matching Bewerber und Stellen per ID statt ueber den Namen."""
+		values = list(dict.fromkeys(str(value).strip() for value in requested if str(value).strip()))
+		mapping: dict[str, str] = {}
+		if billing_store is not None and any(value.isdigit() for value in values):
+			mapping = await billing_store.graph_ids_for(table, values)
+		return {value: mapping.get(value, value) for value in values}
+
+	def missing_ids(graph_ids: dict[str, str], found_rows: list[dict[str, Any]]) -> list[str]:
+		found = {str(row.get('id')) for row in found_rows if row.get('id') is not None}
+		return [requested for requested, graph_id in graph_ids.items() if graph_id not in found]
+
+	async def load_vectormatch_inputs(payload: VectorMatchRequest) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+		job_graph_ids = await resolve_graph_ids('jobs', payload.job_ids)
+		candidate_graph_ids = await resolve_graph_ids('candidates', payload.cv_ids)
+		jobs_raw = await db_service.get_jobs_for_vectormatch(list(job_graph_ids.values()), payload.job_titles)
+		candidates_raw = await db_service.get_candidates_for_vectormatch(list(candidate_graph_ids.values()), payload.candidate_names)
+		missing_jobs = missing_ids(job_graph_ids, jobs_raw)
+		missing_candidates = missing_ids(candidate_graph_ids, candidates_raw)
+		# Nie still ein leeres Ergebnis: fehlt alles auf einer Seite, sagt die
+		# Antwort genau, welche IDs in Neo4j fehlen.
+		if not jobs_raw:
+			raise HTTPException(status_code=404, detail={
+				'error': 'Keine der angegebenen Stellen ist in Neo4j vorhanden',
+				'missingJobIds': missing_jobs,
+				'missingCandidateIds': missing_candidates,
+			})
+		if not candidates_raw:
+			raise HTTPException(status_code=404, detail={
+				'error': 'Keiner der angegebenen Bewerber ist in Neo4j vorhanden',
+				'missingJobIds': missing_jobs,
+				'missingCandidateIds': missing_candidates,
+			})
+		return jobs_raw, candidates_raw, missing_jobs, missing_candidates
+
 	field_profiles = [
 		('skills', 'skills', 'Fachliche Qualifikation / Skills', 34),
 		('experience', 'experience', 'Berufserfahrung', 14),
@@ -561,13 +598,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		if db_service is None:
 			raise HTTPException(status_code=503, detail='Neo4j service is not available')
 
-		jobs_raw = await db_service.get_jobs_for_vectormatch(payload.job_ids, payload.job_titles)
-		candidates_raw = await db_service.get_candidates_for_vectormatch(payload.cv_ids, payload.candidate_names)
-
-		if not jobs_raw:
-			raise HTTPException(status_code=404, detail='Keine Stellen für die angegebenen Job-IDs gefunden')
-		if not candidates_raw:
-			raise HTTPException(status_code=404, detail='Keine CVs für die angegebenen CV-IDs gefunden')
+		jobs_raw, candidates_raw, missing_jobs, missing_candidates = await load_vectormatch_inputs(payload)
 		if billing_service is not None:
 			await billing_service.charge(request, '-0.10', '3D_MATCH', note='vectormatch')
 
@@ -616,6 +647,8 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			matrix=[VectorMatchRow(**row) for row in rows],
 			jobsRanked=jobs_ranked,
 			candidatesRanked=candidates_ranked,
+			missingJobIds=missing_jobs,
+			missingCandidateIds=missing_candidates,
 		)
 
 	async def build_vector_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str, model_name: str) -> MatchingMatrixPayload:
@@ -1143,8 +1176,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		if db_service is None:
 			raise HTTPException(status_code=503, detail='Neo4j service is not available')
 
-		jobs_raw = await db_service.get_jobs_for_vectormatch(payload.job_ids, payload.job_titles)
-		candidates_raw = await db_service.get_candidates_for_vectormatch(payload.cv_ids, payload.candidate_names)
+		jobs_raw, candidates_raw, missing_jobs, missing_candidates = await load_vectormatch_inputs(payload)
 		job_ids = [row['id'] for row in jobs_raw if row.get('id') is not None]
 		candidate_ids = [row['id'] for row in candidates_raw if row.get('id') is not None]
 		rows = await db_service.get_vectormatch_neo4j_rows(job_ids, candidate_ids)
@@ -1183,6 +1215,8 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			matrix=[VectorMatchRow(**row) for row in normalized_rows],
 			jobsRanked=jobs_ranked,
 			candidatesRanked=candidates_ranked,
+			missingJobIds=missing_jobs,
+			missingCandidateIds=missing_candidates,
 		)
 
 	return router

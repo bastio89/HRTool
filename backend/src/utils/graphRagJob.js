@@ -45,4 +45,20 @@ async function deleteJobNodeFromGraphRag(req, job, graphId) {
   }
 }
 
-module.exports = { deleteJobFromGraphRag };
+// Uebertraegt Stellen aus PostgreSQL nach Neo4j (Knoten-ID = UUID der
+// Stelle). Ohne Sprachmodell, also ohne Credits.
+async function syncGraphJobs(jobIds, req) {
+  const ids = [...new Set((jobIds || []).map(Number).filter(Number.isInteger))];
+  if (ids.length === 0) return { synced: 0, failed: 0, errors: [] };
+  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
+  const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/sync/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
+    body: JSON.stringify({ job_ids: ids }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.detail || payload.error || `GraphRAG HTTP ${response.status}`);
+  return payload;
+}
+
+module.exports = { deleteJobFromGraphRag, syncGraphJobs };

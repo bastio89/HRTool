@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any
@@ -34,6 +35,8 @@ from models import (
 	JobDeleteRequest,
 	JobDeleteResponse,
 	JobProfileExtraction,
+	JobSyncRequest,
+	JobSyncResponse,
 	MatchCandidateResponse,
 	MatchResponse,
 )
@@ -815,13 +818,91 @@ async def sync_candidates(payload: CandidateSyncRequest) -> CandidateSyncRespons
 					continue
 				result.removed_stale_nodes += await db_service.delete_candidate(stale_id)
 			await postgres_store.reset_candidate_graph_ids(candidate_id, row["uuid"])
-			if text_payload and not text_payload.get("anonymized_text"):
+			if not text_payload:
+				# Manuell angelegte Bewerber haben keinen CV-Text; ohne ihn findet
+				# das KI-Matching ausgewaehlter Paarungen sie nicht.
+				profile_data = profile.model_dump(mode="json")
+				await postgres_store.store_candidate_text(
+					str(candidate_id),
+					render_candidate_fulltext(
+						profile_data,
+						work_history=profile_data.get("work_history") or [],
+						education_history=profile_data.get("education_history") or [],
+					),
+					candidate_name=profile.name,
+					source="Profil (manuell angelegt)",
+					profile_json=without_identity_fields(profile_data),
+				)
+				await candidate_privacy_service.anonymize_candidate(str(candidate_id))
+			elif not text_payload.get("anonymized_text"):
 				await candidate_privacy_service.anonymize_candidate(str(candidate_id))
 			result.synced += 1
 		except Exception as exc:
 			logger.warning("Neo4j-Abgleich fuer Bewerber %s fehlgeschlagen", candidate_id, exc_info=True)
 			result.failed += 1
 			result.errors.append({"candidate_id": candidate_id, "error": str(exc)})
+	return result
+
+
+def _job_profile_for_sync(row: dict[str, Any]) -> JobProfileExtraction:
+	"""Profil fuer den Neo4j-Knoten einer Stelle aus PostgreSQL. Das beim
+	Import gespeicherte Strukturprofil liefert die Skills mit Kategorie und
+	Prioritaet; sonst werden die Skills aus dem Textfeld uebernommen."""
+	data: dict[str, Any] = {}
+	parsed = row.get("parsed_profile_json")
+	if isinstance(parsed, str):
+		try:
+			parsed = json.loads(parsed)
+		except ValueError:
+			parsed = None
+	if isinstance(parsed, dict):
+		data.update(parsed)
+	for key, column in (
+		("title", "title"), ("company", "company"), ("recruiter_company", "recruiter_company"),
+		("employer_company", "employer_company"), ("location", "location"), ("employment_type", "type"),
+		("description", "description"), ("requirements", "requirements"), ("about_us", "about_us"), ("benefits", "benefits"),
+	):
+		if row.get(column) not in (None, ""):
+			data[key] = row[column]
+	if not data.get("required_skills") and row.get("skills"):
+		data["required_skills"] = [
+			{"name": name.strip(), "priority": "Mandatory"}
+			for name in re.split(r"[,;\n]+", str(row["skills"]))
+			if name.strip()
+		]
+	data["title"] = data.get("title") or f"Stelle {row['id']}"
+	return JobProfileExtraction.model_validate(data)
+
+
+@app.post("/sync/jobs", response_model=JobSyncResponse)
+async def sync_jobs(payload: JobSyncRequest) -> JobSyncResponse:
+	"""Uebertraegt Stellen aus PostgreSQL nach Neo4j (Knoten-ID = UUID der
+	Stelle) - ohne Sprachmodell, also ohne Credits. Ein aelterer Knoten unter
+	einer anderen ID wird entfernt."""
+	if not payload.job_ids:
+		return JobSyncResponse()
+	result = JobSyncResponse()
+	for row in await postgres_store.list_jobs_for_sync(payload.job_ids):
+		job_id = int(row["id"])
+		try:
+			profile = _job_profile_for_sync(row)
+			embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
+			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
+			await db_service.upsert_job(
+				job_id=row["uuid"],
+				profile=profile,
+				embedding=embedding,
+				skill_embeddings=skill_embeddings,
+			)
+			stale_id = str(row.get("graph_job_id") or "").strip()
+			if stale_id and stale_id != row["uuid"] and not await postgres_store.graph_job_id_in_use(stale_id, exclude_job_id=job_id):
+				result.removed_stale_nodes += await db_service.delete_job(stale_id)
+			await postgres_store.reset_job_graph_id(job_id, row["uuid"])
+			result.synced += 1
+		except Exception as exc:
+			logger.warning("Neo4j-Abgleich fuer Stelle %s fehlgeschlagen", job_id, exc_info=True)
+			result.failed += 1
+			result.errors.append({"job_id": job_id, "error": str(exc)})
 	return result
 
 

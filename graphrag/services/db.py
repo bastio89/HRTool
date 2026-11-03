@@ -465,11 +465,12 @@ class Neo4jService:
                collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), priority: coalesce(req.priority, 'Mandatory'), embedding: s.embedding}) AS required_skills
         ORDER BY toLower(coalesce(j.title, '')), j.id
         """
-        async with self.driver.session() as session:
-            result = await session.run(query, job_ids=ids)
-            rows = await result.data()
-            if rows or not titles:
-                return rows
+        # Mit IDs wird nur per ID gesucht: ein Rueckfall auf den Titel trifft
+        # bei gleichnamigen Stellen die falsche (LIMIT 1).
+        if ids:
+            async with self.driver.session() as session:
+                result = await session.run(query, job_ids=ids)
+                return await result.data()
 
         fallback_rows: list[dict[str, Any]] = []
         for title in titles:
@@ -499,11 +500,12 @@ class Neo4jService:
                collect(DISTINCT toLower(s.name)) AS skills
         ORDER BY toLower(coalesce(c.name, '')), c.id
         """
-        async with self.driver.session() as session:
-            result = await session.run(query, candidate_ids=ids)
-            rows = await result.data()
-            if rows or not names:
-                return rows
+        # Mit IDs wird nur per ID gesucht: ein Rueckfall auf den Namen trifft
+        # bei Namensvettern die falsche Person (LIMIT 1).
+        if ids:
+            async with self.driver.session() as session:
+                result = await session.run(query, candidate_ids=ids)
+                return await result.data()
 
         fallback_rows: list[dict[str, Any]] = []
         for name in names:

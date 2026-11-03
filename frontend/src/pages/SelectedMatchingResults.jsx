@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, Download, FileText, Target, User, UserCheck, XCircle, CheckSquare, Square } from 'lucide-react'
-import { graphRagMatchingApi, matchingApi } from '../api'
+import { matchingApi } from '../api'
 import { Card, Button, ScoreBadge, ScoreRing, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
 
@@ -46,31 +46,16 @@ export default function SelectedMatchingResults() {
         let failures = []
 
         if (mode === 'vector') {
-          const graphRagResponses = await Promise.all(
-            pairs.map((pair) => graphRagMatchingApi.vectorMatch({
-              jobIds: [pair.jobId],
-              jobTitles: [pair.jobTitle],
-              cvIds: [pair.candidateId],
-              candidateNames: pair.candidateName ? [pair.candidateName] : [],
-              engine: 'python',
-            }))
-          )
-
-          rows = graphRagResponses.flatMap((response, index) => {
-            const pair = pairs[index]
-            const matrixRows = response?.matrix || response?.results?.matrix || response?.results?.results || []
-            return matrixRows.map((row) => ({
-              ...row,
-              jobId: pair.jobId,
-              jobTitle: row.jobTitle || pair.jobTitle,
-              sourceJobId: pair.sourceJobId || pair.jobId,
-              sourceJobTitle: pair.sourceJobTitle || pair.jobTitle,
-              candidateId: pair.candidateId,
-              candidateName: row.candidateName || pair.candidateName,
-              sourceCandidateId: pair.sourceCandidateId || pair.candidateId,
-              score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
-            }))
-          }).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
+          // Ein Aufruf fuer alle Paarungen: das Backend sucht per UUID, holt
+          // fehlende Neo4j-Eintraege nach und meldet nicht matchbare Paarungen
+          // als failures (statt dass eine einzelne alles scheitern laesst).
+          const engine = location.state?.engine || parsed.engine || 'python'
+          const response = await matchingApi.vectorMatchSelected(pairs, engine)
+          rows = (response?.results || []).map((row) => ({
+            ...row,
+            score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
+          })).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
+          failures = response?.failures || []
         } else if (precomputed) {
           rows = (precomputed?.results || []).map((row) => ({
             ...row,

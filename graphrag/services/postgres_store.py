@@ -1559,6 +1559,45 @@ class PostgresStore:
             raise RuntimeError("PostgreSQL did not return a job id")
         return {"id": int(row["id"]), "uuid": str(row["uuid"]), "duplicate": False}
 
+    async def graph_ids_for(self, table: str, ids: list[str]) -> dict[str, str]:
+        """PostgreSQL-ID (als Text) -> UUID, die auch der Neo4j-Knoten traegt."""
+        if table not in {"candidates", "jobs"}:
+            raise ValueError(f"Unbekannte Tabelle {table}")
+        numeric = sorted({int(value) for value in ids if str(value).strip().isdigit()})
+        if not numeric:
+            return {}
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(f"SELECT id, uuid::text FROM {table} WHERE id = ANY(%s::bigint[])", (numeric,))
+                return {str(row[0]): str(row[1]) for row in await cursor.fetchall()}
+
+    async def list_jobs_for_sync(self, job_ids: list[int]) -> list[dict[str, Any]]:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT id, uuid::text AS uuid, graph_job_id, title, company, recruiter_company, employer_company,
+                           location, type, description, requirements, about_us, benefits, skills, parsed_profile_json
+                    FROM jobs WHERE id = ANY(%s::bigint[]) ORDER BY id
+                    """,
+                    (list(job_ids),),
+                )
+                rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def graph_job_id_in_use(self, graph_id: str, *, exclude_job_id: int) -> bool:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT 1 FROM jobs WHERE id <> %s AND (uuid::text = %s OR graph_job_id = %s) LIMIT 1",
+                    (exclude_job_id, graph_id, graph_id),
+                )
+                return await cursor.fetchone() is not None
+
+    async def reset_job_graph_id(self, job_id: int, graph_id: str) -> None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            await connection.execute("UPDATE jobs SET graph_job_id = %s WHERE id = %s", (graph_id, job_id))
+
     async def graph_candidate_id_in_use(self, graph_id: str, *, exclude_candidate_id: int) -> bool:
         """Gehoert die Neo4j-ID noch zu einem anderen Bewerber?"""
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:

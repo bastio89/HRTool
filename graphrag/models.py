@@ -386,6 +386,17 @@ class CandidateSyncRequest(BaseModel):
     candidate_ids: list[int] = Field(default_factory=list, max_length=5000)
 
 
+class JobSyncRequest(BaseModel):
+    job_ids: list[int] = Field(default_factory=list, max_length=5000)
+
+
+class JobSyncResponse(BaseModel):
+    synced: int = 0
+    failed: int = 0
+    removed_stale_nodes: int = 0
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class CandidateSyncResponse(BaseModel):
     synced: int = 0
     failed: int = 0
@@ -662,6 +673,9 @@ class VectorMatchPayload(BaseModel):
     matrix: list[VectorMatchRow] = Field(default_factory=list)
     jobsRanked: list[dict[str, Any]] = Field(default_factory=list)
     candidatesRanked: list[dict[str, Any]] = Field(default_factory=list)
+    # Angefragte IDs ohne Eintrag in Neo4j - sie fehlen im Ergebnis.
+    missingJobIds: list[str] = Field(default_factory=list)
+    missingCandidateIds: list[str] = Field(default_factory=list)
 
 
 class VectorMatchNeo4jPayload(BaseModel):
@@ -675,6 +689,8 @@ class VectorMatchNeo4jPayload(BaseModel):
     matrix: list[VectorMatchRow] = Field(default_factory=list)
     jobsRanked: list[dict[str, Any]] = Field(default_factory=list)
     candidatesRanked: list[dict[str, Any]] = Field(default_factory=list)
+    missingJobIds: list[str] = Field(default_factory=list)
+    missingCandidateIds: list[str] = Field(default_factory=list)
 
 
 class Stage1Candidate(BaseModel):

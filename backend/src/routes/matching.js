@@ -15,6 +15,8 @@ const { graphRagAuthHeaders } = require('../graphragAuth');
 // scheitern, der Lauf wird dann beim naechsten Export aus der Historie
 // nachgetragen.
 const { recordMatchingPairsSafely } = require('../matchingPairs');
+// 3D-Matching ueber die UUID: vorher fehlende Neo4j-Eintraege nachholen.
+const { ensureGraphNodes } = require('../graphNodes');
 
 const router = express.Router();
 
@@ -25,11 +27,11 @@ const MATCHING_CANDIDATE_FIELDS = `
   linkedin_url, xing_url, github_url, portfolio_url, drivers_license,
   salary_min, salary_max, salary_currency, salary_interval,
   notice_period, available_from, nationality, work_permit, work_permit_until,
-  gender, parsing_method
+  gender, parsing_method, uuid
 `;
 
 const MATCHING_JOB_FIELDS = `
-  id, title, description, requirements, skills, location, type, status, url
+  id, title, description, requirements, skills, location, type, status, url, uuid
 `;
 
 const WEIGHT_LABELS = {
@@ -207,6 +209,8 @@ function compactStoredMatchingResult(result, { direction, engine } = {}) {
     candidates: (Array.isArray(result?.candidates) ? result.candidates : []).map(({ id, name }) => ({ id, name })),
     jobsRanked: compactRankings(result?.jobsRanked, 'jobId', 'jobTitle'),
     candidatesRanked: compactRankings(result?.candidatesRanked, 'candidateId', 'candidateName'),
+    // Bewerber/Stellen, die nicht gematcht werden konnten (mit Grund).
+    missing: Array.isArray(result?.missing) && result.missing.length ? result.missing.slice(0, 100) : undefined,
     totalPairCount: matrix.length,
     storedPairCount: storedMatrix.length,
     truncated: matrix.length > storedMatrix.length,
@@ -214,102 +218,100 @@ function compactStoredMatchingResult(result, { direction, engine } = {}) {
   };
 }
 
-function remapVectorMatchIds(graphRagResult, { direction, jobRecord, candidateRecords, jobs, candidateRecord }) {
-  const matrix = Array.isArray(graphRagResult?.matrix) ? graphRagResult.matrix : [];
+// Bewerber bzw. Stellen zu den angefragten IDs: PostgreSQL-ID, UUID oder eine
+// aeltere Neo4j-ID. Liefert eine Map von jeder dieser IDs auf den Datensatz.
+function resolveRecords(table, values) {
+  const fields = table === 'candidates' ? MATCHING_CANDIDATE_FIELDS : MATCHING_JOB_FIELDS;
+  const graphColumn = table === 'candidates' ? 'graph_candidate_id' : 'graph_job_id';
+  const raw = [...new Set((values || []).map(value => String(value ?? '').trim()).filter(Boolean))];
+  const numeric = raw.filter(value => /^\d+$/.test(value)).map(Number);
+  const other = raw.filter(value => !/^\d+$/.test(value));
+  const conditions = [];
+  const params = [];
+  if (numeric.length) {
+    conditions.push(`id IN (${numeric.map(() => '?').join(',')})`);
+    params.push(...numeric);
+  }
+  if (other.length) {
+    const list = other.map(() => '?').join(',');
+    conditions.push(`uuid::text IN (${list}) OR ${graphColumn} IN (${list})`);
+    params.push(...other, ...other);
+  }
+  const map = new Map();
+  if (!conditions.length) return map;
+  const rows = db.prepare(`SELECT ${fields}, ${graphColumn} AS graph_id FROM ${table} WHERE ${conditions.join(' OR ')}`).all(...params);
+  for (const row of rows) {
+    for (const key of [row.id, row.uuid, row.graph_id]) {
+      if (key !== null && key !== undefined && key !== '') map.set(String(key), row);
+    }
+  }
+  return map;
+}
 
-  if (direction === 'candidate_to_jobs') {
-    const jobIdByTitle = new Map((jobs || []).map((job) => [normalizeKey(job.title), job.id]));
-    const mappedRows = matrix.map((row) => ({
+const byUuid = (records) => new Map((records || []).filter(Boolean).map(record => [String(record.uuid), record]));
+
+// GraphRAG antwortet mit den UUIDs; das Tool arbeitet mit den PostgreSQL-IDs.
+function remapByUuid(graphRagResult, { jobsByUuid, candidatesByUuid }) {
+  const mapRow = (row) => {
+    const job = jobsByUuid.get(String(row.jobId));
+    const candidate = candidatesByUuid.get(String(row.candidateId));
+    return {
       ...row,
       sourceJobId: row.jobId,
       sourceCandidateId: row.candidateId,
-      jobId: jobIdByTitle.get(normalizeKey(row.jobTitle)) ?? row.jobId,
-      candidateId: candidateRecord?.id ?? row.candidateId,
-    }));
-
-    const mappedJobsRanked = Array.isArray(graphRagResult?.jobsRanked)
-      ? graphRagResult.jobsRanked.map((jobGroup) => ({
-          ...jobGroup,
-          jobId: jobIdByTitle.get(normalizeKey(jobGroup.jobTitle)) ?? jobGroup.jobId,
-          results: Array.isArray(jobGroup.results)
-            ? jobGroup.results.map((row) => ({
-                ...row,
-                sourceJobId: row.jobId,
-                sourceCandidateId: row.candidateId,
-                jobId: jobIdByTitle.get(normalizeKey(row.jobTitle)) ?? row.jobId,
-                candidateId: candidateRecord?.id ?? row.candidateId,
-              }))
-            : [],
-        }))
-      : [];
-
-    return {
-      ...graphRagResult,
-      matrix: mappedRows,
-      jobsRanked: mappedJobsRanked,
-      candidatesRanked: Array.isArray(graphRagResult?.candidatesRanked)
-        ? graphRagResult.candidatesRanked.map((candidateGroup) => ({
-            ...candidateGroup,
-            candidateId: candidateRecord?.id ?? candidateGroup.candidateId,
-            results: Array.isArray(candidateGroup.results)
-              ? candidateGroup.results.map((row) => ({
-                  ...row,
-                  sourceJobId: row.jobId,
-                  sourceCandidateId: row.candidateId,
-                  jobId: jobIdByTitle.get(normalizeKey(row.jobTitle)) ?? row.jobId,
-                  candidateId: candidateRecord?.id ?? row.candidateId,
-                }))
-              : [],
-          }))
-        : [],
+      jobId: job?.id ?? row.jobId,
+      jobTitle: job?.title ?? row.jobTitle,
+      candidateId: candidate?.id ?? row.candidateId,
+      candidateName: candidate?.name ?? row.candidateName,
     };
-  }
-
-  const candidateIdByName = new Map((candidateRecords || []).map((candidate) => [normalizeKey(candidate.name), candidate.id]));
-  const mappedRows = matrix.map((row) => ({
-    ...row,
-    sourceJobId: row.jobId,
-    sourceCandidateId: row.candidateId,
-    jobId: jobRecord?.id ?? row.jobId,
-    candidateId: candidateIdByName.get(normalizeKey(row.candidateName)) ?? row.candidateId,
-  }));
-
-  const mappedCandidatesRanked = Array.isArray(graphRagResult?.candidatesRanked)
-    ? graphRagResult.candidatesRanked.map((candidateGroup) => ({
-        ...candidateGroup,
-        candidateId: candidateIdByName.get(normalizeKey(candidateGroup.candidateName)) ?? candidateGroup.candidateId,
-        results: Array.isArray(candidateGroup.results)
-          ? candidateGroup.results.map((row) => ({
-              ...row,
-              sourceJobId: row.jobId,
-              sourceCandidateId: row.candidateId,
-              jobId: jobRecord?.id ?? row.jobId,
-              candidateId: candidateIdByName.get(normalizeKey(row.candidateName)) ?? row.candidateId,
-            }))
-          : [],
-      }))
-    : [];
-
+  };
+  const mapGroups = (groups, idKey, nameKey, records, nameField) => (Array.isArray(groups) ? groups : []).map((group) => {
+    const record = records.get(String(group[idKey]));
+    return {
+      ...group,
+      [idKey]: record?.id ?? group[idKey],
+      [nameKey]: record?.[nameField] ?? group[nameKey],
+      results: Array.isArray(group.results) ? group.results.map(mapRow) : [],
+    };
+  });
   return {
     ...graphRagResult,
-    matrix: mappedRows,
-    jobsRanked: Array.isArray(graphRagResult?.jobsRanked)
-      ? graphRagResult.jobsRanked.map((jobGroup) => ({
-          ...jobGroup,
-          jobId: jobRecord?.id ?? jobGroup.jobId,
-          results: Array.isArray(jobGroup.results)
-            ? jobGroup.results.map((row) => ({
-                ...row,
-                sourceJobId: row.jobId,
-                sourceCandidateId: row.candidateId,
-                jobId: jobRecord?.id ?? row.jobId,
-                candidateId: candidateIdByName.get(normalizeKey(row.candidateName)) ?? row.candidateId,
-              }))
-            : [],
-        }))
-      : [],
-    candidatesRanked: mappedCandidatesRanked,
+    matrix: (Array.isArray(graphRagResult?.matrix) ? graphRagResult.matrix : []).map(mapRow),
+    jobsRanked: mapGroups(graphRagResult?.jobsRanked, 'jobId', 'jobTitle', jobsByUuid, 'title'),
+    candidatesRanked: mapGroups(graphRagResult?.candidatesRanked, 'candidateId', 'candidateName', candidatesByUuid, 'name'),
   };
+}
+
+// Was im Ergebnis fehlt und warum: Abgleich gescheitert oder kein Eintrag in
+// Neo4j. Wird mit dem Ergebnis angezeigt statt stillschweigend wegzufallen.
+function describeMissing({ graphRagResult = {}, jobsByUuid, candidatesByUuid, jobErrors = new Map(), candidateErrors = new Map(), skippedJobs = [], skippedCandidates = [] }) {
+  const missing = [];
+  for (const job of skippedJobs) missing.push({ type: 'job', id: job.id, name: job.title, reason: jobErrors.get(Number(job.id)) });
+  for (const candidate of skippedCandidates) missing.push({ type: 'candidate', id: candidate.id, name: candidate.name, reason: candidateErrors.get(Number(candidate.id)) });
+  for (const uuid of graphRagResult.missingJobIds || []) {
+    const job = jobsByUuid.get(String(uuid));
+    missing.push({ type: 'job', id: job?.id ?? uuid, name: job?.title ?? null, reason: 'Kein Eintrag in Neo4j' });
+  }
+  for (const uuid of graphRagResult.missingCandidateIds || []) {
+    const candidate = candidatesByUuid.get(String(uuid));
+    missing.push({ type: 'candidate', id: candidate?.id ?? uuid, name: candidate?.name ?? null, reason: 'Kein Eintrag in Neo4j' });
+  }
+  return missing;
+}
+
+function userError(message, status = 422, details = null) {
+  return Object.assign(new Error(message), { status, userMessage: true, details });
+}
+
+// Meldung aus einem GraphRAG-404 ("nichts davon ist in Neo4j") mit Namen.
+function explainGraphRagMiss(error, { jobsByUuid, candidatesByUuid }) {
+  if (error.status !== 404 || !error.detailObject) return error;
+  const detail = error.detailObject;
+  const names = [
+    ...(detail.missingCandidateIds || []).map(id => candidatesByUuid.get(String(id))?.name || id),
+    ...(detail.missingJobIds || []).map(id => jobsByUuid.get(String(id))?.title || id),
+  ];
+  return userError(`${detail.error || 'Kein Eintrag in Neo4j'}${names.length ? `: ${names.join(', ')}` : ''}`, 422, detail);
 }
 
 async function callGraphRagMatching(req, endpoint, payload) {
@@ -322,9 +324,12 @@ async function callGraphRagMatching(req, endpoint, payload) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data.detail || data.error || `GraphRAG HTTP ${response.status}`);
+    const detailObject = data.detail && typeof data.detail === 'object' && !Array.isArray(data.detail) ? data.detail : null;
+    const message = detailObject?.error || (typeof data.detail === 'string' ? data.detail : null) || data.error || `GraphRAG HTTP ${response.status}`;
+    const error = new Error(message);
     error.status = response.status;
-    error.details = data.detail || data.error || null;
+    error.details = message;
+    error.detailObject = detailObject;
     throw error;
   }
 
@@ -577,77 +582,69 @@ function buildMatrixResult({ jobs, candidates, rows, mode, model }) {
   };
 }
 
+// 3D-Matching ueber GraphRAG. Bewerber und Stellen werden per UUID gesucht
+// (nicht mehr ueber den Namen); fehlende Neo4j-Eintraege werden vorher
+// nachgeholt, was dann noch fehlt, steht in result.missing.
 async function runVectorMatch(req, { direction = 'job_to_candidates', jobId, jobTitle, candidateId, candidateName, candidateIds, engine = 'python' }) {
   const endpoint = '/match/vectormatch';
 
   if (direction === 'candidate_to_jobs') {
-    const candidateRecord = getCandidates(candidateId ? [candidateId] : candidateIds)?.[0]
-      || getCandidateByName(candidateName)
-      || {
-        id: candidateId || candidateIds?.[0] || null,
-        name: candidateName || `Bewerber ${candidateId || ''}`.trim(),
-      };
-    const resolvedCandidateName = candidateRecord?.name || candidateName || null;
-    const jobs = getJobs();
-    if (jobs.length === 0) {
-      throw Object.assign(new Error('Keine Stellen vorhanden'), { status: 404 });
+    const requestedId = candidateId ?? candidateIds?.[0] ?? null;
+    const candidate = (requestedId !== null && resolveRecords('candidates', [requestedId]).get(String(requestedId)))
+      || getCandidateByName(candidateName);
+    if (!candidate) throw userError('Bewerber nicht gefunden', 404);
+    const allJobs = getJobs();
+    if (allJobs.length === 0) throw userError('Keine Stellen vorhanden', 404);
+
+    const { candidateErrors, jobErrors } = await ensureGraphNodes(db, req, { candidateIds: [candidate.id], jobIds: allJobs.map(job => job.id) });
+    if (candidateErrors.has(Number(candidate.id))) {
+      throw userError(`${candidate.name} ist nicht in Neo4j und konnte nicht übertragen werden: ${candidateErrors.get(Number(candidate.id))}`);
     }
+    const jobs = allJobs.filter(job => !jobErrors.has(Number(job.id)));
+    const skippedJobs = allJobs.filter(job => jobErrors.has(Number(job.id)));
+    if (jobs.length === 0) throw userError(`Keine Stelle konnte nach Neo4j übertragen werden: ${[...jobErrors.values()][0]}`);
 
-    const graphRagResult = await callGraphRagMatching(req, endpoint, {
-      jobIds: jobs.map((job) => job.id),
-      jobTitles: jobs.map((job) => job.title).filter(Boolean),
-      cvIds: [candidateRecord.id],
-      candidateNames: [resolvedCandidateName].filter(Boolean),
-      engine,
-    });
-    const normalizedGraphRagResult = remapVectorMatchIds(graphRagResult, {
-      direction,
-      jobRecord: null,
-      candidateRecords: [],
-      jobs,
-      candidateRecord,
-    });
-
-    return {
-      direction,
-      candidate: candidateRecord,
-      jobs,
-      graphRagResult: normalizedGraphRagResult,
-    };
+    const maps = { jobsByUuid: byUuid(allJobs), candidatesByUuid: byUuid([candidate]) };
+    let graphRagResult;
+    try {
+      graphRagResult = await callGraphRagMatching(req, endpoint, { jobIds: jobs.map(job => job.uuid), cvIds: [candidate.uuid], engine });
+    } catch (error) {
+      throw explainGraphRagMiss(error, maps);
+    }
+    const remapped = remapByUuid(graphRagResult, maps);
+    remapped.missing = describeMissing({ graphRagResult, ...maps, jobErrors, skippedJobs });
+    return { direction, candidate, jobs: allJobs, graphRagResult: remapped };
   }
 
-  const jobRecord = getJobs([jobId])[0]
-    || getJobByTitle(jobTitle)
-    || {
-      id: jobId || null,
-      title: jobTitle || `Stelle ${jobId || ''}`.trim(),
-    };
-  const candidateRecords = getCandidates(candidateIds);
-  const storedJobId = jobRecord?.id ?? (Number.isFinite(Number(jobId)) ? Number(jobId) : null);
-  const matchedJob = jobRecord || { id: storedJobId, title: `Stelle ${jobId}` };
+  const job = (jobId !== undefined && jobId !== null && resolveRecords('jobs', [jobId]).get(String(jobId))) || getJobByTitle(jobTitle);
+  if (!job) throw userError('Stelle nicht gefunden', 404);
+  const candidateMap = resolveRecords('candidates', candidateIds);
+  const allCandidates = [...new Map((candidateIds || [])
+    .map(value => candidateMap.get(String(value)))
+    .filter(Boolean)
+    .map(candidate => [candidate.id, candidate])).values()];
+  if (allCandidates.length === 0) throw userError('Keiner der ausgewählten Bewerber wurde gefunden', 404);
 
-  const graphRagResult = await callGraphRagMatching(req, endpoint, {
-    jobIds: [storedJobId ?? jobId],
-    jobTitles: [matchedJob.title || `Stelle ${jobId}`],
-    cvIds: candidateIds,
-    candidateNames: candidateRecords.map((candidate) => candidate.name).filter(Boolean),
-    engine,
-  });
+  const { candidateErrors, jobErrors } = await ensureGraphNodes(db, req, { candidateIds: allCandidates.map(c => c.id), jobIds: [job.id] });
+  if (jobErrors.has(Number(job.id))) {
+    throw userError(`Die Stelle „${job.title}“ ist nicht in Neo4j und konnte nicht übertragen werden: ${jobErrors.get(Number(job.id))}`);
+  }
+  const candidates = allCandidates.filter(candidate => !candidateErrors.has(Number(candidate.id)));
+  const skippedCandidates = allCandidates.filter(candidate => candidateErrors.has(Number(candidate.id)));
+  if (candidates.length === 0) {
+    throw userError(`Keiner der Bewerber konnte nach Neo4j übertragen werden: ${skippedCandidates.map(c => c.name).join(', ')} (${[...candidateErrors.values()][0]})`);
+  }
 
-  const normalizedGraphRagResult = remapVectorMatchIds(graphRagResult, {
-    direction,
-    jobRecord: matchedJob,
-    candidateRecords,
-    jobs: [],
-    candidateRecord: candidateRecords[0] || null,
-  });
-
-  return {
-    direction,
-    job: matchedJob,
-    candidates: candidateRecords,
-    graphRagResult: normalizedGraphRagResult,
-  };
+  const maps = { jobsByUuid: byUuid([job]), candidatesByUuid: byUuid(allCandidates) };
+  let graphRagResult;
+  try {
+    graphRagResult = await callGraphRagMatching(req, endpoint, { jobIds: [job.uuid], cvIds: candidates.map(c => c.uuid), engine });
+  } catch (error) {
+    throw explainGraphRagMiss(error, maps);
+  }
+  const remapped = remapByUuid(graphRagResult, maps);
+  remapped.missing = describeMissing({ graphRagResult, ...maps, candidateErrors, skippedCandidates });
+  return { direction, job, candidates: allCandidates, graphRagResult: remapped };
 }
 
 function sanitizeExternalPayload({ job, candidates }) {
@@ -911,15 +908,35 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
       return res.status(400).json({ error: 'Maximal 20 Paarungen pro Anfrage erlaubt' });
     }
 
-    const graphRagResult = await callGraphRagMatching(req, '/match/ki_match_pairs', {
-      pairs: pairs.map((pair) => ({
-        jobId: pair.sourceJobId || pair.jobId,
-        jobTitle: pair.jobTitle,
-        candidateId: pair.candidateId || pair.sourceCandidateId,
-        candidateName: pair.candidateName,
-      })),
-      weights,
-    });
+    // IDs serverseitig aufloesen (PostgreSQL-ID oder UUID) und eindeutig an
+    // GraphRAG geben; der CV-Text liegt unter der PostgreSQL-ID.
+    const jobMap = resolveRecords('jobs', pairs.flatMap(pair => [pair.jobId, pair.sourceJobId]));
+    const candidateMap = resolveRecords('candidates', pairs.flatMap(pair => [pair.candidateId, pair.sourceCandidateId]));
+    const localFailures = [];
+    const resolvedPairs = [];
+    for (const pair of pairs) {
+      const job = jobMap.get(String(pair.jobId)) || jobMap.get(String(pair.sourceJobId));
+      const candidate = candidateMap.get(String(pair.candidateId)) || candidateMap.get(String(pair.sourceCandidateId));
+      if (!job || !candidate) {
+        localFailures.push({ jobId: pair.jobId ?? null, jobTitle: pair.jobTitle || null, candidateId: pair.candidateId ?? null, candidateName: pair.candidateName || null, error: !job ? 'Stelle nicht gefunden' : 'Bewerber nicht gefunden' });
+      } else {
+        resolvedPairs.push({ jobId: String(job.id), jobTitle: job.title, candidateId: String(candidate.id), candidateName: candidate.name });
+      }
+    }
+    if (resolvedPairs.length === 0) {
+      return res.json({ results: [], failures: localFailures, selectedCount: pairs.length, matchedCount: 0, failedCount: localFailures.length });
+    }
+    // Manuell angelegte Bewerber erhalten dabei ihren CV-Text (ohne ihn findet
+    // GraphRAG sie fuer das KI-Matching nicht).
+    await ensureGraphNodes(db, req, { candidateIds: resolvedPairs.map(pair => Number(pair.candidateId)) });
+
+    const remoteResult = await callGraphRagMatching(req, '/match/ki_match_pairs', { pairs: resolvedPairs, weights });
+    const graphRagResult = {
+      ...remoteResult,
+      failures: [...(remoteResult?.failures || []), ...localFailures],
+      selectedCount: pairs.length,
+      failedCount: (remoteResult?.failedCount ?? remoteResult?.failures?.length ?? 0) + localFailures.length,
+    };
 
     recordMatchingPairsSafely(db, 'ai', graphRagResult?.results, { model: graphRagResult?.model || null });
 
@@ -1082,13 +1099,10 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
         null,
       );
 
-      // Nicht per Titel gemappte Stellen tragen noch die Neo4j-UUID; sie
-      // werden ueber graph_job_id zugeordnet. Der Bewerber ist bekannt.
       recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
         matchingResultId: saveResult.lastInsertRowid,
         candidateId: candidate?.id ?? null,
         jobIds: jobs.map(job => job.id),
-        allowNameLookup: true,
         model: graphRagResult.model || null,
         engine,
       });
@@ -1139,8 +1153,6 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
     recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
       matchingResultId: saveResult.lastInsertRowid,
       jobId: storedJobId,
-      candidateIds,
-      allowNameLookup: true,
       model: graphRagResult.model || null,
       engine,
     });
@@ -1164,13 +1176,95 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
   } catch (error) {
     console.error('Error running vector matching:', error);
     res.status(error.status || 500).json({
-      error: error.name === 'AbortError'
-        ? 'KI-Timeout – Vector-Matching dauerte zu lange.'
-        : error.status === 429
-          ? 'Das KI-Modell ist aktuell rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
-          : 'Fehler beim Vector-Matching',
+      error: error.userMessage
+        ? error.message
+        : error.name === 'AbortError'
+          ? 'KI-Timeout – Vector-Matching dauerte zu lange.'
+          : error.status === 429
+            ? 'Das KI-Modell ist aktuell rate-limited. Bitte kurz warten oder ein anderes Modell wählen.'
+            : `Fehler beim Vector-Matching: ${error.details || error.message}`,
       details: error.details || error.message,
     });
+  }
+});
+
+/**
+ * @swagger
+ * /matching/vectormatch-selected:
+ *   post:
+ *     summary: 3D-Matching fuer ausgewaehlte Paarungen (Bewerber x Stelle)
+ *     description: |
+ *       Sucht Bewerber und Stellen per UUID in Neo4j, holt fehlende Eintraege
+ *       vorher nach und liefert Teilergebnisse plus failures fuer Paarungen,
+ *       die nicht gematcht werden konnten.
+ *     tags: [Matching]
+ */
+router.post('/vectormatch-selected', matchingRateLimiter, async (req, res) => {
+  try {
+    const { pairs, engine = 'python' } = req.body || {};
+    if (!Array.isArray(pairs) || pairs.length === 0) return res.status(400).json({ error: 'Mindestens eine Paarung ist erforderlich' });
+    if (pairs.length > 200) return res.status(400).json({ error: 'Maximal 200 Paarungen pro Anfrage erlaubt' });
+    if (!['python', 'neo4j'].includes(engine)) return res.status(400).json({ error: 'Ungültige Vector-Matching-Engine' });
+
+    const jobMap = resolveRecords('jobs', pairs.flatMap(pair => [pair.jobId, pair.sourceJobId]));
+    const candidateMap = resolveRecords('candidates', pairs.flatMap(pair => [pair.candidateId, pair.sourceCandidateId]));
+    const failures = [];
+    const groups = new Map();
+    for (const pair of pairs) {
+      const job = jobMap.get(String(pair.jobId)) || jobMap.get(String(pair.sourceJobId));
+      const candidate = candidateMap.get(String(pair.candidateId)) || candidateMap.get(String(pair.sourceCandidateId));
+      if (!job || !candidate) {
+        failures.push({ jobId: pair.jobId ?? null, jobTitle: pair.jobTitle || null, candidateId: pair.candidateId ?? null, candidateName: pair.candidateName || null, error: !job ? 'Stelle nicht gefunden' : 'Bewerber nicht gefunden' });
+        continue;
+      }
+      if (!groups.has(job.id)) groups.set(job.id, { job, candidates: new Map() });
+      groups.get(job.id).candidates.set(candidate.id, candidate);
+    }
+
+    const allCandidates = [...new Map([...groups.values()].flatMap(group => [...group.candidates.values()]).map(c => [c.id, c])).values()];
+    const { candidateErrors, jobErrors } = await ensureGraphNodes(db, req, {
+      candidateIds: allCandidates.map(candidate => candidate.id),
+      jobIds: [...groups.keys()],
+    });
+
+    const results = [];
+    let model = null;
+    for (const { job, candidates: candidateGroup } of groups.values()) {
+      const failure = (candidate, error) => failures.push({ jobId: job.id, jobTitle: job.title, candidateId: candidate.id, candidateName: candidate.name, error });
+      if (jobErrors.has(Number(job.id))) {
+        for (const candidate of candidateGroup.values()) failure(candidate, `Stelle nicht in Neo4j: ${jobErrors.get(Number(job.id))}`);
+        continue;
+      }
+      const candidates = [];
+      for (const candidate of candidateGroup.values()) {
+        if (candidateErrors.has(Number(candidate.id))) failure(candidate, `Bewerber nicht in Neo4j: ${candidateErrors.get(Number(candidate.id))}`);
+        else candidates.push(candidate);
+      }
+      if (candidates.length === 0) continue;
+      const maps = { jobsByUuid: byUuid([job]), candidatesByUuid: byUuid(candidates) };
+      try {
+        const graphRagResult = await callGraphRagMatching(req, '/match/vectormatch', { jobIds: [job.uuid], cvIds: candidates.map(c => c.uuid), engine });
+        model = graphRagResult.model || model;
+        results.push(...remapByUuid(graphRagResult, maps).matrix);
+        for (const uuid of graphRagResult.missingCandidateIds || []) {
+          const candidate = maps.candidatesByUuid.get(String(uuid));
+          if (candidate) failure(candidate, 'Kein Eintrag in Neo4j');
+        }
+      } catch (rawError) {
+        const error = explainGraphRagMiss(rawError, maps);
+        for (const candidate of candidates) failure(candidate, error.message);
+      }
+    }
+
+    results.sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0));
+    recordMatchingPairsSafely(db, 'vector', results, { model, engine });
+    logAudit(req, 'ki-matching-vector', 'Matching', null, '3D-Matching selektierte Paarungen', {
+      engine, selectedCount: pairs.length, matchedCount: results.length, failedCount: failures.length,
+    });
+    res.json({ mode: 'vector', engine, model, results, failures, selectedCount: pairs.length, matchedCount: results.length, failedCount: failures.length });
+  } catch (error) {
+    console.error('Error running selected vector matching:', error);
+    res.status(error.status || 500).json({ error: error.userMessage ? error.message : 'Fehler beim 3D-Matching', details: error.details || error.message });
   }
 });
 

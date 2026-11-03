@@ -237,6 +237,14 @@ export const matchingApi = {
       body: JSON.stringify(payload),
       timeout: 600000,
     }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.vectorMatch' }); return result; }),
+  // 3D-Matching ausgewaehlter Paarungen ueber das Backend: Suche per UUID,
+  // fehlende Neo4j-Eintraege werden nachgeholt, Uebriges kommt als failures.
+  vectorMatchSelected: (pairs = [], engine = 'python') =>
+    request('/matching/vectormatch-selected', {
+      method: 'POST',
+      body: JSON.stringify({ pairs, engine }),
+      timeout: 600000,
+    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.vectorMatchSelected' }); return result; }),
   runSelected: (pairs = [], weights = null) =>
     request('/matching/run-selected', {
       method: 'POST',
@@ -247,25 +255,6 @@ export const matchingApi = {
   getResult: (id) => request(`/matching/history/${id}`),
   deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),
   reviewResult: (id, notes) => request(`/matching/history/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
-};
-
-export const graphRagMatchingApi = {
-  vectorMatch: async (payload = {}) => {
-    const response = await fetch(`${GRAPHRAG_API_BASE}/match/vectormatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(payload),
-    })
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'GraphRAG Vector-Matching fehlgeschlagen' }))
-      throw new Error(error.error || error.detail || `HTTP ${response.status}`)
-    }
-
-    const json = await response.json()
-    notifyCreditRefresh({ source: 'graphRagMatchingApi.vectorMatch' })
-    return json
-  },
 };
 
 async function graphRagRequest(path, options = {}) {

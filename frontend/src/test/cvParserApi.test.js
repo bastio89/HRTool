@@ -82,4 +82,26 @@ describe('cvParserApi', () => {
 
     await expect(cvParserApi.parse(file)).rejects.toThrow('CV-Analyse fehlgeschlagen (HTTP 413)')
   })
+
+  test('turns a GraphRAG duplicate (409 with detail object) into a readable error with code', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      headers: { get: () => 'application/json' },
+      json: async () => ({
+        detail: {
+          error: 'Diese Person ist bereits im Tool angelegt: Anna Muster (ID 7)',
+          code: 'DUPLICATE_CANDIDATE',
+          existing: { id: 7, name: 'Anna Muster' },
+        },
+      }),
+    }))
+    const file = new File(['cv data'], 'candidate.pdf', { type: 'application/pdf' })
+
+    const failure = await cvParserApi.parse(file, undefined, true).catch(error => error)
+    expect(failure.message).toBe('Diese Person ist bereits im Tool angelegt: Anna Muster (ID 7)')
+    expect(failure.code).toBe('DUPLICATE_CANDIDATE')
+    expect(failure.existing).toEqual({ id: 7, name: 'Anna Muster' })
+    expect(failure.status).toBe(409)
+  })
 })

@@ -20,6 +20,7 @@ const column = (key, label, group, extra = {}) => ({
 
 const BASE_FIELDS = [
   column('id', 'Interne ID', 'Stammdaten', { type: 'number' }),
+  column('uuid', 'UUID (identisch in PostgreSQL und Neo4j)', 'Stammdaten'),
   column('gender', 'Anrede / Geschlecht', 'Stammdaten'),
   column('name', 'Name (vollständig)', 'Stammdaten'),
   { key: 'first_name', label: 'Vorname (abgeleitet)', group: 'Stammdaten', type: 'string', value: row => splitName(row.name).first || null },
@@ -27,6 +28,7 @@ const BASE_FIELDS = [
   column('email', 'E-Mail', 'Stammdaten'),
   column('phone', 'Telefon', 'Stammdaten'),
   column('location', 'Wohnort / Adresse', 'Stammdaten'),
+  column('birth_date', 'Geburtsdatum', 'Stammdaten', { type: 'date' }),
   column('nationality', 'Nationalität', 'Stammdaten'),
 
   column('current_position', 'Aktuelle Position', 'Beruf'),

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Users, Wifi, WifiOff } from 'lucide-react'
+import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Users, Wifi, WifiOff, CopyCheck } from 'lucide-react'
 import { cvParserApi, uploadsApi } from '../api'
 import { Button } from './UI'
 import Modal from './Modal'
@@ -122,7 +122,13 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
           duplicateCandidate: result.duplicateCandidate || null,
         })
       } catch (err) {
-        updateFile(item.id, { status: STATUS.ERROR, progress: 0, error: err.message || t('batch_import.error_generic') })
+        // Gleicher Name + Geburtsdatum: die Person gibt es schon, nichts
+        // wurde angelegt. Das ist kein Fehler, sondern ein Ueberspringen.
+        if (err.code === 'DUPLICATE_CANDIDATE') {
+          updateFile(item.id, { status: STATUS.SKIPPED, progress: 0, existing: err.existing || null, error: err.message })
+        } else {
+          updateFile(item.id, { status: STATUS.ERROR, progress: 0, error: err.message || t('batch_import.error_generic') })
+        }
       }
     }
 
@@ -288,6 +294,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
               <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
                 {item.status === STATUS.DONE && <CheckCircle2 className="w-5 h-5 text-[#34c759]" />}
                 {item.status === STATUS.ERROR && <XCircle className="w-5 h-5 text-[#ff3b30]" />}
+                {item.status === STATUS.SKIPPED && <CopyCheck className="w-5 h-5 text-[#ff9500]" />}
                 {item.status === STATUS.PROCESSING && (
                   <Loader2 className="w-5 h-5 text-[#0071e3] animate-spin" />
                 )}
@@ -319,7 +326,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
                         PostgreSQL: {item.storage?.postgres ? 'gespeichert' : 'nicht gespeichert'}
                       </span>
                       <span className={`px-2 py-0.5 rounded-full ${item.storage?.neo4j ? 'bg-[#0071e3]/10 text-[#0058b0]' : 'bg-gray-200 text-gray-500'}`}>
-                        Neo4j: {item.storage?.neo4j ? 'gespeichert' : 'nicht gespeichert'}
+                        Neo4j: {item.storage?.neo4j ? 'gespeichert' : item.storage?.neo4jSyncQueued ? 'wird übertragen' : 'nicht gespeichert'}
                       </span>
                       {item.duplicate && (
                         <span className="px-2 py-0.5 rounded-full bg-[#ff9500]/10 text-[#a35b00]">
@@ -336,6 +343,11 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
                 )}
                 {item.status === STATUS.ERROR && (
                   <p className="text-[12px] text-[#ff3b30] mt-0.5 whitespace-normal break-words leading-snug">{item.error}</p>
+                )}
+                {item.status === STATUS.SKIPPED && (
+                  <p className="text-[12px] text-[#a35b00] mt-0.5 whitespace-normal break-words leading-snug">
+                    {t('batch_import.skipped_existing').replace('{name}', item.existing?.name || '').replace('{id}', item.existing?.id ?? '')}
+                  </p>
                 )}
                 {item.status === STATUS.PENDING && (
                   <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">

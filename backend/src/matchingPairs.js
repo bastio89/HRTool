@@ -8,9 +8,9 @@
 // (#Bewerber x #Stellen) Zeilen je Methode, egal wie oft gematcht wird.
 //
 // Bewerber- und Stellen-IDs sind immer die Primaerschluessel aus PostgreSQL
-// (candidates.id, jobs.id). GraphRAG/Neo4j fuehrt eigene UUIDs, verknuepft
-// ueber jobs.graph_job_id bzw. candidates.graph_candidate_id(s) - bei
-// aelteren oder manuell angelegten Datensaetzen fehlt die Verknuepfung.
+// (candidates.id, jobs.id). Neo4j-Knoten tragen die UUID aus PostgreSQL
+// (Spalte uuid); aeltere Knoten sind ueber jobs.graph_job_id bzw.
+// candidates.graph_candidate_id(s) verknuepft.
 // Zeilen aus GraphRAG werden deshalb hier auf die PostgreSQL-IDs
 // zurueckgefuehrt (ID, dann UUID, dann optional eindeutiger Name/Titel);
 // nicht zuordenbare Zeilen werden verworfen statt geraten.
@@ -123,9 +123,9 @@ function candidatesByGraphId(db, uuids) {
     for (const part of chunks(uuids, 1000)) {
       const list = part.map(() => '?').join(',');
       rows.push(...db.prepare(`
-        SELECT id, graph_candidate_id, graph_candidate_ids FROM candidates
-        WHERE graph_candidate_id IN (${list}) OR graph_candidate_ids && ARRAY[${list}]::TEXT[]
-      `).all(...part, ...part));
+        SELECT id, uuid::text AS uuid, graph_candidate_id, graph_candidate_ids FROM candidates
+        WHERE uuid::text IN (${list}) OR graph_candidate_id IN (${list}) OR graph_candidate_ids && ARRAY[${list}]::TEXT[]
+      `).all(...part, ...part, ...part));
     }
   } catch (_) {
     rows = []; // Spalten fehlen in sehr alten Datenbanken
@@ -133,11 +133,32 @@ function candidatesByGraphId(db, uuids) {
   const wanted = new Set(uuids);
   const map = new Map();
   for (const row of rows) {
-    const ids = new Set([row.graph_candidate_id, ...(Array.isArray(row.graph_candidate_ids) ? row.graph_candidate_ids : [])]);
+    const ids = new Set([row.uuid, row.graph_candidate_id, ...(Array.isArray(row.graph_candidate_ids) ? row.graph_candidate_ids : [])]);
     for (const uuid of ids) {
       if (!uuid || !wanted.has(uuid)) continue;
       const id = Number(row.id);
       map.set(uuid, map.has(uuid) && map.get(uuid) !== id ? null : id);
+    }
+  }
+  return map;
+}
+
+// Neo4j-IDs von Stellen: uuid (kanonisch) oder - bei Altdaten - graph_job_id.
+// Eine ID, die zu mehreren Stellen passt, gilt als nicht eindeutig.
+function jobsByGraphId(db, ids) {
+  const map = new Map();
+  if (!ids.length) return map;
+  const wanted = new Set(ids);
+  for (const part of chunks(ids, 1000)) {
+    const list = part.map(() => '?').join(',');
+    const rows = db.prepare(`SELECT id, uuid::text AS uuid, graph_job_id FROM jobs WHERE uuid::text IN (${list}) OR graph_job_id IN (${list})`)
+      .all(...part, ...part);
+    for (const row of rows) {
+      for (const key of new Set([row.uuid, row.graph_job_id])) {
+        if (!key || !wanted.has(key)) continue;
+        const id = Number(row.id);
+        map.set(key, map.has(key) && map.get(key) !== id ? null : id);
+      }
     }
   }
   return map;
@@ -174,10 +195,7 @@ function createIdResolver(db, rows, options) {
   const knownJobs = new Set(jobIds.size
     ? selectIn(db, 'SELECT id FROM jobs WHERE id IN (?)', [...jobIds]).map(row => Number(row.id))
     : []);
-  const jobByUuid = new Map(jobUuids.size
-    ? selectIn(db, 'SELECT id, graph_job_id FROM jobs WHERE graph_job_id IN (?) ORDER BY id', [...jobUuids])
-      .map(row => [String(row.graph_job_id), Number(row.id)])
-    : []);
+  const jobByUuid = jobsByGraphId(db, [...jobUuids]);
   const candidateByName = names.size
     ? uniqueBy(selectIn(db, 'SELECT id, name FROM candidates WHERE LOWER(name) IN (?)', [...names]), 'name')
     : new Map();

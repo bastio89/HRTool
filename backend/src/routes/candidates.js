@@ -3,9 +3,34 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { deleteGraphCandidate, deleteGraphCandidates } = require('../utils/graphRagCandidate');
+const {
+  deleteCandidateTexts,
+  deleteGraphCandidate,
+  deleteGraphCandidates,
+  syncGraphCandidatesInBackground,
+} = require('../utils/graphRagCandidate');
+const { cleanupCandidateFiles: cleanupCandidateFilesOnDisk } = require('../utils/candidateFiles');
+const {
+  IdentityValidationError,
+  assertNoCandidateDuplicate,
+  findCandidateDuplicate,
+  normalizeBirthDate,
+  requireCandidateIdentity,
+  sendIdentityError,
+  translateUniqueViolation,
+} = require('../identity');
 
 const router = express.Router();
+
+// Fuer Fehlermeldungen nach einem Eindeutigkeitsverstoss; ungueltige
+// Angaben wurden vorher bereits abgewiesen.
+function safeBirthDate(value) {
+  try {
+    return normalizeBirthDate(value);
+  } catch (_) {
+    return null;
+  }
+}
 const uploadsDir = path.join(__dirname, '..', '..', 'data', 'uploads');
 
 const SEARCHABLE_FIELDS = [
@@ -73,17 +98,7 @@ function buildSearchFilter(search) {
 
 // Helper: Delete physical files for candidate IDs
 function cleanupCandidateFiles(candidateIds) {
-  const ids = Array.isArray(candidateIds) ? candidateIds : [candidateIds];
-  const placeholders = ids.map(() => '?').join(',');
-  const files = db.prepare(`SELECT filename FROM candidate_files WHERE candidate_id IN (${placeholders})`).all(...ids);
-  for (const file of files) {
-    const filePath = path.join(uploadsDir, file.filename);
-    try {
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch (err) {
-      console.error(`Failed to delete file ${filePath}:`, err.message);
-    }
-  }
+  cleanupCandidateFilesOnDisk(db, candidateIds);
 }
 
 /**
@@ -652,11 +667,27 @@ router.post('/check-duplicate', (req, res) => {
     const { name, email, excludeId } = req.body;
     const duplicates = [];
 
+    // Gleicher Name + gleiches Geburtsdatum = dieselbe Person: blockiert das
+    // Speichern. Gleicher Name oder gleiche E-Mail allein sind nur Hinweise.
+    let birthDate = null;
+    try {
+      birthDate = normalizeBirthDate(req.body.birth_date);
+    } catch (_) {
+      birthDate = null;
+    }
+    if (name && name.trim() && birthDate) {
+      const identity = findCandidateDuplicate(db, { name, birth_date: birthDate, excludeId: excludeId || null });
+      if (identity) {
+        duplicates.push({ id: identity.id, name: identity.name, email: identity.email, birth_date: identity.birth_date, matchType: 'identity', blocking: true });
+      }
+    }
+
     if (name && name.trim()) {
       const byName = db.prepare(
         'SELECT id, name, email, location FROM candidates WHERE LOWER(name) = LOWER(?)' + (excludeId ? ' AND id != ?' : '')
       ).all(...(excludeId ? [name.trim(), excludeId] : [name.trim()]));
-      duplicates.push(...byName.map(d => ({ ...d, matchType: 'name' })));
+      const knownIds = new Set(duplicates.map(d => d.id));
+      duplicates.push(...byName.filter(d => !knownIds.has(d.id)).map(d => ({ ...d, matchType: 'name', blocking: false })));
     }
 
     if (email && email.trim()) {
@@ -664,7 +695,7 @@ router.post('/check-duplicate', (req, res) => {
         'SELECT id, name, email, location FROM candidates WHERE LOWER(email) = LOWER(?)' + (excludeId ? ' AND id != ?' : '')
       ).all(...(excludeId ? [email.trim(), excludeId] : [email.trim()]));
       const existingIds = new Set(duplicates.map(d => d.id));
-      duplicates.push(...byEmail.filter(d => !existingIds.has(d.id)).map(d => ({ ...d, matchType: 'email' })));
+      duplicates.push(...byEmail.filter(d => !existingIds.has(d.id)).map(d => ({ ...d, matchType: 'email', blocking: false })));
     }
 
     res.json({ duplicates });
@@ -705,9 +736,8 @@ router.post('/', (req, res) => {
       gender
     } = req.body;
 
-    if (!name || name.trim() === '') {
-      return res.status(400).json({ error: 'Name ist erforderlich' });
-    }
+    const identity = requireCandidateIdentity(req.body);
+    assertNoCandidateDuplicate(db, identity);
 
     const result = db.prepare(`
       INSERT INTO candidates (name, email, phone, location, experience, skills,
@@ -719,10 +749,10 @@ router.post('/', (req, res) => {
         gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
         nationality, work_permit, work_permit_until,
         referrer_name, referrer_email,
-        current_employer, current_position, gender)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        current_employer, current_position, gender, birth_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      name, email || null, phone || null, location || null,
+      identity.name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
@@ -733,13 +763,16 @@ router.post('/', (req, res) => {
       gdpr_consent_date || null, gdpr_consent_type || null, gdpr_consent_expires || null,
       nationality || null, work_permit || null, work_permit_until || null,
       referrer_name || null, referrer_email || null,
-      current_employer || null, current_position || null, gender || null
+      current_employer || null, current_position || null, gender || null, identity.birth_date
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(result.lastInsertRowid);
     logAudit(req, 'erstellt', 'Candidate', candidate.id, candidate.name);
+    syncGraphCandidatesInBackground([candidate.id], req);
     res.status(201).json(candidate);
-  } catch (error) {
+  } catch (rawError) {
+    const error = translateUniqueViolation(db, rawError, 'candidate', { name: req.body?.name, birth_date: safeBirthDate(req.body?.birth_date) });
+    if (sendIdentityError(res, error)) return;
     console.error('Error creating candidate:', error);
     res.status(500).json({ error: 'Fehler beim Erstellen des Bewerbers' });
   }
@@ -786,9 +819,10 @@ router.put('/:id', (req, res) => {
       gender
     } = req.body;
 
-    if (!name || name.trim() === '') {
-      return res.status(400).json({ error: 'Name ist erforderlich' });
-    }
+    // Auch Bestandsbewerber ohne Geburtsdatum muessen es beim Speichern
+    // nachtragen: Name + Geburtsdatum machen die Person eindeutig.
+    const identity = requireCandidateIdentity(req.body);
+    assertNoCandidateDuplicate(db, { ...identity, excludeId: existing.id });
 
     db.prepare(`
       UPDATE candidates SET
@@ -802,11 +836,11 @@ router.put('/:id', (req, res) => {
         gdpr_consent_date = ?, gdpr_consent_type = ?, gdpr_consent_expires = ?,
         nationality = ?, work_permit = ?, work_permit_until = ?,
         referrer_name = ?, referrer_email = ?,
-        current_employer = ?, current_position = ?, gender = ?,
+        current_employer = ?, current_position = ?, gender = ?, birth_date = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
-      name, email || null, phone || null, location || null,
+      identity.name, email || null, phone || null, location || null,
       experience || null, skills || null, education || null,
       desired_salary || null, availability || null, languages || null,
       certificates || null, drivers_license || null, mobility || null,
@@ -817,13 +851,16 @@ router.put('/:id', (req, res) => {
       gdpr_consent_date || null, gdpr_consent_type || null, gdpr_consent_expires || null,
       nationality || null, work_permit || null, work_permit_until || null,
       referrer_name || null, referrer_email || null,
-      current_employer || null, current_position || null, gender || null, req.params.id
+      current_employer || null, current_position || null, gender || null, identity.birth_date, req.params.id
     );
 
     const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(req.params.id);
     logAudit(req, 'aktualisiert', 'Candidate', candidate.id, candidate.name);
+    syncGraphCandidatesInBackground([candidate.id], req);
     res.json(candidate);
-  } catch (error) {
+  } catch (rawError) {
+    const error = translateUniqueViolation(db, rawError, 'candidate', { name: req.body?.name, birth_date: safeBirthDate(req.body?.birth_date), excludeId: Number(req.params.id) });
+    if (sendIdentityError(res, error)) return;
     console.error('Error updating candidate:', error);
     res.status(500).json({ error: 'Fehler beim Aktualisieren des Bewerbers' });
   }
@@ -857,6 +894,7 @@ router.delete('/:id', async (req, res) => {
 
     logAudit(req, 'gelöscht', 'Candidate', existing.id, existing.name);
     db.prepare('DELETE FROM candidates WHERE id = ?').run(req.params.id);
+    deleteCandidateTexts(db, [existing.id]);
     res.json({ message: 'Bewerber erfolgreich gelöscht' });
   } catch (error) {
     console.error('Error deleting candidate:', error);
@@ -897,6 +935,7 @@ router.post('/batch/delete', async (req, res) => {
     cleanupCandidateFiles(ids);
 
     const result = db.prepare(`DELETE FROM candidates WHERE id IN (${placeholders})`).run(...ids);
+    deleteCandidateTexts(db, candidates.map(candidate => candidate.id));
     logAudit(req, 'batch-gelöscht', 'Candidate', null, null, { ids, count: result.changes });
     res.json({ deleted: result.changes });
   } catch (error) {
@@ -965,16 +1004,12 @@ router.post('/batch/status', (req, res) => {
  */
 router.post('/import', (req, res) => {
   try {
-    const { rows, skipDuplicates = true } = req.body;
+    // Dubletten werden immer uebersprungen (eine Person gibt es nur einmal);
+    // skipDuplicates bleibt aus Kompatibilitaet im Request erlaubt.
+    const { rows } = req.body;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'Keine Daten zum Importieren' });
     }
-
-    const VALID_FIELDS = [
-      'name', 'email', 'phone', 'location', 'experience', 'skills',
-      'education', 'desired_salary', 'availability', 'languages',
-      'certificates', 'drivers_license', 'mobility', 'notes', 'status', 'tags', 'source'
-    ];
 
     let imported = 0;
     let skipped = 0;
@@ -984,57 +1019,65 @@ router.post('/import', (req, res) => {
     const insertStmt = db.prepare(`
       INSERT INTO candidates (name, email, phone, location, experience, skills,
         education, desired_salary, availability, languages, certificates,
-        drivers_license, mobility, notes, status, tags, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        drivers_license, mobility, notes, status, tags, source, birth_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-
-    const checkDupByEmail = db.prepare("SELECT id, name FROM candidates WHERE email = ? AND email IS NOT NULL AND email != ''");
-    const checkDupByName = db.prepare('SELECT id, name FROM candidates WHERE LOWER(name) = LOWER(?)');
+    const importedIds = [];
 
     const importMany = db.transaction(() => {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const rowNum = i + 1;
 
-        // Validate name
-        if (!row.name || String(row.name).trim() === '') {
-          errors.push({ row: rowNum, reason: 'Name fehlt' });
+        let identity;
+        try {
+          identity = requireCandidateIdentity(row);
+        } catch (err) {
+          if (!(err instanceof IdentityValidationError)) throw err;
+          errors.push({ row: rowNum, name: row.name || null, reason: err.message });
           continue;
         }
 
-        // Check duplicates
-        if (skipDuplicates) {
-          let dup = null;
-          if (row.email && String(row.email).trim()) {
-            dup = checkDupByEmail.get(String(row.email).trim());
-          }
-          if (!dup && row.name) {
-            dup = checkDupByName.get(String(row.name).trim());
-          }
-          if (dup) {
-            duplicates.push({ row: rowNum, name: row.name, existingName: dup.name });
-            skipped++;
-            continue;
-          }
+        // Sieht auch Zeilen, die in diesem Import schon angelegt wurden
+        // (gleiche Transaktion), und erkennt so Dubletten innerhalb der Datei.
+        const dup = findCandidateDuplicate(db, identity);
+        if (dup) {
+          duplicates.push({ row: rowNum, name: identity.name, birth_date: identity.birth_date, existingId: dup.id, existingName: dup.name });
+          skipped++;
+          continue;
         }
 
+        // Savepoint je Zeile: ein Fehler (z. B. gleichzeitig angelegte
+        // Dublette) bricht sonst die ganze PostgreSQL-Transaktion ab.
+        db.exec('SAVEPOINT csv_import_row');
         try {
-          insertStmt.run(
-            String(row.name).trim(),
+          const result = insertStmt.run(
+            identity.name,
             row.email || null, row.phone || null, row.location || null,
             row.experience || null, row.skills || null, row.education || null,
             row.desired_salary || null, row.availability || null, row.languages || null,
             row.certificates || null, row.drivers_license || null, row.mobility || null,
-            row.notes || null, row.status || 'Aktiv', row.tags || null, row.source || null
+            row.notes || null, row.status || 'Aktiv', row.tags || null, row.source || null,
+            identity.birth_date
           );
+          db.exec('RELEASE SAVEPOINT csv_import_row');
+          importedIds.push(result.lastInsertRowid);
           imported++;
-        } catch (err) {
-          errors.push({ row: rowNum, reason: err.message });
+        } catch (rawErr) {
+          db.exec('ROLLBACK TO SAVEPOINT csv_import_row');
+          const err = translateUniqueViolation(db, rawErr, 'candidate', identity);
+          if (err.code === 'DUPLICATE_CANDIDATE') {
+            duplicates.push({ row: rowNum, name: identity.name, birth_date: identity.birth_date, existingId: err.existing?.id, existingName: err.existing?.name });
+            skipped++;
+          } else {
+            errors.push({ row: rowNum, name: identity.name, reason: err.message });
+          }
         }
       }
     });
 
     importMany();
+    syncGraphCandidatesInBackground(importedIds, req);
 
     logAudit(req, 'csv-import', 'Candidate', null, null, {
       total: rows.length, imported, skipped, errors: errors.length

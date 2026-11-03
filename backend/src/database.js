@@ -630,4 +630,8 @@ if (tplCount.count === 0) {
 
 db.ensureIdentityDefaults();
 
+// Eindeutige Identitaet: Geburtsdatum, UUID und Eindeutigkeitsindizes fuer
+// Bewerber und Stellen (siehe src/identity.js).
+require('./identity').ensureIdentitySchema(db);
+
 module.exports = db;

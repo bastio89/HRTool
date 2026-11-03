@@ -1,7 +1,8 @@
 const express = require('express');
 const db = require('../database');
 const { logAudit } = require('./audit');
-const { deleteGraphCandidates } = require('../utils/graphRagCandidate');
+const { deleteCandidateTexts, deleteGraphCandidates } = require('../utils/graphRagCandidate');
+const { cleanupCandidateFiles } = require('../utils/candidateFiles');
 const { getAiConfig, normalizeAiBaseUrl, resolveAiProvider, resolveAiRuntimeBaseUrl, buildAiRequest, extractAiText, stripReasoningTags, fetchAiModels, filterModelsByKind, pingAiService, invalidateProviderCache, invalidateAiConfigCache, OPENROUTER_BASE_URL } = require('../aiConfig');
 
 const router = express.Router();
@@ -756,6 +757,8 @@ router.delete('/dsgvo/delete-expired', async (req, res) => {
     }
 
     await deleteGraphCandidates(expired, req);
+    // Dateien auf der Platte und CV-Volltexte gehoeren zur DSGVO-Loeschung.
+    cleanupCandidateFiles(db, expired.map(c => c.id));
 
     const deleteTransaction = db.transaction(() => {
       const ids = expired.map(c => c.id);
@@ -767,6 +770,7 @@ router.delete('/dsgvo/delete-expired', async (req, res) => {
         db.prepare('DELETE FROM candidate_files WHERE candidate_id = ?').run(id);
         db.prepare('DELETE FROM candidates WHERE id = ?').run(id);
       }
+      deleteCandidateTexts(db, ids);
 
       return ids.length;
     });

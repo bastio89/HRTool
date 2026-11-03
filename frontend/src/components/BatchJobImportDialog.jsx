@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Briefcase } from 'lucide-react'
+import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, ChevronRight, Briefcase, CopyCheck } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Button } from './UI'
 import Modal from './Modal'
@@ -14,6 +14,7 @@ const STATUS = {
   PROCESSING: 'processing',
   DONE: 'done',
   ERROR: 'error',
+  SKIPPED: 'skipped',
 }
 
 function filenameToTitle(filename) {
@@ -126,7 +127,12 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
         })
       } catch (err) {
         const elapsed = item.startedAt ? Math.floor((Date.now() - item.startedAt) / 1000) : null
-        updateFile(item.id, { status: STATUS.ERROR, error: err.message || t('batch_job_import.error_generic'), elapsed })
+        // Eine Stelle gibt es nur einmal: vorhandene Stelle wird uebersprungen.
+        if (err.code === 'DUPLICATE_JOB') {
+          updateFile(item.id, { status: STATUS.SKIPPED, existing: err.existing || null, elapsed })
+        } else {
+          updateFile(item.id, { status: STATUS.ERROR, error: err.message || t('batch_job_import.error_generic'), elapsed })
+        }
       }
     }
 
@@ -142,7 +148,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
   }
 
   const canRun  = !running && files.some(f => f.status === STATUS.PENDING || f.status === STATUS.ERROR)
-  const allDone = files.length > 0 && files.every(f => f.status === STATUS.DONE)
+  const allDone = files.length > 0 && files.every(f => f.status === STATUS.DONE || f.status === STATUS.SKIPPED)
   const toProcess = files.filter(f => f.status === STATUS.PENDING || f.status === STATUS.ERROR).length
 
   const footer = (
@@ -262,6 +268,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
               <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
                 {item.status === STATUS.DONE       && <CheckCircle2 className="w-5 h-5 text-[#34c759]" />}
                 {item.status === STATUS.ERROR      && <XCircle      className="w-5 h-5 text-[#ff3b30]" />}
+                {item.status === STATUS.SKIPPED    && <CopyCheck    className="w-5 h-5 text-[#ff9500]" />}
                 {item.status === STATUS.PROCESSING && <Loader2      className="w-5 h-5 text-[#5e5ce6] animate-spin" />}
                 {item.status === STATUS.PENDING    && <FileText     className="w-5 h-5 text-gray-500 dark:text-gray-400" />}
               </div>
@@ -300,6 +307,11 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
                 )}
                 {item.status === STATUS.ERROR && (
                   <p className="text-[12px] text-[#ff3b30] mt-0.5 truncate">{item.error}{item.elapsed != null ? ` (${item.elapsed}s)` : ''}</p>
+                )}
+                {item.status === STATUS.SKIPPED && (
+                  <p className="text-[12px] text-[#a35b00] mt-0.5 truncate">
+                    {t('batch_job_import.skipped_existing').replace('{title}', item.existing?.title || '').replace('{id}', item.existing?.id ?? '')}
+                  </p>
                 )}
                 {item.status === STATUS.PENDING && (
                   <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">

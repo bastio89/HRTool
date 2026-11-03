@@ -12,6 +12,8 @@ const { promptGuard } = require('../middleware/promptSanitizer');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 const { tmpDir, extractText } = require('../utils/documentText');
 const { graphRagAuthHeaders } = require('../graphragAuth');
+const { DuplicateError, assertNoJobDuplicate, findJobDuplicate, sendIdentityError, translateUniqueViolation } = require('../identity');
+const { deleteJobFromGraphRag } = require('../utils/graphRagJob');
 const { forwardJobsChPluginRequest } = require('./plugins');
 
 const router = express.Router();
@@ -154,41 +156,25 @@ function serializeJobSkills(skills) {
   return '';
 }
 
-function findDuplicateJob(job) {
-  if (job.url && String(job.url).trim()) {
-    const existing = db.prepare("SELECT * FROM jobs WHERE LOWER(COALESCE(url, '')) = LOWER(?) LIMIT 1").get(String(job.url).trim());
-    if (existing) return existing;
+// Eine Stelle gibt es genau einmal (gleiche URL oder gleicher Titel bei
+// gleicher Firma und gleichem Ort, siehe src/identity.js). Ein Treffer wirft
+// DuplicateError statt still den bestehenden Datensatz zurueckzugeben.
+// enrichExisting: Ein erneuter Import ergaenzt bei der vorhandenen Stelle
+// leere Felder (Quelle, Skills), legt aber keinen zweiten Datensatz an.
+function persistLocalJob(job, { enrichExisting = false } = {}) {
+  const hit = findJobDuplicate(db, job);
+  if (hit) {
+    if (enrichExisting) {
+      const existing = db.prepare('SELECT * FROM jobs WHERE id = ?').get(hit.existing.id) || hit.existing;
+      if (job.source && !existing.source) db.prepare('UPDATE jobs SET source = ? WHERE id = ?').run(job.source, existing.id);
+      if (job.skills && !String(existing.skills || '').trim()) db.prepare('UPDATE jobs SET skills = ? WHERE id = ?').run(job.skills, existing.id);
+    }
+    throw new DuplicateError('job', hit.reason, hit.existing);
   }
 
-  if (!job.title || !String(job.title).trim()) {
-    return null;
-  }
-
-  const existing = db.prepare(
-    "SELECT * FROM jobs WHERE LOWER(title) = LOWER(?) AND COALESCE(LOWER(company), '') = COALESCE(LOWER(?), '') AND COALESCE(LOWER(location), '') = COALESCE(LOWER(?), '') LIMIT 1"
-  ).get(String(job.title).trim(), String(job.company || '').trim(), String(job.location || '').trim());
-  return existing || null;
-}
-
-function persistLocalJob(job) {
-  const duplicate = findDuplicateJob(job);
-  if (duplicate) {
-    if (job.source && !duplicate.source) {
-      db.prepare('UPDATE jobs SET source = ? WHERE id = ?').run(job.source, duplicate.id);
-      duplicate.source = job.source;
-    }
-    if (job.skills && !String(duplicate.skills || '').trim()) {
-      db.prepare('UPDATE jobs SET skills = ? WHERE id = ?').run(job.skills, duplicate.id);
-      duplicate.skills = job.skills;
-    }
-    if (job.graph_job_id && !duplicate.graph_job_id) {
-      db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(job.graph_job_id, duplicate.id);
-      return db.prepare('SELECT * FROM jobs WHERE id = ?').get(duplicate.id);
-    }
-    return { ...duplicate, duplicate: true };
-  }
-
-  const result = db.prepare(`
+  let result;
+  try {
+    result = db.prepare(`
     INSERT INTO jobs (graph_job_id, company, title, about_us, description, requirements, skills, benefits, location, type, status, url, source)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
@@ -206,56 +192,29 @@ function persistLocalJob(job) {
     job.url || null,
     job.source || null,
   );
+  } catch (error) {
+    throw translateUniqueViolation(db, error, 'job', job);
+  }
 
   return db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
 }
 
-async function ingestIntoGraphRag(req, rawText, persist = true, profile = null) {
+// jobId: UUID der Stelle aus PostgreSQL. GraphRAG legt den Neo4j-Knoten
+// dann unter genau dieser ID an, damit beide Datenbanken dieselbe ID kennen.
+async function ingestIntoGraphRag(req, rawText, persist = true, profile = null, jobId = null) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   if (!baseUrl) return null;
 
   const persistValue = persist === true ? '1' : persist === false ? '0' : String(persist);
+  const jobIdParam = jobId ? `&job_id=${encodeURIComponent(jobId)}` : '';
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 180000);
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${encodeURIComponent(persistValue)}`, {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${encodeURIComponent(persistValue)}${jobIdParam}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
       body: JSON.stringify(profile ? { profile } : { raw_text: rawText }),
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(`GraphRAG HTTP ${response.status}: ${payload.detail || payload.error || 'Unbekannter Fehler'}`);
-    }
-    return payload;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function deleteJobFromGraphRag(req, job) {
-  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
-  if (!baseUrl) return null;
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180000);
-  try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
-      body: JSON.stringify({
-        job_id: job.graph_job_id || null,
-        title: job.title || null,
-        description: job.description || null,
-        requirements: job.requirements || null,
-        about_us: job.about_us || null,
-        benefits: job.benefits || null,
-        location: job.location || null,
-        type: job.type || null,
-        url: job.url || null,
-      }),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
@@ -420,9 +379,9 @@ router.post('/', (req, res) => {
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
     const job = persistLocalJob({ title, company, about_us, description, requirements, skills, benefits, location, type, status, url, source });
-    logAudit(req, job.duplicate ? 'duplikat' : 'erstellt', 'Job', job.id, job.title);
+    logAudit(req, 'erstellt', 'Job', job.id, job.title);
 
-    ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j', graphRagProfile).catch((graphRagErr) => {
+    ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j', graphRagProfile, job.uuid).catch((graphRagErr) => {
       console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
       return { error: graphRagErr.message };
     }).then((graphRag) => {
@@ -436,6 +395,7 @@ router.post('/', (req, res) => {
       });
     });
   } catch (err) {
+    if (sendIdentityError(res, err)) return;
     console.error('Job creation error:', err);
     res.status(500).json({ error: 'Fehler beim Erstellen der Stelle' });
   }
@@ -503,7 +463,9 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   // gehoert deshalb ins KI-Protokoll (Art. 12 EU AI Act), genauso wie der
   // Generator weiter unten.
   const aiStartedAt = Date.now();
-  const graphRag = await ingestIntoGraphRag(req, trimmedText, persist ? 'neo4j' : false);
+  // Erst nur auslesen; gespeichert wird nach der Dublettenpruefung, der
+  // Neo4j-Knoten entsteht danach mit der UUID der Stelle.
+  let graphRag = await ingestIntoGraphRag(req, trimmedText, false);
     const profile = graphRag?.profile || {};
     const extractedSkills = serializeJobSkills(profile.required_skills);
 
@@ -524,7 +486,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       : filenameTitle;
     const parsedJob = persist
       ? persistLocalJob({
-        graph_job_id: graphRag?.id || null,
+        graph_job_id: null,
         title: resolvedTitle,
         company: profile.company || profile.company_name || '',
         source: 'Job-LLM-Import',
@@ -537,8 +499,19 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
         type: profile.employment_type || 'Vollzeit',
         status: 'Offen',
         url: null,
-      })
+      }, { enrichExisting: true })
       : null;
+
+    if (parsedJob) {
+      try {
+        const stored = await ingestIntoGraphRag(req, null, 'neo4j', graphRag?.profile || null, parsedJob.uuid);
+        graphRag = { ...graphRag, ...stored, profile: graphRag?.profile };
+        if (stored?.id) db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(stored.id, parsedJob.id);
+      } catch (graphRagErr) {
+        console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
+        graphRag = { ...graphRag, error: graphRagErr.message };
+      }
+    }
 
     const importSteps = {
       aiParsed: {
@@ -568,6 +541,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       graphRag,
     });
   } catch (err) {
+    if (err instanceof DuplicateError) return res.status(409).json(err.toJSON());
     console.error('Job description upload error:', err);
     const message = String(err?.message || '');
 
@@ -632,6 +606,8 @@ router.post('/export-pdf', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { title, company, description, requirements, skills, location, type, status, url, about_us, benefits } = req.body;
+    if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
+    assertNoJobDuplicate(db, { title, company, location, url, excludeId: Number(req.params.id) });
     db.prepare(`
       UPDATE jobs SET title=?, company=?, about_us=?, description=?, requirements=?, skills=?, benefits=?, location=?, type=?, status=?, url=?,
         updated_at=CURRENT_TIMESTAMP
@@ -641,7 +617,9 @@ router.put('/:id', (req, res) => {
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     logAudit(req, 'aktualisiert', 'Job', job.id, job.title);
     res.json(job);
-  } catch (err) {
+  } catch (rawErr) {
+    const err = translateUniqueViolation(db, rawErr, 'job', { ...req.body, excludeId: Number(req.params.id) });
+    if (sendIdentityError(res, err)) return;
     res.status(500).json({ error: 'Fehler beim Aktualisieren der Stelle' });
   }
 });

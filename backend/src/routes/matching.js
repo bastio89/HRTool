@@ -101,10 +101,17 @@ function buildCandidateFullText(candidate, candidateText) {
   if (candidateText?.original_text) parts.push(`CV-Volltext:\n${candidateText.original_text}`);
   else if (candidateText?.anonymized_text) parts.push(`CV-Volltext:\n${candidateText.anonymized_text}`);
   if (candidateText?.profile_json) {
-    const profileJson = typeof candidateText.profile_json === 'string'
-      ? candidateText.profile_json
-      : JSON.stringify(candidateText.profile_json);
-    if (profileJson && profileJson !== '{}') parts.push(`CV-Struktur:\n${profileJson}`);
+    let profile = candidateText.profile_json;
+    if (typeof profile === 'string') {
+      try { profile = JSON.parse(profile); } catch (_) { profile = null; }
+    }
+    // Das Geburtsdatum dient nur der Identifikation und gehoert nicht ins
+    // Matching (Altersdiskriminierung).
+    if (profile && typeof profile === 'object') {
+      const { birth_date: _birthDate, ...matchingProfile } = profile;
+      const profileJson = JSON.stringify(matchingProfile);
+      if (profileJson !== '{}') parts.push(`CV-Struktur:\n${profileJson}`);
+    }
   }
   return parts.join('\n\n').trim();
 }

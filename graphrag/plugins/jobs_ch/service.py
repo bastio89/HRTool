@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from fast_cvjob_parsing.app.schemas import JobResponse
 import jobs_ch_to_pdf
@@ -286,22 +285,25 @@ class JobsChImportService:
                     logger.warning("jobs.ch duplicate lookup failed for %s", link, exc_info=True)
                     existing_job = None
 
-                job_id = existing_job["id"] if existing_job else (job.job_id or str(uuid4()))
-                is_duplicate = existing_job is not None
-                if is_duplicate:
-                    duplicate_count += 1
                 embedding = await self.llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
                 skill_embeddings = await self._build_skill_embeddings([item.name for item in profile.required_skills])
 
-                await persist_job_profile(
+                # Eine Stelle gibt es nur einmal (gleiche URL oder Titel + Firma +
+                # Ort): eine vorhandene Stelle wird abgeglichen statt neu
+                # angelegt. Der Neo4j-Knoten traegt die UUID der Stelle.
+                stored_job = await persist_job_profile(
                     postgres_store=self.postgres_store,
-                    job_id=job_id,
+                    job_id=None,
                     raw_text=raw_text,
                     profile=profile,
                     source=self.SOURCE_LABEL,
                     source_hash=source_hash,
                     profile_hash=profile_hash,
                 )
+                job_id = stored_job["uuid"]
+                is_duplicate = bool(stored_job.get("duplicate")) or existing_job is not None
+                if is_duplicate:
+                    duplicate_count += 1
                 await self.db_service.upsert_job(
                     job_id=job_id,
                     profile=profile,

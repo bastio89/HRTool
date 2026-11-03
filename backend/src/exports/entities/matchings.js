@@ -33,7 +33,7 @@ const field = (key, label, group, value, type = 'string') => ({ key, label, grou
 
 const CANDIDATE_FIELDS = [
   field('candidate_id', 'Bewerber-ID', 'Bewerber', row => row.candidate_id, 'number'),
-  field('candidate_uuid', 'Bewerber-UUID (GraphRAG/Neo4j)', 'Bewerber', row => row.candidate_uuid ?? null),
+  field('candidate_uuid', 'Bewerber-UUID (PostgreSQL und Neo4j)', 'Bewerber', row => row.candidate_uuid ?? null),
   field('candidate_name', 'Name', 'Bewerber', row => row.candidate_name ?? null),
   field('candidate_email', 'E-Mail', 'Bewerber', row => row.candidate_email ?? null),
   field('candidate_location', 'Wohnort', 'Bewerber', row => row.candidate_location ?? null),
@@ -42,7 +42,7 @@ const CANDIDATE_FIELDS = [
 
 const JOB_FIELDS = [
   field('job_id', 'Stellen-ID', 'Stelle', row => row.job_id, 'number'),
-  field('job_uuid', 'Stellen-UUID (GraphRAG/Neo4j)', 'Stelle', row => row.job_uuid ?? null),
+  field('job_uuid', 'Stellen-UUID (PostgreSQL und Neo4j)', 'Stelle', row => row.job_uuid ?? null),
   field('job_title', 'Stellentitel', 'Stelle', row => row.job_title ?? null),
   field('job_company', 'Unternehmen', 'Stelle', row => row.job_company ?? null),
   field('job_location', 'Standort', 'Stelle', row => row.job_location ?? null),
@@ -161,10 +161,10 @@ function createMatchingEntity({ key, label, description, method, extraFields, de
       const { where, params } = buildWhere(method, filters);
       let sql = `
         SELECT mp.*,
-          c.name AS candidate_name, c.graph_candidate_id AS candidate_uuid,
+          c.name AS candidate_name, c.uuid::text AS candidate_uuid,
           c.email AS candidate_email, c.location AS candidate_location,
           COALESCE(c.status, 'Aktiv') AS candidate_status,
-          j.title AS job_title, j.graph_job_id AS job_uuid, j.company AS job_company,
+          j.title AS job_title, j.uuid::text AS job_uuid, j.company AS job_company,
           j.location AS job_location, COALESCE(j.status, 'Offen') AS job_status
         ${FROM}${where}
         ORDER BY mp.score DESC, mp.candidate_id ASC, mp.job_id ASC

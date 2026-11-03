@@ -5,6 +5,9 @@ const multer = require('multer');
 const db = require('../database');
 const { logAudit } = require('./audit');
 
+const { MergeError, mergeCandidates } = require('../duplicates');
+const { syncGraphCandidatesInBackground } = require('../utils/graphRagCandidate');
+
 const router = express.Router();
 const uploadsDir = path.join(__dirname, '..', '..', 'data', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -306,70 +309,17 @@ router.put('/:candidateId/custom-fields', (req, res) => {
 // CANDIDATE MERGE (#10)
 // ============================================
 
+// Zusammenfuehren nimmt alles mit: Interviews, Bewertungen, CV-Volltext,
+// Matching-Ergebnisse und die Neo4j-IDs (siehe src/duplicates.js).
 router.post('/merge', (req, res) => {
   try {
     const { keepId, mergeId } = req.body;
-    if (!keepId || !mergeId) return res.status(400).json({ error: 'keepId und mergeId sind erforderlich' });
-    
-    const keep = db.prepare('SELECT * FROM candidates WHERE id = ?').get(keepId);
-    const merge = db.prepare('SELECT * FROM candidates WHERE id = ?').get(mergeId);
-    if (!keep || !merge) return res.status(404).json({ error: 'Kandidat nicht gefunden' });
-
-    const mergeTx = db.transaction(() => {
-      // Fill empty fields in keep with merge data
-      const textFields = ['email', 'phone', 'location', 'experience', 'skills', 'education',
-        'desired_salary', 'availability', 'languages', 'certificates', 'drivers_license',
-        'mobility', 'notes', 'source', 'linkedin_url', 'xing_url', 'github_url', 'portfolio_url',
-        'nationality', 'work_permit', 'work_permit_until', 'notice_period', 'available_from',
-        'current_employer', 'current_position', 'referrer_name', 'referrer_email'];
-      
-      const updates = [];
-      const params = [];
-      for (const f of textFields) {
-        if (!keep[f] && merge[f]) {
-          updates.push(`${f} = ?`);
-          params.push(merge[f]);
-        }
-      }
-      // Merge tags
-      const keepTags = keep.tags ? keep.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
-      const mergeTags = merge.tags ? merge.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
-      const allTags = [...new Set([...keepTags, ...mergeTags])];
-      updates.push('tags = ?');
-      params.push(allTags.join(', '));
-      
-      if (updates.length > 0) {
-        params.push(keepId);
-        db.prepare(`UPDATE candidates SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
-      }
-
-      // Move related data to keep candidate
-      db.prepare('UPDATE activities SET candidate_id = ? WHERE candidate_id = ?').run(keepId, mergeId);
-      db.prepare('UPDATE candidate_files SET candidate_id = ? WHERE candidate_id = ?').run(keepId, mergeId);
-      db.prepare('UPDATE candidate_ratings SET candidate_id = ? WHERE candidate_id = ?').run(keepId, mergeId);
-      db.prepare('UPDATE candidate_work_history SET candidate_id = ? WHERE candidate_id = ?').run(keepId, mergeId);
-      db.prepare('UPDATE candidate_education SET candidate_id = ? WHERE candidate_id = ?').run(keepId, mergeId);
-      db.prepare('UPDATE candidate_custom_values SET candidate_id = ? WHERE candidate_id = ? AND field_id NOT IN (SELECT field_id FROM candidate_custom_values WHERE candidate_id = ?)').run(keepId, mergeId, keepId);
-      db.prepare('UPDATE comments SET entity_id = ? WHERE entity_type = ? AND entity_id = ?').run(keepId, 'candidate', mergeId);
-      
-      // Handle pipeline entries (skip duplicates for same job)
-      const existingJobs = db.prepare('SELECT job_id FROM pipeline_entries WHERE candidate_id = ?').all(keepId).map(r => r.job_id);
-      const mergeEntries = db.prepare('SELECT * FROM pipeline_entries WHERE candidate_id = ?').all(mergeId);
-      for (const entry of mergeEntries) {
-        if (!existingJobs.includes(entry.job_id)) {
-          db.prepare('UPDATE pipeline_entries SET candidate_id = ? WHERE id = ?').run(keepId, entry.id);
-        }
-      }
-
-      // Delete merged candidate
-      db.prepare('DELETE FROM candidates WHERE id = ?').run(mergeId);
-    });
-
-    mergeTx();
-    const result = db.prepare('SELECT * FROM candidates WHERE id = ?').get(keepId);
-    logAudit(req, 'zusammengeführt', 'Candidate', keepId, `${keep.name} + ${merge.name}`);
-    res.json(result);
+    const { candidate, merged } = mergeCandidates(db, keepId, mergeId);
+    logAudit(req, 'zusammengeführt', 'Candidate', candidate.id, `${candidate.name} + ${merged.name}`);
+    syncGraphCandidatesInBackground([candidate.id], req);
+    res.json(candidate);
   } catch (err) {
+    if (err instanceof MergeError) return res.status(err.status).json({ error: err.message });
     console.error('Merge error:', err);
     res.status(500).json({ error: err.message });
   }

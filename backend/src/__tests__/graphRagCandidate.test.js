@@ -89,6 +89,7 @@ describe('GraphRAG candidate deletion', () => {
   test('candidate delete route removes the graph node before the local row', async () => {
     const candidate = { id: 17, name: 'Daniel Huber', graph_candidate_id: 'graph-candidate-17' };
     let localDeleted = false;
+    let textsDeleted = false;
     const db = {
       prepare(sql) {
         if (sql.includes('SELECT * FROM candidates WHERE id = ?')) {
@@ -99,6 +100,10 @@ describe('GraphRAG candidate deletion', () => {
         }
         if (sql.includes('DELETE FROM candidates WHERE id = ?')) {
           return { run: () => { localDeleted = true; return { changes: 1 }; } };
+        }
+        // CV-Volltext (candidate_texts) gehoert zur Loeschung (DSGVO).
+        if (sql.includes('DELETE FROM candidate_texts')) {
+          return { run: (...ids) => { textsDeleted = ids.includes('17'); return { changes: 1 }; } };
         }
         throw new Error(`Unexpected SQL: ${sql}`);
       },
@@ -120,5 +125,6 @@ describe('GraphRAG candidate deletion', () => {
     expect(response.status).toBe(200);
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect(localDeleted).toBe(true);
+    expect(textsDeleted).toBe(true);
   });
 });

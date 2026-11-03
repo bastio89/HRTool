@@ -38,6 +38,7 @@ import AISettings from './pages/AISettings'
 import Prompts from './pages/Prompts'
 import AdminCreditsPage from './pages/AdminCreditsPage'
 import DataExport from './pages/DataExport'
+import Duplicates from './pages/Duplicates'
 import { PluginProvider, usePlugins } from './plugins/PluginContext'
 import { getPluginDefinition } from './plugins/registry'
 
@@ -136,6 +137,7 @@ function AppRouter() {
               <Route path="admin/prompts" element={<AdminRoute><Prompts /></AdminRoute>} />
               <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />
               <Route path="admin/export" element={<AdminRoute><DataExport /></AdminRoute>} />
+              <Route path="admin/duplicates" element={<AdminRoute><Duplicates /></AdminRoute>} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

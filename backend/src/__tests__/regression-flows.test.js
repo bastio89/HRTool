@@ -296,7 +296,7 @@ function createMockDb(seed = {}) {
               gdprConsentDate, gdprConsentType, gdprConsentExpires,
               nationality, workPermit, workPermitUntil,
               referrerName, referrerEmail,
-              currentEmployer, currentPosition, gender,
+              currentEmployer, currentPosition, gender, birthDate,
             ] = args;
 
             const row = {
@@ -339,6 +339,7 @@ function createMockDb(seed = {}) {
               current_employer: currentEmployer,
               current_position: currentPosition,
               gender,
+              birth_date: birthDate ?? null,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             };
@@ -655,8 +656,8 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       json: async () => ({
         id: 'graph-cand-daniel',
         message: 'Candidate ingested successfully',
-        profile: { email: 'daniel@example.com' },
-        persisted: true,
+        profile: { email: 'daniel@example.com', birth_date: '1991-04-12' },
+        persisted: false,
       }),
     }));
 
@@ -674,6 +675,37 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(response.status).toBe(200);
     expect(response.body.candidate.name).toBe('Daniel Huber');
     expect(mockDb.__state.candidates[0].name).toBe('Daniel Huber');
+    expect(mockDb.__state.candidates[0].birth_date).toBe('1991-04-12');
+    // GraphRAG liest nur aus; gespeichert wird im Backend mit Dublettenpruefung.
+    expect(String(global.fetch.mock.calls[0][0])).toContain('/ingest/candidate?persist=0');
+  });
+
+  test('CV import without birth date is rejected and nothing is stored', async () => {
+    const mockDb = createMockDb();
+    mockDb.transaction = (callback) => () => callback();
+    jest.doMock('../database', () => mockDb);
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../aiLogger', () => ({ logAiCall: jest.fn() }));
+    jest.doMock('pdf-parse', () => jest.fn(async () => ({ text: 'Daniel Huber\ndaniel@example.com' })));
+
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: '', message: 'parsed', profile: { name: 'Daniel Huber', email: 'daniel@example.com' }, persisted: false }),
+    }));
+
+    const cvParserRouter = require('../routes/cv-parser');
+    const app = express();
+    app.use('/api/cv-parser', cvParserRouter);
+
+    const response = await request(app)
+      .post('/api/cv-parser/parse?persist=1')
+      .attach('file', Buffer.from('%PDF-1.4 fake pdf content'), { filename: 'cv.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(422);
+    expect(response.body.field).toBe('birth_date');
+    expect(response.body.error).toMatch(/Geburtsdatum/);
+    expect(mockDb.__state.candidates).toHaveLength(0);
   });
 
   test('candidate search is case-insensitive and combines profile fields', async () => {

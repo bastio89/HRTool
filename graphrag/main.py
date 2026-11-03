@@ -25,6 +25,8 @@ from models import (
 	CandidatePrivacyRequest,
 	CandidatePrivacyResponse,
 	CandidateProfileExtraction,
+	CandidateSyncRequest,
+	CandidateSyncResponse,
 	AiUsageMetrics,
 	HealthResponse,
 	JobIngestRequest,
@@ -37,7 +39,14 @@ from models import (
 )
 from services.candidate_privacy import CandidatePrivacyService
 from services.candidate_extraction import extract_candidate_profile
-from services.candidate_persistence import persist_candidate_profile
+from services.candidate_identity import (
+	CandidateIdentityError,
+	DuplicateCandidateError,
+	ensure_birth_date,
+	normalize_birth_date,
+	without_identity_fields,
+)
+from services.candidate_persistence import create_candidate
 from services.db import Neo4jService
 from matching_api import create_matching_router
 from services.model_config import ModelConfigService
@@ -307,6 +316,51 @@ async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_ca
 	raise HTTPException(status_code=400, detail="Provide either raw_text or a non-empty file.")
 
 
+def _identity_http_error(exc: Exception) -> HTTPException:
+	"""Eine Person gibt es nur einmal: 409 bei vorhandener Person, 422 wenn
+	Name oder Geburtsdatum fehlen."""
+	if isinstance(exc, DuplicateCandidateError):
+		return HTTPException(status_code=409, detail=exc.to_detail())
+	return HTTPException(status_code=422, detail={"error": str(exc), "field": getattr(exc, "field", None)})
+
+
+async def _existing_identity(profile: CandidateProfileExtraction) -> dict[str, Any] | None:
+	"""Vorhandene Person mit gleichem Namen und Geburtsdatum (nur Hinweis
+	beim reinen Auslesen)."""
+	birth_date = normalize_birth_date(profile.birth_date)
+	name = str(profile.name or "").strip()
+	if not name or not birth_date:
+		return None
+	try:
+		return await postgres_store.find_candidate_by_identity(name, birth_date)
+	except Exception:
+		logger.warning("identity lookup failed", exc_info=True)
+		return None
+
+
+async def _create_candidate(profile: CandidateProfileExtraction, candidate_text: str, source: str, text_hash: str | None = None, profile_hash: str | None = None) -> dict[str, Any]:
+	try:
+		return await create_candidate(
+			postgres_store=postgres_store,
+			candidate_privacy_service=candidate_privacy_service,
+			db_service=db_service,
+			llm_service=llm_service,
+			build_skill_embeddings=_build_skill_embeddings,
+			profile=profile,
+			candidate_text=candidate_text,
+			source=source,
+			source_hash=text_hash,
+			profile_hash=profile_hash,
+		)
+	except (CandidateIdentityError, DuplicateCandidateError) as exc:
+		raise _identity_http_error(exc) from exc
+	except HTTPException:
+		raise
+	except Exception as exc:
+		logger.exception("Candidate persistence failed")
+		raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
+
+
 async def _extract_candidate_payload_from_request(request: Request) -> tuple[str | None, CandidateProfileExtraction | None]:
 	content_type = request.headers.get("content-type", "").lower()
 
@@ -497,53 +551,23 @@ async def parse_cv(
 		logger.exception("Candidate parsing failed")
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
 
+	ensure_birth_date(profile, combined_text)
 	text_hash = _normalized_text_hash(combined_text)
 	profile_hash = _normalized_profile_hash(profile)
-	duplicate_candidate = None
-	try:
-		if text_hash:
-			duplicate_candidate = await db_service.find_candidate_by_source_hash(text_hash)
-		if duplicate_candidate is None and profile_hash:
-			duplicate_candidate = await db_service.find_candidate_by_profile_hash(profile_hash)
-		if duplicate_candidate is None:
-			name = str(profile.name or "").strip()
-			email = str(profile.email or "").strip()
-			phone = str(profile.phone or "").strip()
-			if name or email or phone:
-				duplicate_candidate = await postgres_store._find_existing_candidate(profile)
-	except Exception:
-		logger.warning("cv-parser duplicate lookup failed; continuing without dedupe", exc_info=True)
-		duplicate_candidate = None
+	# Dieselbe Person = gleicher Name + gleiches Geburtsdatum.
+	duplicate_candidate = await _existing_identity(profile)
 
 	graph_candidate_id: str | None = None
 	postgres_candidate_id: int | None = None
 	if persist:
-		graph_candidate_id = duplicate_candidate["id"] if duplicate_candidate else str(uuid4())
-		try:
-			embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
-			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
-			await db_service.upsert_candidate(
-				candidate_id=graph_candidate_id,
-				profile=profile,
-				embedding=embedding,
-				skill_embeddings=skill_embeddings,
-			)
-			candidate_text = combined_text or render_candidate_fulltext(
-				profile.model_dump(mode="json"),
-				work_history=[item.model_dump(mode="json") for item in profile.work_history],
-				education_history=[item.model_dump(mode="json") for item in profile.education_history],
-			)
-			postgres_candidate_id = await persist_candidate_profile(
-				postgres_store=postgres_store,
-				candidate_privacy_service=candidate_privacy_service,
-				profile=profile,
-				candidate_text=candidate_text,
-				source="CV-Import",
-				graph_candidate_id=graph_candidate_id,
-			)
-		except Exception as exc:
-			logger.exception("Candidate persistence failed")
-			raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
+		candidate_text = combined_text or render_candidate_fulltext(
+			profile.model_dump(mode="json"),
+			work_history=[item.model_dump(mode="json") for item in profile.work_history],
+			education_history=[item.model_dump(mode="json") for item in profile.education_history],
+		)
+		stored = await _create_candidate(profile, candidate_text, "CV-Import", text_hash, profile_hash)
+		graph_candidate_id = stored["uuid"]
+		postgres_candidate_id = stored["id"]
 
 	profile_payload = profile.model_dump(mode="json")
 	candidate_payload = {**profile_payload, **({"id": postgres_candidate_id} if postgres_candidate_id else {})}
@@ -634,53 +658,23 @@ async def import_fast_cv(
 	combined_text = "\n\n".join(text_parts)
 	await billing_service.charge(request, "-1.00", "CV_PARSE", note="Fast CV import")
 
+	ensure_birth_date(profile, combined_text)
 	text_hash = _normalized_text_hash(combined_text)
 	profile_hash = _normalized_profile_hash(profile)
-	duplicate_candidate = None
-	try:
-		if text_hash:
-			duplicate_candidate = await db_service.find_candidate_by_source_hash(text_hash)
-		if duplicate_candidate is None and profile_hash:
-			duplicate_candidate = await db_service.find_candidate_by_profile_hash(profile_hash)
-		if duplicate_candidate is None:
-			name = str(profile.name or "").strip()
-			email = str(profile.email or "").strip()
-			phone = str(profile.phone or "").strip()
-			if name or email or phone:
-				duplicate_candidate = await postgres_store._find_existing_candidate(profile)
-	except Exception:
-		logger.warning("fast CV importer duplicate lookup failed; continuing without dedupe", exc_info=True)
-		duplicate_candidate = None
+	# Dieselbe Person = gleicher Name + gleiches Geburtsdatum.
+	duplicate_candidate = await _existing_identity(profile)
 
 	graph_candidate_id: str | None = None
 	postgres_candidate_id: int | None = None
 	if persist:
-		graph_candidate_id = duplicate_candidate["id"] if duplicate_candidate else str(uuid4())
-		try:
-			embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
-			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
-			await db_service.upsert_candidate(
-				candidate_id=graph_candidate_id,
-				profile=profile,
-				embedding=embedding,
-				skill_embeddings=skill_embeddings,
-			)
-			candidate_text = combined_text or render_candidate_fulltext(
-				profile.model_dump(mode="json"),
-				work_history=[item.model_dump(mode="json") for item in profile.work_history],
-				education_history=[item.model_dump(mode="json") for item in profile.education_history],
-			)
-			postgres_candidate_id = await persist_candidate_profile(
-				postgres_store=postgres_store,
-				candidate_privacy_service=candidate_privacy_service,
-				profile=profile,
-				candidate_text=candidate_text,
-				source="CV-Fast-Import",
-				graph_candidate_id=graph_candidate_id,
-			)
-		except Exception as exc:
-			logger.exception("Fast candidate persistence failed")
-			raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
+		candidate_text = combined_text or render_candidate_fulltext(
+			profile.model_dump(mode="json"),
+			work_history=[item.model_dump(mode="json") for item in profile.work_history],
+			education_history=[item.model_dump(mode="json") for item in profile.education_history],
+		)
+		stored = await _create_candidate(profile, candidate_text, "CV-Fast-Import", text_hash, profile_hash)
+		graph_candidate_id = stored["uuid"]
+		postgres_candidate_id = stored["id"]
 
 	profile_payload = profile.model_dump(mode="json")
 	candidate_payload = {**profile_payload, **({"id": postgres_candidate_id} if postgres_candidate_id else {})}
@@ -711,7 +705,11 @@ async def import_fast_cv(
 @app.post("/ingest/candidate", response_model=CandidateIngestResponse)
 async def ingest_candidate(
 	request: Request,
+	persist: str = Query(default="true"),
 ) -> CandidateIngestResponse:
+	"""Liest einen CV aus und legt den Bewerber an (persist=1, Standard).
+	persist=0 liest nur aus - das Backend speichert dann selbst mit
+	Dublettenpruefung und uebertraegt den Bewerber per /sync/candidates."""
 	text, provided_profile = await _extract_candidate_payload_from_request(request=request)
 	try:
 		if provided_profile is None:
@@ -725,55 +723,106 @@ async def ingest_candidate(
 		raise HTTPException(status_code=502, detail=f"Candidate parsing failed: {exc}") from exc
 
 	await billing_service.charge(request, "-1.00", "CV_PARSE", note="CV ingest")
+	ensure_birth_date(profile, text)
 
-	text_hash = _normalized_text_hash(text)
-	profile_hash = _normalized_profile_hash(profile)
-	duplicate_candidate = None
-	if text_hash:
-		duplicate_candidate = await db_service.find_candidate_by_source_hash(text_hash)
-	if duplicate_candidate is None and profile_hash:
-		duplicate_candidate = await db_service.find_candidate_by_profile_hash(profile_hash)
-	candidate_id = duplicate_candidate["id"] if duplicate_candidate else str(uuid4())
+	if str(persist or "").strip().lower() in {"0", "false", "no", "none", "off"}:
+		return CandidateIngestResponse(id="", message="Candidate parsed successfully", profile=profile, persisted=False)
 
-	try:
-		embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
-		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
-	except Exception as exc:
-		logger.exception("Candidate embedding creation failed")
-		raise HTTPException(status_code=502, detail=f"Candidate embedding creation failed: {exc}") from exc
-
-	try:
-		await db_service.upsert_candidate(
-			candidate_id=candidate_id,
-			profile=profile,
-			embedding=embedding,
-			skill_embeddings=skill_embeddings,
-			source_hash=text_hash,
-			profile_hash=profile_hash,
-		)
-		candidate_text = text or render_candidate_fulltext(
-			profile.model_dump(mode="json"),
-			work_history=[item.model_dump(mode="json") for item in profile.work_history],
-			education_history=[item.model_dump(mode="json") for item in profile.education_history],
-		)
-		await persist_candidate_profile(
-			postgres_store=postgres_store,
-			candidate_privacy_service=candidate_privacy_service,
-			profile=profile,
-			candidate_text=candidate_text,
-			source="Candidate-Ingest",
-			graph_candidate_id=candidate_id,
-		)
-	except Exception as exc:
-		logger.exception("Candidate persistence failed")
-		raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
-
+	candidate_text = text or render_candidate_fulltext(
+		profile.model_dump(mode="json"),
+		work_history=[item.model_dump(mode="json") for item in profile.work_history],
+		education_history=[item.model_dump(mode="json") for item in profile.education_history],
+	)
+	stored = await _create_candidate(
+		profile,
+		candidate_text,
+		"Candidate-Ingest",
+		_normalized_text_hash(text),
+		_normalized_profile_hash(profile),
+	)
 	return CandidateIngestResponse(
-		id=candidate_id,
+		id=stored["uuid"],
 		message="Candidate ingested successfully",
 		profile=profile,
 		persisted=True,
+		postgres_id=stored["id"],
 	)
+
+
+def _profile_for_sync(row: dict[str, Any], text_payload: dict[str, Any] | None) -> CandidateProfileExtraction:
+	"""Profil fuer den Neo4j-Knoten: PostgreSQL ist fuehrend, das beim
+	CV-Import gespeicherte Strukturprofil liefert Skills mit Kategorien."""
+	data: dict[str, Any] = {}
+	profile_json = (text_payload or {}).get("profile_json")
+	if isinstance(profile_json, str):
+		try:
+			profile_json = json.loads(profile_json)
+		except ValueError:
+			profile_json = None
+	if isinstance(profile_json, dict):
+		data.update(without_identity_fields(profile_json))
+	for key in (
+		"name", "email", "phone", "location", "experience", "education", "certificates", "drivers_license",
+		"mobility", "desired_salary", "availability", "notice_period", "linkedin_url", "xing_url", "github_url",
+		"portfolio_url", "tags", "notes", "current_employer", "current_position", "nationality", "gender",
+	):
+		if row.get(key) not in (None, ""):
+			data[key] = row[key]
+	if not data.get("skills") and row.get("skills"):
+		data["skills"] = row["skills"]
+	if not data.get("languages") and row.get("languages"):
+		data["languages"] = row["languages"]
+	if row.get("work_history"):
+		data["work_history"] = [
+			{**entry, "is_current": bool(entry.get("is_current"))} for entry in row["work_history"]
+		]
+	if row.get("education_history"):
+		data["education_history"] = row["education_history"]
+	data.pop("birth_date", None)
+	return CandidateProfileExtraction.model_validate(data)
+
+
+@app.post("/sync/candidates", response_model=CandidateSyncResponse)
+async def sync_candidates(payload: CandidateSyncRequest) -> CandidateSyncResponse:
+	"""Uebertraegt Bewerber aus PostgreSQL nach Neo4j. Der Knoten traegt die
+	UUID des Bewerbers; aeltere Knoten derselben Person (andere IDs in
+	graph_candidate_ids) werden entfernt, damit es die Person auch in Neo4j
+	nur einmal gibt. Kostet keine Credits (es wird nichts geparst)."""
+	if not payload.candidate_ids:
+		return CandidateSyncResponse()
+	rows = await postgres_store.list_candidates_for_backfill(payload.candidate_ids)
+	result = CandidateSyncResponse()
+	for row in rows:
+		candidate_id = int(row["candidate_id"])
+		try:
+			text_payload = await postgres_store.get_candidate_text(str(candidate_id))
+			profile = _profile_for_sync(row, text_payload)
+			embedding = await llm_service.create_embedding(without_identity_fields(profile.model_dump()), allow_fallback=False)
+			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
+			await db_service.upsert_candidate(
+				candidate_id=row["uuid"],
+				profile=profile,
+				embedding=embedding,
+				skill_embeddings=skill_embeddings,
+			)
+			stale_ids = {
+				str(value).strip()
+				for value in [row.get("graph_candidate_id"), *(row.get("graph_candidate_ids") or [])]
+				if value and str(value).strip() and str(value).strip() != row["uuid"]
+			}
+			for stale_id in stale_ids:
+				if await postgres_store.graph_candidate_id_in_use(stale_id, exclude_candidate_id=candidate_id):
+					continue
+				result.removed_stale_nodes += await db_service.delete_candidate(stale_id)
+			await postgres_store.reset_candidate_graph_ids(candidate_id, row["uuid"])
+			if text_payload and not text_payload.get("anonymized_text"):
+				await candidate_privacy_service.anonymize_candidate(str(candidate_id))
+			result.synced += 1
+		except Exception as exc:
+			logger.warning("Neo4j-Abgleich fuer Bewerber %s fehlgeschlagen", candidate_id, exc_info=True)
+			result.failed += 1
+			result.errors.append({"candidate_id": candidate_id, "error": str(exc)})
+	return result
 
 
 @app.delete("/ingest/candidate", response_model=CandidateDeleteResponse)
@@ -804,6 +853,7 @@ async def delete_candidate(payload: CandidateDeleteRequest) -> CandidateDeleteRe
 async def ingest_job(
 	request: Request,
 	persist: str = Query(default="true"),
+	job_id: str | None = Query(default=None, description="UUID der Stelle aus PostgreSQL; der Neo4j-Knoten erhaelt genau diese ID"),
 ) -> JobIngestResponse:
 	text, provided_profile = await _extract_job_payload_from_request(request=request)
 	try:
@@ -876,9 +926,20 @@ async def ingest_job(
 		persist_postgres = True
 		persist_neo4j = True
 
-	job_id = duplicate_job["id"] if duplicate_job else str(uuid4())
+	requested_job_id = str(job_id or "").strip() or None
+	graph_job_id = requested_job_id or (duplicate_job["id"] if duplicate_job else str(uuid4()))
 	if not persist_postgres and not persist_neo4j:
-		return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=False)
+		return JobIngestResponse(id=graph_job_id, message="Job ingested successfully", profile=profile, persisted=False)
+
+	if persist_postgres:
+		# Eine Stelle gibt es nur einmal: vorhandene Stelle blockiert das Anlegen.
+		existing_job = await postgres_store._find_existing_job(requested_job_id, profile)
+		if existing_job is not None:
+			raise HTTPException(status_code=409, detail={
+				"error": f"Diese Stelle ist bereits im Tool angelegt: {existing_job.get('title') or 'Stelle'} (ID {existing_job.get('id')})",
+				"code": "DUPLICATE_JOB",
+				"existing": existing_job,
+			})
 
 	await billing_service.charge(request, "-1.00", "JOB_PARSE", note=profile.title or "Job ingest")
 
@@ -893,9 +954,9 @@ async def ingest_job(
 
 	if persist_postgres:
 		try:
-			await persist_job_profile(
+			stored_job = await persist_job_profile(
 				postgres_store=postgres_store,
-				job_id=job_id,
+				job_id=None,
 				raw_text=text or "",
 				profile=profile,
 				source_hash=text_hash,
@@ -904,11 +965,15 @@ async def ingest_job(
 		except Exception as exc:
 			logger.exception("Job PostgreSQL persistence failed")
 			raise HTTPException(status_code=503, detail=f"Job PostgreSQL persistence failed: {exc}") from exc
+		if stored_job.get("duplicate"):
+			raise HTTPException(status_code=409, detail={"error": "Diese Stelle ist bereits im Tool angelegt", "code": "DUPLICATE_JOB", "existing": stored_job})
+		# Neo4j-Knoten und PostgreSQL-Zeile teilen sich die UUID.
+		graph_job_id = stored_job["uuid"]
 
 	if persist_neo4j:
 		try:
 			await db_service.upsert_job(
-				job_id=job_id,
+				job_id=graph_job_id,
 				profile=profile,
 				embedding=embedding,
 				skill_embeddings=skill_embeddings,
@@ -919,7 +984,7 @@ async def ingest_job(
 			logger.exception("Job persistence failed")
 			raise HTTPException(status_code=503, detail=f"Job persistence failed: {exc}") from exc
 
-	return JobIngestResponse(id=job_id, message="Job ingested successfully", profile=profile, persisted=True)
+	return JobIngestResponse(id=graph_job_id, message="Job ingested successfully", profile=profile, persisted=True)
 
 
 @app.delete("/ingest/job", response_model=JobDeleteResponse)
@@ -946,7 +1011,9 @@ async def delete_job(payload: JobDeleteRequest) -> JobDeleteResponse:
 		location=payload.location,
 		employment_type=payload.type,
 	)
-	postgres_deleted = await postgres_store.delete_job(
+	# scope "neo4j": das Backend loescht seine PostgreSQL-Zeile selbst. Sonst
+	# wuerden alle Stellen mit derselben (Alt-)ID mitgeloescht.
+	postgres_deleted = 0 if payload.scope == "neo4j" else await postgres_store.delete_job(
 		payload.job_id,
 		title=payload.title,
 		description=payload.description,

@@ -1048,7 +1048,8 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 					)
 					continue
 
-				candidate_profile = candidate_text_payload.get('profile_json') or {}
+				# Das Geburtsdatum dient nur der Identifikation, nie dem Matching.
+				candidate_profile = {key: value for key, value in (candidate_text_payload.get('profile_json') or {}).items() if key != 'birth_date'}
 				candidate_name = str(candidate_text_payload.get('candidate_name') or pair.candidate_name or candidate_profile.get('name') or candidate_id).strip()
 				candidate_text_parts = [
 					str(candidate_text_payload.get('original_text')).strip() if candidate_text_payload.get('original_text') else '',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useId } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Save, Sparkles, Loader2, Upload, FileText } from 'lucide-react'
 import { jobsApi } from '../api'
 import { Card, Button, Input, Textarea, LoadingSpinner, PageContainer } from '../components/UI'
@@ -47,6 +47,8 @@ export default function JobForm() {
   const [aiKeywords, setAiKeywords] = useState('')
   const [aiModel, setAiModel] = useState('')
   const [error, setError] = useState('')
+  // Eine Stelle gibt es nur einmal: bei einer Dublette Verweis auf die vorhandene.
+  const [existingJob, setExistingJob] = useState(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -89,6 +91,7 @@ export default function JobForm() {
       markSaved()
       navigate('/jobs')
     } catch (err) {
+      setExistingJob(err.code === 'DUPLICATE_JOB' ? err.existing || null : null)
       setError(err.message)
     } finally {
       setSaving(false)
@@ -211,8 +214,13 @@ export default function JobForm() {
       </div>
 
       {error && (
-        <div className="p-6 rounded-[20px] bg-[#ff3b30]/10 text-[#ff3b30] text-[16px] font-medium mb-10">
+        <div role="alert" className="p-6 rounded-[20px] bg-[#ff3b30]/10 text-[#ff3b30] text-[16px] font-medium mb-10">
           {error}
+          {existingJob?.id && (
+            <Link to={`/jobs/${existingJob.id}/edit`} className="block mt-3 text-[14px] font-semibold text-[var(--apple-blue-text)] hover:underline">
+              {t('jobs.duplicate_open_existing')}
+            </Link>
+          )}
         </div>
       )}
 

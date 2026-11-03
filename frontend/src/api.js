@@ -101,6 +101,21 @@ function normalizeErrorMessage(error, fallback) {
   return fallback
 }
 
+// Fehler aus Backend (error/details) und GraphRAG (detail, ggf. als Objekt
+// mit error/code/existing, z. B. bei einer Dublette) einheitlich abbilden.
+function apiErrorFromPayload(payload, fallback) {
+  const detail = payload?.detail && typeof payload.detail === 'object' ? payload.detail : null
+  const source = detail || payload || {}
+  // Die genauere Angabe (details/detail) geht vor der allgemeinen (error).
+  const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  const message = text(payload?.details) || text(payload?.detail) || normalizeErrorMessage(source, null) || fallback
+  const failure = new Error(message)
+  failure.code = source.code
+  failure.existing = source.existing
+  failure.field = source.field
+  return failure
+}
+
 function notifyCreditRefresh(detail = {}) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(CREDIT_REFRESH_EVENT, { detail }));
@@ -140,7 +155,13 @@ async function request(url, options = {}) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }));
-    throw new Error(normalizeErrorMessage(error, `HTTP ${response.status ?? 'unknown'}`));
+    const failure = new Error(normalizeErrorMessage(error, `HTTP ${response.status ?? 'unknown'}`));
+    // Z. B. bei einer Dublette (409): code und bestehender Datensatz.
+    failure.status = response.status;
+    failure.code = error?.code;
+    failure.existing = error?.existing;
+    failure.field = error?.field;
+    throw failure;
   }
 
   return response.json();
@@ -192,8 +213,8 @@ export const candidatesApi = {
   getSourceStats: () => request('/candidates/stats/sources'),
   getTimeToHire: () => request('/candidates/stats/time-to-hire'),
   getTags: () => request('/candidates/stats/tags'),
-  checkDuplicate: (name, email, excludeId) =>
-    request('/candidates/check-duplicate', { method: 'POST', body: JSON.stringify({ name, email, excludeId }) }),
+  checkDuplicate: (name, email, excludeId, birthDate) =>
+    request('/candidates/check-duplicate', { method: 'POST', body: JSON.stringify({ name, email, excludeId, birth_date: birthDate || undefined }) }),
 };
 
 // Matching API
@@ -337,7 +358,9 @@ export const jobsApi = {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => null);
-      throw new Error(error?.detail || error?.error || `Job-Analyse fehlgeschlagen (HTTP ${response.status})`);
+      const failure = apiErrorFromPayload(error, `Job-Analyse fehlgeschlagen (HTTP ${response.status})`);
+      failure.status = response.status;
+      throw failure;
     }
     const parsed = await response.json();
     const profile = parsed.profile || {};
@@ -441,7 +464,9 @@ export const jobsApi = {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => null);
-      throw new Error(error?.detail || error?.error || `Job-Analyse fehlgeschlagen (HTTP ${response.status})`);
+      const failure = apiErrorFromPayload(error, `Job-Analyse fehlgeschlagen (HTTP ${response.status})`);
+      failure.status = response.status;
+      throw failure;
     }
 
     const parsed = await response.json();
@@ -601,6 +626,14 @@ export const exportsApi = {
   runProfile: (id, filters = {}) => downloadExport(`/exports/profiles/${id}/run`, { filters }),
 };
 
+// Administration -> Dubletten
+export const duplicatesApi = {
+  getOverview: () => request('/duplicates'),
+  mergeCandidates: (keepId, mergeIds) => request('/duplicates/candidates/merge', { method: 'POST', body: JSON.stringify({ keepId, mergeIds }) }),
+  mergeJobs: (keepId, mergeIds) => request('/duplicates/jobs/merge', { method: 'POST', body: JSON.stringify({ keepId, mergeIds }) }),
+  syncCandidates: () => request('/duplicates/sync-candidates', { method: 'POST', body: '{}' }),
+};
+
 export const searchApi = {
   global: (query, limit = 10) => {
     const q = new URLSearchParams();
@@ -672,13 +705,15 @@ export const cvParserApi = {
           try {
             const evt = JSON.parse(errLine.slice(6));
             if (evt.details || evt.detail || evt.error) {
-              throw new Error(evt.details || evt.detail || evt.error);
+              throw apiErrorFromPayload(evt, 'CV-Analyse fehlgeschlagen');
             }
           } catch (e) { if (e.message && !e.message.includes('JSON')) throw e; }
         }
       }
       const error = await response.json().catch(() => null);
-      throw new Error(error?.details || error?.detail || error?.error || `CV-Analyse fehlgeschlagen (HTTP ${response.status})`);
+      const failure = apiErrorFromPayload(error, `CV-Analyse fehlgeschlagen (HTTP ${response.status})`);
+      failure.status = response.status;
+      throw failure;
     }
     // Stream mode: parse SSE events (only if server actually returns SSE)
     const contentType = response.headers.get('content-type') || '';
@@ -702,7 +737,7 @@ export const cvParserApi = {
               } else if (event.type === 'result') {
                 result = event;
               } else if (event.type === 'error') {
-                throw new Error(event.details || event.detail || event.error || 'CV-Analyse fehlgeschlagen');
+                throw apiErrorFromPayload(event, 'CV-Analyse fehlgeschlagen');
               }
             } catch (e) {
               if (e.message && !e.message.includes('JSON')) throw e;

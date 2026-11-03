@@ -85,7 +85,8 @@ async def test_existing_job_with_empty_skills_is_backfilled() -> None:
     finally:
         postgres_store_module.psycopg.AsyncConnection.connect = original_connect
 
-    assert result == 19
+    # Vorhandene Stelle: kein zweiter Datensatz, leere Skills werden ergaenzt.
+    assert result == {"id": 19, "uuid": None, "duplicate": True}
     assert connection.executed is not None
     query, params = connection.executed
     assert "SET skills = %s" in query
@@ -107,8 +108,8 @@ async def test_new_job_stores_extracted_skills() -> None:
         async def execute(self, query: str, params: tuple[object, ...]) -> None:
             self.executed = (query, params)
 
-        async def fetchone(self) -> dict[str, int]:
-            return {"id": 23}
+        async def fetchone(self) -> dict[str, object]:
+            return {"id": 23, "uuid": "8c1f6a9e-3d2b-4c5a-9e8f-0a1b2c3d4e5f"}
 
     class FakeConnection:
         def __init__(self, cursor: FakeCursor):
@@ -146,8 +147,11 @@ async def test_new_job_stores_extracted_skills() -> None:
     finally:
         postgres_store_module.psycopg.AsyncConnection.connect = original_connect
 
-    assert result == 23
+    assert result == {"id": 23, "uuid": "8c1f6a9e-3d2b-4c5a-9e8f-0a1b2c3d4e5f", "duplicate": False}
     assert cursor.executed is not None
     query, params = cursor.executed
     assert "requirements, skills, about_us" in query
-    assert params[7] == "Elektroplanung, MSR-Technik"
+    # uuid und graph_job_id stehen vorne: die Stelle und ihr Neo4j-Knoten
+    # teilen sich dieselbe, neu vergebene UUID.
+    assert params[0] == params[1]
+    assert params[8] == "Elektroplanung, MSR-Technik"

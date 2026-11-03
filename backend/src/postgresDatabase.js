@@ -5,6 +5,9 @@ const { Client, types } = require('pg');
 
 types.setTypeParser(20, value => Number(value));
 types.setTypeParser(1700, value => Number(value));
+// DATE (z. B. Geburtsdatum) als 'JJJJ-MM-TT' liefern statt als Date um
+// Mitternacht lokaler Zeit, das sonst je nach Zeitzone den Tag verschiebt.
+types.setTypeParser(1082, value => value);
 
 function waitFor(register) {
   let complete = false;

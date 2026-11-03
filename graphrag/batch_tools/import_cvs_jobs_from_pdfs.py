@@ -47,7 +47,8 @@ if str(GRAPHRAG_ROOT) not in sys.path:
 from config import settings
 from services.candidate_privacy import CandidatePrivacyService
 from services.candidate_extraction import extract_candidate_profile
-from services.candidate_persistence import persist_candidate_profile
+from services.candidate_identity import CandidateIdentityError, DuplicateCandidateError, ensure_birth_date
+from services.candidate_persistence import create_candidate
 from services.db import Neo4jService
 from services.model_config import ModelConfigService
 from services.llm import LLMService
@@ -331,35 +332,6 @@ async def _build_skill_embeddings(
     return {name.lower(): vector for name, vector in zip(unique_names, vectors)}
 
 
-async def _store_candidate_and_fetch_job_matches(
-    *,
-    profile,
-    candidate_id: str,
-    raw_text: str,
-    source_hash: str,
-    profile_hash: str,
-    db_service: Neo4jService,
-    llm_service: LLMService,
-    match_limit: int,
-) -> list[dict[str, object]]:
-    # Create the candidate node first so the database contains the imported CV.
-    embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
-    skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills], llm_service)
-
-    await db_service.upsert_candidate(
-        candidate_id=candidate_id,
-        profile=profile,
-        embedding=embedding,
-        skill_embeddings=skill_embeddings,
-        source_hash=source_hash,
-        profile_hash=profile_hash,
-    )
-
-    # Fetch the best matching jobs directly from Neo4j after the candidate exists.
-    matches = await db_service.get_top_job_matches_for_candidate(candidate_id, limit=match_limit)
-    return [match.model_dump() for match in matches]
-
-
 async def process_job_file(
     pdf_path: Path,
     done_dir: Path,
@@ -428,22 +400,11 @@ async def process_cv_file(
     if dry_run:
         return True, f"dry-run ok: mode=cv extracted_chars={len(extracted_text)} source_hash={source_hash[:12]}"
 
-    # Step 2: skip files whose normalized text already exists in Neo4j.
+    # Step 2: skip files whose normalized text already exists in Neo4j
+    # (spart das Parsen; die Person ist dann bereits angelegt).
     existing_candidate = await db_service.find_candidate_by_source_hash(source_hash)
     duplicate_dir = done_dir / "duplicates"
     if existing_candidate is not None:
-        try:
-            profile = await extract_candidate_profile(llm_service, extracted_text)
-            await persist_candidate_profile(
-                postgres_store=postgres_store,
-                candidate_privacy_service=candidate_privacy_service,
-                profile=profile,
-                candidate_text=extracted_text,
-                source="CV-Batch-Import",
-                graph_candidate_id=existing_candidate["id"],
-            )
-        except Exception as exc:
-            return False, f"duplicate backfill failed: {exc}"
         duplicate_dir.mkdir(parents=True, exist_ok=True)
         destination = ensure_unique_destination(duplicate_dir, pdf_path.name)
         shutil.move(str(pdf_path), str(destination))
@@ -456,41 +417,38 @@ async def process_cv_file(
         profile = await extract_candidate_profile(llm_service, extracted_text)
     except Exception as exc:
         return False, f"candidate parsing failed: {exc}"
+    ensure_birth_date(profile, extracted_text)
 
-    profile_hash = _normalized_profile_hash(profile)
-    existing_profile = await db_service.find_candidate_by_profile_hash(profile_hash)
-    duplicate_dir = done_dir / "duplicates"
-    if existing_profile is not None:
-        duplicate_dir.mkdir(parents=True, exist_ok=True)
-        destination = ensure_unique_destination(duplicate_dir, pdf_path.name)
-        shutil.move(str(pdf_path), str(destination))
-        return (
-            True,
-            f"duplicate skipped: existing_candidate_id={existing_profile['id']} moved_to={destination}",
-        )
-
-    candidate_id = str(uuid4())
+    # Name + Geburtsdatum machen die Person eindeutig; PostgreSQL legt an,
+    # der Neo4j-Knoten erhaelt dieselbe UUID.
     try:
-        matches = await _store_candidate_and_fetch_job_matches(
-            profile=profile,
-            candidate_id=candidate_id,
-            raw_text=extracted_text,
-            source_hash=source_hash,
-            profile_hash=profile_hash,
-            db_service=db_service,
-            llm_service=llm_service,
-            match_limit=match_limit,
-        )
-        await persist_candidate_profile(
+        stored = await create_candidate(
             postgres_store=postgres_store,
             candidate_privacy_service=candidate_privacy_service,
+            db_service=db_service,
+            llm_service=llm_service,
+            build_skill_embeddings=lambda names: _build_skill_embeddings(names, llm_service),
             profile=profile,
             candidate_text=extracted_text,
             source="CV-Batch-Import",
-            graph_candidate_id=candidate_id,
+            source_hash=source_hash,
+            profile_hash=_normalized_profile_hash(profile),
         )
+    except DuplicateCandidateError as exc:
+        duplicate_dir.mkdir(parents=True, exist_ok=True)
+        destination = ensure_unique_destination(duplicate_dir, pdf_path.name)
+        shutil.move(str(pdf_path), str(destination))
+        return True, f"duplicate skipped: existing_candidate_id={exc.existing.get('id')} moved_to={destination}"
+    except CandidateIdentityError as exc:
+        return False, f"rejected: {exc}"
     except Exception as exc:
-        return False, f"candidate embedding creation failed: {exc}"
+        return False, f"candidate persistence failed: {exc}"
+
+    candidate_id = stored["uuid"]
+    try:
+        matches = [match.model_dump() for match in await db_service.get_top_job_matches_for_candidate(candidate_id, limit=match_limit)]
+    except Exception:
+        matches = []
 
     # Step 3: move the processed PDF only after Neo4j persistence succeeded.
     done_dir.mkdir(parents=True, exist_ok=True)

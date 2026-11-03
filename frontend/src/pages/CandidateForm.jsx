@@ -13,7 +13,8 @@ import { useI18n } from '../I18nContext'
 const SUGGESTED_TAGS = ['Top-Kandidat', 'Senior', 'Junior', 'Freelancer', 'Remote', 'Sofort verfügbar', 'Führungskraft', 'Teilzeit', 'Werkstudent', 'Intern']
 
 const emptyCandidate = {
-  name: '', email: '', phone: '', location: '',
+  // Name + Geburtsdatum machen eine Person im Tool eindeutig (Pflicht).
+  name: '', birth_date: '', email: '', phone: '', location: '',
   experience: '', skills: '', education: '',
   desired_salary: '', availability: '', languages: '',
   certificates: '', drivers_license: '', mobility: '', notes: '',
@@ -111,7 +112,7 @@ export default function CandidateForm() {
       const c = result.candidate || result
       setForm(prev => {
         const updated = { ...prev }
-        const fields = ['name', 'email', 'phone', 'location', 'experience', 'skills', 'education', 'languages',
+        const fields = ['name', 'birth_date', 'email', 'phone', 'location', 'experience', 'skills', 'education', 'languages',
           'certificates', 'drivers_license', 'desired_salary', 'availability', 'mobility', 'tags', 'notes',
           'linkedin_url', 'xing_url', 'github_url', 'portfolio_url',
           'nationality', 'current_employer', 'current_position', 'notice_period', 'gender']
@@ -156,11 +157,17 @@ export default function CandidateForm() {
     if (dupTimer.current) clearTimeout(dupTimer.current)
     if (!form.name.trim() && !form.email.trim()) { setDuplicates([]); return }
     dupTimer.current = setTimeout(async () => {
-      try { const res = await candidatesApi.checkDuplicate(form.name, form.email, isEdit ? id : undefined); setDuplicates(res.duplicates || []) }
+      try { const res = await candidatesApi.checkDuplicate(form.name, form.email, isEdit ? id : undefined, form.birth_date); setDuplicates(res.duplicates || []) }
       catch { setDuplicates([]) }
     }, 500)
     return () => clearTimeout(dupTimer.current)
-  }, [form.name, form.email, id, isEdit])
+  }, [form.name, form.email, form.birth_date, id, isEdit])
+
+  // Gleicher Name + gleiches Geburtsdatum = dieselbe Person: Speichern ist
+  // gesperrt und es wird auf den vorhandenen Bewerber verwiesen.
+  const blockingDuplicate = duplicates.find(d => d.blocking) || null
+  const hintDuplicates = duplicates.filter(d => !d.blocking)
+  const today = new Date().toISOString().slice(0, 10)
 
   // Work history helpers
   const addWorkEntry = () => setWorkHistory(prev => [...prev, { ...emptyWorkEntry }])
@@ -196,7 +203,14 @@ export default function CandidateForm() {
       setJustSaved(true)
       markSaved()
       navigate('/candidates')
-    } catch (err) { setError(err.message) }
+    } catch (err) {
+      if (err.code === 'DUPLICATE_CANDIDATE' && err.existing?.id) {
+        setDuplicates(prev => [{ ...err.existing, matchType: 'identity', blocking: true }, ...prev.filter(d => d.id !== err.existing.id)])
+        setError('')
+      } else {
+        setError(err.message)
+      }
+    }
     finally { setSaving(false) }
   }
 
@@ -231,11 +245,19 @@ export default function CandidateForm() {
 
       {error && <div className="p-6 rounded-[20px] bg-[#ff3b30]/10 text-[#ff3b30] text-[16px] font-medium mb-10">{error}</div>}
 
-      {duplicates.length > 0 && (
+      {blockingDuplicate && (
+        <div role="alert" className="p-6 rounded-[20px] bg-[#ff3b30]/10 border border-[#ff3b30]/20 mb-10">
+          <div className="flex items-center gap-3 mb-2"><AlertTriangle className="w-5 h-5 text-[#ff3b30]" /><span className="text-[16px] font-semibold text-[#ff3b30]">{t('form.duplicate_blocking_title')}</span></div>
+          <p className="text-[14px] text-gray-700 dark:text-gray-300">{t('form.duplicate_blocking_text').replace('{name}', blockingDuplicate.name || '')}</p>
+          <Link to={`/candidates/${blockingDuplicate.id}`} className="inline-flex mt-3 text-[14px] font-semibold text-[var(--apple-blue-text)] hover:underline">{t('form.duplicate_open_existing')}</Link>
+        </div>
+      )}
+
+      {hintDuplicates.length > 0 && (
         <div className="p-6 rounded-[20px] bg-[#ff9f0a]/10 border border-[#ff9f0a]/20 mb-10">
           <div className="flex items-center gap-3 mb-3"><AlertTriangle className="w-5 h-5 text-[#ff9f0a]" /><span className="text-[16px] font-semibold text-[#ff9f0a]">{t('form.duplicates_found')}</span></div>
           <div className="space-y-2">
-            {duplicates.map(d => (
+            {hintDuplicates.map(d => (
               <div key={d.id} className="flex items-center justify-between bg-white/6 dark:bg-[#1c1c1e]/60 rounded-[14px] px-5 py-3">
                 <div><span className="text-[15px] font-semibold text-black dark:text-white">{d.name}</span>{d.email && <span className="text-[14px] text-gray-500 dark:text-gray-400 ml-3">{d.email}</span>}{d.location && <span className="text-[14px] text-gray-500 dark:text-gray-400 ml-3">{d.location}</span>}</div>
                 <span className="text-[12px] font-semibold text-[#ff9f0a] bg-[#ff9f0a]/10 px-3 py-1 rounded-full">{d.matchType === 'email' ? t('form.duplicate_email') : t('form.duplicate_name')}</span>
@@ -337,6 +359,8 @@ export default function CandidateForm() {
           <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.personal')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <Input label={t('form.name') + ' *'} placeholder="Max Mustermann" value={form.name} onChange={handleChange('name')} required />
+            <Input label={t('form.birth_date') + ' *'} type="date" max={today} value={form.birth_date || ''} onChange={handleChange('birth_date')} required aria-describedby={`${fieldIdPrefix}-birth-hint`} />
+            <p id={`${fieldIdPrefix}-birth-hint`} className="md:col-span-2 -mt-5 ml-2 text-[13px] text-gray-500 dark:text-gray-400">{t('form.birth_date_hint')}</p>
             <div className="flex flex-col gap-3">
               <label htmlFor={`${fieldIdPrefix}-gender`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.gender')}</label>
               <select id={`${fieldIdPrefix}-gender`} value={form.gender} onChange={handleChange('gender')} className={selectClass}>
@@ -653,7 +677,7 @@ export default function CandidateForm() {
             </span>
           )}
           <Button variant="secondary" size="lg" type="button" onClick={() => leaveTo('/candidates')}>{t('form.cancel')}</Button>
-          <Button variant="dark" type="submit" size="lg" disabled={saving || !form.name.trim()}><Save className="w-5 h-5" />{saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}</Button>
+          <Button variant="dark" type="submit" size="lg" disabled={saving || !form.name.trim() || !form.birth_date || Boolean(blockingDuplicate)}><Save className="w-5 h-5" />{saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}</Button>
         </FormActionBar>
       </form>
     </PageContainer>

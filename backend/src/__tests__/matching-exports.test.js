@@ -37,6 +37,7 @@ let carla;
 let dario;
 let emil;
 let backend;
+let backendUuid;
 let data;
 const historyIds = [];
 
@@ -67,9 +68,12 @@ beforeAll(() => {
   carla = insertCandidate(`Carla Code ${marker}`);
   dario = insertCandidate(`Dario Data ${marker}`);
   emil = insertCandidate(`Emil Engel ${marker}`);
-  const insertJob = db.prepare('INSERT INTO jobs (title, graph_job_id, location, status) VALUES (?, ?, ?, ?)');
-  backend = insertJob.run(`Backend Engineer ${marker}`, null, 'Zuerich', 'Offen').lastInsertRowid;
-  data = insertJob.run(`Data Scientist ${marker}`, graphUuid, 'Bern', 'Offen').lastInsertRowid;
+  backend = db.prepare('INSERT INTO jobs (title, location, status) VALUES (?, ?, ?)')
+    .run(`Backend Engineer ${marker}`, 'Zuerich', 'Offen').lastInsertRowid;
+  // Neo4j-Knoten und PostgreSQL teilen sich die UUID der Stelle.
+  data = db.prepare('INSERT INTO jobs (title, uuid, graph_job_id, location, status) VALUES (?, ?, ?, ?, ?)')
+    .run(`Data Scientist ${marker}`, graphUuid, graphUuid, 'Bern', 'Offen').lastInsertRowid;
+  backendUuid = db.prepare('SELECT uuid FROM jobs WHERE id = ?').get(backend).uuid;
 });
 
 afterAll(() => {
@@ -140,9 +144,10 @@ describe('recording matching pairs', () => {
         fields: ['candidate_id', 'candidate_uuid', 'job_id', 'score'],
         filters: { candidate_ids: [frida, gustav] },
       });
+      const fridaUuid = db.prepare('SELECT uuid FROM candidates WHERE id = ?').get(frida).uuid;
       expect(res.text.split('\r\n')).toEqual([
         'candidate_id;candidate_uuid;job_id;score',
-        `${frida};${marker}-frida-new;${backend};61`,
+        `${frida};${fridaUuid};${backend};61`,
       ]);
     } finally {
       db.prepare('DELETE FROM candidates WHERE id IN (?, ?)').run(frida, gustav);
@@ -187,8 +192,8 @@ describe('N:N export', () => {
     expect(lines[0]).toBe('candidate_id;job_id;job_uuid;job_title;score;hard_skill_score');
     // Sortiert nach Matchingwert; 50 ist nicht "groesser als 50".
     expect(lines.slice(1)).toEqual([
-      `${carla};${backend};;Backend Engineer ${marker};64;`,
-      `${dario};${backend};;Backend Engineer ${marker};50.4;`,
+      `${carla};${backend};${backendUuid};Backend Engineer ${marker};64;`,
+      `${dario};${backend};${backendUuid};Backend Engineer ${marker};50.4;`,
     ]);
   });
 

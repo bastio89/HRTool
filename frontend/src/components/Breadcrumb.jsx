@@ -26,6 +26,7 @@ export default function Breadcrumb() {
     'dsgvo': t('breadcrumb.dsgvo'),
     'credits': t('breadcrumb.credits'),
     'ki-transparenz': t('breadcrumb.ki_transparency'),
+    'duplicates': t('nav.duplicates'),
   }
 
   if (segments.length === 0) return null

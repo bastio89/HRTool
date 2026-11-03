@@ -99,8 +99,10 @@ async def test_legacy_candidate_routes_delegate_to_postgres_store(app_module, ap
 		}
 	)
 
+	identity_mock = AsyncMock(return_value=None)
 	monkeypatch.setattr(app_module.postgres_store, "list_compat_candidates", list_mock)
 	monkeypatch.setattr(app_module.postgres_store, "create_compat_candidate", create_mock)
+	monkeypatch.setattr(app_module.postgres_store, "find_candidate_by_identity", identity_mock)
 
 	response = await api_client.get("/api/candidates")
 
@@ -116,9 +118,18 @@ async def test_legacy_candidate_routes_delegate_to_postgres_store(app_module, ap
 		}
 	]
 
-	create_response = await api_client.post(
+	# Ohne Geburtsdatum wird niemand angelegt: Name + Geburtsdatum machen die
+	# Person eindeutig.
+	missing = await api_client.post(
 		"/api/candidates",
 		json={"name": "Max Beispiel", "email": "max@example.com", "location": "Zug"},
+	)
+	assert missing.status_code == 422
+	assert missing.json()["detail"]["field"] == "birth_date"
+
+	create_response = await api_client.post(
+		"/api/candidates",
+		json={"name": "Max Beispiel", "email": "max@example.com", "location": "Zug", "birth_date": "01.05.1990"},
 	)
 
 	assert create_response.status_code == 201
@@ -130,6 +141,17 @@ async def test_legacy_candidate_routes_delegate_to_postgres_store(app_module, ap
 		"location": "Zug",
 		"status": "new",
 	}
+	identity_mock.assert_awaited_with("Max Beispiel", "1990-05-01")
+	assert create_mock.await_args.kwargs["birth_date"] == "1990-05-01"
+
+	identity_mock.return_value = {"id": 2, "uuid": "8c1f6a9e-3d2b-4c5a-9e8f-0a1b2c3d4e5f", "name": "Max Beispiel", "birth_date": "1990-05-01"}
+	duplicate = await api_client.post(
+		"/api/candidates",
+		json={"name": "max beispiel", "birth_date": "1990-05-01"},
+	)
+	assert duplicate.status_code == 409
+	assert duplicate.json()["detail"]["code"] == "DUPLICATE_CANDIDATE"
+	assert create_mock.await_count == 1
 
 
 @pytest.mark.anyio

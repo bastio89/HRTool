@@ -6,6 +6,9 @@ import Modal from './Modal'
 
 const CANDIDATE_FIELDS = [
   { key: 'name', labelKey: 'form.name', required: true },
+  // Name + Geburtsdatum machen eine Person eindeutig; ohne Geburtsdatum wird
+  // die Zeile vom Server abgelehnt.
+  { key: 'birth_date', labelKey: 'form.birth_date', required: true },
   { key: 'email', labelKey: 'form.email' },
   { key: 'phone', labelKey: 'form.phone' },
   { key: 'location', labelKey: 'form.location' },
@@ -29,6 +32,8 @@ function autoMap(header) {
   const h = header.toLowerCase().trim()
   const mappings = {
     'name': 'name', 'vorname': 'name', 'nachname': 'name', 'full name': 'name', 'fullname': 'name', 'bewerber': 'name',
+    'geburtsdatum': 'birth_date', 'geburtstag': 'birth_date', 'geb.': 'birth_date', 'geb': 'birth_date', 'birth_date': 'birth_date',
+    'birthdate': 'birth_date', 'date of birth': 'birth_date', 'dob': 'birth_date', 'birthday': 'birth_date',
     'email': 'email', 'e-mail': 'email', 'mail': 'email', 'e_mail': 'email',
     'telefon': 'phone', 'phone': 'phone', 'tel': 'phone', 'handy': 'phone', 'mobil': 'phone', 'mobile': 'phone',
     'standort': 'location', 'location': 'location', 'ort': 'location', 'stadt': 'location', 'city': 'location', 'plz': 'location',
@@ -93,7 +98,8 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
   const [csvHeaders, setCsvHeaders] = useState([])
   const [csvRows, setCsvRows] = useState([])
   const [mapping, setMapping] = useState({}) // csvHeader -> candidateField
-  const [skipDuplicates, setSkipDuplicates] = useState(true)
+  // Dubletten (gleicher Name + Geburtsdatum) werden immer uebersprungen.
+  const skipDuplicates = true
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -175,7 +181,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
     }
   }
 
-  const hasNameMapping = Object.values(mapping).includes('name')
+  const hasNameMapping = Object.values(mapping).includes('name') && Object.values(mapping).includes('birth_date')
 
   const stepLabel =
     step === 1 ? t('csv.step_upload')
@@ -301,11 +307,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
               </div>
             )}
 
-            <label className="flex items-center gap-3 mt-4 cursor-pointer">
-              <input type="checkbox" checked={skipDuplicates} onChange={e => setSkipDuplicates(e.target.checked)}
-                className="w-5 h-5 rounded-md accent-[#0071e3]" />
-              <span className="text-[14px] text-gray-600 dark:text-gray-300">{t('csv.skip_duplicates')}</span>
-            </label>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-4">{t('csv.skip_duplicates')}</p>
           </div>
         )}
 

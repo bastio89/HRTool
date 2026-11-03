@@ -54,7 +54,9 @@
 - **Umfangreiche Profile** — Name, Kontakt, Standort, Skills, Erfahrung, Ausbildung, Gehaltswunsch, Verfügbarkeit, Sprachen, Zertifikate, Führerschein, Mobilität
 - **Status-Tracking** — Aktiv, Passiv, In Prozess, Blacklist
 - **Tags & Quellen** — Flexible Verschlagwortung und Herkunfts-Tracking (LinkedIn, Xing, Indeed, Stepstone, Empfehlung, Karriereseite, Messe, Initiativ)
-- **Duplikat-Erkennung** — Automatische Prüfung von Name und E-Mail beim Anlegen
+- **Eine Person gibt es nur einmal** — Name + Geburtsdatum machen einen Bewerber eindeutig (Geburtsdatum ist Pflicht); eine vorhandene Person wird beim Anlegen, im CSV- und im CV-Import blockiert bzw. übersprungen. Gleiche E-Mail oder gleicher Name allein sind nur ein Hinweis
+- **Eine Stelle gibt es nur einmal** — gleiche URL oder gleicher Titel bei gleicher Firma und gleichem Ort
+- **Dubletten bereinigen** — Administration → Dubletten zeigt Dubletten aus dem Bestand und führt sie zusammen (inkl. Pipelines, Interviews, Dateien, Matching-Ergebnissen)
 - **Aktivitätsprotokoll** — Notizen, Anrufe, E-Mails, Interviews — lückenlose Dokumentation
 - **Datei-Upload** — Drag & Drop für PDFs, Word-Dokumente und Bilder
 - **Datei-Vorschau** — PDFs und Bilder direkt im Browser anzeigen
@@ -449,6 +451,21 @@ Beispiel-Request:
 
 Die Antwort enthält Score, Stärken, Schwächen und Kurzbegründung je Kandidat. Die Daten werden nicht als Bewerber oder Stelle im HRTool gespeichert; die Schnittstelle nutzt nur das konfigurierte lokale KI-Modell.
 
+### Eindeutige Identität von Bewerbern und Stellen
+
+Eine Person und eine Stelle gibt es im HRTool genau einmal – in PostgreSQL und in Neo4j mit derselben ID.
+
+| | Bewerber | Stelle |
+|---|---|---|
+| Gleich, wenn … | Name + Geburtsdatum gleich (Groß-/Kleinschreibung und Leerzeichen egal) | URL gleich (ohne `http(s)://`, `www.`, abschließendes `/`) **oder** Titel + Firma + Ort gleich |
+| Pflichtangaben | Name, Geburtsdatum | Titel |
+| Bei Treffer | Anlegen wird mit HTTP 409 und Verweis auf den vorhandenen Bewerber blockiert; Importe überspringen die Zeile | Anlegen wird mit HTTP 409 blockiert; ein erneuter Import ergänzt bei der vorhandenen Stelle nur leere Skills |
+
+- **UUID:** Jeder Datensatz hat die Spalte `uuid` (eindeutig, von PostgreSQL vergeben). GraphRAG legt Neo4j-Knoten unter genau dieser UUID an; bestehende Neo4j-IDs wurden bei der Migration übernommen, wo sie eindeutig waren.
+- **Durchgesetzt** wird die Regel in allen Anlegewegen (Formular, CSV-Import, KI- und Schnell-CV-Import, Batch-Import, jobs.ch, API) und zusätzlich durch Eindeutigkeitsindizes in PostgreSQL (`backend/src/identity.js`, `graphrag/services/candidate_identity.py`).
+- **Geburtsdatum:** wird beim CV-Import aus beschrifteten Angaben gelesen („Geburtsdatum: 12.03.1985“, „Date of birth …“). Ohne Geburtsdatum wird kein Bewerber angelegt – Bestandsbewerber müssen es beim nächsten Bearbeiten ergänzen. Es dient nur der Identifikation und geht nicht in Embeddings, Neo4j oder an ein Sprachmodell.
+- **Bestand bereinigen:** Administration → Dubletten listet Dubletten (Bewerber auch mögliche über gleiche E-Mail, Telefonnummer oder gleichen Namen) und führt sie zusammen. Eindeutigkeitsregeln, die wegen alter Dubletten noch nicht aktiv sind, werden nach dem Zusammenführen automatisch aktiv. Dort lässt sich auch der Neo4j-Abgleich nachholen (`POST /sync/candidates` in GraphRAG).
+
 ### Datenexport für Fremdsysteme
 
 Bewerberdaten lassen sich über eine generische Schnittstelle in andere Tools übertragen (Lohnbuchhaltung, HRIS, CRM …). Ein Export wird durch eine Spezifikation beschrieben:
@@ -493,7 +510,7 @@ Neben `candidates` gibt es die Entitäten `matching_ai` (KI-Matching) und `match
 ```
 
 - `score_above`: nur Paarungen mit Matchingwert **größer als** dem Wert (0–100, in %). Weitere Filter: `job_ids`, `candidate_ids`, `job_status`, `candidate_status`, `updated_since` (gematcht seit).
-- IDs: `candidate_id` und `job_id` sind die PostgreSQL-Primärschlüssel des HRTool und eindeutig. `candidate_uuid` bzw. `job_uuid` sind die GraphRAG/Neo4j-UUIDs (`candidates.graph_candidate_id`, `jobs.graph_job_id`); sie können leer sein (ältere oder manuell angelegte Datensätze) und sind in PostgreSQL nicht als eindeutig abgesichert – als Schlüssel im Zielsystem daher die PostgreSQL-IDs verwenden.
+- IDs: `candidate_id` und `job_id` sind die PostgreSQL-Primärschlüssel. `candidate_uuid` bzw. `job_uuid` sind die UUIDs der Datensätze (eindeutig, siehe „Eindeutige Identität“); dieselbe UUID trägt der Knoten in Neo4j.
 - Grundlage ist die Tabelle `matching_pair_results` (je Methode und Paarung genau ein Eintrag). Läufe aus der Matching-Historie, die vor dieser Tabelle entstanden sind, werden beim ersten Matching-Export automatisch übernommen – bei 3D-Läufen aus dieser Zeit allerdings nur die dort gespeicherten (besten 100) Paarungen. Wird ein Lauf aus der Historie, ein Bewerber oder eine Stelle gelöscht, verschwinden die zugehörigen Paarungen mit.
 
 ### Übersicht: 63+ Endpunkte

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from models import CandidateCreate, CandidateRead, JobCreate, JobRead, LegacyHealthResponse
+from services.candidate_identity import CandidateIdentityError, DuplicateCandidateError, require_identity
 from services.postgres_store import PostgresStore
 
 
@@ -91,11 +92,19 @@ def create_legacy_router(postgres_store: PostgresStore) -> APIRouter:
 
 	@router.post("/candidates", response_model=CandidateRead, status_code=status.HTTP_201_CREATED)
 	async def create_candidate(payload: CandidateCreate) -> CandidateRead:
+		try:
+			name, birth_date = require_identity(payload)
+		except CandidateIdentityError as exc:
+			raise HTTPException(status_code=422, detail={"error": str(exc), "field": exc.field}) from exc
+		existing = await postgres_store.find_candidate_by_identity(name, birth_date)
+		if existing is not None:
+			raise HTTPException(status_code=409, detail=DuplicateCandidateError(existing).to_detail())
 		row = await postgres_store.create_compat_candidate(
-			name=payload.name,
+			name=name,
 			email=payload.email,
 			phone=payload.phone,
 			location=payload.location,
+			birth_date=birth_date,
 		)
 		return CandidateRead(
 			id=int(row["id"]),

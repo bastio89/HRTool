@@ -89,7 +89,8 @@ describe('jobs parse-description logging', () => {
     jest.doMock('../aiLogger', () => ({ logAiCall: jest.fn() }));
     jest.doMock('../database', () => ({
       prepare: (sql) => {
-        if (sql.includes('SELECT * FROM jobs WHERE LOWER(title)')) {
+        // Dublettenpruefung (src/identity.js): Titel + Firma + Ort
+        if (sql.includes('FROM jobs') && sql.includes('btrim(COALESCE(title')) {
           return { get: () => existingJob };
         }
         if (sql === 'UPDATE jobs SET skills = ? WHERE id = ?') {
@@ -136,9 +137,12 @@ describe('jobs parse-description logging', () => {
       .post('/api/jobs/parse-description?persist=1')
       .attach('file', filePath, { contentType: 'text/plain' });
 
-    expect(response.status).toBe(200);
+    // Kein zweiter Datensatz: der Import meldet die vorhandene Stelle und
+    // ergaenzt dort nur die fehlenden Skills.
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('DUPLICATE_JOB');
+    expect(response.body.existing.id).toBe(existingJob.id);
     expect(updateSkills).toHaveBeenCalledWith('Elektroplanung, MSR-Technik', existingJob.id);
-    expect(response.body.job.skills).toBe('Elektroplanung, MSR-Technik');
   });
 
   test('sends a supplied fast-parser profile to GraphRAG without raw text', async () => {

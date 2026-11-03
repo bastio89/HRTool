@@ -113,6 +113,9 @@ class CandidateProfileExtraction(BaseModel):
     current_position: str | None = None
     nationality: str | None = None
     gender: str | None = None
+    # Nur zur Identifikation (Name + Geburtsdatum = eine Person), JJJJ-MM-TT.
+    # Geht nie in Embeddings, Neo4j oder Prompts (siehe candidate_identity).
+    birth_date: str | None = None
     # How the profile was extracted, for example "llm" or other pipeline-specific labels.
     parsing_method: str | None = None
     skills: list[CandidateSkillExtraction] = Field(default_factory=list)
@@ -150,6 +153,13 @@ class CandidateProfileExtraction(BaseModel):
     @classmethod
     def normalize_text_fields(cls, value):
         return _coerce_text_field(value)
+
+    @field_validator("birth_date", mode="before")
+    @classmethod
+    def normalize_birth_date(cls, value):
+        from services.candidate_identity import normalize_birth_date
+
+        return normalize_birth_date(value)
 
     @field_validator("skills", mode="before")
     @classmethod
@@ -367,6 +377,20 @@ class IngestResponse(BaseModel):
 class CandidateIngestResponse(IngestResponse):
     profile: CandidateProfileExtraction
     persisted: bool = True
+    # PostgreSQL-ID des angelegten Bewerbers; id ist dessen UUID, die auch
+    # der Neo4j-Knoten traegt.
+    postgres_id: int | None = None
+
+
+class CandidateSyncRequest(BaseModel):
+    candidate_ids: list[int] = Field(default_factory=list, max_length=5000)
+
+
+class CandidateSyncResponse(BaseModel):
+    synced: int = 0
+    failed: int = 0
+    removed_stale_nodes: int = 0
+    errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CandidateDeleteRequest(BaseModel):
@@ -401,6 +425,9 @@ class JobIngestResponse(IngestResponse):
 
 
 class JobDeleteRequest(BaseModel):
+    # "neo4j": nur den Neo4j-Knoten loeschen (das Backend loescht die
+    # PostgreSQL-Zeile selbst); "all" (Standard) loescht beides.
+    scope: str = "all"
     job_id: str | None = None
     title: str | None = None
     description: str | None = None
@@ -432,14 +459,19 @@ class JobCreate(BaseModel):
 class JobRead(JobCreate):
     id: int
 
-class CandidateCreate(BaseModel):
+class CandidateBase(BaseModel):
     name: str = Field(..., min_length=2)
     email: str | None = None
     phone: str | None = None
     location: str | None = None
     status: str | None = "new"
 
-class CandidateRead(CandidateCreate):
+
+class CandidateCreate(CandidateBase):
+    # Pflicht beim Anlegen: Name + Geburtsdatum machen die Person eindeutig.
+    birth_date: str | None = None
+
+class CandidateRead(CandidateBase):
     id: int
 
 

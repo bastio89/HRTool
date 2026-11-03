@@ -7,6 +7,14 @@ const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
 const { tmpDir, extractText } = require('../utils/documentText');
 const { graphRagAuthHeaders } = require('../graphragAuth');
+const {
+  DuplicateError,
+  IdentityValidationError,
+  assertNoCandidateDuplicate,
+  requireCandidateIdentity,
+  translateUniqueViolation,
+} = require('../identity');
+const { syncGraphCandidatesInBackground } = require('../utils/graphRagCandidate');
 
 const router = express.Router();
 
@@ -245,29 +253,6 @@ function resolveCandidateName(profile, filename) {
   return filenameName;
 }
 
-function findDuplicateCandidate(row) {
-  if (row.email && String(row.email).trim()) {
-    const existing = db.prepare(
-      "SELECT id FROM candidates WHERE LOWER(COALESCE(email, '')) = LOWER(?) LIMIT 1"
-    ).get(String(row.email).trim());
-    if (existing) return existing;
-  }
-
-  if (row.phone && String(row.phone).trim()) {
-    const existing = db.prepare(
-      "SELECT id FROM candidates WHERE replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '+', '') = replace(replace(replace(?, ' ', ''), '-', ''), '+', '') LIMIT 1"
-    ).get(String(row.phone).trim());
-    if (existing) return existing;
-  }
-
-  if (row.name && String(row.name).trim()) {
-    const existing = db.prepare('SELECT id FROM candidates WHERE LOWER(name) = LOWER(?) LIMIT 1').get(String(row.name).trim());
-    if (existing) return existing;
-  }
-
-  return null;
-}
-
 function loadCandidateWithHistory(candidateId) {
   const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
   if (!candidate) return null;
@@ -324,16 +309,15 @@ function buildCandidateRow(profile) {
   };
 }
 
-function persistCandidate(profile, req) {
+// Legt den Bewerber an, wenn Name + Geburtsdatum noch nicht vergeben sind
+// (sonst DuplicateError), speichert den CV-Volltext fuer das KI-Matching und
+// stoesst die Uebertragung nach Neo4j an (Knoten-ID = UUID des Bewerbers).
+function persistCandidate(profile, req, cvText) {
   const row = buildCandidateRow(profile);
-  const duplicate = findDuplicateCandidate(row);
-  if (duplicate) {
-    const existingCandidate = loadCandidateWithHistory(duplicate.id);
-    if (existingCandidate) {
-      logAudit(req, 'duplikat', 'Candidate', existingCandidate.id, existingCandidate.name);
-      return existingCandidate;
-    }
-  }
+  const identity = requireCandidateIdentity({ name: row.name, birth_date: profile.birth_date });
+  assertNoCandidateDuplicate(db, identity);
+  row.name = identity.name;
+  row.birth_date = identity.birth_date;
 
   const insert = db.prepare(`
     INSERT INTO candidates (name, email, phone, location, experience, skills,
@@ -345,11 +329,13 @@ function persistCandidate(profile, req) {
       gdpr_consent_date, gdpr_consent_type, gdpr_consent_expires,
       nationality, work_permit, work_permit_until,
       referrer_name, referrer_email,
-      current_employer, current_position, gender)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      current_employer, current_position, gender, birth_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const result = insert.run(
+  let result;
+  try {
+    result = insert.run(
     row.name, row.email, row.phone, row.location,
     row.experience, row.skills, row.education,
     row.desired_salary, row.availability, row.languages,
@@ -361,8 +347,11 @@ function persistCandidate(profile, req) {
     row.gdpr_consent_date, row.gdpr_consent_type, row.gdpr_consent_expires,
     row.nationality, row.work_permit, row.work_permit_until,
     row.referrer_name, row.referrer_email,
-    row.current_employer, row.current_position, row.gender,
-  );
+    row.current_employer, row.current_position, row.gender, row.birth_date,
+    );
+  } catch (error) {
+    throw translateUniqueViolation(db, error, 'candidate', identity);
+  }
 
   const candidateId = result.lastInsertRowid;
   const workHistory = normalizeWorkHistory(profile).filter((item) => Boolean(item.employer && item.position));
@@ -420,6 +409,22 @@ function persistCandidate(profile, req) {
     }
   });
   tx();
+
+  if (cvText && String(cvText).trim()) {
+    // Das Geburtsdatum dient nur der Identifikation und bleibt aus den
+    // Strukturdaten heraus, die ins KI-Matching gehen.
+    const { birth_date: _birthDate, ...matchingProfile } = profile;
+    db.prepare(`
+      INSERT INTO candidate_texts (candidate_id, candidate_name, source, original_text, profile_json)
+      VALUES (CAST(? AS TEXT), ?, ?, ?, ?)
+      ON CONFLICT (candidate_id) DO UPDATE SET
+        candidate_name = EXCLUDED.candidate_name, source = EXCLUDED.source,
+        original_text = EXCLUDED.original_text, profile_json = EXCLUDED.profile_json,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING candidate_id
+    `).run(candidateId, row.name, 'CV-Import', String(cvText).trim(), JSON.stringify(matchingProfile));
+  }
+  syncGraphCandidatesInBackground([candidateId], req);
 
   const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
   const candidateWorkHistory = db.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(candidateId);
@@ -678,7 +683,9 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     sendProgress('extract_done', `${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert`, 35);
 
     sendProgress('graphrag_connect', 'CV wird an GraphRAG übergeben...', 40);
-    const graphRag = await ingestIntoGraphRag(combinedText.trim(), persist, req);
+    // GraphRAG liest nur aus; gespeichert wird hier mit der Pruefung auf
+    // Name + Geburtsdatum, danach folgt die Uebertragung nach Neo4j.
+    const graphRag = await ingestIntoGraphRag(combinedText.trim(), false, req);
 
     sendProgress('graphrag_done', 'GraphRAG-Analyse abgeschlossen', 75);
 
@@ -708,7 +715,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     }
     let localCandidate = null;
     let storedInPostgres = false;
-    let storedInNeo4j = Boolean(graphRag.persisted);
+    let neo4jSyncQueued = false;
     if (persist) {
       if (!candidateName) {
         return sendError(422, {
@@ -718,9 +725,22 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       }
       sendProgress('postgres_save', 'Speichere Kandidat in PostgreSQL...', 85);
       try {
-        localCandidate = persistCandidate(profile, req);
+        localCandidate = persistCandidate(profile, req, combinedText);
         storedInPostgres = Boolean(localCandidate);
+        neo4jSyncQueued = storedInPostgres;
       } catch (persistErr) {
+        if (persistErr instanceof DuplicateError) {
+          return sendError(409, { ...persistErr.toJSON(), profile });
+        }
+        if (persistErr instanceof IdentityValidationError) {
+          return sendError(422, {
+            error: persistErr.field === 'birth_date'
+              ? 'Im CV wurde kein Geburtsdatum gefunden. Bitte den Bewerber über das Formular anlegen und das Geburtsdatum ergänzen.'
+              : persistErr.message,
+            field: persistErr.field,
+            profile,
+          });
+        }
         return sendError(503, {
           error: 'PostgreSQL-Speicherung fehlgeschlagen',
           details: persistErr.message,
@@ -740,7 +760,8 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       graphRag,
       storage: {
         postgres: storedInPostgres,
-        neo4j: storedInNeo4j,
+        neo4j: false,
+        neo4jSyncQueued,
       },
       textLength: combinedText.length,
       persisted: persist,

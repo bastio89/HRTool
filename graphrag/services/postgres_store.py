@@ -6,6 +6,7 @@ import re
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import psycopg
 from psycopg import errors as pg_errors
@@ -13,8 +14,53 @@ from psycopg.types.json import Jsonb
 from psycopg.rows import dict_row
 
 from models import AiUsageMetrics, CandidateProfileExtraction, JobProfileExtraction
+from services.candidate_identity import DuplicateCandidateError, require_identity
 
 logger = logging.getLogger(__name__)
+
+# Gleiche Normalisierung wie backend/src/identity.js (Indizes und Abfragen).
+def _text_key(column: str) -> str:
+    return rf"lower(regexp_replace(btrim(COALESCE({column}, '')), '\s+', ' ', 'g'))"
+
+
+def _url_key(column: str) -> str:
+    return rf"regexp_replace(lower(btrim({column})), '^https?://(www\.)?|/+$', '', 'g')"
+
+
+_UUID_PATTERN = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+
+# Eindeutige Identitaet von Bewerbern und Stellen. Das Backend legt dieselben
+# Spalten und Indizes an; wer zuerst startet, richtet sie ein.
+_IDENTITY_SCHEMA = [
+    "ALTER TABLE candidates ADD COLUMN IF NOT EXISTS birth_date DATE",
+    *(
+        statement
+        for table, graph_column in (("candidates", "graph_candidate_id"), ("jobs", "graph_job_id"))
+        for statement in (
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS uuid UUID",
+            f"""
+            WITH graph AS (
+                SELECT id, CASE WHEN {graph_column} ~ '{_UUID_PATTERN}' THEN {graph_column}::uuid END AS graph_uuid
+                FROM {table}
+            ), single AS (
+                SELECT graph_uuid FROM graph WHERE graph_uuid IS NOT NULL GROUP BY graph_uuid HAVING COUNT(*) = 1
+            )
+            UPDATE {table} t SET uuid = g.graph_uuid
+            FROM graph g JOIN single s ON s.graph_uuid = g.graph_uuid
+            WHERE t.id = g.id AND t.uuid IS NULL
+              AND NOT EXISTS (SELECT 1 FROM {table} o WHERE o.uuid = g.graph_uuid)
+            """,
+            f"UPDATE {table} SET uuid = gen_random_uuid() WHERE uuid IS NULL",
+            f"ALTER TABLE {table} ALTER COLUMN uuid SET DEFAULT gen_random_uuid()",
+            f"ALTER TABLE {table} ALTER COLUMN uuid SET NOT NULL",
+        )
+    ),
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_candidates_uuid ON candidates (uuid)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_jobs_uuid ON jobs (uuid)",
+    f"CREATE UNIQUE INDEX IF NOT EXISTS uq_candidates_identity ON candidates (({_text_key('name')}), birth_date) WHERE birth_date IS NOT NULL",
+    f"CREATE UNIQUE INDEX IF NOT EXISTS uq_jobs_url ON jobs (({_url_key('url')})) WHERE url IS NOT NULL AND btrim(url) <> ''",
+    f"CREATE UNIQUE INDEX IF NOT EXISTS uq_jobs_identity ON jobs (({_text_key('title')}), ({_text_key('company')}), ({_text_key('location')}))",
+]
 
 
 class PostgresStore:
@@ -436,6 +482,17 @@ class PostgresStore:
                     ON credit_transactions(user_id, created_at DESC, id DESC)
                     """
                 )
+        await self.ensure_identity_schema()
+
+    async def ensure_identity_schema(self) -> None:
+        # Jede Anweisung einzeln: Ein Eindeutigkeitsindex scheitert, solange es
+        # im Bestand noch Dubletten gibt - die Pruefung im Code greift trotzdem.
+        async with await psycopg.AsyncConnection.connect(self.database_url, autocommit=True) as connection:
+            for statement in _IDENTITY_SCHEMA:
+                try:
+                    await connection.execute(statement)
+                except psycopg.Error as exc:
+                    logger.warning("Identitaets-Schema: %s (%s)", exc, " ".join(statement.split())[:80])
 
     async def seed_default_prompts(self) -> None:
         seed_path = Path(__file__).resolve().parents[1] / "seeds" / "prompts.sql"
@@ -898,13 +955,16 @@ class PostgresStore:
                 return dict(row)
         return None
 
-    async def list_candidates_for_backfill(self) -> list[dict[str, Any]]:
+    async def list_candidates_for_backfill(self, candidate_ids: list[int] | None = None) -> list[dict[str, Any]]:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
                     SELECT
                         c.id::text AS candidate_id,
+                        c.uuid::text AS uuid,
+                        c.graph_candidate_id,
+                        c.graph_candidate_ids,
                         c.name,
                         c.email,
                         c.phone,
@@ -963,16 +1023,43 @@ class PostgresStore:
                             WHERE e.candidate_id = c.id
                         ), '[]'::json) AS education_history
                     FROM candidates c
+                    WHERE (%(ids)s::bigint[] IS NULL OR c.id = ANY(%(ids)s::bigint[]))
                     ORDER BY c.id
-                    """
+                    """,
+                    {"ids": candidate_ids},
                 )
                 rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
-    async def insert_candidate(self, profile: CandidateProfileExtraction, source: str | None = None) -> int:
-        existing = await self._find_existing_candidate(profile)
+    async def find_candidate_by_identity(self, name: str, birth_date: str) -> dict[str, Any] | None:
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    f"""
+                    SELECT id, uuid::text AS uuid, name, birth_date::text AS birth_date, email
+                    FROM candidates
+                    WHERE {_text_key('name')} = {_text_key('%s::text')} AND birth_date = %s::date
+                    ORDER BY id LIMIT 1
+                    """,
+                    (name, birth_date),
+                )
+                row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def delete_candidate_row(self, candidate_id: int) -> None:
+        """Rueckbau, wenn nach dem Anlegen in PostgreSQL Neo4j scheitert."""
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            await connection.execute("DELETE FROM candidate_texts WHERE candidate_id = %s", (str(candidate_id),))
+            await connection.execute("DELETE FROM candidates WHERE id = %s", (candidate_id,))
+
+    async def insert_candidate(self, profile: CandidateProfileExtraction, source: str | None = None) -> dict[str, Any]:
+        """Legt den Bewerber an und liefert {"id", "uuid"}. Name + Geburtsdatum
+        sind Pflicht; eine vorhandene Person ergibt DuplicateCandidateError
+        statt eines zweiten Datensatzes."""
+        name, birth_date = require_identity(profile)
+        existing = await self.find_candidate_by_identity(name, birth_date)
         if existing is not None:
-            return int(existing["id"])
+            raise DuplicateCandidateError(existing)
 
         skills = ", ".join(item.name for item in profile.skills) or None
         languages = ", ".join(
@@ -983,102 +1070,130 @@ class PostgresStore:
             f"{item.level} {item.field_of_study}" for item in profile.educations
         ) or profile.education
 
-        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
-            async with connection.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(
-                    """
-                    INSERT INTO candidates (
-                        name, email, phone, location, experience, skills, education,
-                        desired_salary, availability, languages, certificates,
-                        drivers_license, mobility, notes, status, tags, source, linkedin_url,
-                        xing_url, github_url, portfolio_url, notice_period, nationality,
-                        current_employer, current_position, gender, parsing_method
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, 'Aktiv', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                    ) RETURNING id
-                    """,
-                    (
-                        profile.name,
-                        profile.email,
-                        profile.phone,
-                        profile.location,
-                        profile.experience,
-                        skills,
-                        education,
-                        profile.desired_salary,
-                        profile.availability,
-                        languages,
-                        profile.certificates,
-                        profile.drivers_license,
-                        profile.mobility,
-                        profile.notes,
-                        profile.tags,
-                        source,
-                        profile.linkedin_url,
-                        profile.xing_url,
-                        profile.github_url,
-                        profile.portfolio_url,
-                        profile.notice_period,
-                        profile.nationality,
-                        profile.current_employer,
-                        profile.current_position,
-                        profile.gender,
-                        profile.parsing_method,
-                    ),
-                )
-                row = await cursor.fetchone()
-                if row is None:
-                    raise RuntimeError("PostgreSQL did not return a candidate id")
-                candidate_id = int(row["id"])
-
-                for item in profile.work_history:
-                    if not item.employer or not item.position:
-                        continue
+        try:
+            async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                async with connection.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        INSERT INTO candidate_work_history (
-                            candidate_id, employer, position, from_date, to_date,
-                            is_current, description, location
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO candidates (
+                            name, email, phone, location, experience, skills, education,
+                            desired_salary, availability, languages, certificates,
+                            drivers_license, mobility, notes, status, tags, source, linkedin_url,
+                            xing_url, github_url, portfolio_url, notice_period, nationality,
+                            current_employer, current_position, gender, parsing_method, birth_date
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            %s, 'Aktiv', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::date
+                        ) RETURNING id, uuid::text AS uuid
                         """,
                         (
-                            candidate_id, item.employer, item.position, item.from_date,
-                            item.to_date, 1 if item.is_current else 0, item.description, item.location,
+                            name,
+                            profile.email,
+                            profile.phone,
+                            profile.location,
+                            profile.experience,
+                            skills,
+                            education,
+                            profile.desired_salary,
+                            profile.availability,
+                            languages,
+                            profile.certificates,
+                            profile.drivers_license,
+                            profile.mobility,
+                            profile.notes,
+                            profile.tags,
+                            source,
+                            profile.linkedin_url,
+                            profile.xing_url,
+                            profile.github_url,
+                            profile.portfolio_url,
+                            profile.notice_period,
+                            profile.nationality,
+                            profile.current_employer,
+                            profile.current_position,
+                            profile.gender,
+                            profile.parsing_method,
+                            birth_date,
                         ),
                     )
+                    row = await cursor.fetchone()
+                    if row is None:
+                        raise RuntimeError("PostgreSQL did not return a candidate id")
+                    candidate_id = int(row["id"])
+                    candidate_uuid = str(row["uuid"])
 
-                for item in profile.education_history:
-                    if not item.institution:
-                        continue
-                    await cursor.execute(
-                        """
-                        INSERT INTO candidate_education (
-                            candidate_id, institution, degree, field_of_study,
-                            from_date, to_date, description
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-                        """,
-                        (
-                            candidate_id, item.institution, item.degree, item.field_of_study,
-                            item.from_date, item.to_date, item.description,
-                        ),
-                    )
+                    for item in profile.work_history:
+                        if not item.employer or not item.position:
+                            continue
+                        await cursor.execute(
+                            """
+                            INSERT INTO candidate_work_history (
+                                candidate_id, employer, position, from_date, to_date,
+                                is_current, description, location
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                candidate_id, item.employer, item.position, item.from_date,
+                                item.to_date, 1 if item.is_current else 0, item.description, item.location,
+                            ),
+                        )
 
-        return candidate_id
+                    for item in profile.education_history:
+                        if not item.institution:
+                            continue
+                        await cursor.execute(
+                            """
+                            INSERT INTO candidate_education (
+                                candidate_id, institution, degree, field_of_study,
+                                from_date, to_date, description
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                candidate_id, item.institution, item.degree, item.field_of_study,
+                                item.from_date, item.to_date, item.description,
+                            ),
+                        )
 
-    async def _find_existing_job(self, job_id: str, profile: JobProfileExtraction, source: str | None = None) -> dict[str, Any] | None:
+        except pg_errors.UniqueViolation as exc:
+            # Gleichzeitig angelegte Person: der Index uq_candidates_identity greift.
+            existing = await self.find_candidate_by_identity(name, birth_date)
+            if existing is None:
+                raise
+            raise DuplicateCandidateError(existing) from exc
+
+        return {"id": candidate_id, "uuid": candidate_uuid}
+
+    async def _find_existing_job(self, job_id: str, profile: JobProfileExtraction, source: str | None = None, url: str | None = None) -> dict[str, Any] | None:
+        """Eine Stelle gibt es genau einmal: gleiche ID, gleiche URL oder gleicher
+        Titel bei gleicher Firma und gleichem Ort (wie backend/src/identity.js)."""
         job_key = str(job_id or "").strip()
         if job_key:
             async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
                 async with connection.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT id, graph_job_id, title
+                        SELECT id, uuid::text AS uuid, graph_job_id, title
                         FROM jobs
-                        WHERE graph_job_id = %s OR id::text = %s
+                        WHERE uuid::text = %s OR graph_job_id = %s OR id::text = %s
                         LIMIT 1
                         """,
-                        (job_key, job_key),
+                        (job_key, job_key, job_key),
+                    )
+                    row = await cursor.fetchone()
+            if row:
+                return dict(row)
+
+        url_value = str(url or getattr(profile, "url", None) or "").strip()
+        if url_value:
+            async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                async with connection.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        f"""
+                        SELECT id, uuid::text AS uuid, graph_job_id, title FROM jobs
+                        WHERE url IS NOT NULL AND btrim(url) <> '' AND {_url_key('url')} = {_url_key('%s::text')}
+                        ORDER BY id LIMIT 1
+                        """,
+                        (url_value,),
                     )
                     row = await cursor.fetchone()
             if row:
@@ -1090,25 +1205,18 @@ class PostgresStore:
 
         company = str(profile.company or profile.employer_company or profile.recruiter_company or "").strip()
         location = str(profile.location or "").strip()
-        source_value = str(source or "").strip()
-
-        query = [
-            "SELECT id, graph_job_id, title FROM jobs",
-            "WHERE LOWER(title) = LOWER(%s)",
-        ]
-        params: list[Any] = [title]
-        query.append("AND COALESCE(LOWER(company), '') = COALESCE(LOWER(%s), '')")
-        params.append(company)
-        query.append("AND COALESCE(LOWER(location), '') = COALESCE(LOWER(%s), '')")
-        params.append(location)
-        if source_value:
-            query.append("AND COALESCE(LOWER(source), '') = LOWER(%s)")
-            params.append(source_value)
-        query.append("LIMIT 1")
-
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute("\n".join(query), params)
+                await cursor.execute(
+                    f"""
+                    SELECT id, uuid::text AS uuid, graph_job_id, title FROM jobs
+                    WHERE {_text_key('title')} = {_text_key('%s::text')}
+                      AND {_text_key('company')} = {_text_key('%s::text')}
+                      AND {_text_key('location')} = {_text_key('%s::text')}
+                    ORDER BY id LIMIT 1
+                    """,
+                    (title, company, location),
+                )
                 row = await cursor.fetchone()
         return dict(row) if row else None
 
@@ -1208,10 +1316,11 @@ class PostgresStore:
                     SELECT id, graph_job_id, title, company, location, type, status, description, requirements,
                            about_us, benefits, url, raw_text, parsed_profile_json
                     FROM jobs
-                    WHERE graph_job_id = %s OR id::text = %s
+                    WHERE uuid::text = %s OR graph_job_id = %s OR id::text = %s
+                    ORDER BY id
                     LIMIT 1
                     """,
-                    (job_id, job_id),
+                    (job_id, job_id, job_id),
                 )
                 row = await cursor.fetchone()
         if row is None:
@@ -1357,21 +1466,23 @@ class PostgresStore:
         phone: str | None = None,
         location: str | None = None,
         status: str = "new",
+        birth_date: str | None = None,
     ) -> dict[str, Any]:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
-                    INSERT INTO candidates (name, email, phone, location, status)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO candidates (name, email, phone, location, status, birth_date)
+                    VALUES (%s, %s, %s, %s, %s, %s::date)
                     RETURNING id,
                               name,
                               email,
                               phone,
                               location,
-                              status
+                              status,
+                              birth_date
                     """,
-                    (name, email, phone, location, status),
+                    (name, email, phone, location, status, birth_date),
                 )
                 row = await cursor.fetchone()
         if row is None:
@@ -1380,13 +1491,15 @@ class PostgresStore:
 
     async def _upsert_job_once(
         self,
-        job_id: str,
+        job_id: str | None,
         raw_text: str,
         profile: JobProfileExtraction,
         source: str | None = None,
         source_hash: str | None = None,
         profile_hash: str | None = None,
-    ) -> int:
+    ) -> dict[str, Any]:
+        """Liefert {"id", "uuid", "duplicate"}. Eine vorhandene Stelle wird
+        nicht ein zweites Mal angelegt (leere Skills werden ergaenzt)."""
         existing = await self._find_existing_job(job_id, profile, source=source)
         skills = self._job_skills_text(profile)
         if existing is not None:
@@ -1400,41 +1513,73 @@ class PostgresStore:
                         """,
                         (skills, int(existing["id"])),
                     )
-            return int(existing["id"])
+            return {"id": int(existing["id"]), "uuid": existing.get("uuid"), "duplicate": True}
 
         description = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
         requirements = self._summarize_requirements(profile)
-        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
-            async with connection.cursor(row_factory=dict_row) as cursor:
-                await cursor.execute(
-                    """
-                    INSERT INTO jobs (
-                        graph_job_id, title, company, recruiter_company, employer_company, description,
-                        requirements, skills, about_us, benefits, location, type, status, url, raw_text, source,
-                        parsed_profile_json
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', NULL, %s, %s, %s)
-                    RETURNING id
-                    """,
-                    (
-                        job_id,
-                        profile.title,
-                        profile.company,
-                        profile.recruiter_company,
-                        profile.employer_company,
-                        description,
-                        requirements,
-                        skills or None,
-                        profile.location,
-                        profile.employment_type or "Vollzeit",
-                        raw_text,
-                        source,
-                        json.dumps(profile.model_dump(), ensure_ascii=False),
-                    ),
-                )
-                row = await cursor.fetchone()
+        # Die UUID der Stelle ist zugleich die ID des Neo4j-Knotens.
+        new_uuid = str(uuid4())
+        try:
+            async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                async with connection.cursor(row_factory=dict_row) as cursor:
+                    await cursor.execute(
+                        """
+                        INSERT INTO jobs (
+                            uuid, graph_job_id, title, company, recruiter_company, employer_company, description,
+                            requirements, skills, about_us, benefits, location, type, status, url, raw_text, source,
+                            parsed_profile_json
+                        ) VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', NULL, %s, %s, %s)
+                        RETURNING id, uuid::text AS uuid
+                        """,
+                        (
+                            new_uuid,
+                            new_uuid,
+                            profile.title,
+                            profile.company,
+                            profile.recruiter_company,
+                            profile.employer_company,
+                            description,
+                            requirements,
+                            skills or None,
+                            profile.location,
+                            profile.employment_type or "Vollzeit",
+                            raw_text,
+                            source,
+                            json.dumps(profile.model_dump(), ensure_ascii=False),
+                        ),
+                    )
+                    row = await cursor.fetchone()
+        except pg_errors.UniqueViolation:
+            # Gleichzeitig angelegte Stelle: die Eindeutigkeitsindizes greifen.
+            existing = await self._find_existing_job(None, profile, source=source)
+            if existing is None:
+                raise
+            return {"id": int(existing["id"]), "uuid": existing.get("uuid"), "duplicate": True}
         if row is None:
             raise RuntimeError("PostgreSQL did not return a job id")
-        return int(row["id"])
+        return {"id": int(row["id"]), "uuid": str(row["uuid"]), "duplicate": False}
+
+    async def graph_candidate_id_in_use(self, graph_id: str, *, exclude_candidate_id: int) -> bool:
+        """Gehoert die Neo4j-ID noch zu einem anderen Bewerber?"""
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            async with connection.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    SELECT 1 FROM candidates
+                    WHERE id <> %s AND (uuid::text = %s OR graph_candidate_id = %s OR %s = ANY(COALESCE(graph_candidate_ids, ARRAY[]::TEXT[])))
+                    LIMIT 1
+                    """,
+                    (exclude_candidate_id, graph_id, graph_id, graph_id),
+                )
+                return await cursor.fetchone() is not None
+
+    async def reset_candidate_graph_ids(self, candidate_id: int, graph_id: str) -> None:
+        """Nach dem Abgleich gibt es genau einen Neo4j-Knoten: den mit der UUID."""
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            await connection.execute(
+                "UPDATE candidates SET graph_candidate_id = %s, graph_candidate_ids = ARRAY[%s]::TEXT[] WHERE id = %s",
+                (graph_id, graph_id, candidate_id),
+            )
 
     async def set_candidate_graph_id(self, candidate_id: int, graph_candidate_id: str) -> None:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -1454,13 +1599,13 @@ class PostgresStore:
 
     async def upsert_job(
         self,
-        job_id: str,
+        job_id: str | None,
         raw_text: str,
         profile: JobProfileExtraction,
         source: str | None = None,
         source_hash: str | None = None,
         profile_hash: str | None = None,
-    ) -> int:
+    ) -> dict[str, Any]:
         try:
             return await self._upsert_job_once(
                 job_id=job_id,

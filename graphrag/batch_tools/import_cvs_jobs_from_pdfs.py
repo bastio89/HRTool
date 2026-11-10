@@ -419,7 +419,8 @@ async def process_cv_file(
         return False, f"candidate parsing failed: {exc}"
     ensure_birth_date(profile, extracted_text)
 
-    # Name + Geburtsdatum machen die Person eindeutig; PostgreSQL legt an,
+    # Mit Geburtsdatum machen Name + Geburtsdatum die Person eindeutig
+    # (ohne wird nicht auf Dubletten geprueft); PostgreSQL legt an,
     # der Neo4j-Knoten erhaelt dieselbe UUID.
     try:
         stored = await create_candidate(

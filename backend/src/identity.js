@@ -2,8 +2,10 @@
 //
 // Fachliche Regeln (vom Fachbereich festgelegt):
 //   - Eine Person gibt es genau einmal: gleicher Name UND gleiches
-//     Geburtsdatum = dieselbe Person. Das Geburtsdatum ist beim Anlegen
-//     Pflicht. Ein Treffer blockiert das Anlegen.
+//     Geburtsdatum = dieselbe Person, ein Treffer blockiert das Anlegen.
+//     Pflicht ist nur der Name. Das Geburtsdatum ist optional, weil das
+//     fuehrende CRM Dubletten verhindert; ohne Geburtsdatum wird nicht auf
+//     Dubletten geprueft (gleiche Namen sind noch keine gleiche Person).
 //   - Eine Stelle gibt es genau einmal: gleiche URL ODER gleicher Titel bei
 //     gleicher Firma und gleichem Ort = dieselbe Stelle.
 //
@@ -114,15 +116,12 @@ function normalizeBirthDate(value) {
   return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-// Pflichtangaben fuer das Anlegen eines Bewerbers.
+// Identitaetsangaben fuer das Anlegen eines Bewerbers: Name Pflicht,
+// Geburtsdatum optional (JJJJ-MM-TT oder null; ungueltige Angaben werfen).
 function requireCandidateIdentity(input = {}) {
   const name = String(input.name || '').trim();
   if (!name) throw new IdentityValidationError('Name ist erforderlich', 'name');
-  const birthDate = normalizeBirthDate(input.birth_date);
-  if (!birthDate) {
-    throw new IdentityValidationError('Geburtsdatum ist erforderlich – Name und Geburtsdatum machen eine Person im Tool eindeutig', 'birth_date');
-  }
-  return { name, birth_date: birthDate };
+  return { name, birth_date: normalizeBirthDate(input.birth_date) };
 }
 
 function findCandidateDuplicate(db, { name, birth_date: birthDate, excludeId = null }) {

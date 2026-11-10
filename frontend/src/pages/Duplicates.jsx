@@ -214,7 +214,7 @@ export default function Duplicates() {
           {inactiveRules.length > 0 && <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('duplicates.rules_inactive_hint')}</p>}
         </StatusCard>
 
-        <StatusCard icon={CalendarX} title={t('duplicates.missing_birth_title')} tone={data.candidates.withoutBirthDate ? 'warn' : 'ok'}>
+        <StatusCard icon={CalendarX} title={t('duplicates.missing_birth_title')} tone="neutral">
           <p className="text-[32px] leading-none font-semibold text-black dark:text-white">{data.candidates.withoutBirthDate}</p>
           <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('duplicates.missing_birth_hint').replace('{total}', data.candidates.total)}</p>
         </StatusCard>

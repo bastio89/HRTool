@@ -54,7 +54,7 @@
 - **Umfangreiche Profile** — Name, Kontakt, Standort, Skills, Erfahrung, Ausbildung, Gehaltswunsch, Verfügbarkeit, Sprachen, Zertifikate, Führerschein, Mobilität
 - **Status-Tracking** — Aktiv, Passiv, In Prozess, Blacklist
 - **Tags & Quellen** — Flexible Verschlagwortung und Herkunfts-Tracking (LinkedIn, Xing, Indeed, Stepstone, Empfehlung, Karriereseite, Messe, Initiativ)
-- **Eine Person gibt es nur einmal** — Name + Geburtsdatum machen einen Bewerber eindeutig (Geburtsdatum ist Pflicht); eine vorhandene Person wird beim Anlegen, im CSV- und im CV-Import blockiert bzw. übersprungen. Gleiche E-Mail oder gleicher Name allein sind nur ein Hinweis
+- **Eine Person gibt es nur einmal** — Name + Geburtsdatum machen einen Bewerber eindeutig (das Geburtsdatum ist optional, weil das führende CRM Dubletten verhindert; ohne Geburtsdatum wird nicht auf Dubletten geprüft); eine vorhandene Person wird beim Anlegen, im CSV- und im CV-Import blockiert bzw. übersprungen. Gleiche E-Mail oder gleicher Name allein sind nur ein Hinweis
 - **Eine Stelle gibt es nur einmal** — gleiche URL oder gleicher Titel bei gleicher Firma und gleichem Ort
 - **Dubletten bereinigen** — Administration → Dubletten zeigt Dubletten aus dem Bestand und führt sie zusammen (inkl. Pipelines, Interviews, Dateien, Matching-Ergebnissen)
 - **Aktivitätsprotokoll** — Notizen, Anrufe, E-Mails, Interviews — lückenlose Dokumentation
@@ -457,13 +457,13 @@ Eine Person und eine Stelle gibt es im HRTool genau einmal – in PostgreSQL und
 
 | | Bewerber | Stelle |
 |---|---|---|
-| Gleich, wenn … | Name + Geburtsdatum gleich (Groß-/Kleinschreibung und Leerzeichen egal) | URL gleich (ohne `http(s)://`, `www.`, abschließendes `/`) **oder** Titel + Firma + Ort gleich |
-| Pflichtangaben | Name, Geburtsdatum | Titel |
+| Gleich, wenn … | Name + Geburtsdatum gleich (Groß-/Kleinschreibung und Leerzeichen egal); ohne Geburtsdatum keine Prüfung | URL gleich (ohne `http(s)://`, `www.`, abschließendes `/`) **oder** Titel + Firma + Ort gleich |
+| Pflichtangaben | Name (Geburtsdatum optional) | Titel |
 | Bei Treffer | Anlegen wird mit HTTP 409 und Verweis auf den vorhandenen Bewerber blockiert; Importe überspringen die Zeile | Anlegen wird mit HTTP 409 blockiert; ein erneuter Import ergänzt bei der vorhandenen Stelle nur leere Skills |
 
 - **UUID:** Jeder Datensatz hat die Spalte `uuid` (eindeutig, von PostgreSQL vergeben). GraphRAG legt Neo4j-Knoten unter genau dieser UUID an; bestehende Neo4j-IDs wurden bei der Migration übernommen, wo sie eindeutig waren.
 - **Durchgesetzt** wird die Regel in allen Anlegewegen (Formular, CSV-Import, KI- und Schnell-CV-Import, Batch-Import, jobs.ch, API) und zusätzlich durch Eindeutigkeitsindizes in PostgreSQL (`backend/src/identity.js`, `graphrag/services/candidate_identity.py`).
-- **Geburtsdatum:** wird beim CV-Import aus beschrifteten Angaben gelesen („Geburtsdatum: 12.03.1985“, „Date of birth …“). Ohne Geburtsdatum wird kein Bewerber angelegt – Bestandsbewerber müssen es beim nächsten Bearbeiten ergänzen. Es dient nur der Identifikation und geht nicht in Embeddings, Neo4j oder an ein Sprachmodell.
+- **Geburtsdatum:** wird beim CV-Import aus beschrifteten Angaben gelesen („Geburtsdatum: 12.03.1985“, „Date of birth …“). Es ist optional: Fehlt es oder ist das gelesene Datum unbrauchbar, wird der Bewerber ohne Geburtsdatum angelegt (dann ohne Dublettenprüfung – die stellt das CRM sicher). Ein von Hand eingegebenes ungültiges Datum wird abgelehnt. Es dient nur der Identifikation und geht nicht in Embeddings, Neo4j oder an ein Sprachmodell.
 - **3D-Matching per UUID:** Bewerber und Stellen werden in Neo4j über ihre UUID gesucht, nicht mehr über Namen oder Titel (Namensvettern werden nicht verwechselt). Fehlt ein Eintrag in Neo4j – z. B. bei manuell angelegten Bewerbern oder Altbestand –, holt das Backend den Abgleich vor dem Matching automatisch nach (GraphRAG `POST /sync/candidates` bzw. `POST /sync/jobs`, ohne Sprachmodell und ohne Credits). Was dann noch fehlt, wird mit Grund gemeldet statt stillschweigend ausgelassen. Beim Abgleich erhalten manuell angelegte Bewerber zusätzlich einen CV-Text aus ihrem Profil, damit auch das KI-Matching ausgewählter Paarungen sie findet.
 - **Bestand bereinigen:** Administration → Dubletten listet Dubletten (Bewerber auch mögliche über gleiche E-Mail, Telefonnummer oder gleichen Namen) und führt sie zusammen. Eindeutigkeitsregeln, die wegen alter Dubletten noch nicht aktiv sind, werden nach dem Zusammenführen automatisch aktiv. Dort lässt sich auch der Neo4j-Abgleich nachholen (`POST /sync/candidates` in GraphRAG).
 

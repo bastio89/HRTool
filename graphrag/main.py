@@ -320,8 +320,8 @@ async def _extract_raw_text(raw_text: str | None, file: UploadFile | None, is_ca
 
 
 def _identity_http_error(exc: Exception) -> HTTPException:
-	"""Eine Person gibt es nur einmal: 409 bei vorhandener Person, 422 wenn
-	Name oder Geburtsdatum fehlen."""
+	"""Eine Person gibt es nur einmal: 409 bei vorhandener Person (gleicher
+	Name + Geburtsdatum), 422 bei fehlendem Namen oder ungueltigem Datum."""
 	if isinstance(exc, DuplicateCandidateError):
 		return HTTPException(status_code=409, detail=exc.to_detail())
 	return HTTPException(status_code=422, detail={"error": str(exc), "field": getattr(exc, "field", None)})

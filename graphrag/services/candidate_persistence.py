@@ -19,8 +19,8 @@ async def persist_candidate_profile(
 	source: str,
 	graph_candidate_id: str | None = None,
 ) -> dict[str, Any]:
-	"""Legt den Bewerber in PostgreSQL an (Name + Geburtsdatum Pflicht,
-	DuplicateCandidateError bei vorhandener Person) und speichert CV-Volltext
+	"""Legt den Bewerber in PostgreSQL an (Name Pflicht, Geburtsdatum
+	optional; DuplicateCandidateError bei gleichem Name + Geburtsdatum) und speichert CV-Volltext
 	und Anonymisierung. Liefert {"id", "uuid"}. graph_candidate_id ist nur fuer
 	Altdaten gedacht; neue Neo4j-Knoten tragen die UUID des Bewerbers."""
 	stored = await postgres_store.insert_candidate(profile, source=source)
@@ -52,7 +52,8 @@ async def create_candidate(
 	profile_hash: str | None = None,
 ) -> dict[str, Any]:
 	"""Ein Bewerber entsteht genau einmal und in beiden Datenbanken mit
-	derselben ID: zuerst PostgreSQL (mit Pruefung auf Name + Geburtsdatum),
+	derselben ID: zuerst PostgreSQL (mit Pruefung auf Name + Geburtsdatum,
+	sofern eines angegeben ist),
 	danach der Neo4j-Knoten mit der UUID aus PostgreSQL. Scheitert Neo4j, wird
 	der PostgreSQL-Datensatz wieder entfernt."""
 	require_identity(profile)

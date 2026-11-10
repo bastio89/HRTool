@@ -479,7 +479,7 @@ class CandidateBase(BaseModel):
 
 
 class CandidateCreate(CandidateBase):
-    # Pflicht beim Anlegen: Name + Geburtsdatum machen die Person eindeutig.
+    # Optional. Ist es angegeben, machen Name + Geburtsdatum die Person eindeutig.
     birth_date: str | None = None
 
 class CandidateRead(CandidateBase):

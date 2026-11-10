@@ -118,14 +118,13 @@ async def test_legacy_candidate_routes_delegate_to_postgres_store(app_module, ap
 		}
 	]
 
-	# Ohne Geburtsdatum wird niemand angelegt: Name + Geburtsdatum machen die
-	# Person eindeutig.
-	missing = await api_client.post(
+	# Ein unbrauchbares Geburtsdatum wird abgelehnt (fehlen darf es).
+	invalid = await api_client.post(
 		"/api/candidates",
-		json={"name": "Max Beispiel", "email": "max@example.com", "location": "Zug"},
+		json={"name": "Max Beispiel", "email": "max@example.com", "location": "Zug", "birth_date": "31.02.1990"},
 	)
-	assert missing.status_code == 422
-	assert missing.json()["detail"]["field"] == "birth_date"
+	assert invalid.status_code == 422
+	assert invalid.json()["detail"]["field"] == "birth_date"
 
 	create_response = await api_client.post(
 		"/api/candidates",
@@ -152,6 +151,14 @@ async def test_legacy_candidate_routes_delegate_to_postgres_store(app_module, ap
 	assert duplicate.status_code == 409
 	assert duplicate.json()["detail"]["code"] == "DUPLICATE_CANDIDATE"
 	assert create_mock.await_count == 1
+
+	# Ohne Geburtsdatum wird ohne Dublettenpruefung angelegt.
+	identity_mock.reset_mock()
+	without = await api_client.post("/api/candidates", json={"name": "Max Beispiel"})
+	assert without.status_code == 201
+	identity_mock.assert_not_awaited()
+	assert create_mock.await_count == 2
+	assert create_mock.await_args.kwargs["birth_date"] is None
 
 
 @pytest.mark.anyio

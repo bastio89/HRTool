@@ -11,6 +11,7 @@ const {
   DuplicateError,
   IdentityValidationError,
   assertNoCandidateDuplicate,
+  normalizeBirthDate,
   requireCandidateIdentity,
   translateUniqueViolation,
 } = require('../identity');
@@ -309,12 +310,23 @@ function buildCandidateRow(profile) {
   };
 }
 
-// Legt den Bewerber an, wenn Name + Geburtsdatum noch nicht vergeben sind
-// (sonst DuplicateError), speichert den CV-Volltext fuer das KI-Matching und
-// stoesst die Uebertragung nach Neo4j an (Knoten-ID = UUID des Bewerbers).
+// Ein aus dem CV gelesenes Geburtsdatum ist optional: ist es unbrauchbar,
+// wird der Bewerber ohne angelegt statt den Import abzubrechen.
+function birthDateFromCv(value) {
+  try {
+    return normalizeBirthDate(value);
+  } catch (_) {
+    return null;
+  }
+}
+
+// Legt den Bewerber an (mit Geburtsdatum: nur wenn Name + Geburtsdatum noch
+// nicht vergeben sind, sonst DuplicateError), speichert den CV-Volltext fuer
+// das KI-Matching und stoesst die Uebertragung nach Neo4j an (Knoten-ID =
+// UUID des Bewerbers).
 function persistCandidate(profile, req, cvText) {
   const row = buildCandidateRow(profile);
-  const identity = requireCandidateIdentity({ name: row.name, birth_date: profile.birth_date });
+  const identity = requireCandidateIdentity({ name: row.name, birth_date: birthDateFromCv(profile.birth_date) });
   assertNoCandidateDuplicate(db, identity);
   row.name = identity.name;
   row.birth_date = identity.birth_date;
@@ -683,8 +695,8 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     sendProgress('extract_done', `${combinedText.length} Zeichen aus ${files.length} Datei(en) extrahiert`, 35);
 
     sendProgress('graphrag_connect', 'CV wird an GraphRAG übergeben...', 40);
-    // GraphRAG liest nur aus; gespeichert wird hier mit der Pruefung auf
-    // Name + Geburtsdatum, danach folgt die Uebertragung nach Neo4j.
+    // GraphRAG liest nur aus; gespeichert wird hier (mit Geburtsdatum inkl.
+    // Pruefung auf Name + Geburtsdatum), danach folgt die Uebertragung nach Neo4j.
     const graphRag = await ingestIntoGraphRag(combinedText.trim(), false, req);
 
     sendProgress('graphrag_done', 'GraphRAG-Analyse abgeschlossen', 75);
@@ -734,9 +746,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
         }
         if (persistErr instanceof IdentityValidationError) {
           return sendError(422, {
-            error: persistErr.field === 'birth_date'
-              ? 'Im CV wurde kein Geburtsdatum gefunden. Bitte den Bewerber über das Formular anlegen und das Geburtsdatum ergänzen.'
-              : persistErr.message,
+            error: persistErr.message,
             field: persistErr.field,
             profile,
           });

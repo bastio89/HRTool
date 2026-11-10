@@ -1,7 +1,8 @@
 """Eindeutige Identitaet von Bewerbern (Gegenstueck zu backend/src/identity.js).
 
-Fachliche Regel: Name + Geburtsdatum machen eine Person eindeutig. Das
-Geburtsdatum ist beim Anlegen Pflicht; eine vorhandene Person wird nicht
+Fachliche Regel: Pflicht ist nur der Name. Das Geburtsdatum ist optional,
+weil das fuehrende CRM Dubletten verhindert. Ist eines angegeben, machen
+Name + Geburtsdatum die Person eindeutig: eine vorhandene Person wird nicht
 ein zweites Mal angelegt. Das Geburtsdatum dient nur der Identifikation und
 geht nie in Embeddings, Neo4j oder an ein Sprachmodell.
 """
@@ -133,17 +134,16 @@ def ensure_birth_date(profile: Any, *texts: str | None) -> Any:
 	return profile
 
 
-def require_identity(profile: Any) -> tuple[str, str]:
+def require_identity(profile: Any) -> tuple[str, str | None]:
+	"""Name (Pflicht) und Geburtsdatum (optional, JJJJ-MM-TT oder None)."""
 	name = re.sub(r"\s+", " ", str(getattr(profile, "name", "") or "")).strip()
 	if not name:
 		raise CandidateIdentityError("Name ist erforderlich", "name")
-	birth_date = normalize_birth_date(getattr(profile, "birth_date", None))
-	if not birth_date:
-		raise CandidateIdentityError(
-			"Im CV wurde kein Geburtsdatum gefunden. Name und Geburtsdatum machen eine Person im Tool eindeutig - "
-			"bitte den Bewerber über das Formular anlegen und das Geburtsdatum ergänzen.",
-			"birth_date",
-		)
+	raw = getattr(profile, "birth_date", None)
+	birth_date = normalize_birth_date(raw)
+	# Fehlt das Datum, ist das in Ordnung; ein unbrauchbares wird gemeldet.
+	if birth_date is None and raw is not None and str(raw).strip():
+		raise CandidateIdentityError(f'Ungültiges Geburtsdatum "{str(raw).strip()}" (erwartet TT.MM.JJJJ oder JJJJ-MM-TT)', "birth_date")
 	return name, birth_date
 
 

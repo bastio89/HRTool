@@ -96,7 +96,8 @@ def create_legacy_router(postgres_store: PostgresStore) -> APIRouter:
 			name, birth_date = require_identity(payload)
 		except CandidateIdentityError as exc:
 			raise HTTPException(status_code=422, detail={"error": str(exc), "field": exc.field}) from exc
-		existing = await postgres_store.find_candidate_by_identity(name, birth_date)
+		# Ohne Geburtsdatum keine Dublettenpruefung (das stellt das CRM sicher).
+		existing = await postgres_store.find_candidate_by_identity(name, birth_date) if birth_date else None
 		if existing is not None:
 			raise HTTPException(status_code=409, detail=DuplicateCandidateError(existing).to_detail())
 		row = await postgres_store.create_compat_candidate(

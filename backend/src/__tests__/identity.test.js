@@ -73,10 +73,17 @@ describe('candidates are unique by name and birth date', () => {
     expect(status).toMatchObject({ candidates_uuid: true, candidates_identity: true, jobs_uuid: true });
   });
 
-  test('birth date is required when creating a candidate', async () => {
-    const res = await request(app).post('/api/candidates').send(person({ birth_date: '' }));
-    expect(res.status).toBe(400);
-    expect(res.body.field).toBe('birth_date');
+  test('the birth date is optional, but an invalid one is rejected', async () => {
+    const invalid = await request(app).post('/api/candidates').send(person({ birth_date: '31.02.1990' }));
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.field).toBe('birth_date');
+
+    // Ohne Geburtsdatum keine Dublettenpruefung: Namensvettern sind erlaubt.
+    const first = await request(app).post('/api/candidates').send(person({ name: `Ohne Datum ${marker}`, birth_date: '' }));
+    const second = await request(app).post('/api/candidates').send(person({ name: `Ohne Datum ${marker}`, birth_date: null }));
+    expect([first.status, second.status]).toEqual([201, 201]);
+    expect(first.body.birth_date).toBeNull();
+    db.prepare('DELETE FROM candidates WHERE id IN (?, ?)').run(first.body.id, second.body.id);
   });
 
   test('creates the candidate with a UUID and queues the Neo4j sync', async () => {
@@ -103,14 +110,17 @@ describe('candidates are unique by name and birth date', () => {
     createdCandidates.push(res.body.id);
   });
 
-  test('blocks renaming into an existing person and requires the birth date on update', async () => {
+  test('blocks renaming into an existing person and allows removing the birth date on update', async () => {
     const [first, second] = createdCandidates;
     const clash = await request(app).put(`/api/candidates/${second}`).send(person({ birth_date: '14.02.1990' }));
     expect(clash.status).toBe(409);
     expect(clash.body.existing.id).toBe(first);
 
-    const missing = await request(app).put(`/api/candidates/${second}`).send(person({ birth_date: null }));
-    expect(missing.status).toBe(400);
+    const withoutDate = await request(app).put(`/api/candidates/${second}`).send(person({ birth_date: null }));
+    expect(withoutDate.status).toBe(200);
+    expect(withoutDate.body.birth_date).toBeNull();
+    const restored = await request(app).put(`/api/candidates/${second}`).send(person({ birth_date: '15.02.1990' }));
+    expect(restored.status).toBe(200);
 
     const ok = await request(app).put(`/api/candidates/${first}`).send(person({ location: 'Bern' }));
     expect(ok.status).toBe(200);
@@ -131,7 +141,7 @@ describe('candidates are unique by name and birth date', () => {
       .toThrow(/uq_candidates_identity/);
   });
 
-  test('CSV import requires the birth date and skips duplicates, also within the file', async () => {
+  test('CSV import accepts rows without birth date and skips duplicates, also within the file', async () => {
     const res = await request(app).post('/api/candidates/import').send({
       skipDuplicates: false,
       rows: [
@@ -143,9 +153,10 @@ describe('candidates are unique by name and birth date', () => {
       ],
     });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ total: 5, imported: 1, skipped: 2, errors: 2 });
+    expect(res.body).toMatchObject({ total: 5, imported: 2, skipped: 2, errors: 1 });
     expect(res.body.duplicates.map(entry => entry.row)).toEqual([2, 3]);
-    expect(res.body.errorDetails.map(entry => entry.row)).toEqual([4, 5]);
+    expect(res.body.errorDetails.map(entry => entry.row)).toEqual([5]);
+    expect(db.prepare('SELECT birth_date FROM candidates WHERE name = ?').get(`Ohne Datum ${marker}`).birth_date).toBeNull();
     const rows = db.prepare('SELECT id FROM candidates WHERE name ILIKE ?').all(`mara moser ${marker}`);
     expect(rows).toHaveLength(1);
     createdCandidates.push(rows[0].id);

@@ -1,5 +1,5 @@
 """Eindeutige Identitaet in GraphRAG: Name + Geburtsdatum machen eine Person
-eindeutig (Geburtsdatum Pflicht), PostgreSQL vergibt die UUID und der
+eindeutig (Geburtsdatum optional), PostgreSQL vergibt die UUID und der
 Neo4j-Knoten traegt genau diese. Das Geburtsdatum geht nie in Embeddings.
 
 Die PostgreSQL-Tests laufen gegen DATABASE_URL (wie in CI); Neo4j, Sprachmodell
@@ -53,15 +53,19 @@ def test_extract_birth_date_only_from_labelled_dates(text, expected):
 	assert extract_birth_date(text) == expected
 
 
-def test_profile_normalizes_birth_date_and_identity_is_required():
+def test_profile_normalizes_birth_date_and_only_the_name_is_required():
 	profile = CandidateProfileExtraction(name="Anna Muster", birth_date="3.7.1985")
 	assert profile.birth_date == "1985-07-03"
 	assert normalize_birth_date("01.01.2999") is None
 	assert require_identity(profile) == ("Anna Muster", "1985-07-03")
 
 	without = CandidateProfileExtraction(name="Anna Muster")
+	assert require_identity(without) == ("Anna Muster", None)
 	with pytest.raises(CandidateIdentityError) as error:
-		require_identity(without)
+		require_identity(CandidateProfileExtraction(name="  "))
+	assert error.value.field == "name"
+	with pytest.raises(CandidateIdentityError) as error:
+		require_identity(SimpleNamespace(name="Anna Muster", birth_date="31.02.1990"))
 	assert error.value.field == "birth_date"
 	assert ensure_birth_date(without, "Lebenslauf\nGeburtsdatum: 03.07.1985").birth_date == "1985-07-03"
 
@@ -102,8 +106,11 @@ async def test_insert_candidate_blocks_the_same_person(store):
 	other = await store.insert_candidate(_profile(f"Lena Lorenz {MARKER}", "15.02.1990"), source="Test")
 	assert other["id"] != stored["id"]
 
-	with pytest.raises(CandidateIdentityError):
-		await store.insert_candidate(_profile(f"Ohne Datum {MARKER}", None), source="Test")
+	# Ohne Geburtsdatum keine Dublettenpruefung: beide werden angelegt.
+	first = await store.insert_candidate(_profile(f"Ohne Datum {MARKER}", None), source="Test")
+	second = await store.insert_candidate(_profile(f"Ohne Datum {MARKER}", None), source="Test")
+	assert first["id"] != second["id"]
+	assert await store.find_candidate_by_identity(f"Ohne Datum {MARKER}", None) is None
 
 
 @needs_db
@@ -178,9 +185,9 @@ async def test_ingest_candidate_route_blocks_duplicates_and_parses_without_stori
 	assert duplicate.status_code == 409
 	assert duplicate.json()["detail"]["existing"]["id"] == body["postgres_id"]
 
-	missing = await api_client.post("/ingest/candidate", json={"profile": {"name": f"Ohne {MARKER}"}})
-	assert missing.status_code == 422
-	assert missing.json()["detail"]["field"] == "birth_date"
+	without = await api_client.post("/ingest/candidate", json={"profile": {"name": f"Ohne {MARKER}"}})
+	assert without.status_code == 200
+	assert without.json()["persisted"] is True
 
 
 @needs_db

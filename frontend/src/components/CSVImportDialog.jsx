@@ -6,9 +6,9 @@ import Modal from './Modal'
 
 const CANDIDATE_FIELDS = [
   { key: 'name', labelKey: 'form.name', required: true },
-  // Name + Geburtsdatum machen eine Person eindeutig; ohne Geburtsdatum wird
-  // die Zeile vom Server abgelehnt.
-  { key: 'birth_date', labelKey: 'form.birth_date', required: true },
+  // Optional; mit Geburtsdatum werden Personen mit gleichem Namen und
+  // Geburtsdatum als Dublette uebersprungen.
+  { key: 'birth_date', labelKey: 'form.birth_date' },
   { key: 'email', labelKey: 'form.email' },
   { key: 'phone', labelKey: 'form.phone' },
   { key: 'location', labelKey: 'form.location' },
@@ -181,7 +181,7 @@ export default function CSVImportDialog({ open, onClose, onImported }) {
     }
   }
 
-  const hasNameMapping = Object.values(mapping).includes('name') && Object.values(mapping).includes('birth_date')
+  const hasNameMapping = Object.values(mapping).includes('name')
 
   const stepLabel =
     step === 1 ? t('csv.step_upload')

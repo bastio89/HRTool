@@ -13,7 +13,8 @@ import { useI18n } from '../I18nContext'
 const SUGGESTED_TAGS = ['Top-Kandidat', 'Senior', 'Junior', 'Freelancer', 'Remote', 'Sofort verfügbar', 'Führungskraft', 'Teilzeit', 'Werkstudent', 'Intern']
 
 const emptyCandidate = {
-  // Name + Geburtsdatum machen eine Person im Tool eindeutig (Pflicht).
+  // Geburtsdatum optional; ist es angegeben, machen Name + Geburtsdatum die
+  // Person im Tool eindeutig.
   name: '', birth_date: '', email: '', phone: '', location: '',
   experience: '', skills: '', education: '',
   desired_salary: '', availability: '', languages: '',
@@ -359,7 +360,7 @@ export default function CandidateForm() {
           <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('form.personal')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <Input label={t('form.name') + ' *'} placeholder="Max Mustermann" value={form.name} onChange={handleChange('name')} required />
-            <Input label={t('form.birth_date') + ' *'} type="date" max={today} value={form.birth_date || ''} onChange={handleChange('birth_date')} required aria-describedby={`${fieldIdPrefix}-birth-hint`} />
+            <Input label={t('form.birth_date')} type="date" max={today} value={form.birth_date || ''} onChange={handleChange('birth_date')} aria-describedby={`${fieldIdPrefix}-birth-hint`} />
             <p id={`${fieldIdPrefix}-birth-hint`} className="md:col-span-2 -mt-5 ml-2 text-[13px] text-gray-500 dark:text-gray-400">{t('form.birth_date_hint')}</p>
             <div className="flex flex-col gap-3">
               <label htmlFor={`${fieldIdPrefix}-gender`} className="text-[15px] font-semibold text-gray-500 dark:text-gray-400">{t('form.gender')}</label>
@@ -677,7 +678,7 @@ export default function CandidateForm() {
             </span>
           )}
           <Button variant="secondary" size="lg" type="button" onClick={() => leaveTo('/candidates')}>{t('form.cancel')}</Button>
-          <Button variant="dark" type="submit" size="lg" disabled={saving || !form.name.trim() || !form.birth_date || Boolean(blockingDuplicate)}><Save className="w-5 h-5" />{saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}</Button>
+          <Button variant="dark" type="submit" size="lg" disabled={saving || !form.name.trim() || Boolean(blockingDuplicate)}><Save className="w-5 h-5" />{saving ? t('form.saving') : (isEdit ? t('form.update') : t('form.save'))}</Button>
         </FormActionBar>
       </form>
     </PageContainer>

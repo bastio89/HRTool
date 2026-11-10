@@ -47,13 +47,16 @@ describe('CandidateForm – eine Person gibt es nur einmal', () => {
     candidatesApi.checkDuplicate.mockResolvedValue({ duplicates: [] })
   })
 
-  test('requires the date of birth before saving', async () => {
+  test('saves with the name alone, the date of birth is optional', async () => {
+    candidatesApi.create.mockResolvedValue({ id: 5 })
     renderForm()
-    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Anna Muster' } })
     expect(saveButton().disabled).toBe(true)
-
-    fireEvent.change(screen.getByLabelText('Geburtsdatum *'), { target: { value: '1990-02-14' } })
+    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Anna Muster' } })
+    expect(screen.getByLabelText('Geburtsdatum').required).toBe(false)
     expect(saveButton().disabled).toBe(false)
+
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(candidatesApi.create).toHaveBeenCalledWith(expect.objectContaining({ name: 'Anna Muster', birth_date: '' })))
   })
 
   test('blocks saving when the same name and birth date exist and links the existing person', async () => {
@@ -62,7 +65,7 @@ describe('CandidateForm – eine Person gibt es nur einmal', () => {
     })
     renderForm()
     fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Anna Muster' } })
-    fireEvent.change(screen.getByLabelText('Geburtsdatum *'), { target: { value: '1990-02-14' } })
+    fireEvent.change(screen.getByLabelText('Geburtsdatum'), { target: { value: '1990-02-14' } })
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toMatch(/bereits angelegt/)
@@ -80,7 +83,7 @@ describe('CandidateForm – eine Person gibt es nur einmal', () => {
     candidatesApi.create.mockRejectedValue(duplicate)
     renderForm()
     fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Anna Muster' } })
-    fireEvent.change(screen.getByLabelText('Geburtsdatum *'), { target: { value: '1990-02-14' } })
+    fireEvent.change(screen.getByLabelText('Geburtsdatum'), { target: { value: '1990-02-14' } })
     fireEvent.click(saveButton())
 
     await screen.findByRole('link', { name: 'Vorhandenen Bewerber öffnen' })

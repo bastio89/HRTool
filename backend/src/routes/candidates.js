@@ -819,8 +819,8 @@ router.put('/:id', (req, res) => {
       gender
     } = req.body;
 
-    // Auch Bestandsbewerber ohne Geburtsdatum muessen es beim Speichern
-    // nachtragen: Name + Geburtsdatum machen die Person eindeutig.
+    // Das Geburtsdatum ist optional; ist es angegeben, darf Name +
+    // Geburtsdatum keiner anderen Person gehoeren.
     const identity = requireCandidateIdentity(req.body);
     assertNoCandidateDuplicate(db, { ...identity, excludeId: existing.id });
 

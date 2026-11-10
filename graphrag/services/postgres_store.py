@@ -1031,7 +1031,10 @@ class PostgresStore:
                 rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
-    async def find_candidate_by_identity(self, name: str, birth_date: str) -> dict[str, Any] | None:
+    async def find_candidate_by_identity(self, name: str, birth_date: str | None) -> dict[str, Any] | None:
+        # Ohne Geburtsdatum gibt es keine sichere Dublette (Namensvettern).
+        if not name or not birth_date:
+            return None
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             async with connection.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
@@ -1053,9 +1056,10 @@ class PostgresStore:
             await connection.execute("DELETE FROM candidates WHERE id = %s", (candidate_id,))
 
     async def insert_candidate(self, profile: CandidateProfileExtraction, source: str | None = None) -> dict[str, Any]:
-        """Legt den Bewerber an und liefert {"id", "uuid"}. Name + Geburtsdatum
-        sind Pflicht; eine vorhandene Person ergibt DuplicateCandidateError
-        statt eines zweiten Datensatzes."""
+        """Legt den Bewerber an und liefert {"id", "uuid"}. Pflicht ist nur der
+        Name; mit Geburtsdatum ergibt eine vorhandene Person (gleicher Name +
+        gleiches Geburtsdatum) DuplicateCandidateError statt eines zweiten
+        Datensatzes."""
         name, birth_date = require_identity(profile)
         existing = await self.find_candidate_by_identity(name, birth_date)
         if existing is not None:

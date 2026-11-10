@@ -96,13 +96,18 @@ async function extractText(filePath, mimetype) {
     return text;
   }
 
-  if (
-    mimetype === 'application/msword' ||
-    mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
+  if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
     const mammoth = require('mammoth');
     const result = await mammoth.extractRawText({ path: filePath });
     return result.value;
+  }
+
+  // Altes Word-Format (.doc, OLE). word-extractor erkennt am Inhalt auch eine
+  // als .doc benannte DOCX-Datei.
+  if (mimetype === 'application/msword') {
+    const WordExtractor = require('word-extractor');
+    const document = await new WordExtractor().extract(filePath);
+    return document.getBody();
   }
 
   if (mimetype === 'text/plain' || mimetype === 'text/markdown') {

@@ -379,6 +379,10 @@ router.post('/', (req, res) => {
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
 
     const job = persistLocalJob({ title, company, about_us, description, requirements, skills, benefits, location, type, status, url, source });
+    // Lohn laut Stellenbeschreibung (optional, z. B. fuer die CRM-Rueckgabe).
+    if (String(req.body.salary || '').trim()) {
+      db.prepare('UPDATE jobs SET salary = ? WHERE id = ?').run(String(req.body.salary).trim(), job.id);
+    }
     logAudit(req, 'erstellt', 'Job', job.id, job.title);
 
     ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j', graphRagProfile, job.uuid).catch((graphRagErr) => {
@@ -614,6 +618,9 @@ router.put('/:id', (req, res) => {
       WHERE id=?
     `).run(title, company || null, about_us || null, description || null, requirements || null, skills || null, benefits || null,
       location || null, type || 'Vollzeit', status || 'Offen', url || null, req.params.id);
+    if (Object.prototype.hasOwnProperty.call(req.body, 'salary')) {
+      db.prepare('UPDATE jobs SET salary = ? WHERE id = ?').run(String(req.body.salary || '').trim() || null, req.params.id);
+    }
     const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
     logAudit(req, 'aktualisiert', 'Job', job.id, job.title);
     res.json(job);

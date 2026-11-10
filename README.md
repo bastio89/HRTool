@@ -97,6 +97,7 @@
 - **CSV-Import** — Massenhafter Bewerber-Upload mit automatischer Duplikat-Erkennung
 - **Datenbank-Backup** — JSON-Backup der PostgreSQL-Daten als Download (Admin)
 - **Generische Export-Schnittstelle** — Bewerberdaten mit frei wählbaren Feldern, Zielfeld-Mapping und Filtern als CSV, JSON, NDJSON oder XML exportieren; als Profil speichern und optional per API-Key für Fremdsysteme freigeben (Administration → Datenexport, nur Admins)
+- **CRM-Austausch (Axessence)** — Kandidaten-ZIP aus dem CRM importieren (CRM-UUID bleibt die UUID des Bewerbers) und die Matching-Ergebnisse als Rückgabe-CSV im CRM-Format liefern (Administration → CRM-Austausch, siehe „CRM-Schnittstelle“)
 - **N:N-Matching-Export** — Ergebnisse von KI-Matching und 3D-Matching als Liste Bewerber × Stelle (eine Zeile je Paarung, letztes Ergebnis) exportieren, optional nur Paarungen mit einem Matchingwert größer X % (Administration → Datenexport → Datenquelle „KI-Matching“ bzw. „3D-Matching“)
 
 ### 🔐 Sicherheit & Compliance
@@ -513,6 +514,31 @@ Neben `candidates` gibt es die Entitäten `matching_ai` (KI-Matching) und `match
 - `score_above`: nur Paarungen mit Matchingwert **größer als** dem Wert (0–100, in %). Weitere Filter: `job_ids`, `candidate_ids`, `job_status`, `candidate_status`, `updated_since` (gematcht seit).
 - IDs: `candidate_id` und `job_id` sind die PostgreSQL-Primärschlüssel. `candidate_uuid` bzw. `job_uuid` sind die UUIDs der Datensätze (eindeutig, siehe „Eindeutige Identität“); dieselbe UUID trägt der Knoten in Neo4j.
 - Grundlage ist die Tabelle `matching_pair_results` (je Methode und Paarung genau ein Eintrag). Läufe aus der Matching-Historie, die vor dieser Tabelle entstanden sind, werden beim ersten Matching-Export automatisch übernommen – bei 3D-Läufen aus dieser Zeit allerdings nur die dort gespeicherten (besten 100) Paarungen. Wird ein Lauf aus der Historie, ein Bewerber oder eine Stelle gelöscht, verschwinden die zugehörigen Paarungen mit.
+
+### CRM-Schnittstelle
+
+Datei-Austausch mit dem CRM (Axessence) nach der Schnittstellenbeschreibung „Technische Schnittstelle HR Matching“. Bedienung unter **Administration → CRM-Austausch** (nur Admins).
+
+**1. Import (CRM → HR Tool).** Im CRM unter *Datensicherung & Admin → HR Matching Tool Daten* das ZIP `hr-matching-kandidaten.zip` herunterladen und hochladen.
+
+- Inhalt: `kandidaten.csv` (UTF-8 mit BOM, Komma, Spalten `UUID, Vorname, Nachname, Labels, CV_Dokument`, Labels als JSON-Array in der Zelle) und die CVs unter `cvs/<UUID>.pdf|.docx|.doc`. Der Tabellenkalkulationsschutz des CRM (führender Apostroph vor `= + - @`) wird beim Lesen entfernt.
+- Zuerst wird nur **geprüft** (`POST /api/crm/import`): UUID gültig und nur einmal, Labels lesbar, CV vorhanden und im Format PDF/DOCX/DOC. Pfade außerhalb des Archivs (`..`, absolute Pfade) lassen das ganze ZIP scheitern. Die Prüfliste zeigt je Kandidat „wird angelegt“, „wird aktualisiert“ oder den Fehler.
+- Dann wird **Kandidat für Kandidat** importiert (`POST /api/crm/import/{token}/candidates/{uuid}`, mit Fortschritt; Fehlgeschlagene lassen sich erneut versuchen):
+  - Das CV wird gelesen (alte `.doc`-Dateien über `word-extractor`) und wie beim CV-Import von GraphRAG ausgewertet.
+  - Die **CRM-UUID wird unverändert die UUID des Bewerbers** – dieselbe ID in CRM, PostgreSQL und Neo4j. Vor- und Nachname aus dem CRM gehen vor dem Namen aus dem CV; Labels kommen zu den Tags hinzu. Das CV liegt danach beim Bewerber unter „Dateien“.
+  - Gibt es die UUID schon, wird **aktualisiert** statt doppelt angelegt. Ist das CV unverändert, wird es nicht neu ausgewertet (spart Credits).
+  - Gibt es dieselbe Person (Name + Geburtsdatum) bereits ohne CRM-Bezug im Tool, wird sie mit der CRM-UUID **verknüpft**. Führt das CRM sie unter einer anderen UUID, gelten sie als zwei Personen (das CRM verhindert Dubletten); das Geburtsdatum wird dann nicht übernommen.
+- Hochgeladene Archive liegen unter `backend/data/crm-imports/` und werden nach 24 Stunden oder mit „Verwerfen“ entfernt. Grenzen: 10 000 Kandidaten, 256 MiB je CV, 300 MB je ZIP (nginx erlaubt für `/api/crm/` entsprechend große Uploads).
+
+**2. Rückgabe (HR Tool → CRM).** Methode (KI- oder 3D-Matching) und optional „Matchingwert größer als X %“ wählen, Vorschau ansehen, CSV herunterladen und im CRM hochladen (Vorschau prüfen, Übernahme auslösen).
+
+- Format: UTF-8 mit BOM, Semikolon, CRLF, Kopfzeile `UUID;Vorname;Nachname;Firma;Stelle;URL;Matching;Bewerbungsdatum;Startdatum;Ort;Lohnvorstellung;Anforderungen;Status` – keine weiteren Spalten. Bewerbungsdatum, Startdatum und Status bleiben leer (überschreiben im CRM nichts; neue Bewerbungen erhalten dort den Status „Aktiv“).
+- Je CRM-Kandidat und Stelle eine Zeile mit dem letzten Ergebnis aus `matching_pair_results`; KI und 3D kommen nie in dieselbe Datei.
+- Das CRM übernimmt eine Datei **ganz oder gar nicht**. Deshalb enthält sie nur Zeilen, die die CRM-Prüfung bestehen: nur Kandidaten aus dem CRM (`source = 'CRM'`), nur Stellen mit Firma, Titel und absoluter http(s)-URL ohne Zugangsdaten. Alles andere zeigt die Vorschau mit Grund (z. B. „Stelle ohne URL“) und Link zur Stelle.
+- Texte: HTML wird zu Text, `<` und `>` werden durch `‹` `›` ersetzt, höchstens 20 000 Zeichen je Feld. „Anforderungen“ sind die Anforderungen der Stelle (sonst die Beschreibung).
+- **Lohnvorstellung** ist der Lohn der Stelle, sofern die Stellenbeschreibung einen nennt: das Feld „Lohn laut Stellenbeschreibung“ der Stelle oder – wenn leer – ein Betrag mit Währung bei einem Lohn-Begriff im Stellentext („Lohn: CHF 110'000“, „Jahreslohn von CHF 95'000.– bis …“). Ohne Angabe bleibt die Spalte leer.
+- Mehr als 5000 Zeilen oder 5 MiB werden auf mehrere Dateien verteilt (`…-teil-1-von-2.csv`), die einzeln hochgeladen werden.
+- Endpunkte: `GET /api/crm/return/preview?method=ai|vector&score_above=70` und `GET /api/crm/return/download?method=…&score_above=…&part=1`. Import und Rückgabe stehen im Audit-Log.
 
 ### Übersicht: 63+ Endpunkte
 

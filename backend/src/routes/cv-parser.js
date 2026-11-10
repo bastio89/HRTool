@@ -324,7 +324,10 @@ function birthDateFromCv(value) {
 // nicht vergeben sind, sonst DuplicateError), speichert den CV-Volltext fuer
 // das KI-Matching und stoesst die Uebertragung nach Neo4j an (Knoten-ID =
 // UUID des Bewerbers).
-function persistCandidate(profile, req, cvText) {
+// options.syncGraph=false: der Aufrufer stoesst den Neo4j-Abgleich selbst an
+// (z. B. der CRM-Import, nachdem er die CRM-UUID gesetzt hat).
+function persistCandidate(profile, req, cvText, options = {}) {
+  const { syncGraph = true, textSource = 'CV-Import' } = options;
   const row = buildCandidateRow(profile);
   const identity = requireCandidateIdentity({ name: row.name, birth_date: birthDateFromCv(profile.birth_date) });
   assertNoCandidateDuplicate(db, identity);
@@ -366,6 +369,25 @@ function persistCandidate(profile, req, cvText) {
   }
 
   const candidateId = result.lastInsertRowid;
+  writeCandidateHistory(candidateId, profile);
+  writeCandidateText(candidateId, row.name, cvText, profile, textSource);
+  if (syncGraph) syncGraphCandidatesInBackground([candidateId], req);
+
+  const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
+  const candidateWorkHistory = db.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(candidateId);
+  const candidateEducationHistory = db.prepare('SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY from_date DESC').all(candidateId);
+  logAudit(req, 'erstellt', 'Candidate', candidate.id, candidate.name);
+
+  return {
+    ...candidate,
+    work_history: candidateWorkHistory,
+    education_history: candidateEducationHistory,
+  };
+}
+
+// Werdegang und Ausbildung aus dem CV-Profil; replace=true ersetzt die
+// vorhandenen Eintraege (erneuter Import eines geaenderten CVs).
+function writeCandidateHistory(candidateId, profile, { replace = false } = {}) {
   const workHistory = normalizeWorkHistory(profile).filter((item) => Boolean(item.employer && item.position));
   const educationHistory = normalizeHistoryEntries(profile.education_history, 'education')
     .filter((item) => Boolean(item.institution));
@@ -396,6 +418,10 @@ function persistCandidate(profile, req, cvText) {
   `);
 
   const tx = db.transaction(() => {
+    if (replace) {
+      db.prepare('DELETE FROM candidate_work_history WHERE candidate_id = ?').run(candidateId);
+      db.prepare('DELETE FROM candidate_education WHERE candidate_id = ?').run(candidateId);
+    }
     for (const item of workHistory) {
       workInsert.run(
         candidateId,
@@ -421,7 +447,10 @@ function persistCandidate(profile, req, cvText) {
     }
   });
   tx();
+}
 
+// CV-Volltext und Profil fuer das KI-Matching (candidate_texts).
+function writeCandidateText(candidateId, name, cvText, profile, source = 'CV-Import') {
   if (cvText && String(cvText).trim()) {
     // Das Geburtsdatum dient nur der Identifikation und bleibt aus den
     // Strukturdaten heraus, die ins KI-Matching gehen.
@@ -434,20 +463,39 @@ function persistCandidate(profile, req, cvText) {
         original_text = EXCLUDED.original_text, profile_json = EXCLUDED.profile_json,
         updated_at = CURRENT_TIMESTAMP
       RETURNING candidate_id
-    `).run(candidateId, row.name, 'CV-Import', String(cvText).trim(), JSON.stringify(matchingProfile));
+    `).run(candidateId, name, source, String(cvText).trim(), JSON.stringify(matchingProfile));
   }
-  syncGraphCandidatesInBackground([candidateId], req);
+}
 
-  const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
-  const candidateWorkHistory = db.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(candidateId);
-  const candidateEducationHistory = db.prepare('SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY from_date DESC').all(candidateId);
-  logAudit(req, 'erstellt', 'Candidate', candidate.id, candidate.name);
-
-  return {
-    ...candidate,
-    work_history: candidateWorkHistory,
-    education_history: candidateEducationHistory,
-  };
+// CV-Text von GraphRAG auslesen lassen (ohne Speichern) und das Profil
+// ergaenzen: Name notfalls aus dem Dateinamen, Werdegang notfalls aus dem Text.
+async function parseCvProfile(text, filename, req) {
+  const graphRag = await ingestIntoGraphRag(String(text).trim(), false, req);
+  const profile = graphRag.profile || {};
+  const candidateName = resolveCandidateName(profile, filename);
+  if (candidateName) profile.name = candidateName;
+  if (!Array.isArray(profile.work_history) || profile.work_history.length === 0) {
+    const recoveredWorkHistory = extractWorkHistoryFromText(text);
+    if (recoveredWorkHistory.length > 0) {
+      profile.work_history = recoveredWorkHistory;
+      if (!profile.current_employer && recoveredWorkHistory[0]?.employer) {
+        profile.current_employer = recoveredWorkHistory[0].employer;
+      }
+      if (!profile.current_position && recoveredWorkHistory[0]?.position) {
+        profile.current_position = recoveredWorkHistory[0].position;
+      }
+      if (!profile.experience) {
+        profile.experience = recoveredWorkHistory
+          .slice(0, 3)
+          .map((entry) => [entry.position, entry.employer].filter(Boolean).join(', '))
+          .filter(Boolean)
+          .join('\n');
+      }
+    } else {
+      console.warn('CV-Parser: kein Beruflicher Werdegang beim Parsen gefunden');
+    }
+  }
+  return { graphRag, profile, candidateName };
 }
 
 async function ingestIntoGraphRag(rawText, persist, req) {
@@ -697,34 +745,9 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
     sendProgress('graphrag_connect', 'CV wird an GraphRAG übergeben...', 40);
     // GraphRAG liest nur aus; gespeichert wird hier (mit Geburtsdatum inkl.
     // Pruefung auf Name + Geburtsdatum), danach folgt die Uebertragung nach Neo4j.
-    const graphRag = await ingestIntoGraphRag(combinedText.trim(), false, req);
+    const { graphRag, profile, candidateName } = await parseCvProfile(combinedText, filenames[0], req);
 
     sendProgress('graphrag_done', 'GraphRAG-Analyse abgeschlossen', 75);
-
-    const profile = graphRag.profile || {};
-    const candidateName = resolveCandidateName(profile, filenames[0]);
-    if (candidateName) profile.name = candidateName;
-    if (!Array.isArray(profile.work_history) || profile.work_history.length === 0) {
-      const recoveredWorkHistory = extractWorkHistoryFromText(combinedText);
-      if (recoveredWorkHistory.length > 0) {
-        profile.work_history = recoveredWorkHistory;
-        if (!profile.current_employer && recoveredWorkHistory[0]?.employer) {
-          profile.current_employer = recoveredWorkHistory[0].employer;
-        }
-        if (!profile.current_position && recoveredWorkHistory[0]?.position) {
-          profile.current_position = recoveredWorkHistory[0].position;
-        }
-        if (!profile.experience) {
-          profile.experience = recoveredWorkHistory
-            .slice(0, 3)
-            .map((entry) => [entry.position, entry.employer].filter(Boolean).join(', '))
-            .filter(Boolean)
-            .join('\n');
-        }
-      } else {
-        console.warn('CV-Parser: kein Beruflicher Werdegang beim Parsen gefunden');
-      }
-    }
     let localCandidate = null;
     let storedInPostgres = false;
     let neo4jSyncQueued = false;
@@ -802,3 +825,9 @@ router.use((err, req, res, next) => {
 });
 
 module.exports = router;
+// Fuer den CRM-Import (src/crm): dieselbe Auswertung und Speicherung wie hier.
+module.exports.parseCvProfile = parseCvProfile;
+module.exports.persistCandidate = persistCandidate;
+module.exports.buildCandidateRow = buildCandidateRow;
+module.exports.writeCandidateHistory = writeCandidateHistory;
+module.exports.writeCandidateText = writeCandidateText;

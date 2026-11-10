@@ -615,6 +615,52 @@ export const exportsApi = {
   runProfile: (id, filters = {}) => downloadExport(`/exports/profiles/${id}/run`, { filters }),
 };
 
+// Administration -> CRM-Austausch (README, Abschnitt "CRM-Schnittstelle")
+async function downloadFile(url, fallbackName) {
+  const response = await fetch(`${API_BASE}${url}`, { headers: authHeaders() });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw apiErrorFromPayload(error, `Download fehlgeschlagen (HTTP ${response.status})`);
+  }
+  const blob = await response.blob();
+  const filename = parseFilenameFromDisposition(response.headers.get('Content-Disposition')) || fallbackName;
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+  return { filename };
+}
+
+const returnQuery = (method, scoreAbove, extra = {}) => {
+  const query = new URLSearchParams({ method, ...extra });
+  if (scoreAbove !== undefined && scoreAbove !== null && String(scoreAbove).trim() !== '') query.set('score_above', String(scoreAbove).trim());
+  return query.toString();
+};
+
+export const crmApi = {
+  // ZIP hochladen und pruefen; noch wird nichts angelegt.
+  inspectArchive: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/crm/import`, { method: 'POST', headers: authHeaders(), body: formData });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw apiErrorFromPayload(payload, `Prüfung fehlgeschlagen (HTTP ${response.status})`);
+    return payload;
+  },
+  importCandidate: async (token, uuid) => {
+    const result = await request(`/crm/import/${encodeURIComponent(token)}/candidates/${encodeURIComponent(uuid)}`, { method: 'POST', body: '{}', timeout: 300000 });
+    notifyCreditRefresh({ source: 'crmApi.importCandidate' });
+    return result;
+  },
+  discardImport: (token) => request(`/crm/import/${encodeURIComponent(token)}`, { method: 'DELETE' }),
+  previewReturn: (method, scoreAbove) => request(`/crm/return/preview?${returnQuery(method, scoreAbove)}`),
+  downloadReturn: (method, scoreAbove, part = 1) => downloadFile(`/crm/return/download?${returnQuery(method, scoreAbove, { part: String(part) })}`, 'hr-matching-rueckgabe.csv'),
+};
+
 // Administration -> Dubletten
 export const duplicatesApi = {
   getOverview: () => request('/duplicates'),

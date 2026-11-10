@@ -39,6 +39,7 @@ import Prompts from './pages/Prompts'
 import AdminCreditsPage from './pages/AdminCreditsPage'
 import DataExport from './pages/DataExport'
 import Duplicates from './pages/Duplicates'
+import CrmExchange from './pages/CrmExchange'
 import { PluginProvider, usePlugins } from './plugins/PluginContext'
 import { getPluginDefinition } from './plugins/registry'
 
@@ -138,6 +139,7 @@ function AppRouter() {
               <Route path="admin/reports" element={<RevisorRoute><Reports /></RevisorRoute>} />
               <Route path="admin/export" element={<AdminRoute><DataExport /></AdminRoute>} />
               <Route path="admin/duplicates" element={<AdminRoute><Duplicates /></AdminRoute>} />
+              <Route path="admin/crm" element={<AdminRoute><CrmExchange /></AdminRoute>} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

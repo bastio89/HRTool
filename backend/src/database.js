@@ -236,6 +236,14 @@ const migrations = [
   // Spalte ebenfalls an; das Backend muss sie aber selbst mitbringen, damit
   // das Anlegen einer Stelle nicht davon abhängt, ob GraphRAG schon lief.
   `ALTER TABLE jobs ADD COLUMN company TEXT`,
+  // CRM-Schnittstelle (src/crm): Lohn laut Stellenbeschreibung und die
+  // Namensteile, wie das CRM sie fuehrt (nur fuer die Rueckgabe-CSV).
+  `ALTER TABLE jobs ADD COLUMN salary TEXT`,
+  // Rohtext der Stellenausschreibung (legt sonst GraphRAG an); Quelle fuer den Lohn.
+  `ALTER TABLE jobs ADD COLUMN raw_text TEXT`,
+  `ALTER TABLE candidates ADD COLUMN crm_first_name TEXT`,
+  `ALTER TABLE candidates ADD COLUMN crm_last_name TEXT`,
+  `ALTER TABLE candidates ADD COLUMN crm_imported_at TIMESTAMP`,
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch (_) { /* column already exists */ }

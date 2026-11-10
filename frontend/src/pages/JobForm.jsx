@@ -15,7 +15,7 @@ const JOB_STATUSES = ['Offen', 'Besetzt', 'Pausiert', 'Archiviert']
 
 const emptyJob = {
   title: '', about_us: '', description: '', requirements: '', skills: '', benefits: '',
-  company: '', location: '', type: 'Vollzeit', status: 'Offen', url: ''
+  company: '', location: '', type: 'Vollzeit', status: 'Offen', url: '', salary: ''
 }
 
 function filenameToJobTitle(filename) {
@@ -67,6 +67,7 @@ export default function JobForm() {
             type: data.type || 'Vollzeit',
             status: data.status || 'Offen',
             url: data.url || '',
+            salary: data.salary || '',
           }
           setForm(loaded)
           setPristine(loaded)
@@ -150,6 +151,7 @@ export default function JobForm() {
         type: importedJob?.type || 'Vollzeit',
         status: importedJob?.status || 'Offen',
         url: importedJob?.url || '',
+        salary: importedJob?.salary || '',
       }
       setForm(importedForm)
       setPristine(importedForm)
@@ -253,6 +255,12 @@ export default function JobForm() {
               value={form.url}
               onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
               type="url"
+            />
+            <Input
+              label={t('job.salary_label')}
+              placeholder={t('job.salary_placeholder')}
+              value={form.salary}
+              onChange={e => setForm(f => ({ ...f, salary: e.target.value }))}
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="flex flex-col gap-3">

@@ -31,6 +31,7 @@ const linkedinRouter = require('./src/routes/linkedin');
 const serverLogsRouter = require('./src/routes/server-logs');
 const exportsRouter = require('./src/routes/exports');
 const duplicatesRouter = require('./src/routes/duplicates');
+const crmRouter = require('./src/routes/crm');
 const authMiddleware = require('./src/middleware/auth');
 const { installServerFileLogger } = require('./src/serverLogger');
 const db = require('./src/database');
@@ -98,6 +99,7 @@ app.use('/api/linkedin', linkedinRouter);
 app.use('/api/server-logs', serverLogsRouter);
 app.use('/api/exports', exportsRouter);
 app.use('/api/duplicates', duplicatesRouter);
+app.use('/api/crm', crmRouter);
 
 /**
  * @swagger

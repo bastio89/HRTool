@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Avatar from './Avatar'
 import SystemStatusChip from './SystemStatus'
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Wrench, Code2, Wallet, Loader2, FileOutput, CopyCheck } from 'lucide-react'
+import { LayoutDashboard, Users, GitCompare, History, Plus, Command, Briefcase, LogOut, Shield, Menu, X, Moon, Sun, ClipboardList, ShieldAlert, Bot, ChevronDown, Settings, Globe, Mail, BarChart3, Cpu, Wrench, Code2, Wallet, Loader2, FileOutput, CopyCheck, ArrowLeftRight } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import { useTheme } from '../ThemeContext'
 import { useI18n } from '../I18nContext'
@@ -31,6 +31,7 @@ const adminItems = [
   { to: '/admin/prompts', icon: Code2, labelKey: 'nav.prompts' },
   { to: '/admin/export', icon: FileOutput, labelKey: 'nav.data_export' },
   { to: '/admin/duplicates', icon: CopyCheck, labelKey: 'nav.duplicates' },
+  { to: '/admin/crm', icon: ArrowLeftRight, labelKey: 'nav.crm' },
   { to: '/admin/reports', icon: BarChart3, labelKey: 'nav.reports' },
   { to: '/admin/audit', icon: ClipboardList, labelKey: 'nav.audit' },
   { to: '/admin/dsgvo', icon: ShieldAlert, labelKey: 'nav.dsgvo' },

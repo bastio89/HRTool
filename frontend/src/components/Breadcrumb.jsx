@@ -27,6 +27,7 @@ export default function Breadcrumb() {
     'credits': t('breadcrumb.credits'),
     'ki-transparenz': t('breadcrumb.ki_transparency'),
     'duplicates': t('nav.duplicates'),
+    'crm': t('nav.crm'),
   }
 
   if (segments.length === 0) return null

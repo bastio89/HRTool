@@ -302,6 +302,23 @@ async function readCvText(dir, row) {
   }
 }
 
+// GraphRAG wertet das CV aus. Ist es nicht erreichbar, soll genau das in der
+// Pruefliste stehen und nicht nur "konnte nicht importiert werden".
+const UNREACHABLE = ['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'ECONNRESET', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'];
+
+async function parseProfile(text, row, req) {
+  try {
+    return (await cvParser.parseCvProfile(text, row.cvPath, req)).profile;
+  } catch (error) {
+    const code = error.cause?.code || error.code;
+    if (UNREACHABLE.includes(code) || /fetch failed/i.test(error.message)) {
+      throw new CrmImportError(`GraphRAG ist nicht erreichbar (${code || error.message}) – das CV kann nicht ausgewertet werden. Läuft der GraphRAG-Container?`, 503);
+    }
+    if (error.name === 'AbortError') throw new CrmImportError('GraphRAG hat nicht rechtzeitig geantwortet (Zeitüberschreitung)', 504);
+    throw new CrmImportError(`CV-Auswertung fehlgeschlagen: ${error.message}`, 502);
+  }
+}
+
 function crmName(row) {
   return [row.firstName, row.lastName].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
@@ -348,7 +365,7 @@ async function importCandidate(token, uuid, req) {
     const name = crmName(row) || existing.name;
     const cvChanged = !stored || normalizeText(stored.original_text) !== normalizeText(text);
     if (cvChanged) {
-      const { profile } = await cvParser.parseCvProfile(text, row.cvPath, req);
+      const profile = await parseProfile(text, row, req);
       refreshFromProfile(existing.id, profile, text, name);
       storeCvFile(existing.id, row.uuid, name, buffer, ext);
     }
@@ -357,7 +374,7 @@ async function importCandidate(token, uuid, req) {
     candidate = existing;
     logAudit(req, 'aktualisiert', 'Candidate', existing.id, name, `CRM-Import (${status === 'updated' ? 'neues CV' : 'Stammdaten'})`);
   } else {
-    const { profile } = await cvParser.parseCvProfile(text, row.cvPath, req);
+    const profile = await parseProfile(text, row, req);
     if (crmName(row)) profile.name = crmName(row);
     if (!String(profile.name || '').trim()) {
       throw new CrmImportError('Kein Name: weder im CRM noch im CV angegeben', 422);

@@ -237,6 +237,21 @@ describe('CRM import', () => {
     expect(db.prepare('SELECT uuid::text AS uuid, tags, source FROM candidates WHERE id = ?').get(existing)).toEqual({ uuid, tags: 'Bestand, Deutsch', source: 'CRM' });
   });
 
+  test('says clearly when GraphRAG is not reachable', async () => {
+    const uuid = newUuid();
+    const { body } = await upload(makeZip([
+      { name: 'kandidaten.csv', data: candidatesCsv([[uuid, 'Julia', `Offline ${marker}`, '["Klient"]', `cvs/${uuid}.docx`]]) },
+      { name: `cvs/${uuid}.docx`, data: makeDocx(['Julia Offline', 'Projektleiterin mit langer Erfahrung']) },
+    ]));
+    global.fetch = jest.fn(async () => { throw new TypeError('fetch failed', { cause: { code: 'ENOTFOUND' } }); });
+
+    const res = await request(app()).post(`/api/crm/import/${body.token}/candidates/${uuid}`);
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('GraphRAG ist nicht erreichbar (ENOTFOUND) – das CV kann nicht ausgewertet werden. Läuft der GraphRAG-Container?');
+    expect(db.prepare('SELECT 1 FROM candidates WHERE uuid = ?').get(uuid)).toBeUndefined();
+  });
+
   test('reports a CV without readable text and unknown UUIDs, and is admin only', async () => {
     const uuid = newUuid();
     const { body } = await upload(makeZip([

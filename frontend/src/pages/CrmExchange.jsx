@@ -279,7 +279,7 @@ function ReturnSection({ t, toast }) {
             id="crm-return-method"
             value={method}
             onChange={e => { setMethod(e.target.value); setPreview(null) }}
-            className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white cursor-pointer"
+            className="w-full px-5 py-4 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] text-[16px] font-medium text-black dark:text-white appearance-none cursor-pointer focus:outline-none focus:bg-white dark:focus:bg-[#3a3a3c] focus:ring-4 focus:ring-[#0071e3]/10 border border-transparent focus:border-[#0071e3]/30 transition"
           >
             <option value="ai">{t('crm.method_ai')}</option>
             <option value="vector">{t('crm.method_vector')}</option>

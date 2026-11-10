@@ -49,7 +49,8 @@ function sendError(res, error, fallback) {
   }
   if (sendIdentityError(res, error)) return undefined;
   console.error(fallback, error);
-  return res.status(500).json({ error: fallback, details: error.message });
+  // Die Ursache gehoert in die Meldung, die die Oberflaeche anzeigt.
+  return res.status(500).json({ error: `${fallback}: ${error.message}` });
 }
 
 /**

@@ -299,6 +299,7 @@ class JobsChImportService:
                     source=self.SOURCE_LABEL,
                     source_hash=source_hash,
                     profile_hash=profile_hash,
+                    url=job.source_url or link,
                 )
                 job_id = stored_job["uuid"]
                 is_duplicate = bool(stored_job.get("duplicate")) or existing_job is not None

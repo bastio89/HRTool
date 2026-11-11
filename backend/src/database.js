@@ -642,4 +642,11 @@ db.ensureIdentityDefaults();
 // Bewerber und Stellen (siehe src/identity.js).
 require('./identity').ensureIdentitySchema(db);
 
+// Stellen-URLs, die aeltere Importe nur im Text ("Quelle: ...") hatten.
+try {
+  require('./jobSourceUrl').backfillJobUrls(db);
+} catch (error) {
+  console.warn('Stellen-URLs konnten nicht nachgetragen werden:', error.message);
+}
+
 module.exports = db;

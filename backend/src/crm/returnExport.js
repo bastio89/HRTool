@@ -8,6 +8,7 @@ const { toCsv } = require('./csv');
 const { CRM_SOURCE } = require('./candidateImport');
 const { backfillMatchingPairs, ensureMatchingPairSchema } = require('../matchingPairs');
 const { extractJobSalary } = require('./salary');
+const { backfillJobUrls } = require('../jobSourceUrl');
 
 const METHODS = { ai: 'KI-Matching', vector: '3D-Matching' };
 const HEADER = ['UUID', 'Vorname', 'Nachname', 'Firma', 'Stelle', 'URL', 'Matching', 'Bewerbungsdatum', 'Startdatum', 'Ort', 'Lohnvorstellung', 'Anforderungen', 'Status'];
@@ -94,6 +95,7 @@ function parseThreshold(value) {
 function loadPairs(db, method, threshold) {
   ensureMatchingPairSchema(db);
   backfillMatchingPairs(db);
+  backfillJobUrls(db);
   const params = [method, CRM_SOURCE];
   let where = 'mp.method = ? AND c.source = ?';
   if (threshold !== null) {

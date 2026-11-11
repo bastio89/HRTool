@@ -1,3 +1,4 @@
+const { sourceUrlFromText } = require('../jobSourceUrl');
 const express = require('express');
 const fs = require('fs');
 const os = require('os');
@@ -375,8 +376,11 @@ router.get('/:id', (req, res) => {
  */
 router.post('/', (req, res) => {
   try {
-    const { title, company, description, requirements, skills, location, type, status, url, about_us, benefits, source, graphRagProfile } = req.body;
+    const { title, company, description, requirements, skills, location, type, status, about_us, benefits, source, graphRagProfile } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
+    // Ohne URL: Link aus "Quelle: ..." im Text (z. B. jobs.ch-PDF), damit die
+    // Stelle eindeutig ist und in die CRM-Rueckgabe kann.
+    const url = String(req.body.url || '').trim() || sourceUrlFromText(description, requirements, about_us, benefits);
 
     const job = persistLocalJob({ title, company, about_us, description, requirements, skills, benefits, location, type, status, url, source });
     // Lohn laut Stellenbeschreibung (optional, z. B. fuer die CRM-Rueckgabe).

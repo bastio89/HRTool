@@ -248,6 +248,7 @@ function ReturnDiagnostics({ preview, t }) {
   if (d.notCrmPairs > 0) notes.push(fill('crm.diag_not_crm', { pairs: d.notCrmPairs, candidates: d.notCrmCandidates }))
   if (d.crmCandidates > 0 && d.crmCandidatesUnmatched > 0) notes.push(fill('crm.diag_unmatched', { count: d.crmCandidatesUnmatched, total: d.crmCandidates, method: preview.methodLabel }))
   if (d.belowThreshold > 0) notes.push(fill('crm.diag_below_threshold', { count: d.belowThreshold, threshold: preview.threshold }))
+  if (preview.excludedCount > 0) notes.push(fill('crm.diag_job_problems', { count: preview.excludedCount }))
   if (!notes.length) return null
   return (
     <div className="rounded-2xl bg-[#ff9500]/10 p-4 space-y-2" role="status">
@@ -292,9 +293,29 @@ function ReturnSection({ t, toast }) {
     }
   }
 
+  // Direkt exportieren: eine Datei wird sofort heruntergeladen; bei mehreren
+  // Teilen oder ohne gueltige Zeile bleibt die Vorschau mit den Gruenden stehen.
+  const exportCsv = async () => {
+    setLoading(true)
+    setError('')
+    let result = null
+    try {
+      result = await crmApi.previewReturn(method, scoreAbove)
+      setPreview(result)
+    } catch (err) {
+      setPreview(null)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+    if (!result) return
+    if (result.parts.length === 1) await download(1)
+    else if (result.parts.length === 0) setError(t('crm.export_impossible'))
+  }
+
   return (
     <Section icon={Download} title={t('crm.return_title')} description={t('crm.return_description')}>
-      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
         <div className="flex flex-col gap-3">
           <label htmlFor="crm-return-method" className="text-[15px] font-semibold text-gray-500 dark:text-gray-400 ml-1">{t('crm.method')}</label>
           <select
@@ -318,7 +339,10 @@ function ReturnSection({ t, toast }) {
           value={scoreAbove}
           onChange={e => { setScoreAbove(e.target.value); setPreview(null) }}
         />
-        <Button onClick={load} disabled={loading}>{loading ? t('crm.loading_preview') : t('crm.preview')}</Button>
+        <Button variant="secondary" onClick={load} disabled={loading || downloading !== null}>{loading ? t('crm.loading_preview') : t('crm.preview')}</Button>
+        <Button onClick={exportCsv} disabled={loading || downloading !== null}>
+          <Download className="w-4 h-4" aria-hidden="true" />{t('crm.export')}
+        </Button>
       </div>
 
       {error && <p className="text-[14px] text-[#ff3b30]" role="alert">{error}</p>}
@@ -330,6 +354,13 @@ function ReturnSection({ t, toast }) {
           </p>
 
           <ReturnDiagnostics preview={preview} t={t} />
+
+          {preview.parts.length === 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button disabled><Download className="w-4 h-4" aria-hidden="true" />{t('crm.download')}</Button>
+              <span className="text-[13px] text-gray-500 dark:text-gray-400">{t('crm.no_rows_hint')}</span>
+            </div>
+          )}
 
           {preview.parts.length > 0 && (
             <div className="space-y-2">

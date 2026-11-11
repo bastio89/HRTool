@@ -1501,10 +1501,13 @@ class PostgresStore:
         source: str | None = None,
         source_hash: str | None = None,
         profile_hash: str | None = None,
+        url: str | None = None,
     ) -> dict[str, Any]:
         """Liefert {"id", "uuid", "duplicate"}. Eine vorhandene Stelle wird
-        nicht ein zweites Mal angelegt (leere Skills werden ergaenzt)."""
-        existing = await self._find_existing_job(job_id, profile, source=source)
+        nicht ein zweites Mal angelegt (leere Skills und eine fehlende URL
+        werden ergaenzt)."""
+        url_value = str(url or "").strip() or None
+        existing = await self._find_existing_job(job_id, profile, source=source, url=url_value)
         skills = self._job_skills_text(profile)
         if existing is not None:
             if skills:
@@ -1517,6 +1520,15 @@ class PostgresStore:
                         """,
                         (skills, int(existing["id"])),
                     )
+            if url_value:
+                try:
+                    async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+                        await connection.execute(
+                            "UPDATE jobs SET url = %s WHERE id = %s AND COALESCE(BTRIM(url), '') = ''",
+                            (url_value, int(existing["id"])),
+                        )
+                except pg_errors.UniqueViolation:
+                    logger.warning("URL %s gehoert bereits zu einer anderen Stelle", url_value)
             return {"id": int(existing["id"]), "uuid": existing.get("uuid"), "duplicate": True}
 
         description = raw_text.strip() if raw_text and raw_text.strip() else self._render_plain_text(profile)
@@ -1532,7 +1544,7 @@ class PostgresStore:
                             uuid, graph_job_id, title, company, recruiter_company, employer_company, description,
                             requirements, skills, about_us, benefits, location, type, status, url, raw_text, source,
                             parsed_profile_json
-                        ) VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', NULL, %s, %s, %s)
+                        ) VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, %s, %s, 'Offen', %s, %s, %s, %s)
                         RETURNING id, uuid::text AS uuid
                         """,
                         (
@@ -1547,6 +1559,7 @@ class PostgresStore:
                             skills or None,
                             profile.location,
                             profile.employment_type or "Vollzeit",
+                            url_value,
                             raw_text,
                             source,
                             json.dumps(profile.model_dump(), ensure_ascii=False),
@@ -1555,7 +1568,7 @@ class PostgresStore:
                     row = await cursor.fetchone()
         except pg_errors.UniqueViolation:
             # Gleichzeitig angelegte Stelle: die Eindeutigkeitsindizes greifen.
-            existing = await self._find_existing_job(None, profile, source=source)
+            existing = await self._find_existing_job(None, profile, source=source, url=url_value)
             if existing is None:
                 raise
             return {"id": int(existing["id"]), "uuid": existing.get("uuid"), "duplicate": True}
@@ -1648,6 +1661,7 @@ class PostgresStore:
         source: str | None = None,
         source_hash: str | None = None,
         profile_hash: str | None = None,
+        url: str | None = None,
     ) -> dict[str, Any]:
         try:
             return await self._upsert_job_once(
@@ -1657,6 +1671,7 @@ class PostgresStore:
                 source=source,
                 source_hash=source_hash,
                 profile_hash=profile_hash,
+                url=url,
             )
         except pg_errors.UndefinedColumn as exc:
             if "graph_job_id" not in str(exc) and "source" not in str(exc):
@@ -1669,6 +1684,7 @@ class PostgresStore:
                 source=source,
                 source_hash=source_hash,
                 profile_hash=profile_hash,
+                url=url,
             )
 
     @staticmethod

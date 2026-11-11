@@ -14,6 +14,7 @@ const crmRouter = require('../routes/crm');
 const { parseCsv, toCsv, unprotectCell } = require('../crm/csv');
 const { splitIntoParts, plainText, LIMITS } = require('../crm/returnExport');
 const { extractJobSalary } = require('../crm/salary');
+const { sourceUrlFromText } = require('../jobSourceUrl');
 const { ensureMatchingPairSchema } = require('../matchingPairs');
 const { cleanupCandidateFiles } = require('../utils/candidateFiles');
 
@@ -344,6 +345,23 @@ describe('CRM return CSV', () => {
     expect(analyst[10]).toBe('CHF 95000');
     expect((await request(app()).get('/api/crm/return/preview').query({ method: 'x' })).status).toBe(400);
     expect((await request(app()).get('/api/crm/return/preview').query({ method: 'ai', score_above: 120 })).status).toBe(400);
+  });
+
+  test('jobs imported without URL get the link from "Quelle:" in the job text', async () => {
+    const uuid = newUuid();
+    const candidate = db.prepare("INSERT INTO candidates (name, source, crm_first_name, crm_last_name, uuid) VALUES (?, 'CRM', 'Quentin', ?, CAST(? AS UUID))").run(`Quentin Quelle ${marker}`, `Quelle ${marker}`, uuid).lastInsertRowid;
+    const link = `https://www.jobs.ch/de/stellenangebote/detail/${marker}/`;
+    const job = db.prepare('INSERT INTO jobs (title, company, location, raw_text) VALUES (?, ?, ?, ?)')
+      .run(`Data Engineer ${marker}`, 'Quelle AG', 'Basel', `Data Engineer\nQuelle AG\n\nAufgaben ...\n\nQuelle: ${link}`).lastInsertRowid;
+    db.prepare("INSERT INTO matching_pair_results (method, candidate_id, job_id, score) VALUES ('ai', ?, ?, 77) RETURNING id").run(candidate, job);
+
+    const res = await request(app()).get('/api/crm/return/download').query({ method: 'ai', score_above: 76 });
+
+    const row = parseCsv(res.text).find(cells => cells[0] === uuid);
+    expect(row[5]).toBe(link);
+    expect(db.prepare('SELECT url FROM jobs WHERE id = ?').get(job).url).toBe(link);
+    expect(sourceUrlFromText('Text', 'Titel\n  Quelle: https://example.org/job/1).\n')).toBe('https://example.org/job/1');
+    expect(sourceUrlFromText('Die Quelle: unbekannt')).toBeNull();
   });
 
   test('splits into files of at most 5000 rows and below 5 MiB', () => {

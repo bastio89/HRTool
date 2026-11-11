@@ -89,7 +89,39 @@ describe('CrmExchange', () => {
     const box = await screen.findByRole('status')
     expect(within(box).getByText(/^42 Paarungen von 7 Kandidaten, die nicht über das CRM-ZIP importiert wurden/)).toBeTruthy()
     expect(within(box).getByText('1 von 1 CRM-Kandidaten wurden mit KI-Matching noch nicht gematcht.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Rückgabe-CSV herunterladen' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Rückgabe-CSV herunterladen' }).disabled).toBe(true)
+  })
+
+  test('the export button downloads a single file right away', async () => {
+    crmApi.previewReturn.mockResolvedValue({
+      method: 'ai', methodLabel: 'KI-Matching', threshold: null, rowCount: 2, candidateCount: 1,
+      parts: [{ part: 1, rows: 2 }], excludedCount: 0, excludedReasons: {}, excluded: [], sample: [],
+      diagnostics: { totalPairs: 2, notCrmPairs: 0, notCrmCandidates: 0, belowThreshold: 0, crmCandidates: 1, crmCandidatesUnmatched: 0 },
+    })
+    crmApi.downloadReturn.mockResolvedValue({ filename: 'hr-matching-rueckgabe-ki.csv' })
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'CSV exportieren' }))
+
+    await waitFor(() => expect(crmApi.downloadReturn).toHaveBeenCalledWith('ai', '', 1))
+    expect(toast.success).toHaveBeenCalledWith('hr-matching-rueckgabe-ki.csv heruntergeladen')
+  })
+
+  test('the export button explains why nothing can be exported', async () => {
+    crmApi.previewReturn.mockResolvedValue({
+      method: 'ai', methodLabel: 'KI-Matching', threshold: null, rowCount: 0, candidateCount: 0, parts: [],
+      excludedCount: 1, excludedReasons: { 'Stelle ohne URL': 1 },
+      excluded: [{ candidateId: 5, candidateName: 'Julia Schramm', jobId: 7, jobTitle: 'Projektleitung', score: 81, reasons: ['Stelle ohne URL'] }],
+      sample: [], diagnostics: { totalPairs: 1, notCrmPairs: 0, notCrmCandidates: 0, belowThreshold: 0, crmCandidates: 1, crmCandidatesUnmatched: 0 },
+    })
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'CSV exportieren' }))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/^Kein Export möglich/)
+    expect(crmApi.downloadReturn).not.toHaveBeenCalled()
+    expect(within(screen.getByRole('status')).getByText(/^1 Paarungen von CRM-Kandidaten scheitern an Angaben der Stelle/)).toBeTruthy()
+    expect(within(screen.getByRole('link', { name: 'Projektleitung' }).closest('tr')).getByText('Stelle ohne URL')).toBeTruthy()
   })
 
   test('previews the return, lists excluded pairs and downloads each part', async () => {

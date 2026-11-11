@@ -77,6 +77,21 @@ describe('CrmExchange', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('kandidaten.csv fehlt im Archiv')
   })
 
+  test('explains an empty return instead of showing nothing', async () => {
+    crmApi.previewReturn.mockResolvedValue({
+      method: 'ai', methodLabel: 'KI-Matching', threshold: null, rowCount: 0, candidateCount: 0, parts: [],
+      excludedCount: 0, excludedReasons: {}, excluded: [], sample: [],
+      diagnostics: { totalPairs: 42, notCrmPairs: 42, notCrmCandidates: 7, belowThreshold: 0, crmCandidates: 1, crmCandidatesUnmatched: 1 },
+    })
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Vorschau' }))
+
+    const box = await screen.findByRole('status')
+    expect(within(box).getByText(/^42 Paarungen von 7 Kandidaten, die nicht über das CRM-ZIP importiert wurden/)).toBeTruthy()
+    expect(within(box).getByText('1 von 1 CRM-Kandidaten wurden mit KI-Matching noch nicht gematcht.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Rückgabe-CSV herunterladen' })).toBeNull()
+  })
+
   test('previews the return, lists excluded pairs and downloads each part', async () => {
     crmApi.previewReturn.mockResolvedValue({
       method: 'vector', methodLabel: '3D-Matching', threshold: 70, rowCount: 6200, candidateCount: 40,

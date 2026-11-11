@@ -237,6 +237,28 @@ function ImportSection({ t, toast }) {
   )
 }
 
+// Erklaert, warum Paarungen aus dem Verlauf nicht in der Rueckgabe stehen.
+function ReturnDiagnostics({ preview, t }) {
+  const d = preview.diagnostics
+  if (!d) return null
+  const fill = (key, values) => Object.entries(values).reduce((text, [name, value]) => text.replace(`{${name}}`, value), t(key))
+  const notes = []
+  if (d.totalPairs === 0) notes.push(fill('crm.diag_no_pairs', { method: preview.methodLabel }))
+  if (d.crmCandidates === 0) notes.push(t('crm.diag_no_crm_candidates'))
+  if (d.notCrmPairs > 0) notes.push(fill('crm.diag_not_crm', { pairs: d.notCrmPairs, candidates: d.notCrmCandidates }))
+  if (d.crmCandidates > 0 && d.crmCandidatesUnmatched > 0) notes.push(fill('crm.diag_unmatched', { count: d.crmCandidatesUnmatched, total: d.crmCandidates, method: preview.methodLabel }))
+  if (d.belowThreshold > 0) notes.push(fill('crm.diag_below_threshold', { count: d.belowThreshold, threshold: preview.threshold }))
+  if (!notes.length) return null
+  return (
+    <div className="rounded-2xl bg-[#ff9500]/10 p-4 space-y-2" role="status">
+      <p className="text-[14px] font-semibold text-[#a35b00] dark:text-[#ffb340]">{t('crm.diag_title')}</p>
+      <ul className="text-[14px] text-gray-700 dark:text-gray-300 list-disc ml-5 space-y-1">
+        {notes.map(note => <li key={note}>{note}</li>)}
+      </ul>
+    </div>
+  )
+}
+
 function ReturnSection({ t, toast }) {
   const [method, setMethod] = useState('ai')
   const [scoreAbove, setScoreAbove] = useState('')
@@ -306,6 +328,8 @@ function ReturnSection({ t, toast }) {
           <p className="text-[15px] text-black dark:text-white">
             {t('crm.preview_summary').replace('{rows}', preview.rowCount).replace('{candidates}', preview.candidateCount).replace('{method}', preview.methodLabel)}
           </p>
+
+          <ReturnDiagnostics preview={preview} t={t} />
 
           {preview.parts.length > 0 && (
             <div className="space-y-2">

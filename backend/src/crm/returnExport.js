@@ -112,6 +112,36 @@ function loadPairs(db, method, threshold) {
   `).all(...params);
 }
 
+// Wo sind die uebrigen Paarungen geblieben? Fuer die Vorschau: Paarungen
+// von Bewerbern ohne CRM-Bezug (UUID dem CRM unbekannt), Paarungen unter der
+// Schwelle und CRM-Kandidaten, die mit der Methode noch nicht gematcht sind.
+function diagnose(db, method, threshold) {
+  const count = value => Number(value) || 0;
+  const pairs = db.prepare(`
+    SELECT COUNT(*) AS total,
+      SUM(CASE WHEN COALESCE(c.source, '') <> ? THEN 1 ELSE 0 END) AS not_crm,
+      COUNT(DISTINCT CASE WHEN COALESCE(c.source, '') <> ? THEN c.id END) AS not_crm_candidates
+      ${threshold !== null ? ', SUM(CASE WHEN c.source = ? AND mp.score <= ? THEN 1 ELSE 0 END) AS below_threshold' : ''}
+    FROM matching_pair_results mp
+    JOIN candidates c ON c.id = mp.candidate_id
+    JOIN jobs j ON j.id = mp.job_id
+    WHERE mp.method = ?
+  `).get(CRM_SOURCE, CRM_SOURCE, ...(threshold !== null ? [CRM_SOURCE, threshold] : []), method) || {};
+  const crm = db.prepare(`
+    SELECT COUNT(*) AS total,
+      SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM matching_pair_results mp WHERE mp.candidate_id = c.id AND mp.method = ?) THEN 1 ELSE 0 END) AS unmatched
+    FROM candidates c WHERE c.source = ?
+  `).get(method, CRM_SOURCE) || {};
+  return {
+    totalPairs: count(pairs.total),
+    notCrmPairs: count(pairs.not_crm),
+    notCrmCandidates: count(pairs.not_crm_candidates),
+    belowThreshold: count(pairs.below_threshold),
+    crmCandidates: count(crm.total),
+    crmCandidatesUnmatched: count(crm.unmatched),
+  };
+}
+
 // Zeilen der Rueckgabe und ausgeschlossene Paarungen mit Grund.
 function buildReturnRows(db, { method, scoreAbove } = {}) {
   if (!METHODS[method]) throw new CrmExportError('Methode muss "ai" (KI-Matching) oder "vector" (3D-Matching) sein');
@@ -193,6 +223,7 @@ function previewReturn(db, options) {
     excludedCount: excluded.length,
     excludedReasons: reasonCounts,
     excluded: excluded.slice(0, 200),
+    diagnostics: diagnose(db, method, threshold),
     sample: rows.slice(0, 5).map(row => Object.fromEntries(HEADER.map((column, index) => [column, row[index]]))),
   };
 }

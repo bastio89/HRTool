@@ -304,6 +304,22 @@ describe('CRM return CSV', () => {
     const excluded = res.body.excluded.filter(entry => entry.candidateId === crmCandidate);
     expect(excluded.map(entry => entry.reasons)).toEqual([['Stelle ohne Firma'], ['Stelle ohne URL']]);
     expect(res.body.excluded.some(entry => entry.candidateId === otherCandidate)).toBe(false);
+    // Die Vorschau sagt, wo die uebrigen Paarungen geblieben sind.
+    expect(res.body.diagnostics.notCrmPairs).toBeGreaterThanOrEqual(1);
+    expect(res.body.diagnostics.notCrmCandidates).toBeGreaterThanOrEqual(1);
+    expect(res.body.diagnostics.crmCandidates).toBeGreaterThanOrEqual(1);
+    expect(res.body.diagnostics.totalPairs).toBeGreaterThanOrEqual(res.body.rowCount + res.body.excludedCount + res.body.diagnostics.notCrmPairs);
+  });
+
+  test('explains an empty return: matchings only of candidates not from the CRM, or below the threshold', async () => {
+    const before = (await request(app()).get('/api/crm/return/preview').query({ method: 'vector', score_above: 50 })).body;
+    expect(before.rowCount).toBe(0);
+    expect(before.diagnostics.belowThreshold).toBeGreaterThanOrEqual(1);
+    const pair = db.prepare("INSERT INTO matching_pair_results (method, candidate_id, job_id, score) VALUES ('vector', ?, (SELECT job_id FROM matching_pair_results WHERE candidate_id = ? AND method = 'ai' LIMIT 1), 95) RETURNING id");
+    pair.run(otherCandidate, crmCandidate);
+    const after = (await request(app()).get('/api/crm/return/preview').query({ method: 'vector', score_above: 50 })).body;
+    expect(after.rowCount).toBe(0);
+    expect(after.diagnostics.notCrmPairs - before.diagnostics.notCrmPairs).toBe(1);
   });
 
   test('writes exactly the CRM format: semicolon, BOM, header, salary of the job, plain text', async () => {

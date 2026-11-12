@@ -355,29 +355,23 @@ function ReturnSection({ t, toast }) {
 
           <ReturnDiagnostics preview={preview} t={t} />
 
-          {preview.parts.length === 0 && (
-            <div className="flex flex-wrap items-center gap-3">
-              <Button disabled><Download className="w-4 h-4" aria-hidden="true" />{t('crm.download')}</Button>
-              <span className="text-[13px] text-gray-500 dark:text-gray-400">{t('crm.no_rows_hint')}</span>
-            </div>
-          )}
-
-          {preview.parts.length > 0 && (
+          {/* Eine Datei laedt "CSV exportieren" direkt. Nur wenn die Rueckgabe
+              auf mehrere Dateien verteilt ist, braucht es je Teil einen Knopf. */}
+          {preview.parts.length > 1 && (
             <div className="space-y-2">
-              {preview.parts.length > 1 && <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('crm.parts_hint').replace('{count}', preview.parts.length)}</p>}
+              <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('crm.parts_hint').replace('{count}', preview.parts.length)}</p>
               <div className="flex flex-wrap gap-3">
                 {preview.parts.map(part => (
-                  <Button key={part.part} onClick={() => download(part.part)} disabled={downloading !== null}>
+                  <Button key={part.part} variant="secondary" onClick={() => download(part.part)} disabled={downloading !== null}>
                     <Download className="w-4 h-4" aria-hidden="true" />
-                    {preview.parts.length > 1
-                      ? t('crm.download_part').replace('{part}', part.part).replace('{count}', preview.parts.length).replace('{rows}', part.rows)
-                      : t('crm.download')}
+                    {t('crm.download_part').replace('{part}', part.part).replace('{count}', preview.parts.length).replace('{rows}', part.rows)}
                   </Button>
                 ))}
               </div>
-              <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('crm.upload_hint')}</p>
             </div>
           )}
+
+          {preview.parts.length > 0 && <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('crm.upload_hint')}</p>}
 
           {preview.excludedCount > 0 && (
             <div className="space-y-3">

@@ -89,7 +89,7 @@ describe('CrmExchange', () => {
     const box = await screen.findByRole('status')
     expect(within(box).getByText(/^42 Paarungen von 7 Kandidaten, die nicht über das CRM-ZIP importiert wurden/)).toBeTruthy()
     expect(within(box).getByText('1 von 1 CRM-Kandidaten wurden mit KI-Matching noch nicht gematcht.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Rückgabe-CSV herunterladen' }).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: /herunterladen|Teil/ })).toBeNull()
   })
 
   test('the export button downloads a single file right away', async () => {
@@ -105,6 +105,8 @@ describe('CrmExchange', () => {
 
     await waitFor(() => expect(crmApi.downloadReturn).toHaveBeenCalledWith('ai', '', 1))
     expect(toast.success).toHaveBeenCalledWith('hr-matching-rueckgabe-ki.csv heruntergeladen')
+    // Nur ein Export-Knopf: kein zweiter Download-Knopf unter der Vorschau.
+    expect(screen.getAllByRole('button', { name: /exportieren|herunterladen|Teil/ }).map(button => button.textContent)).toEqual(['CSV exportieren'])
   })
 
   test('the export button explains why nothing can be exported', async () => {

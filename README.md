@@ -172,6 +172,7 @@
 <p>Drag & Drop Kanban-Board mit 6 Stufen, Notizen, Interviews und Bewertungen auf den Karten.</p>
 </details>
 
+
 <details>
 <summary><strong>KI-Matching</strong></summary>
 <p>Automatische Kandidaten-Bewertung mit Score-Ringen, Stärken/Schwächen und CSV-Export.</p>

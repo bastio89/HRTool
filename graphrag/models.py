@@ -583,6 +583,61 @@ class KiMatchPairsResponse(BaseModel):
     model: str | None = None
 
 
+class SkillRequirementInput(BaseModel):
+    name: str = Field(..., min_length=1)
+    priority: Literal["mandatory", "nice_to_have"] = "mandatory"
+
+    @field_validator("name")
+    @classmethod
+    def strip_skill_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Skill-Name darf nicht leer sein.")
+        return normalized
+
+
+class SkillMatchingRequest(BaseModel):
+    need_skills: list[SkillRequirementInput] = Field(..., min_length=1)
+    has_skills: list[str] = Field(default_factory=list)
+
+    @field_validator("has_skills")
+    @classmethod
+    def strip_candidate_skills(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("Kandidaten-Skill-Namen dürfen nicht leer sein.")
+        return normalized
+
+
+class SkillMatchItem(BaseModel):
+    need_skill: str
+    need_esco_uri: str | None = None
+    need_resolution_status: Literal["resolved", "ambiguous", "unknown"]
+    has_skill: str | None = None
+    has_esco_uri: str | None = None
+    has_resolution_status: Literal["resolved", "ambiguous", "unknown"] | None = None
+    similarity: float = Field(..., ge=0.0, le=1.0)
+    weighted_similarity: float = Field(..., ge=0.0, le=1.0)
+    priority: Literal["mandatory", "nice_to_have"]
+    covered: bool
+    match_type: Literal["canonical", "semantic", "none"]
+    reason: str
+
+
+class SkillMissingItem(BaseModel):
+    name: str
+    priority: Literal["mandatory", "nice_to_have"]
+    reason: str
+
+
+class SkillMatchingResponse(BaseModel):
+    score: int = Field(..., ge=0, le=100)
+    qualified: bool
+    cutoff: float = Field(..., ge=0.0, le=1.0)
+    matches: list[SkillMatchItem] = Field(default_factory=list)
+    missing_skills: list[SkillMissingItem] = Field(default_factory=list)
+
+
 class MatchingMatrixRequest(BaseModel):
     mode: str = "all_jobs_all_candidates"
     jobs: list[MatchingJobInput] = Field(default_factory=list)

@@ -49,6 +49,53 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ## Endpoints
  `POST /cv-parser/parse?persist=false` (multipart field `file`, up to 10 PDF, DOC, DOCX, PNG, JPEG or WebP files; set `persist=true` to store the candidate in Neo4j)
 
+### Skill-Matching
+
+`POST /match/skills` bewertet jede Anforderung gerichtet gegen den besten vorhandenen Kandidaten-Skill. Der Endpunkt nutzt den lokalen ESCO-Katalog und das konfigurierte Embedding-Modell; eine leere `has_skills`-Liste ist zulässig, `need_skills` muss mindestens einen Eintrag enthalten.
+
+```json
+{
+  "need_skills": [
+    {"name": "Python programming", "priority": "mandatory"},
+    {"name": "Cloud deployment", "priority": "nice_to_have"}
+  ],
+  "has_skills": ["Python", "AWS deployment"]
+}
+```
+
+Jeder Treffer enthält den besten Kandidaten-Skill, ESCO-Auflösung, rohe und gewertete Ähnlichkeit, Abdeckungsstatus und Begründung. `qualified` berücksichtigt das Muss-Skill-Gate; `missing_skills` benennt ungedeckte Anforderungen samt Grund.
+
+```json
+{
+  "score": 67,
+  "qualified": true,
+  "cutoff": 0.75,
+  "matches": [
+    {
+      "need_skill": "Python programming",
+      "need_esco_uri": "http://data.europa.eu/esco/skill/...",
+      "need_resolution_status": "resolved",
+      "has_skill": "Python",
+      "has_esco_uri": "http://data.europa.eu/esco/skill/...",
+      "has_resolution_status": "resolved",
+      "similarity": 1.0,
+      "weighted_similarity": 1.0,
+      "priority": "mandatory",
+      "covered": true,
+      "match_type": "canonical",
+      "reason": "Identische kanonische ESCO-URI."
+    }
+  ],
+  "missing_skills": [
+    {
+      "name": "Cloud deployment",
+      "priority": "nice_to_have",
+      "reason": "Semantische Ähnlichkeit 0.0000 liegt unter dem Cutoff 0.75."
+    }
+  ]
+}
+```
+
 ## Graph schema (Neo4j)
 
 ### Core nodes
@@ -175,3 +222,38 @@ export NEO4J_PASSWORD=your_real_password
 ```
 
 Wenn der Graphrag-Server gegen den Neo4j-Container aus dem Hauptprojekt laufen soll, verwenden Sie stattdessen `NEO4J_URI=bolt://neo4j:7687` und denselben `NEO4J_PASSWORD` wie in der Compose-Datei.
+
+## ESCO-Katalog importieren
+Als ausgewählter Stand ist ESCO 1.2.1 vorgesehen (veröffentlicht im Dezember 2025). Der offizielle Download bietet sprachspezifische CSV-Dateien wie `skills_en.csv` und `skills_de.csv` sowie eine `dictionary`-Datei mit nicht bevorzugten Bezeichnungen. Siehe [ESCO v1.2.1](https://esco.ec.europa.eu/en/about-esco/escopedia/escopedia/esco-v121) und [Dateistruktur der Downloads](https://esco.ec.europa.eu/en/structure-esco-downloadable-datasets).
+
+| Voraussetzung | Vorgehen |
+|---|---|
+| Download | CSV-Dateien für die gewünschten Sprachen aus dem offiziellen ESCO-Downloadportal lokal in ein Verzeichnis legen. Erwartet werden `skills_<sprache>.csv` sowie `dictionary_<sprache>.csv` oder `dictionary.csv`. |
+| Lizenzprüfung | Der [ESCO-Datensatz im Datenportal](https://data.europa.eu/88u/dataset/european-skills-competences-qualifications-and-occupations) weist für die Klassifikations-Distribution `COM_REUSE` aus. Der Katalogeintrag bindet diese Angabe nicht ausdrücklich an eine bestimmte Version oder das konkrete Archiv; Nachweis und Einschränkung stehen in [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md). Vor produktiver Nutzung sind individuelle Hinweise und Rechte Dritter zu beachten. ESCO-Daten werden nicht mit dem Repository ausgeliefert. |
+| Testlauf | `python scripts/import_esco.py --input-dir /pfad/zu/esco-csv --release 1.2.1 --languages en,de --dry-run` prüft Dateien und zählt importierbare Skills, ohne Neo4j zu verbinden. |
+| Import/Aktualisierung | Nach erfolgreicher Lizenzprüfung und laufendem Neo4j denselben Befehl ohne `--dry-run` ausführen. `ESCOConcept`-Knoten werden anhand ihrer URI idempotent aktualisiert und mit passenden bestehenden `Skill`-Knoten verknüpft. |
+
+Der Import übernimmt URI, bevorzugte Bezeichnung, Definition, Sprachvarianten und Wörterbuchterme. Mehrdeutige Aliase werden beim Auflösen nicht willkürlich einem Konzept zugeordnet; unbekannte Bezeichnungen bleiben unaufgelöst. Für eine neue ESCO-Veröffentlichung zuerst deren Lizenz und CSV-Struktur prüfen, danach `--release` mit der Versionskennung setzen und den Import erneut ausführen.
+
+Das in [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) dokumentierte JSON-LD-Archiv dient dem Quellen- und Lizenznachweis; der Importer verarbeitet CSV-Exporte und liest dieses ZIP nicht direkt.
+
+## Skill-Matching-Score
+
+| Regel | Verhalten |
+|---|---|
+| Cutoff | `SKILL_MATCHING_CUTOFF`, Standard `0.75`; Werte darunter zählen als `0`. |
+| Volltrefferbereich | Ähnlichkeiten ab `0.90` werden für den Score auf `1.0` begrenzt; dazwischen zählt der Messwert. |
+| Gewichtung | Muss-Skills zählen mit Gewicht `2`, Nice-to-have-Skills mit Gewicht `1`; der Score ist der gewichtete Durchschnitt von `0` bis `100`. |
+| Muss-Skill-Gate | Ein nicht abgedeckter Muss-Skill setzt `qualified` auf `false` und den Gesamtscore auf `0`; Nice-to-have-Lücken lösen kein Gate aus. |
+
+ESCO-URIs liefern kanonische Treffer. Andere Paare werden anhand der bevorzugten ESCO-Bezeichnung und Beschreibung semantisch verglichen; semantische Ähnlichkeit wird nicht als identische kanonische URI ausgegeben.
+
+## CSV-Regressionstest für Skill-Matching
+
+Die Testfälle stehen in `tests/fixtures/skill_matching_cases.csv`; Skill-Listen sind JSON-Arrays innerhalb der CSV-Zellen. Der Test läuft standardmäßig nicht und benötigt einen befüllten Neo4j-ESCO-Katalog sowie die konfigurierte Embedding- und Datenbankverbindung.
+
+```bash
+RUN_SKILL_MATCHING_CSV_TESTS=1 python -m pytest -q tests/test_skill_matching_csv.py
+```
+
+Die Fälle werden zeilenweise ausgeführt. Eine Abweichung von mehr als 5 Punkten schlägt mit Testid, Soll, Ist und Differenz fehl.

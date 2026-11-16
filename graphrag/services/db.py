@@ -13,6 +13,7 @@ from models import (
     Stage1Candidate,
     Stage2Candidate,
 )
+from services.esco_catalog import normalize_alias
 from services.postgres_store import PostgresStore
 
 
@@ -28,6 +29,65 @@ class Neo4jService:
 
     async def close(self) -> None:
         await self.driver.close()
+
+    async def upsert_esco_concepts(self, concepts: list[dict[str, Any]]) -> None:
+        if not concepts:
+            return
+
+        normalized_concepts = [
+            {
+                **concept,
+                "normalized_preferred_label": normalize_alias(str(concept["preferred_label"])),
+                "normalized_aliases": sorted(
+                    {
+                        normalize_alias(alias)
+                        for alias in concept.get("aliases", [])
+                        if isinstance(alias, str) and normalize_alias(alias)
+                    }
+                ),
+            }
+            for concept in concepts
+        ]
+        query = """
+        UNWIND $concepts AS concept
+        MERGE (canonical:ESCOConcept {uri: concept.uri})
+        SET canonical.preferredLabel = concept.preferred_label,
+            canonical.normalizedPreferredLabel = concept.normalized_preferred_label,
+            canonical.normalizedAliases = concept.normalized_aliases,
+            canonical.aliases = coalesce(concept.aliases, []),
+            canonical.description = concept.description,
+            canonical.release = concept.release
+        WITH canonical, concept, [concept.preferred_label] + coalesce(concept.aliases, []) AS labels
+        UNWIND labels AS label
+        WITH canonical, toLower(trim(label)) AS normalized_label
+        WHERE normalized_label <> ''
+        MATCH (skill:Skill {name: normalized_label})
+        MERGE (skill)-[:CANONICALIZES_TO]->(canonical)
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, concepts=normalized_concepts)
+            await result.consume()
+
+    async def get_esco_concepts_for_aliases(self, aliases: list[str]) -> list[dict[str, Any]]:
+        normalized_aliases = sorted({normalize_alias(alias) for alias in aliases if normalize_alias(alias)})
+        if not normalized_aliases:
+            return []
+
+        query = """
+        MATCH (concept:ESCOConcept)
+        WHERE concept.normalizedPreferredLabel IN $aliases
+           OR any(alias IN coalesce(concept.normalizedAliases, []) WHERE alias IN $aliases)
+           OR any(alias IN coalesce(concept.aliases, []) WHERE toLower(trim(alias)) IN $aliases)
+        RETURN DISTINCT concept.uri AS uri,
+                        concept.preferredLabel AS preferred_label,
+                        concept.aliases AS aliases,
+                        concept.description AS description,
+                        concept.release AS release
+        """
+        async with self.driver.session() as session:
+            result = await session.run(query, aliases=normalized_aliases)
+            rows = await result.data()
+        return [dict(row) for row in rows]
 
     async def delete_candidate(
         self,

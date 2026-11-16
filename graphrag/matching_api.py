@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 import re
+from dataclasses import asdict
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,17 +23,31 @@ from models import (
 	MatchingResultItem,
 	MatchingResultsPayload,
 	MatchingRunRequest,
+	SkillMatchingRequest,
+	SkillMatchingResponse,
+	SkillMatchItem,
+	SkillMissingItem,
 	VectorMatchPayload,
 	VectorMatchRequest,
 	VectorMatchRow,
 	VectorMatchNeo4jPayload,
 )
+from services.skill_matching import RequiredSkill, SkillMatchingService
 
 
 def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 	router = APIRouter()
 	billing_store = getattr(db_service, 'postgres_store', None) or getattr(llm_service, 'postgres_store', None)
 	billing_service = BillingService(billing_store) if billing_store is not None else None
+	skill_matching_service = (
+		SkillMatchingService(
+			llm_service,
+			db_service,
+			similarity_cutoff=settings.skill_matching_cutoff,
+		)
+		if llm_service is not None and db_service is not None
+		else None
+	)
 
 	async def resolve_graph_ids(table: str, requested: list[Any]) -> dict[str, str]:
 		"""Angefragte ID -> ID des Neo4j-Knotens. PostgreSQL-IDs (Zahlen) werden
@@ -649,6 +664,29 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			candidatesRanked=candidates_ranked,
 			missingJobIds=missing_jobs,
 			missingCandidateIds=missing_candidates,
+		)
+
+	@router.post('/match/skills', response_model=SkillMatchingResponse)
+	async def skill_match(payload: SkillMatchingRequest) -> SkillMatchingResponse:
+		if skill_matching_service is None:
+			raise HTTPException(status_code=503, detail='Skill matching services are not available')
+
+		result = await skill_matching_service.match(
+			[
+				RequiredSkill(name=skill.name, priority=skill.priority)
+				for skill in payload.need_skills
+			],
+			payload.has_skills,
+		)
+		return SkillMatchingResponse(
+			score=result.score,
+			qualified=result.qualified,
+			cutoff=settings.skill_matching_cutoff,
+			matches=[SkillMatchItem.model_validate(asdict(match)) for match in result.matches],
+			missing_skills=[
+				SkillMissingItem(name=match.need_skill, priority=match.priority, reason=match.reason)
+				for match in result.missing_skills
+			],
 		)
 
 	async def build_vector_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str, model_name: str) -> MatchingMatrixPayload:

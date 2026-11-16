@@ -17,6 +17,7 @@ CONSTRAINTS = [
     "CREATE CONSTRAINT candidate_id_unique IF NOT EXISTS FOR (c:Candidate) REQUIRE c.id IS UNIQUE",
     "CREATE CONSTRAINT job_id_unique IF NOT EXISTS FOR (j:Job) REQUIRE j.id IS UNIQUE",
     "CREATE CONSTRAINT skill_name_unique IF NOT EXISTS FOR (s:Skill) REQUIRE s.name IS UNIQUE",
+    "CREATE CONSTRAINT esco_concept_uri_unique IF NOT EXISTS FOR (e:ESCOConcept) REQUIRE e.uri IS UNIQUE",
     "CREATE CONSTRAINT language_name_unique IF NOT EXISTS FOR (l:Language) REQUIRE l.name IS UNIQUE",
     "CREATE CONSTRAINT industry_name_unique IF NOT EXISTS FOR (i:Industry) REQUIRE i.name IS UNIQUE",
     (
@@ -35,6 +36,7 @@ CONSTRAINTS = [
 ]
 
 INDEXES = [
+    "CREATE INDEX esco_concept_label_index IF NOT EXISTS FOR (e:ESCOConcept) ON (e.normalizedPreferredLabel)",
     (
         "CREATE VECTOR INDEX candidate_embedding_index IF NOT EXISTS "
         "FOR (c:Candidate) ON (c.embedding) "

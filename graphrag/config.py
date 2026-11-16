@@ -2,6 +2,7 @@ import os
 from urllib.parse import urlsplit, urlunsplit
 
 import psycopg
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +37,7 @@ class Settings(BaseSettings):
 
     # Embedding dimensions persisted in Neo4j vector index.
     embedding_dimensions: int = 1536
+    skill_matching_cutoff: float = Field(default=0.75, ge=0.0, le=1.0)
 
     model_config = SettingsConfigDict(
         env_file=".env",

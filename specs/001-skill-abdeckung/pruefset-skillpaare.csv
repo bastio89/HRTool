@@ -1,0 +1,40 @@
+﻿Skill A;Skill B;Erwartung;Kommentar
+Kubernetes;K8s;gleich;Vorschlag – bitte prüfen
+Microsoft Excel;MS Excel;gleich;Vorschlag – bitte prüfen
+Stakeholder-Management;Stakeholder Management;gleich;Vorschlag – bitte prüfen
+JavaScript;JS;gleich;Vorschlag – bitte prüfen
+Projektmanagement;Project Management;gleich;Vorschlag – bitte prüfen
+Deutsch;Deutschkenntnisse;gleich;Vorschlag – bitte prüfen
+Führerschein Kat. B;Fahrausweis B;gleich;Vorschlag – bitte prüfen
+Python;Python-Programmierung;gleich;Vorschlag – bitte prüfen
+Projektleitung;Projektmanagement;verwandt;Vorschlag – bitte prüfen
+Fahrzeugaufbereitung;Fahrzeugreinigung;verwandt;Vorschlag – bitte prüfen
+Fahrzeugpflege;Autopflege;verwandt;Vorschlag – bitte prüfen
+PostgreSQL;Relationale Datenbanken;verwandt;Vorschlag – bitte prüfen
+SQL;Datenbanken;verwandt;Vorschlag – bitte prüfen
+Finanzbuchhaltung;Buchhaltung;verwandt;Vorschlag – bitte prüfen
+Kommunikationsfähigkeit;Kommunikation;verwandt;Vorschlag – bitte prüfen
+Teamfähigkeit;Teamarbeit;verwandt;Vorschlag – bitte prüfen
+Spring Boot;Java;verwandt;Vorschlag – bitte prüfen
+React;JavaScript;verwandt;Vorschlag – bitte prüfen
+Lohnbuchhaltung;Personaladministration;verwandt;Vorschlag – bitte prüfen
+Gabelstapler fahren;Staplerausweis;verwandt;Vorschlag – bitte prüfen
+Kundenberatung;Kundenservice;verwandt;Vorschlag – bitte prüfen
+Fahrzeugaufbereitung;Beiratsleitung;unverwandt;aus Fehlerbericht
+Fahrzeugpflege;Genomik;unverwandt;aus Fehlerbericht
+Parkieren auf engem Raum;Statistik;unverwandt;aus Fehlerbericht
+Fahren mit Handschaltung;R;unverwandt;aus Fehlerbericht
+Buchhaltung;Python;unverwandt;Vorschlag – bitte prüfen
+Projektmanagement;Fahrzeugpflege;unverwandt;Vorschlag – bitte prüfen
+Teamfähigkeit;SQL;unverwandt;Vorschlag – bitte prüfen
+Pflegefachkraft;Softwareentwicklung;unverwandt;Vorschlag – bitte prüfen
+Elektroinstallation;Marketing;unverwandt;Vorschlag – bitte prüfen
+Bioinformatik;Gastronomie;unverwandt;Vorschlag – bitte prüfen
+Java;JavaScript;verwechslung;Vorschlag – bitte prüfen
+Junior;Senior;verwechslung;Vorschlag – bitte prüfen
+C;C#;verwechslung;Vorschlag – bitte prüfen
+C++;C#;verwechslung;Vorschlag – bitte prüfen
+SAP HR;SAP FI;verwechslung;Vorschlag – bitte prüfen
+Englisch Grundkenntnisse;Englisch verhandlungssicher;verwechslung;Niveau unterschiedlich – Vorschlag, bitte prüfen
+Elektriker;Elektroniker;verwechslung;Vorschlag – bitte prüfen
+Pflegehelfer;Pflegefachkraft;verwechslung;Vorschlag – bitte prüfen

@@ -2,7 +2,7 @@
 
 **Branch**: `master`
 **Erstellt**: 2026-11-17
-**Status**: Entwurf – wartet auf Klärung (siehe Abschnitt „Klärungen“)
+**Status**: Geklärt – Grundlage für `plan.md` und `tasks.md` (Entscheidungen siehe Abschnitt „Klärungen“)
 **Grundlagen**: Fehlerbericht „gleiche Paarung: M×N 90 %, 3D 69 %, KI 5 %“;
 `Dokumente/matching-strategie.md`; Analyse in `research.md`
 
@@ -194,9 +194,10 @@ Gewichten) gibt es keine Mischung aus alten und neuen Werten.
 - **FR-004**: Vor dem Vektorvergleich MÜSSEN Skill-Namen normalisiert werden
   (Groß-/Kleinschreibung, Leerzeichen, Bindestriche/Unterstriche); gleiche
   normalisierte Namen ergeben 100 %.
-- **FR-005**: Das System MUSS eine pflegbare Synonymliste (Skill → kanonischer
-  Skill) unterstützen; gleiche kanonische Skills ergeben 100 %.
-  [KLÄRUNG NÖTIG: eigene Liste oder ESCO, siehe K4]
+- **FR-005**: Das System MUSS eine eigene, im Tool pflegbare Synonymliste
+  (Skill → kanonischer Skill) unterstützen; gleiche kanonische Skills ergeben
+  100 %. Vorschläge für neue Einträge liefert die Kalibrierung; HR bestätigt
+  sie. ESCO ist nicht Teil dieser Version (K4).
 - **FR-006**: Skills MÜSSEN als kurzer Text mit Kontext-Präfix eingebettet
   werden (Vorlage einstellbar, Vorschlag „Berufliche Kompetenz: {Skill}“), nicht
   als JSON.
@@ -204,9 +205,13 @@ Gewichten) gibt es keine Mischung aus alten und neuen Werten.
   bestimmt werden: s < τ_unten → 0 %; s ≥ τ_oben → 100 %; dazwischen linear.
   Startwerte τ_unten = 0,72 und τ_oben = 0,90; beide einstellbar.
 - **FR-008**: Muss-Skills MÜSSEN doppelt, Kann-Skills einfach gewichtet werden.
-- **FR-009**: Der Gesamtwert MUSS aus HardSkill- und SoftSkill-Abdeckung
-  gebildet werden. [KLÄRUNG NÖTIG: Gewichtung, siehe K3]
-- **FR-010**: [KLÄRUNG NÖTIG: Umgang mit nicht abgedeckten Muss-Skills, siehe K2]
+- **FR-009**: Der Gesamtwert MUSS zu 80 % aus der HardSkill- und zu 20 % aus
+  der SoftSkill-Abdeckung bestehen (Gewichte einstellbar). Fordert die Stelle
+  keine SoftSkills oder hat der Bewerber keine SoftSkill-Angaben, zählt nur die
+  HardSkill-Abdeckung; fordert die Stelle nur SoftSkills, zählt nur diese (K3).
+- **FR-010**: Nicht abgedeckte Muss-Skills DÜRFEN den Gesamtwert nicht
+  zusätzlich deckeln oder abziehen; jedes Ergebnis MUSS aber „x von y
+  Muss-Skills abgedeckt“ ausweisen (K2).
 - **FR-011**: Das System MUSS eine Liste bekannter Verwechslungspaare
   unterstützen, die nie als Treffer gelten.
 - **FR-012**: Fehlt für einen Skill ein Embedding, MUSS ein Vergleich über ganze
@@ -227,8 +232,8 @@ Gewichten) gibt es keine Mischung aus alten und neuen Werten.
 - **FR-017**: Ein Kalibrierwerkzeug MUSS aus den echten Skills und einer Liste
   beurteilter Skill-Paare Verteilungen, Schwellenvorschläge und
   Fehlzuordnungen ausgeben, ohne Personendaten zu verwenden.
-- **FR-018**: Die Auswahl „Engine Python / Neo4j“ entfällt in der Oberfläche,
-  da beide dasselbe Ergebnis liefern müssen. [KLÄRUNG NÖTIG: siehe K6]
+- **FR-018**: Die Auswahl „Engine Python / Neo4j“ entfällt in der Oberfläche;
+  ältere Aufrufe mit Engine-Angabe liefern dasselbe Ergebnis (K6).
 - **FR-019**: Das KI-Matching bleibt unverändert.
 
 ### Zentrale Begriffe
@@ -265,24 +270,25 @@ Gewichten) gibt es keine Mischung aus alten und neuen Werten.
 - Kategorie und Priorität der Skills stammen aus der Auswertung durch das
   Sprachmodell und werden so übernommen; der Parser kennt nur „Mandatory“ und
   „NiceToHave“.
-- Ein mehrsprachiges Embedding-Modell ist verfügbar (lokal per Ollama oder über
-  OpenRouter).
+- Embeddings kommen über OpenRouter (bei euch angebunden). Das Modell wird per
+  Kalibrierung bestätigt; Favorit ist `baai/bge-m3`, Vergleich mit
+  `openai/text-embedding-3-small` und dem heute eingestellten Modell.
 - Erweiterungen der Strategie – Reranking der Grauzone, Graph-Distanz,
   vollständiges ESCO-Mapping – sind nicht Teil dieser Version (Grundsatz VI).
 
 ## Klärungen
 
-Offen (Empfehlung jeweils in `research.md`):
+Entschieden am 2026-11-17 (wie in `research.md`, Abschnitt 5, empfohlen):
 
-- **K1 – Embedding-Modell**: Welches Modell ist eingestellt? Wechsel auf
-  `bge-m3`?
-- **K2 – Muss-Skills** (FR-010): (a) keine Sonderregel, nur „x von y
-  Muss-Skills“ anzeigen; (b) Deckelung des Gesamtwerts, wenn ein Muss-Skill
-  fehlt; (c) Abzug je fehlendem Muss-Skill.
-- **K3 – Hard/Soft** (FR-009): 80/20, und wenn eine Seite keine SoftSkills hat,
-  zählt nur Hard?
-- **K4 – Synonymliste** (FR-005): eigene Liste (aus vorhandenen Skills
-  aufgebaut, im Tool pflegbar) oder ESCO-Katalog?
-- **K5 – Prüfset**: Wer beurteilt das Prüfset (Paarungen und Skill-Paare), siehe
-  `datenbedarf.md`?
-- **K6 – Engine-Auswahl** (FR-018): Auswahl entfernen?
+- **K1 – Embedding-Modell**: über **OpenRouter**. Gewählt wird per Kalibrierung
+  auf euren Daten; Favorit `baai/bge-m3`, Vergleich mit
+  `openai/text-embedding-3-small` und dem heute eingestellten Modell.
+- **K2 – Muss-Skills**: keine Deckelung, kein Abzug; „x von y Muss-Skills
+  abgedeckt“ wird immer angezeigt (FR-010).
+- **K3 – Hard/Soft**: 80/20; ohne SoftSkills auf einer Seite zählt nur Hard
+  (FR-009).
+- **K4 – Synonymliste**: eigene, im Tool pflegbare Liste; ESCO später
+  (FR-005).
+- **K5 – Prüfset**: HR beurteilt Skill-Paare und Paarungen
+  (`datenbedarf.md`); das Prüfset wird Teil der Tests.
+- **K6 – Engine-Auswahl**: entfällt (FR-018).

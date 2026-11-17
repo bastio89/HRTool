@@ -135,6 +135,9 @@ falsch. Ein automatisches Mapping beim Einlesen würde falsche Anker erzeugen.
 
 ## 5. Empfehlungen zu den Klärungen
 
+Am 2026-11-17 so beschlossen; zu K1 mit der Vorgabe, dass Embeddings über
+OpenRouter laufen (Favorit `baai/bge-m3`).
+
 - **K1 Modell**: `bge-m3`. Es ist mehrsprachig, läuft lokal ohne Kosten und ist
   bei Bedarf identisch über OpenRouter verfügbar. Bestätigung über die
   Kalibrierung: Gewählt wird das Modell, das „verwandt“ und „unverwandt“ in

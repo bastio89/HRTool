@@ -609,6 +609,19 @@ class SkillMatchingRequest(BaseModel):
         return normalized
 
 
+class SkillMatchingTestCaseInput(SkillMatchingRequest):
+    test_id: str = Field(..., min_length=1, max_length=120)
+    expected_score: int = Field(..., ge=0, le=100)
+
+    @field_validator("test_id")
+    @classmethod
+    def strip_test_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Test-ID darf nicht leer sein.")
+        return normalized
+
+
 class SkillMatchItem(BaseModel):
     need_skill: str
     need_esco_uri: str | None = None

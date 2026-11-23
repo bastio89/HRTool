@@ -24,6 +24,7 @@ const CONTAINER_WIDTHS = {
   narrow: 'max-w-[880px]',
   content: 'max-w-[1400px]',
   wide: 'max-w-[1600px]',
+  full: 'max-w-none',
 }
 
 export function PageContainer({ width = 'content', className = '', children, ...props }) {

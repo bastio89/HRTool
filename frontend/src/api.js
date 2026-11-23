@@ -7,7 +7,7 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function parseCsvText(text) {
+export function parseCsvText(text) {
   const source = String(text || '').replace(/^\uFEFF/, '')
   if (!source.trim()) return []
 
@@ -797,6 +797,22 @@ export const pluginsApi = {
   getAll: () => request('/plugins'),
   getPlugin: (pluginId) => request(`/plugins/${pluginId}`),
   setPluginEnabled: (pluginId, enabled) => request(`/plugins/${pluginId}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+  getSkillMatchingTestCases: () => request('/plugins/skill_matching_tests/cases'),
+  createSkillMatchingTestCase: (testCase) => request('/plugins/skill_matching_tests/cases', {
+    method: 'POST',
+    body: JSON.stringify(testCase),
+  }),
+  updateSkillMatchingTestCase: (caseId, testCase) => request(`/plugins/skill_matching_tests/cases/${caseId}`, {
+    method: 'PUT',
+    body: JSON.stringify(testCase),
+  }),
+  deleteSkillMatchingTestCase: (caseId) => request(`/plugins/skill_matching_tests/cases/${caseId}`, {
+    method: 'DELETE',
+  }),
+  runSkillMatchingCsvTest: () => request('/plugins/skill_matching_tests/run', {
+    method: 'POST',
+    timeout: 330_000,
+  }),
 };
 
 export const linkedinApi = {

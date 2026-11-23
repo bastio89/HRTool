@@ -246,14 +246,16 @@ Das in [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) dokumentierte JSON
 | Gewichtung | Muss-Skills zählen mit Gewicht `2`, Nice-to-have-Skills mit Gewicht `1`; der Score ist der gewichtete Durchschnitt von `0` bis `100`. |
 | Muss-Skill-Gate | Ein nicht abgedeckter Muss-Skill setzt `qualified` auf `false` und den Gesamtscore auf `0`; Nice-to-have-Lücken lösen kein Gate aus. |
 
-ESCO-URIs liefern kanonische Treffer. Andere Paare werden anhand der bevorzugten ESCO-Bezeichnung und Beschreibung semantisch verglichen; semantische Ähnlichkeit wird nicht als identische kanonische URI ausgegeben.
+ESCO-URIs liefern kanonische Treffer. Identische Skill-Bezeichnungen nach Normalisierung werden auch ohne ESCO-Treffer mit Ähnlichkeit `1.0` gewertet. Andere Paare werden anhand der bevorzugten ESCO-Bezeichnung und Beschreibung semantisch verglichen; semantische Ähnlichkeit wird nicht als identische kanonische URI ausgegeben.
 
 ## CSV-Regressionstest für Skill-Matching
 
-Die Testfälle stehen in `tests/fixtures/skill_matching_cases.csv`; Skill-Listen sind JSON-Arrays innerhalb der CSV-Zellen. Der Test läuft standardmäßig nicht und benötigt einen befüllten Neo4j-ESCO-Katalog sowie die konfigurierte Embedding- und Datenbankverbindung.
+Die Testfälle werden in PostgreSQL in `skill_matching_test_cases` gespeichert. Beim ersten Start wird die bisherige Datei `tests/fixtures/skill_matching_cases.csv` einmalig als Startbestand importiert, sofern die Tabelle noch leer ist. Danach ist PostgreSQL die maßgebliche Datenquelle. Administratoren können Fälle unter **Admin → Plugins → Skill-Matching CSV-Test** bearbeiten, hinzufügen oder löschen. Die Skill-Listen werden im Editor als CSV mit Kopfzeilen eingegeben: `name,priority` für benötigte Skills und `skill` für vorhandene Skills; pro Zeile wird ein Skill eingetragen.
 
 ```bash
-RUN_SKILL_MATCHING_CSV_TESTS=1 python -m pytest -q tests/test_skill_matching_csv.py
+RUN_SKILL_MATCHING_CSV_TESTS=1 python -m pytest -q -s tests/test_skill_matching_csv.py
 ```
 
-Die Fälle werden zeilenweise ausgeführt. Eine Abweichung von mehr als 5 Punkten schlägt mit Testid, Soll, Ist und Differenz fehl.
+Die in PostgreSQL gespeicherten Fälle werden zeilenweise ausgeführt und geben Test-ID, Soll-Score, Ist-Score, Differenz und Ergebnis aus. Zusätzlich wird jedes Need-/Has-Skill-Paar mit Auflösungsstatus, Ähnlichkeit, Abdeckung und Begründung als Matching-Matrix ausgegeben. Die Matrix markiert außerdem den für jeden Need-Skill ausgewählten besten Has-Skill und weist dessen gewichteten Beitrag zum Gesamtscore in Punkten aus. Bei nicht erfüllter Muss-Skill-Bedingung ist der tatsächliche Score-Beitrag aller Paare 0, da der Gesamtscore dann auf 0 gesetzt wird. Eine Abweichung von mehr als 5 Punkten lässt den Test fehlschlagen. Dafür müssen PostgreSQL, ein befüllter Neo4j-ESCO-Katalog und ein gültiges Embedding-Modell erreichbar sein.
+
+Alternativ kann ein Administrator das Plugin aktivieren und mit **CSV-Test starten** ausführen. Die Score-Tabelle, der Erfolgsstatus, das verwendete Embedding-Modell und der Matching-Service werden direkt dort angezeigt; Modell und Service stehen vor der Matching-Matrix. Der Service ist `services.skill_matching.SkillMatchingService.match()`, der auch vom API-Endpunkt `POST /match/skills` verwendet wird. Der CSV-Test ruft die Service-Methode direkt auf und sendet keinen HTTP-Aufruf an diesen Endpunkt. Der GraphRAG-Container muss mit den Testabhängigkeiten gebaut sein.

@@ -66,10 +66,27 @@ class SkillMatchDetail:
 
 
 @dataclass(frozen=True)
+class SkillMatchMatrixCell:
+    need_skill: str
+    need_resolution_status: Literal["resolved", "ambiguous", "unknown"]
+    has_skill: str | None
+    has_resolution_status: Literal["resolved", "ambiguous", "unknown"] | None
+    similarity: float
+    weighted_similarity: float
+    best_candidate: bool
+    score_contribution: float
+    priority: SkillPriority
+    covered: bool
+    match_type: Literal["canonical", "semantic", "none"]
+    reason: str
+
+
+@dataclass(frozen=True)
 class SkillMatchingResult:
     score: int
     qualified: bool
     matches: tuple[SkillMatchDetail, ...]
+    matrix: tuple[SkillMatchMatrixCell, ...]
 
     @property
     def missing_skills(self) -> tuple[SkillMatchDetail, ...]:
@@ -177,16 +194,73 @@ class SkillMatchingService:
         candidates = profiles[len(need_skills) :]
 
         matches: list[SkillMatchDetail] = []
+        matrix: list[SkillMatchMatrixCell] = []
+        selected_matrix_indices: list[int | None] = []
         weighted_sum = 0.0
         total_weight = 0.0
         for requirement, need in zip(need_skills, needs):
             best_candidate: ResolvedSkill | None = None
+            best_matrix_index: int | None = None
             best_similarity = SkillSimilarity(value=0.0, match_type="semantic")
             for candidate in candidates:
                 similarity = compare_skills(need, candidate)
+                covered = similarity.value >= self.similarity_cutoff
+                weighted_similarity = (
+                    1.0
+                    if covered and similarity.value >= 0.90
+                    else similarity.value
+                    if covered
+                    else 0.0
+                )
+                if similarity.match_type == "canonical":
+                    cell_reason = "Identische kanonische ESCO-URI."
+                elif need.normalized_name == candidate.normalized_name:
+                    cell_reason = "Identische Skill-Bezeichnung nach Normalisierung."
+                else:
+                    comparison = "erreicht" if covered else "liegt unter"
+                    cell_reason = (
+                        f"Semantische Ähnlichkeit {similarity.value:.4f} "
+                        f"{comparison} dem Cutoff {self.similarity_cutoff:.2f}."
+                    )
+                matrix.append(
+                    SkillMatchMatrixCell(
+                        need_skill=need.name,
+                        need_resolution_status=need.resolution_status,
+                        has_skill=candidate.name,
+                        has_resolution_status=candidate.resolution_status,
+                        similarity=round(similarity.value, 4),
+                        weighted_similarity=round(weighted_similarity, 4),
+                        best_candidate=False,
+                        score_contribution=0.0,
+                        priority=requirement.priority,
+                        covered=covered,
+                        match_type=similarity.match_type,
+                        reason=cell_reason,
+                    )
+                )
                 if best_candidate is None or similarity.value > best_similarity.value:
                     best_candidate = candidate
                     best_similarity = similarity
+                    best_matrix_index = len(matrix) - 1
+
+            if not candidates:
+                matrix.append(
+                    SkillMatchMatrixCell(
+                        need_skill=need.name,
+                        need_resolution_status=need.resolution_status,
+                        has_skill=None,
+                        has_resolution_status=None,
+                        similarity=0.0,
+                        weighted_similarity=0.0,
+                        best_candidate=False,
+                        score_contribution=0.0,
+                        priority=requirement.priority,
+                        covered=False,
+                        match_type="none",
+                        reason="Keine Kandidaten-Skills angegeben.",
+                    )
+                )
+            selected_matrix_indices.append(best_matrix_index)
 
             covered = best_candidate is not None and best_similarity.value >= self.similarity_cutoff
             weighted_similarity = (
@@ -206,6 +280,9 @@ class SkillMatchingService:
             elif best_similarity.match_type == "canonical":
                 match_type = "canonical"
                 reason = "Identische kanonische ESCO-URI."
+            elif need.normalized_name == best_candidate.normalized_name:
+                match_type = "semantic"
+                reason = "Identische Skill-Bezeichnung nach Normalisierung."
             else:
                 match_type = "semantic"
                 comparison = "erreicht" if covered else "liegt unter"
@@ -236,11 +313,30 @@ class SkillMatchingService:
             for match in matches
             if match.priority == "mandatory"
         )
+        if total_weight:
+            for match, matrix_index in zip(matches, selected_matrix_indices):
+                if matrix_index is not None:
+                    matrix[matrix_index] = replace(
+                        matrix[matrix_index],
+                        best_candidate=True,
+                        score_contribution=round(
+                            (
+                                (2.0 if match.priority == "mandatory" else 1.0)
+                                * match.weighted_similarity
+                                / total_weight
+                                * 100
+                            )
+                            if qualified
+                            else 0.0,
+                            4,
+                        ),
+                    )
         score = round((weighted_sum / total_weight) * 100) if total_weight else 0
         return SkillMatchingResult(
             score=score if qualified else 0,
             qualified=qualified,
             matches=tuple(matches),
+            matrix=tuple(matrix),
         )
 
     @staticmethod
@@ -274,6 +370,8 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
 def compare_skills(left: ResolvedSkill, right: ResolvedSkill) -> SkillSimilarity:
     if left.esco_uri and left.esco_uri == right.esco_uri:
         return SkillSimilarity(value=1.0, match_type="canonical")
+    if left.normalized_name == right.normalized_name:
+        return SkillSimilarity(value=1.0, match_type="semantic")
     return SkillSimilarity(
         value=cosine_similarity(left.embedding, right.embedding),
         match_type="semantic",

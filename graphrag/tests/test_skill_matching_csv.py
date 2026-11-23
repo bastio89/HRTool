@@ -1,48 +1,21 @@
 from __future__ import annotations
 
-import csv
 import json
 import os
-from pathlib import Path
 
 import pytest
 
 from config import settings
 from models import SkillMatchingRequest
 from services.skill_matching import RequiredSkill, SkillMatchingService
+from services.skill_matching_test_cases import SkillMatchingTestCaseStore
 
 
-FIXTURE_PATH = Path(__file__).parent / "fixtures" / "skill_matching_cases.csv"
-EXPECTED_COLUMNS = [
-    "Testid",
-    "need-skills (Liste)",
-    "has-skills (Liste)",
-    "soll-Score",
-]
-
-
-def _load_cases() -> list[dict[str, str]]:
-    with FIXTURE_PATH.open(encoding="utf-8", newline="") as source:
-        reader = csv.DictReader(source)
-        if reader.fieldnames != EXPECTED_COLUMNS:
-            raise ValueError(f"Unerwartete CSV-Spalten: {reader.fieldnames!r}")
-        return list(reader)
-
-
-def test_skill_matching_csv_has_valid_four_column_cases() -> None:
-    cases = _load_cases()
+def test_skill_matching_test_case_seed_is_valid() -> None:
+    cases = SkillMatchingTestCaseStore._read_seed_cases()
     assert cases
-    for row in cases:
-        payload = SkillMatchingRequest.model_validate(
-            {
-                "need_skills": json.loads(row["need-skills (Liste)"]),
-                "has_skills": json.loads(row["has-skills (Liste)"]),
-            }
-        )
-        expected = int(row["soll-Score"])
-        assert row["Testid"].strip()
-        assert payload.need_skills
-        assert 0 <= expected <= 100
+    assert all(case.need_skills for case in cases)
+    assert all(0 <= case.expected_score <= 100 for case in cases)
 
 
 @pytest.mark.anyio
@@ -56,19 +29,28 @@ async def test_skill_matching_csv_scores_against_configured_graphrag() -> None:
     if settings.neo4j_password in {"test-password", "your_neo4j_password"}:
         pytest.fail("Für den CSV-Integrationstest müssen echte Neo4j-Zugangsdaten gesetzt sein.")
 
-    from main import db_service, llm_service
+    from main import db_service, llm_service, skill_matching_test_case_store
+    from main import model_config_service
+    from matching_api import SKILL_MATCHING_API_METHOD, SKILL_MATCHING_API_PATH
+
+    await skill_matching_test_case_store.ensure_schema()
+    cases = await skill_matching_test_case_store.list_cases()
+    if not cases:
+        pytest.fail("In PostgreSQL sind keine Skill-Matching-Testfälle hinterlegt.")
 
     service = SkillMatchingService(
         llm_service,
         db_service,
         similarity_cutoff=settings.skill_matching_cutoff,
     )
+    failures = []
     try:
-        for row in _load_cases():
+        print("Testid | Soll-Score | Ist-Score | Differenz | Ergebnis")
+        for case in cases:
             payload = SkillMatchingRequest.model_validate(
                 {
-                    "need_skills": json.loads(row["need-skills (Liste)"]),
-                    "has_skills": json.loads(row["has-skills (Liste)"]),
+                    "need_skills": case["need_skills"],
+                    "has_skills": case["has_skills"],
                 }
             )
             result = await service.match(
@@ -78,11 +60,65 @@ async def test_skill_matching_csv_scores_against_configured_graphrag() -> None:
                 ],
                 payload.has_skills,
             )
-            expected = int(row["soll-Score"])
+            for match in result.matrix:
+                print(
+                    "SKILL_MATCHING_MATRIX_JSON:"
+                    + json.dumps(
+                        {
+                            "test_id": case["test_id"],
+                            "need_skill": match.need_skill,
+                            "has_skill": match.has_skill,
+                            "need_resolution_status": match.need_resolution_status,
+                            "has_resolution_status": match.has_resolution_status,
+                            "similarity": match.similarity,
+                            "weighted_similarity": match.weighted_similarity,
+                            "best_candidate": match.best_candidate,
+                            "score_contribution": match.score_contribution,
+                            "priority": match.priority,
+                            "covered": match.covered,
+                            "match_type": match.match_type,
+                            "reason": match.reason,
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+            expected = case["expected_score"]
             difference = abs(result.score - expected)
-            assert difference <= 5, (
-                f"{row['Testid']}: Soll={expected}, Ist={result.score}, Differenz={difference}"
+            passed = difference <= 5
+            print(
+                f"{case['test_id']} | {expected} | {result.score} | {difference} | "
+                f"{'OK' if passed else 'FEHLER'}"
             )
+            if not passed:
+                failures.append(
+                    f"{case['test_id']}: Soll={expected}, Ist={result.score}, Differenz={difference}"
+                )
+        embedding_config = await model_config_service.get_embedding_model()
+        print(
+            "SKILL_MATCHING_EMBEDDING_JSON:"
+            + json.dumps(
+                {"model": embedding_config.model, "provider": embedding_config.provider},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        service_type = type(service)
+        print(
+            "SKILL_MATCHING_SERVICE_JSON:"
+            + json.dumps(
+                {
+                    "implementation": f"{service_type.__module__}.{service_type.__qualname__}",
+                    "method": service.match.__name__,
+                    "api_method": SKILL_MATCHING_API_METHOD,
+                    "api_path": SKILL_MATCHING_API_PATH,
+                    "invocation": "direct",
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        assert not failures, "\n".join(failures)
     finally:
         await db_service.close()
         await llm_service.close()

@@ -35,6 +35,12 @@ export const pluginDefinitions = {
       element: LinkedInToolsPage,
     },
   },
+  skill_matching_tests: {
+    id: 'skill_matching_tests',
+    name: 'Skill-Matching CSV-Test',
+    defaultEnabled: false,
+    uiSlots: ['tools'],
+  },
 }
 
 export function getPluginDefinition(pluginId) {

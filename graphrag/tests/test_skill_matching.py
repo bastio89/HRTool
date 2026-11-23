@@ -70,6 +70,78 @@ async def test_resolve_skills_uses_canonical_labels_and_informative_descriptions
 
 
 @pytest.mark.anyio
+async def test_identical_unresolved_skill_names_match_even_with_zero_embeddings() -> None:
+    service = SkillMatchingService(
+        _MapEmbedding({"Schreiner": [0.0, 0.0]}),
+        _FakeCatalog([]),
+    )
+
+    result = await service.match([RequiredSkill("Schreiner")], ["Schreiner"])
+
+    assert result.score == 100
+    assert result.qualified is True
+    assert result.matches[0].similarity == 1.0
+    assert result.matches[0].covered is True
+    assert result.matches[0].reason == "Identische Skill-Bezeichnung nach Normalisierung."
+    assert result.matrix[0].need_skill == "Schreiner"
+    assert result.matrix[0].has_skill == "Schreiner"
+    assert result.matrix[0].similarity == 1.0
+    assert result.matrix[0].covered is True
+
+
+@pytest.mark.anyio
+async def test_matching_result_contains_each_required_candidate_pair() -> None:
+    service = SkillMatchingService(
+        _MapEmbedding({
+            "Need": [1.0, 0.0],
+            "Candidate A": [1.0, 0.0],
+            "Candidate B": [0.0, 1.0],
+        }),
+        _FakeCatalog([]),
+    )
+
+    result = await service.match([RequiredSkill("Need")], ["Candidate A", "Candidate B"])
+
+    assert [(cell.need_skill, cell.has_skill) for cell in result.matrix] == [
+        ("Need", "Candidate A"),
+        ("Need", "Candidate B"),
+    ]
+    assert [cell.similarity for cell in result.matrix] == [1.0, 0.0]
+    assert [cell.best_candidate for cell in result.matrix] == [True, False]
+    assert [cell.score_contribution for cell in result.matrix] == [100.0, 0.0]
+
+
+@pytest.mark.anyio
+async def test_score_contribution_is_weighted_and_zero_when_mandatory_gate_fails() -> None:
+    service = SkillMatchingService(
+        _MapEmbedding({
+            "Mandatory": [1.0, 0.0],
+            "Nice-to-have": [1.0, 0.0],
+            "Unmatched mandatory": [0.0, 1.0],
+            "Candidate": [1.0, 0.0],
+        }),
+        _FakeCatalog([]),
+        similarity_cutoff=0.75,
+    )
+
+    qualified = await service.match(
+        [RequiredSkill("Mandatory"), RequiredSkill("Nice-to-have", "nice_to_have")],
+        ["Candidate"],
+    )
+    gated = await service.match(
+        [RequiredSkill("Unmatched mandatory"), RequiredSkill("Nice-to-have", "nice_to_have")],
+        ["Candidate"],
+    )
+
+    assert qualified.score == 100
+    assert sum(cell.score_contribution for cell in qualified.matrix) == pytest.approx(100.0)
+    assert [cell.score_contribution for cell in qualified.matrix] == [66.6667, 33.3333]
+    assert gated.score == 0
+    assert [cell.best_candidate for cell in gated.matrix] == [True, True]
+    assert all(cell.score_contribution == 0.0 for cell in gated.matrix)
+
+
+@pytest.mark.anyio
 async def test_ambiguous_and_unknown_skill_names_remain_unresolved() -> None:
     catalog = _FakeCatalog(
         [

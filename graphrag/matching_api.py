@@ -34,6 +34,9 @@ from models import (
 )
 from services.skill_matching import RequiredSkill, SkillMatchingService
 
+SKILL_MATCHING_API_METHOD = "POST"
+SKILL_MATCHING_API_PATH = "/match/skills"
+
 
 def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 	router = APIRouter()
@@ -666,7 +669,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			missingCandidateIds=missing_candidates,
 		)
 
-	@router.post('/match/skills', response_model=SkillMatchingResponse)
+	@router.post(SKILL_MATCHING_API_PATH, response_model=SkillMatchingResponse)
 	async def skill_match(payload: SkillMatchingRequest) -> SkillMatchingResponse:
 		if skill_matching_service is None:
 			raise HTTPException(status_code=503, detail='Skill matching services are not available')

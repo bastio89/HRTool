@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import HTTPException, Request, status
 
 from services.jwt_auth import verify_hs256_jwt
-from services.postgres_store import PostgresStore
+from services.postgres_store import InsufficientCreditsError, MatchingActorUnavailableError, PostgresStore
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class BillingService:
 	def _claims_from_request(self, request: Request) -> BillingUserClaims:
 		try:
 			claims = verify_hs256_jwt(self._extract_bearer_token(request), self.jwt_secret)
-		except ValueError as exc:
+		except (ValueError, TypeError) as exc:
 			raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
 		user_id_raw = claims.get('id')
@@ -76,6 +76,8 @@ class BillingService:
 			user_id = int(user_id_raw)
 		except (TypeError, ValueError) as exc:
 			raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token user') from exc
+		if isinstance(user_id_raw, bool) or not isinstance(user_id_raw, (int, str)) or user_id <= 0:
+			raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token user')
 
 		return BillingUserClaims(
 			user_id=user_id,
@@ -95,6 +97,53 @@ class BillingService:
 			role=claims.role,
 		)
 		return claims
+
+	@staticmethod
+	def _stored_claims(actor: dict[str, Any]) -> BillingUserClaims:
+		return BillingUserClaims(
+			user_id=int(actor['id']), username=actor['username'], display_name=actor['display_name'],
+			email=actor['email'], role=actor['role'],
+		)
+
+	async def actor_for_request(self, request: Request) -> BillingUserClaims:
+		claims = self._claims_from_request(request)
+		actor = await self.postgres_store.get_matching_actor(claims.user_id)
+		if actor is None:
+			raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Matching user no longer exists')
+		return self._stored_claims(actor)
+
+	async def require_matching_admin(self, request: Request) -> BillingUserClaims:
+		actor = await self.actor_for_request(request)
+		if actor.role != 'admin':
+			raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Nur Administratoren haben Zugriff auf Batchverarbeitung')
+		return actor
+
+	async def charge_matching_run(
+		self, run_id: str, amount: Decimal | str | float, action_type: str, *, note: str | None = None,
+	) -> dict[str, Any]:
+		debit = Decimal(str(amount))
+		if not debit.is_finite() or debit >= 0:
+			raise ValueError('Matching debit must be a finite negative amount')
+		run = await self.postgres_store.get_matching_run(run_id)
+		if run is None:
+			raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Matching run not found')
+		actor_id = run['actor_user_id']
+		if actor_id is None or await self.postgres_store.get_matching_actor(actor_id) is None:
+			await self.postgres_store.block_matching_run(run_id, 'missing_actor')
+			raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Matching actor no longer exists')
+		try:
+			return await self.postgres_store.apply_credit_transaction(
+				actor_id, debit, action_type, matching_run_id=run_id,
+				note=note, metadata={'matching_run_id': run_id},
+			)
+		except InsufficientCreditsError as exc:
+			await self.postgres_store.block_matching_run(run_id, 'insufficient_credits')
+			raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail='Insufficient credits') from exc
+		except MatchingActorUnavailableError as exc:
+			await self.postgres_store.block_matching_run(run_id, 'missing_actor')
+			raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Matching actor no longer exists') from exc
+		except ValueError as exc:
+			raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 	async def get_current_summary(self, request: Request) -> dict[str, Any]:
 		claims = await self._ensure_claims_user(request)

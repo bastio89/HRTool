@@ -37,12 +37,16 @@ os.environ.setdefault("DATABASE_URL", "postgresql://hrtool:hrtoolpw@localhost:54
 
 from config import settings
 from services.db import Neo4jService
+from services.llm import LLMService
+from services.postgres_store import PostgresStore
+from services.matching_orchestrator import MatchingOrchestrator
+from services.skill_matching import SkillMatchingService
 from scripts.init_neo4j import init_schema
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Match CVs and jobs in both directions using Neo4j skill overlap and skill embeddings."
+        description="Match stored CVs and jobs in both directions using central skill coverage."
     )
     parser.add_argument(
         "mode",
@@ -101,13 +105,15 @@ def _format_candidate_match(index: int, match: dict[str, object], verbose: bool)
     return "\n".join(lines)
 
 
-async def _match_cv_to_jobs(db_service: Neo4jService, candidate_name: str, limit: int, verbose: bool) -> int:
+async def _match_cv_to_jobs(db_service: Neo4jService, candidate_name: str, limit: int, verbose: bool, orchestrator: MatchingOrchestrator) -> int:
     candidate = await db_service.find_candidate_by_name(candidate_name)
     if candidate is None:
         print(f"No candidate found for name: {candidate_name}")
         return 1
 
-    matches = await db_service.get_top_job_matches_for_candidate(candidate["id"], limit=limit)
+    matches = await db_service.get_top_job_matches_for_candidate(
+        candidate["id"], limit=limit, orchestrator=orchestrator, model=settings.resolved_embedding_model,
+    )
 
     print(f"Candidate: {candidate['name']} [{candidate['id']}]")
     if candidate.get("location"):
@@ -125,13 +131,15 @@ async def _match_cv_to_jobs(db_service: Neo4jService, candidate_name: str, limit
     return 0
 
 
-async def _match_job_to_cvs(db_service: Neo4jService, job_name: str, limit: int, verbose: bool) -> int:
+async def _match_job_to_cvs(db_service: Neo4jService, job_name: str, limit: int, verbose: bool, orchestrator: MatchingOrchestrator) -> int:
     job = await db_service.find_job_by_name(job_name)
     if job is None:
         print(f"No job found for title: {job_name}")
         return 1
 
-    matches = await db_service.get_top_candidate_matches_for_job(job["id"], limit=limit)
+    matches = await db_service.get_top_candidate_matches_for_job(
+        job["id"], limit=limit, orchestrator=orchestrator, model=settings.resolved_embedding_model,
+    )
 
     print(f"Job: {job['title']} [{job['id']}]")
     if job.get("company"):
@@ -152,18 +160,32 @@ async def _match_job_to_cvs(db_service: Neo4jService, job_name: str, limit: int,
 
 
 async def run_match(mode: str, name: str, limit: int, verbose: bool) -> int:
+    if limit < 1:
+        raise ValueError("Match limit must be positive.")
     await init_schema()
+    store = PostgresStore(settings.database_url)
     db_service = Neo4jService(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
+        postgres_store=store,
+    )
+    llm_service = LLMService(
+        base_url=settings.resolved_ai_base_url, chat_model=settings.resolved_chat_model,
+        embedding_model=settings.resolved_embedding_model, embedding_dimensions=settings.embedding_dimensions,
+        provider=settings.resolved_provider, api_key=settings.resolved_api_key,
+    )
+    orchestrator = MatchingOrchestrator(
+        SkillMatchingService(llm_service, db_service, similarity_cutoff=settings.skill_matching_cutoff),
+        postgres_store=store,
     )
 
     try:
         if mode == "cv-job":
-            return await _match_cv_to_jobs(db_service, name, limit=limit, verbose=verbose)
-        return await _match_job_to_cvs(db_service, name, limit=limit, verbose=verbose)
+            return await _match_cv_to_jobs(db_service, name, limit=limit, verbose=verbose, orchestrator=orchestrator)
+        return await _match_job_to_cvs(db_service, name, limit=limit, verbose=verbose, orchestrator=orchestrator)
     finally:
+        await llm_service.close()
         await db_service.close()
 
 

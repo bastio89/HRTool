@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,12 @@ class JobsChImportItemResult:
     imported: bool
     duplicate: bool = False
     error: str | None = None
+    matchingRunId: str | None = None
+    matchingStatus: str = "not_requested"
+    matchingStatusUrl: str | None = None
+    preparationStatus: str = "not_requested"
+    preparationError: str | None = None
+    preparedRevision: str | None = None
 
 
 @dataclass(frozen=True)
@@ -133,10 +140,12 @@ class JobsChExportService:
 class JobsChImportService:
     SOURCE_LABEL = "Jobs.ch-import"
 
-    def __init__(self, *, llm_service: LLMService, postgres_store: PostgresStore, db_service: Neo4jService) -> None:
+    def __init__(self, *, llm_service: LLMService, postgres_store: PostgresStore, db_service: Neo4jService,
+                 prepare_job: Callable[[int], Awaitable[tuple[str, int]]]) -> None:
         self.llm_service = llm_service
         self.postgres_store = postgres_store
         self.db_service = db_service
+        self.prepare_job = prepare_job
 
     @staticmethod
     def _normalize_links(payload: JobsChImportRequest) -> list[str]:
@@ -209,22 +218,6 @@ class JobsChImportService:
         except Exception:
             return None
 
-    async def _build_skill_embeddings(self, skill_names: list[str]) -> dict[str, list[float]]:
-        unique_names = sorted({name.strip() for name in skill_names if isinstance(name, str) and name.strip()})
-        if not unique_names:
-            return {}
-
-        skill_embeddings: dict[str, list[float]] = {}
-        for skill_name in unique_names:
-            skill_embeddings[skill_name.lower()] = await self.llm_service.create_embedding(
-                {
-                    "entity": "skill",
-                    "name": skill_name,
-                },
-                allow_fallback=False,
-            )
-        return skill_embeddings
-
     async def search(self, query: str, *, limit: int = 20) -> list[JobsChSearchItem]:
         results = await asyncio.to_thread(jobs_ch_to_pdf.search_jobs, query, 30, limit)
         return [
@@ -238,7 +231,8 @@ class JobsChImportService:
             for item in results
         ]
 
-    async def import_links(self, payload: JobsChImportRequest, *, fast_parser: Any | None = None) -> JobsChImportResult:
+    async def import_links(self, payload: JobsChImportRequest, *, fast_parser: Any | None = None,
+                           actor_user_id: int | None = None) -> JobsChImportResult:
         links = self._normalize_links(payload)
         if not links:
             raise ValueError("Mindestens ein jobs.ch-Link ist erforderlich.")
@@ -250,7 +244,7 @@ class JobsChImportService:
 
         for link in links:
             try:
-                job = jobs_ch_to_pdf.fetch_job(link)
+                job = await asyncio.to_thread(jobs_ch_to_pdf.fetch_job, link)
                 raw_text = self._build_raw_text(job)
                 if not raw_text.strip():
                     raise RuntimeError("jobs.ch-Seite liefert keinen verwertbaren Text.")
@@ -258,7 +252,7 @@ class JobsChImportService:
                 if payload.import_mode == 'fast_import':
                     with tempfile.TemporaryDirectory(prefix='hrtool-jobs-ch-import-') as temp_dir:
                         pdf_path = Path(temp_dir) / 'job.pdf'
-                        jobs_ch_to_pdf.write_pdf(job, pdf_path)
+                        await asyncio.to_thread(jobs_ch_to_pdf.write_pdf, job, pdf_path)
                         parsed_profile, _ = await asyncio.to_thread(fast_parser.parse_job_with_text, pdf_path.read_bytes())
                     profile = self._profile_from_fast_parser(job, parsed_profile, raw_text)
                 else:
@@ -275,19 +269,6 @@ class JobsChImportService:
 
                 source_hash = self._normalized_text_hash(raw_text)
                 profile_hash = self._normalized_profile_hash(profile)
-                existing_job = None
-                try:
-                    if source_hash:
-                        existing_job = await self.db_service.find_job_by_source_hash(source_hash)
-                    if existing_job is None and profile_hash:
-                        existing_job = await self.db_service.find_job_by_profile_hash(profile_hash)
-                except Exception:
-                    logger.warning("jobs.ch duplicate lookup failed for %s", link, exc_info=True)
-                    existing_job = None
-
-                embedding = await self.llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
-                skill_embeddings = await self._build_skill_embeddings([item.name for item in profile.required_skills])
-
                 # Eine Stelle gibt es nur einmal (gleiche URL oder Titel + Firma +
                 # Ort): eine vorhandene Stelle wird abgeglichen statt neu
                 # angelegt. Der Neo4j-Knoten traegt die UUID der Stelle.
@@ -300,19 +281,22 @@ class JobsChImportService:
                     source_hash=source_hash,
                     profile_hash=profile_hash,
                     url=job.source_url or link,
+                    actor_user_id=actor_user_id,
                 )
                 job_id = stored_job["uuid"]
-                is_duplicate = bool(stored_job.get("duplicate")) or existing_job is not None
+                is_duplicate = bool(stored_job["duplicate"])
                 if is_duplicate:
                     duplicate_count += 1
-                await self.db_service.upsert_job(
-                    job_id=job_id,
-                    profile=profile,
-                    embedding=embedding,
-                    skill_embeddings=skill_embeddings,
-                    source_hash=source_hash,
-                    profile_hash=profile_hash,
-                )
+                prepared_revision = None
+                preparation_error = None
+                preparation_detail = None
+                if stored_job["changed"]:
+                    try:
+                        prepared_revision, _ = await self.prepare_job(int(stored_job["id"]))
+                    except Exception as exc:
+                        preparation_error = "graph_preparation_failed"
+                        preparation_detail = str(exc)
+                        logger.exception("jobs.ch import saved but preparation failed for %s", link)
 
                 imported_count += 1
                 items.append(
@@ -322,6 +306,13 @@ class JobsChImportService:
                         title=profile.title,
                         imported=True,
                         duplicate=is_duplicate,
+                        matchingRunId=stored_job["matchingRunId"],
+                        matchingStatus=stored_job["matchingStatus"],
+                        matchingStatusUrl=f"/matching/runs/{stored_job['matchingRunId']}" if stored_job["matchingRunId"] else None,
+                        preparationStatus="ready" if prepared_revision else "required" if stored_job["changed"] else "not_requested",
+                        preparationError=preparation_error,
+                        preparedRevision=prepared_revision,
+                        error=preparation_detail,
                     )
                 )
             except Exception as exc:
@@ -350,6 +341,10 @@ class JobsChImportService:
             warning = f"{duplicate_count} Dublette{'n' if duplicate_count != 1 else ''} erkannt und mit vorhandenen Daten abgeglichen."
         if failed_count:
             warning = warning or f"{failed_count} jobs.ch-Link{'s' if failed_count != 1 else ''} wurden übersprungen."
+        preparation_failed = sum(item.preparationError is not None for item in items)
+        if preparation_failed:
+            preparation_warning = f"{preparation_failed} gespeicherte{'r Import benötigt' if preparation_failed == 1 else ' Importe benötigen'} noch Graph-Aufbereitung."
+            warning = f"{warning} {preparation_warning}" if warning else preparation_warning
 
         return JobsChImportResult(
             imported=imported_count,

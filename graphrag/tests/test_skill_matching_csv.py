@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 
+import psycopg
+from psycopg.types.json import Jsonb
 import pytest
 
 from config import settings
@@ -16,6 +18,38 @@ def test_skill_matching_test_case_seed_is_valid() -> None:
     assert cases
     assert all(case.need_skills for case in cases)
     assert all(0 <= case.expected_score <= 100 for case in cases)
+
+
+@pytest.mark.anyio
+@pytest.mark.skipif(not os.getenv("DATABASE_URL"), reason="DATABASE_URL fuer Testdatenbank fehlt.")
+@pytest.mark.parametrize("customization", [None, "expected-score", "skills"])
+async def test_score_rule_migration_updates_only_the_unchanged_builtin_case(customization) -> None:
+    case = next(case for case in SkillMatchingTestCaseStore._read_seed_cases() if case.test_id == "missing_mandatory_gate")
+    expected_score = 25 if customization == "expected-score" else 0
+    has_skills = ["Python", "welding"] if customization == "skills" else case.has_skills
+    async with await psycopg.AsyncConnection.connect(os.environ["DATABASE_URL"]) as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute(
+                """CREATE TEMP TABLE skill_matching_test_cases (
+                    test_id TEXT PRIMARY KEY, need_skills JSONB, has_skills JSONB,
+                    expected_score INTEGER, updated_at TIMESTAMPTZ
+                )"""
+            )
+            await cursor.execute(
+                "CREATE TEMP TABLE skill_matching_test_case_migrations (version INTEGER PRIMARY KEY)"
+            )
+            await cursor.execute(
+                "INSERT INTO skill_matching_test_cases (test_id, need_skills, has_skills, expected_score) VALUES (%s, %s, %s, %s)",
+                (case.test_id, Jsonb([skill.model_dump() for skill in case.need_skills]), Jsonb(has_skills), expected_score),
+            )
+
+            await SkillMatchingTestCaseStore._migrate_score_rule(cursor)
+            await SkillMatchingTestCaseStore._migrate_score_rule(cursor)
+
+            await cursor.execute("SELECT expected_score, has_skills FROM skill_matching_test_cases")
+            assert await cursor.fetchone() == (33 if customization is None else expected_score, has_skills)
+            await cursor.execute("SELECT COUNT(*) FROM skill_matching_test_case_migrations")
+            assert await cursor.fetchone() == (1,)
 
 
 @pytest.mark.anyio

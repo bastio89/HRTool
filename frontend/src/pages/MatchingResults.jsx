@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, ThumbsUp, ThumbsDown, User, Clock, ChevronDown, ChevronUp, Trophy, Target, BarChart3, Quote, Download, UserCheck, CheckCircle, CheckSquare, Square, FileText, GitMerge, Loader2 } from 'lucide-react'
-import { matchingApi } from '../api'
+import { matchingApi, matchingScorePercent } from '../api'
 import { Card, Button, ScoreRing, ScoreBadge, LoadingSpinner, PageContainer } from '../components/UI'
 import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useI18n } from '../I18nContext'
 import { localeTag } from '../utils/format'
+import MatchingResultMetadata, { MatchingRunNotice } from '../components/MatchingResultMetadata'
 
 export default function MatchingResults() {
   const { id } = useParams()
@@ -21,13 +22,53 @@ export default function MatchingResults() {
   const [selectedPairKeys, setSelectedPairKeys] = useState([])
   const [selectedBatchLoading, setSelectedBatchLoading] = useState(false)
   const [selectedBatchError, setSelectedBatchError] = useState('')
+  const [progress, setProgress] = useState(null)
+  const controllers = useRef(new Set())
 
   useEffect(() => {
-    matchingApi.getResult(id)
-      .then(setData)
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [id])
+    let active = true
+    const controller = new AbortController()
+    setLoading(true)
+    setError('')
+    setProgress(null)
+    const load = async () => {
+      try {
+        const stored = JSON.parse(sessionStorage.getItem('hrtool:matching:selected-batch') || 'null')
+        if (stored?.response?.status === 'pending' && String(stored.sourceResultId) === String(id)) {
+          navigate('/matching/results/selected', { replace: true, state: { ...stored, precomputed: stored.response } })
+          return
+        }
+        const result = await matchingApi.getResult(id, { signal: controller.signal })
+        if (!active) return
+        const details = result.results
+        const normalize = row => ({
+          ...row, method: row.method ?? details.method,
+          score: matchingScorePercent(row.score, row.method ?? details.method),
+        })
+        const normalized = details && { ...details }
+        if (normalized) {
+          for (const key of ['results', 'matrix']) {
+            if (Array.isArray(details[key])) normalized[key] = details[key].map(normalize)
+          }
+          for (const key of ['jobsRanked', 'candidatesRanked']) {
+            if (Array.isArray(details[key])) normalized[key] = details[key].map(group => ({ ...group, results: (group.results || []).map(normalize) }))
+          }
+        }
+        setData({ ...result, results: normalized })
+      } catch (err) {
+        if (active && err.name !== 'AbortError') setError(err.message)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      active = false
+      controller.abort()
+      controllers.current.forEach(request => request.abort())
+      controllers.current.clear()
+    }
+  }, [id, navigate])
 
   useEffect(() => {
     setMatchingRow(null)
@@ -50,28 +91,24 @@ export default function MatchingResults() {
   const handleMatchingRow = async (row) => {
     setMatchingRow(`${row.candidateId}-${row.jobId}`)
     setMatchingError('')
+    const controller = new AbortController()
+    controllers.current.add(controller)
     try {
       const currentType = data?.results?.type
-      const currentDirection = data?.results?.direction
-      const sourceJobDescription = data?.job_description || data?.jobDescription || row.jobDescription || row.jobTitle || ''
-      const result = currentType === 'vectormatch_neo4j' || currentType === 'vectormatch'
-        ? await matchingApi.vectorMatch({
-            direction: currentDirection || 'job_to_candidates',
-            ...(currentDirection === 'candidate_to_jobs'
-              ? { candidateId: row.candidateId, candidateName: row.candidateName }
-              : { jobId: row.jobId, jobTitle: row.jobTitle, candidateIds: [row.candidateId] }),
-            engine: currentType === 'vectormatch_neo4j' ? 'neo4j' : 'python',
-          })
-        : await matchingApi.run(
-            sourceJobDescription,
-            row.jobTitle,
-            [row.candidateId],
-            {}
-          )
+      const result = await matchingApi.vectorMatch({
+        direction: 'job_to_candidates',
+        jobId: row.jobId ?? row.sourceJobId,
+        candidateIds: [row.candidateId ?? row.sourceCandidateId],
+        engine: data?.results?.engine || (currentType === 'vectormatch_neo4j' ? 'neo4j' : 'python'),
+      }, { signal: controller.signal, onProgress: setProgress })
+      if (controller.signal.aborted) return
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
+      if (err.name === 'AbortError') return
       setMatchingError(err.message)
       setMatchingRow(null)
+    } finally {
+      controllers.current.delete(controller)
     }
   }
 
@@ -84,20 +121,12 @@ export default function MatchingResults() {
   )
 
   const matrixData = data?.results && ['matrix', 'vectormatch', 'vectormatch_neo4j'].includes(data.results.type) ? data.results : null
-  const resultModeLabel = matrixData?.type === 'vectormatch_neo4j'
-    ? 'Vector-Matching (Neo4j)'
-    : matrixData?.type === 'vectormatch'
-      ? 'Vector-Matching (Python)'
-      : matrixData?.model === 'graph-rag-neo4j-skill-vector-match'
-        ? 'Matrix-Matching (Neo4j Vector)'
-        : matrixData?.model === 'graph-rag-vector-matrix'
-          ? 'Matrix-Matching (Python Vector)'
-          : 'Matrix-Matching'
+  const resultModeLabel = `${t(matrixData?.method === 'vector' ? 'matching.method_skill' : matrixData?.method === 'ai' ? 'matching.method_ai' : 'matching.method_unknown')}${matrixData?.engine ? ` (${matrixData.engine})` : ''}`
 
   if (matrixData) {
     const matrixRows = matrixData.matrix || []
     const topRows = matrixRows.slice(0, 12)
-    const bestScoreMatrix = topRows[0]?.score || 0
+    const bestScoreMatrix = topRows.find(row => Number.isFinite(row.score))?.score ?? null
     const isVectorMatching = matrixData.type === 'vectormatch' || matrixData.type === 'vectormatch_neo4j'
     const embeddingModelLabel = matrixData.embeddingModel || 'unbekannt'
     const pairCount = matrixRows.length
@@ -108,8 +137,10 @@ export default function MatchingResults() {
       matrixRows.map((row) => String(row.candidateId ?? row.candidateName ?? '')).filter(Boolean)
     ).size
     const getPairKey = (row) => `${row.jobId}-${row.candidateId}`
+    const hasStoredIds = row => Boolean((row.jobId ?? row.sourceJobId) && (row.candidateId ?? row.sourceCandidateId))
+    const selectableRows = matrixRows.filter(hasStoredIds)
     const selectedPairs = matrixRows.filter((row) => selectedPairKeys.includes(getPairKey(row)))
-    const allPairsSelected = matrixRows.length > 0 && selectedPairKeys.length === matrixRows.length
+    const allPairsSelected = selectableRows.length > 0 && selectedPairKeys.length === selectableRows.length
 
     const togglePairSelection = (row) => {
       const key = getPairKey(row)
@@ -117,26 +148,43 @@ export default function MatchingResults() {
     }
 
     const toggleAllPairs = () => {
-      setSelectedPairKeys((prev) => (prev.length === matrixRows.length ? [] : matrixRows.map(getPairKey)))
+      setSelectedPairKeys((prev) => (prev.length === selectableRows.length ? [] : selectableRows.map(getPairKey)))
     }
 
     const handleRunSelectedMatching = async () => {
       if (selectedPairs.length === 0) return
+      if (selectedPairs.length > 20) {
+        setSelectedBatchError(t('matching.selection_limit'))
+        return
+      }
       setSelectedBatchLoading(true)
       setSelectedBatchError('')
+      const controller = new AbortController()
+      controllers.current.add(controller)
       try {
         const sourceJobDescription = data?.job_description || data?.jobDescription || ''
         const batchPayload = selectedPairs.map((row) => ({
           jobId: row.jobId,
           jobTitle: row.jobTitle,
-          sourceJobId: data?.job_id || data?.jobId || null,
+          sourceJobId: row.sourceJobId ?? data?.job_id ?? data?.jobId ?? null,
           sourceJobTitle: data?.job_title || data?.jobTitle || row.jobTitle,
           jobDescription: row.jobDescription || sourceJobDescription,
           candidateId: row.candidateId,
           sourceCandidateId: row.sourceCandidateId || row.candidateId,
           candidateName: row.candidateName,
         }))
-        const response = await matchingApi.runSelected(batchPayload)
+        const response = await matchingApi.runSelected(batchPayload, null, {
+          signal: controller.signal,
+          onProgress: current => {
+            if (controller.signal.aborted) return
+            setProgress(current)
+            sessionStorage.setItem('hrtool:matching:selected-batch', JSON.stringify({
+              pairs: batchPayload, mode: 'ai', sourceResultId: id, sourceJobDescription,
+              response: { ...current, status: 'pending' },
+            }))
+          },
+        })
+        if (controller.signal.aborted) return
         sessionStorage.setItem('hrtool:matching:selected-batch', JSON.stringify({
           pairs: batchPayload,
           engine: matrixData?.type === 'vectormatch_neo4j' ? 'neo4j' : 'python',
@@ -147,14 +195,16 @@ export default function MatchingResults() {
         }))
         navigate('/matching/results/selected', { state: { pairs: batchPayload, sourceJobDescription, precomputed: response, mode: 'ai' } })
       } catch (err) {
+        if (err.name === 'AbortError') return
         setSelectedBatchError(err.message)
       } finally {
-        setSelectedBatchLoading(false)
+        controllers.current.delete(controller)
+        if (!controller.signal.aborted) setSelectedBatchLoading(false)
       }
     }
 
     const formatVectorScore = (value) => {
-      if (typeof value !== 'number' || Number.isNaN(value)) return '0.000'
+      if (typeof value !== 'number' || !Number.isFinite(value)) return t('matching.score_missing')
       return value.toFixed(3)
     }
 
@@ -167,7 +217,7 @@ export default function MatchingResults() {
       const jobSkill = skill?.jobSkill || 'Unbekannt'
       const candidateSkill = skill?.candidateSkill || 'Unbekannt'
       const category = resolveMatchedSkillCategory(skill)
-      return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity ?? 0)})`
+      return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity)})`
     }
 
     const getCategoryMatches = (row, category) => (row?.matchedSkills || []).filter(
@@ -232,6 +282,7 @@ export default function MatchingResults() {
 
     return (
       <PageContainer width="content" className="flex flex-col flex-1 min-h-[calc(100dvh-11rem)] pb-12">
+        <MatchingRunNotice progress={progress || (matrixData.pendingPairs?.length ? matrixData : null)} />
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
           <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
             <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -285,7 +336,7 @@ export default function MatchingResults() {
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{jobCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_jobs')}</p></Card>
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-black dark:text-white">{candidateCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_candidates')}</p></Card>
           <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">{pairCount}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_pairs')}</p></Card>
-          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">{bestScoreMatrix}%</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_best_match')}</p></Card>
+          <Card className="p-10"><p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">{bestScoreMatrix != null ? `${bestScoreMatrix}%` : t('matching.score_missing')}</p><p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.stat_best_match')}</p></Card>
         </div>
 
         <Card className="min-w-0 overflow-hidden p-8 sm:p-10 mb-12 min-h-[calc(100dvh-24rem)] flex flex-col">
@@ -298,9 +349,9 @@ export default function MatchingResults() {
               <Button size="md" variant="secondary" onClick={toggleAllPairs} disabled={matrixRows.length === 0}>
                 {allPairsSelected ? 'Auswahl löschen' : 'Alle auswählen'}
               </Button>
-              <Button size="md" variant="dark" onClick={handleRunSelectedMatching} disabled={selectedBatchLoading || selectedPairs.length === 0} aria-busy={selectedBatchLoading}>
+              <Button size="md" variant="dark" onClick={handleRunSelectedMatching} disabled={selectedBatchLoading || selectedPairs.length === 0 || selectedPairs.length > 20} aria-busy={selectedBatchLoading}>
                 {selectedBatchLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                {selectedBatchLoading ? 'KI-Matching läuft...' : 'KI-Matching selektierte'}
+                {selectedBatchLoading ? t('selected_results.loading_ai') : t('matching.run_selected_ai')}
               </Button>
             </div>
           </div>
@@ -309,6 +360,7 @@ export default function MatchingResults() {
               {matchingError}
             </div>
           )}
+          {selectedPairs.length > 20 && <p role="alert">{t('matching.selection_limit')}</p>}
           {selectedBatchError && (
             <div role="alert" className="p-4 rounded-[14px] bg-[#ff3b30]/10 text-[#ff3b30] text-[14px] font-medium mb-4">
               {selectedBatchError}
@@ -327,6 +379,7 @@ export default function MatchingResults() {
                     type="button"
                     aria-pressed={isSelected}
                     aria-label={`${isSelected ? 'Auswahl aufheben' : 'Auswählen'}: ${row.candidateName || ''}`}
+                    disabled={!hasStoredIds(row)}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -346,11 +399,15 @@ export default function MatchingResults() {
                   </button>
                   <div className="min-w-0">
                     <p className="break-words text-[16px] font-semibold text-black dark:text-white">{row.candidateName}</p>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_candidate')}</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1 break-all">
+                      {t('detail.candidate_id')}: <span className="font-mono select-all">{row.candidateId ?? row.sourceCandidateId ?? '—'}</span>
+                    </p>
                   </div>
                   <div className="min-w-0">
                     <p className="break-words text-[16px] font-semibold text-black dark:text-white">{row.jobTitle}</p>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_job')}</p>
+                    <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1 break-all">
+                      {t('jobs.id')}: <span className="font-mono select-all">{row.jobId ?? row.sourceJobId ?? '—'}</span>
+                    </p>
                   </div>
                   <div className="flex items-center justify-end gap-3">
                     {isLoading ? (
@@ -359,20 +416,35 @@ export default function MatchingResults() {
                       <div className="flex items-end gap-3">
                         {isVectorMatching ? (
                           <div className="flex flex-col items-end gap-1.5">
+                            <span>{t('matching.method_skill')}: {row.score != null ? `${row.score}%` : t('matching.score_missing')}</span>
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#0071e3]/10 text-[#0071e3]">
-                              HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
+                              HardSkill {formatVectorScore(row.hardSkillScore)}
                             </span>
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#34c759]/10 text-[#34c759]">
-                              SoftSkill {formatVectorScore(row.softSkillScore ?? 0)}
+                              SoftSkill {formatVectorScore(row.softSkillScore)}
                             </span>
                           </div>
                         ) : (
-                          <div className="text-[26px] font-semibold text-[#0071e3]">{row.score}%</div>
+                          <div className="text-[26px] font-semibold text-[#0071e3]">{row.score != null ? `${row.score}%` : t('matching.score_missing')}</div>
                         )}
                         <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0 mb-1" />
                       </div>
                     )}
                   </div>
+                  <div className="col-span-full"><MatchingResultMetadata result={row} historical /></div>
+                  {row.qualified === false && (
+                    <div className="col-span-full rounded-[14px] bg-[#ff9f0a]/10 p-3 text-[13px] text-gray-600 dark:text-gray-300">
+                      {row.summary && <p className="mb-2">{row.summary}</p>}
+                      <p className="font-medium">{t('matching.mandatory_skills_explanation')}</p>
+                      {row.weaknesses?.length > 0 && (
+                        <ul className="list-disc pl-5 mt-2 space-y-1">
+                          {row.weaknesses.map((weakness, weaknessIndex) => (
+                            <li key={weaknessIndex}>{typeof weakness === 'object' ? weakness.text : weakness}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                   {isVectorMatching && (
                     <div className="col-span-full lg:col-start-2 lg:col-end-5">
                       {renderCategoryDebug(row)}
@@ -391,6 +463,9 @@ export default function MatchingResults() {
               {(matrixData.jobsRanked || []).map((job) => (
                 <div key={job.jobId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
                   <h3 className="break-words text-[17px] font-semibold text-black dark:text-white mb-3">{job.jobTitle}</h3>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-3 break-all">
+                    {t('jobs.id')}: <span className="font-mono select-all">{job.jobId ?? '—'}</span>
+                  </p>
                   <div className="space-y-2">
                     {job.results.slice(0, 5).map((row, idx) => (
                       <div key={`${job.jobId}-${row.candidateId}`} className="text-[14px]">
@@ -399,16 +474,19 @@ export default function MatchingResults() {
                           {isVectorMatching ? (
                             <div className="flex shrink-0 flex-col items-end gap-1">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#0071e3]/10 text-[#0071e3]">
-                                HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
+                                HardSkill {formatVectorScore(row.hardSkillScore)}
                               </span>
                               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#34c759]/10 text-[#34c759]">
-                                SoftSkill {formatVectorScore(row.softSkillScore ?? 0)}
+                                SoftSkill {formatVectorScore(row.softSkillScore)}
                               </span>
                             </div>
                           ) : (
-                            <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                            <span className="font-semibold text-[#0071e3]">{row.score != null ? `${row.score}%` : t('matching.score_missing')}</span>
                           )}
                         </div>
+                        <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-1 break-all">
+                          {t('detail.candidate_id')}: <span className="font-mono select-all">{row.candidateId ?? row.sourceCandidateId ?? '—'}</span>
+                        </p>
                         {isVectorMatching && renderCategoryDebug(row)}
                       </div>
                     ))}
@@ -424,6 +502,9 @@ export default function MatchingResults() {
               {(matrixData.candidatesRanked || []).map((candidate) => (
                 <div key={candidate.candidateId} className="pb-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
                   <h3 className="text-[17px] font-semibold text-black dark:text-white mb-3">{candidate.candidateName}</h3>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mb-3 break-all">
+                    {t('detail.candidate_id')}: <span className="font-mono select-all">{candidate.candidateId ?? '—'}</span>
+                  </p>
                   <div className="space-y-2">
                     {candidate.results.slice(0, 5).map((row, idx) => (
                       <div key={`${candidate.candidateId}-${row.jobId}`} className="text-[14px]">
@@ -432,16 +513,19 @@ export default function MatchingResults() {
                           {isVectorMatching ? (
                             <div className="flex shrink-0 flex-col items-end gap-1">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#0071e3]/10 text-[#0071e3]">
-                                HardSkill {formatVectorScore(row.hardSkillScore ?? 0)}
+                                HardSkill {formatVectorScore(row.hardSkillScore)}
                               </span>
                               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-semibold bg-[#34c759]/10 text-[#34c759]">
-                                SoftSkill {formatVectorScore(row.softSkillScore ?? 0)}
+                                SoftSkill {formatVectorScore(row.softSkillScore)}
                               </span>
                             </div>
                           ) : (
-                            <span className="font-semibold text-[#0071e3]">{row.score}%</span>
+                            <span className="font-semibold text-[#0071e3]">{row.score != null ? `${row.score}%` : t('matching.score_missing')}</span>
                           )}
                         </div>
+                        <p className="text-[12px] text-gray-500 dark:text-gray-400 mt-1 break-all">
+                          {t('jobs.id')}: <span className="font-mono select-all">{row.jobId ?? row.sourceJobId ?? '—'}</span>
+                        </p>
                         {isVectorMatching && renderCategoryDebug(row)}
                       </div>
                     ))}
@@ -455,19 +539,20 @@ export default function MatchingResults() {
     )
   }
 
-  // Normalize scores: Ollama returns 0-100, UI expects 0-1, then sort descending
+  // API boundary normalizes legacy scores; UI rings use 0..1.
   const results = (data?.results?.results || []).map(r => ({
     ...r,
-    score: r.score > 1 ? r.score / 100 : r.score,
-  })).sort((a, b) => b.score - a.score)
-  const matchedAt = data?.results?.matchedAt || data?.created_at
-  const bestScore = results[0]?.score || 0
-  const avgScore = results.length > 0 ? results.reduce((s, r) => s + r.score, 0) / results.length : 0
+    score: r.score == null ? null : r.score / 100,
+  })).sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+  const matchedAt = data?.results?.matchedAt
+  const scoredResults = results.filter(row => row.score != null)
+  const bestScore = scoredResults[0]?.score ?? null
+  const avgScore = scoredResults.length ? scoredResults.reduce((sum, row) => sum + row.score, 0) / scoredResults.length : null
   const topCount = results.filter(r => r.score >= 0.8).length
 
   const exportCSV = () => {
     const escape = (v) => {
-      if (!v) return ''
+      if (v == null) return ''
       const s = String(v).replace(/"/g, '""')
       return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s
     }
@@ -475,7 +560,7 @@ export default function MatchingResults() {
     const rows = results.map((r, i) => [
       i + 1,
       r.candidateName,
-      (r.score * 100).toFixed(0),
+      r.score == null ? '' : (r.score * 100).toFixed(0),
       r.summary,
       (r.strengths || []).map(s => typeof s === 'object' ? s.text : s).join('; '),
       (r.weaknesses || []).map(w => typeof w === 'object' ? w.text : w).join('; ')
@@ -492,6 +577,7 @@ export default function MatchingResults() {
 
   return (
     <PageContainer width="content" className="flex flex-col flex-1 min-h-[calc(100dvh-11rem)] pb-12">
+      <MatchingRunNotice progress={progress || (data?.results?.pendingPairs?.length ? data.results : null)} />
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-8 sm:mb-14">
         <div className="flex items-center gap-4 sm:gap-8 flex-1 min-w-0">
           <button onClick={() => navigate(-1)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
@@ -499,6 +585,7 @@ export default function MatchingResults() {
           </button>
           <div className="flex-1 min-w-0">
             <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{t('matching.results')}</h1>
+            <p>{t(data?.results?.method === 'vector' ? 'matching.method_skill' : data?.results?.method === 'ai' ? 'matching.method_ai' : 'matching.method_unknown')}</p>
             <div className="flex items-center gap-3 sm:gap-6 mt-1 sm:mt-3 flex-wrap">
               <span className="text-[14px] sm:text-[18px] font-medium text-gray-500 dark:text-gray-400">{data?.job_title}</span>
               {matchedAt && (
@@ -603,7 +690,7 @@ export default function MatchingResults() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#34c759]">
-                {bestScore ? (bestScore * 100).toFixed(0) + '%' : '-'}
+                {bestScore != null ? (bestScore * 100).toFixed(0) + '%' : t('matching.score_missing')}
               </p>
               <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.best_match')}</p>
             </div>
@@ -616,7 +703,7 @@ export default function MatchingResults() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[48px] leading-none font-semibold tracking-tight text-[#0071e3]">
-                {results.length > 0 ? (avgScore * 100).toFixed(0) + '%' : '-'}
+                {avgScore != null ? (avgScore * 100).toFixed(0) + '%' : t('matching.score_missing')}
               </p>
               <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-4">{t('matching.average')}</p>
             </div>
@@ -640,6 +727,11 @@ export default function MatchingResults() {
 
       <div>
         <h2 className="text-[28px] font-semibold tracking-tight text-black dark:text-white mb-8">{t('matching.ranking')}</h2>
+        {(data?.results?.failures || []).map((failure, index) => (
+          <div role="alert" key={`${failure.jobId}-${failure.candidateId}-${index}`} className="mb-4 text-[#ff3b30]">
+            {failure.candidateName || failure.candidateId}: {failure.error}
+          </div>
+        ))}
         <div className="space-y-6">
           {results.map((result, idx) => (
             <Card key={result.candidateId || idx} className="overflow-hidden p-0" hover>
@@ -656,17 +748,22 @@ export default function MatchingResults() {
                   {idx + 1}
                 </div>
 
-                <ScoreRing score={result.score} size={88} strokeWidth={6} />
+                {result.score != null ? <ScoreRing score={result.score} size={88} strokeWidth={6} /> : <span>{t('matching.score_missing')}</span>}
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-5">
                     <h3 className="text-[26px] font-semibold tracking-tight text-black dark:text-white">{result.candidateName}</h3>
-                    <ScoreBadge score={result.score} />
+                    {result.score != null && <ScoreBadge score={result.score} />}
                     <KiBadge tooltip={t('matching.score_tooltip')} />
                   </div>
+                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 break-all">
+                    {t('detail.candidate_id')}: <span className="font-mono select-all">{result.candidateId ?? result.sourceCandidateId ?? '—'}</span>
+                    {' · '}{t('jobs.id')}: <span className="font-mono select-all">{result.jobId ?? result.sourceJobId ?? data?.job_id ?? '—'}</span>
+                  </p>
                   <p className="text-[16px] font-medium text-gray-500 dark:text-gray-400 mt-3 leading-relaxed">
                     {result.summary}
                   </p>
+                  <MatchingResultMetadata result={result} historical />
                 </div>
 
                 <div className="flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors">

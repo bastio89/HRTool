@@ -8,6 +8,7 @@ import { useToast } from '../components/Toast'
 import { useConfirm } from '../components/ConfirmDialog'
 import FormActionBar from '../components/FormActionBar'
 import useUnsavedChanges from '../hooks/useUnsavedChanges'
+import ImportMatchingStatus from '../components/ImportMatchingStatus'
 import { useI18n } from '../I18nContext'
 
 const JOB_TYPES = ['Vollzeit', 'Teilzeit', 'Freelance', 'Praktikum', 'Werkstudent']
@@ -44,6 +45,7 @@ export default function JobForm() {
   const [uploadingDescription, setUploadingDescription] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [uploadedFilename, setUploadedFilename] = useState('')
+  const [matchingImport, setMatchingImport] = useState(null)
   const [aiKeywords, setAiKeywords] = useState('')
   const [aiModel, setAiModel] = useState('')
   const [error, setError] = useState('')
@@ -160,6 +162,7 @@ export default function JobForm() {
         setPersistedJobId(String(importedJob.id))
       }
       setUploadedFilename(importedFilename)
+      setMatchingImport({ runId: parsed.matchingRunId, status: parsed.matchingStatus })
       toast.success(t('jobs.upload_success'))
     } catch (err) {
       setError(err.message || t('jobs.upload_failed'))
@@ -205,13 +208,18 @@ export default function JobForm() {
         >
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">
             {isEdit ? t('jobs.edit') : t('jobs.create')}
           </h1>
           <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-2">
             {isEdit ? t('jobs.edit_desc') : t('jobs.create_desc')}
           </p>
+          {isEdit && (
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 break-all">
+              {t('jobs.id')}: <span className="font-mono select-all">{effectiveJobId}</span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -377,6 +385,7 @@ export default function JobForm() {
                 </div>
               </div>
             </div>
+            {matchingImport && <ImportMatchingStatus {...matchingImport} />}
             <Textarea
               label={t('job.about_us')}
               placeholder={t('job.about_us_placeholder')}

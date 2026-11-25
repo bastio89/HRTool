@@ -6,6 +6,8 @@
 const express = require('express');
 const request = require('supertest');
 const zlib = require('zlib');
+const fs = require('fs');
+const path = require('path');
 const { PDFDocument, StandardFonts } = require('pdf-lib');
 
 const nativeFetch = global.fetch;
@@ -16,7 +18,7 @@ const { splitIntoParts, plainText, LIMITS } = require('../crm/returnExport');
 const { extractJobSalary } = require('../crm/salary');
 const { sourceUrlFromText } = require('../jobSourceUrl');
 const { ensureMatchingPairSchema } = require('../matchingPairs');
-const { cleanupCandidateFiles } = require('../utils/candidateFiles');
+const { cleanupCandidateFiles, uploadsDir } = require('../utils/candidateFiles');
 
 const marker = `crm-${Date.now()}`;
 const hex = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
@@ -24,6 +26,14 @@ const newUuid = () => `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-8${hex().sli
 
 let graphCalls = [];
 let tokens = [];
+let actorId;
+
+beforeAll(() => {
+  actorId = db.prepare(`
+    INSERT INTO users (username, password_hash, display_name, role)
+    VALUES (?, 'test-only', 'CRM Import Test', 'admin')
+  `).run(marker).lastInsertRowid;
+});
 
 // Kleines ZIP (Methode "stored") fuer die Tests.
 function makeZip(files) {
@@ -94,7 +104,7 @@ function app(role = 'admin') {
   const instance = express();
   instance.use(express.json());
   instance.use((req, res, next) => {
-    req.user = { id: 1, username: role, role };
+    req.user = { id: actorId, username: role, role };
     next();
   });
   instance.use('/api/crm', crmRouter);
@@ -107,22 +117,47 @@ async function upload(zip, role) {
   return res;
 }
 
+async function uploadCv(uuid, firstName, lastName, lines) {
+  return upload(makeZip([
+    { name: 'kandidaten.csv', data: candidatesCsv([[uuid, firstName, lastName, '[]', `cvs/${uuid}.docx`]]) },
+    { name: `cvs/${uuid}.docx`, data: makeDocx(lines) },
+  ]));
+}
+
 beforeEach(() => {
   graphCalls = [];
   process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
   global.fetch = jest.fn(async (url, options) => {
     const path = new URL(String(url)).pathname;
     const body = options?.body ? JSON.parse(options.body) : null;
-    graphCalls.push({ path, body });
+    const call = { path, body };
+    graphCalls.push(call);
     if (path === '/ingest/candidate') {
       const text = body.raw_text;
       const birth = /Geburtsdatum: (\S+)/.exec(text)?.[1] || null;
-      return { ok: true, json: async () => ({ id: '', persisted: false, profile: { name: 'Name aus CV', email: /(\S+@\S+)/.exec(text)?.[1] || null, birth_date: birth, skills: [{ name: 'Projektmanagement' }] } }) };
+      return { ok: true, json: async () => ({ id: '', persisted: false, profile: {
+        name: 'Name aus CV', email: /(\S+@\S+)/.exec(text)?.[1] || null, birth_date: birth,
+        skills: [{ name: /\bSQL\b/.test(text) ? 'SQL' : 'Projektmanagement' }],
+        work_history: text.includes('New Company') ? [{ employer: 'New Company', position: 'Developer' }] : [],
+      } }) };
     }
-    if (path === '/sync/candidates') return { ok: true, json: async () => ({ synced: body.candidate_ids.length, failed: 0, errors: [] }) };
+    if (path === '/sync/candidates') {
+      call.sources = [];
+      for (const id of body.candidate_ids) {
+        const saved = db.prepare('SELECT * FROM candidates WHERE id = ?').get(id);
+        const text = db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(id);
+        expect(saved.source).toBe('CRM');
+        expect(JSON.parse(text.profile_json).name).toBe(saved.name);
+        expect(db.prepare('SELECT id FROM matching_runs WHERE entity_type = ? AND entity_id = ? AND actor_user_id = ?').get('candidate', id, actorId)).toBeDefined();
+        call.sources.push({ id, uuid: saved.uuid, name: saved.name, profileName: JSON.parse(text.profile_json).name });
+      }
+      return { ok: true, json: async () => ({ synced: body.candidate_ids.length, failed: 0, errors: [] }) };
+    }
     return { ok: false, status: 404, json: async () => ({ detail: `kein Mock fuer ${path}` }) };
   });
 });
+
+afterEach(() => jest.restoreAllMocks());
 
 afterAll(async () => {
   global.fetch = nativeFetch;
@@ -134,6 +169,8 @@ afterAll(async () => {
     db.prepare(`DELETE FROM candidates WHERE id IN (${ids.map(() => '?').join(',')})`).run(...ids);
   }
   db.prepare('DELETE FROM jobs WHERE title LIKE ?').run(`%${marker}%`);
+  db.prepare('DELETE FROM matching_runs WHERE actor_user_id = ?').run(actorId);
+  db.prepare('DELETE FROM users WHERE id = ?').run(actorId);
 });
 
 describe('CSV of the interface', () => {
@@ -201,22 +238,35 @@ describe('CRM import', () => {
 
     expect(created.status).toBe(200);
     expect(created.body).toMatchObject({ uuid, status: 'created', warning: null });
+    expect(created.body.matchingStatus).toBe('queued');
+    expect(created.body.matchingStatusUrl).toContain(created.body.matchingRunId);
     const candidate = db.prepare('SELECT * FROM candidates WHERE uuid = ?').get(uuid);
+    expect(db.prepare('SELECT * FROM matching_runs WHERE entity_type = ? AND entity_id = ?').all('candidate', candidate.id))
+      .toEqual([expect.objectContaining({ id: created.body.matchingRunId, actor_user_id: actorId })]);
     expect(candidate).toMatchObject({ name: `Maria Beispiel ${marker}`, tags: 'Deutsch, Projektleiter', source: 'CRM', crm_first_name: 'Maria', crm_last_name: `Beispiel ${marker}`, email: `maria.${marker}@example.com` });
     expect(db.prepare('SELECT original_text, source FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(candidate.id)).toMatchObject({ source: 'CRM' });
     const files = db.prepare('SELECT original_name, mime_type FROM candidate_files WHERE candidate_id = ?').all(candidate.id);
     expect(files).toEqual([{ original_name: `CV Maria Beispiel ${marker}.docx`, mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }]);
     await new Promise(resolve => setImmediate(resolve));
     expect(graphCalls.find(call => call.path === '/sync/candidates').body).toEqual({ candidate_ids: [candidate.id] });
+    expect(graphCalls.find(call => call.path === '/sync/candidates').sources).toEqual([{
+      id: candidate.id, uuid, name: candidate.name, profileName: candidate.name,
+    }]);
 
     // Gleiches CV, neues Label: kein neues Auslesen, Labels kommen hinzu.
+    db.prepare("UPDATE candidate_texts SET anonymized_text = 'existing anonymized', anonymization_map = '{}' WHERE candidate_id = CAST(? AS TEXT)").run(candidate.id);
     graphCalls = [];
     const second = await upload(makeZip([{ name: 'kandidaten.csv', data: csv('["Englisch"]') }, { name: `cvs/${uuid}.docx`, data: cv }]));
     expect(second.body.rows[0]).toMatchObject({ action: 'update', existingId: candidate.id });
     const updated = await request(app()).post(`/api/crm/import/${second.body.token}/candidates/${uuid}`);
     expect(updated.body.status).toBe('unchanged');
+    expect(updated.body.matchingStatus).toBe('not_required');
+    expect(updated.body.matchingRunId).toBeNull();
+    expect(graphCalls).toHaveLength(0);
     expect(graphCalls.some(call => call.path === '/ingest/candidate')).toBe(false);
     expect(db.prepare('SELECT tags FROM candidates WHERE id = ?').get(candidate.id).tags).toBe('Deutsch, Projektleiter, Englisch');
+    expect(db.prepare('SELECT anonymized_text, anonymization_map FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(candidate.id))
+      .toEqual({ anonymized_text: 'existing anonymized', anonymization_map: '{}' });
     expect(db.prepare('SELECT COUNT(*) AS count FROM candidates WHERE uuid = ?').get(uuid).count).toBe(1);
   });
 
@@ -234,8 +284,121 @@ describe('CRM import', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('linked');
+    expect(res.body.matchingStatus).toBe('queued');
+    expect(db.prepare('SELECT id FROM matching_runs WHERE entity_type = ? AND entity_id = ?').all('candidate', existing))
+      .toEqual([{ id: res.body.matchingRunId }]);
     expect(res.body.candidate.id).toBe(existing);
     expect(db.prepare('SELECT uuid::text AS uuid, tags, source FROM candidates WHERE id = ?').get(existing)).toEqual({ uuid, tags: 'Bestand, Deutsch', source: 'CRM' });
+  });
+
+  test('failure after CRM finalization rolls back the initial profile, file and outbox; the same session remains retryable', async () => {
+    const uuid = newUuid();
+    const session = await uploadCv(uuid, 'Atomic', `New ${marker}`, ['Atomic New', 'Projektleiterin mit langer Erfahrung']);
+    const runsBefore = db.prepare('SELECT id FROM matching_runs WHERE actor_user_id = ?').all(actorId);
+    const transaction = db.transactionAsync.bind(db);
+    const injected = jest.spyOn(db, 'transactionAsync').mockImplementation(callback => transaction(async (tx) => {
+      const prepare = tx.prepare.bind(tx);
+      jest.spyOn(tx, 'prepare').mockImplementation(sql => {
+        const statement = prepare(sql);
+        if (!sql.includes('UPDATE candidates SET uuid = CAST')) return statement;
+        const run = statement.run.bind(statement);
+        return { ...statement, run: async (...args) => { await run(...args); throw new Error('injected final CRM failure'); } };
+      });
+      return callback(tx);
+    }));
+    const failed = await request(app()).post(`/api/crm/import/${session.body.token}/candidates/${uuid}`);
+    expect(failed.status).toBe(500);
+    expect(db.prepare('SELECT id FROM candidates WHERE uuid = ?').get(uuid)).toBeUndefined();
+    expect(db.prepare('SELECT candidate_id FROM candidate_texts WHERE candidate_name = ?').get(`Atomic New ${marker}`)).toBeUndefined();
+    expect(db.prepare('SELECT id FROM matching_runs WHERE actor_user_id = ?').all(actorId)).toEqual(runsBefore);
+    expect(fs.readdirSync(uploadsDir).filter(filename => filename.startsWith(`crm-${uuid}-`))).toHaveLength(0);
+    expect(graphCalls.some(call => call.path === '/sync/candidates')).toBe(false);
+    injected.mockRestore();
+    const retried = await request(app()).post(`/api/crm/import/${session.body.token}/candidates/${uuid}`);
+    expect(retried.status).toBe(200);
+    expect(retried.body.matchingStatus).toBe('queued');
+  });
+
+  test('changed-CV enqueue rollback preserves old source, anonymization and file; success publishes one new complete version', async () => {
+    const uuid = newUuid();
+    const original = await uploadCv(uuid, 'Atomic', `Existing ${marker}`, ['Atomic Existing', 'Projektleiter mit langer Erfahrung']);
+    const created = await request(app()).post(`/api/crm/import/${original.body.token}/candidates/${uuid}`);
+    expect(created.status).toBe(200);
+    const id = created.body.candidate.id;
+    db.prepare("UPDATE candidate_texts SET anonymized_text = 'old anonymized', anonymization_map = '{}' WHERE candidate_id = CAST(? AS TEXT)").run(id);
+    const before = db.prepare('SELECT * FROM candidates WHERE id = ?').get(id);
+    const oldText = db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(id);
+    const oldFiles = db.prepare('SELECT * FROM candidate_files WHERE candidate_id = ?').all(id);
+    const changed = await uploadCv(uuid, 'Atomic', `Changed ${marker}`, ['Atomic Changed', 'SQL Developer at New Company with long experience']);
+    const transaction = db.transactionAsync.bind(db);
+    const injected = jest.spyOn(db, 'transactionAsync').mockImplementation(callback => transaction(async (tx) => {
+      const prepare = tx.prepare.bind(tx);
+      jest.spyOn(tx, 'prepare').mockImplementation(sql => {
+        const statement = prepare(sql);
+        if (!sql.includes('INSERT INTO matching_runs')) return statement;
+        const run = statement.run.bind(statement);
+        return { ...statement, run: async (...args) => { await run(...args); throw new Error('injected CRM enqueue failure'); } };
+      });
+      return callback(tx);
+    }));
+    const failed = await request(app()).post(`/api/crm/import/${changed.body.token}/candidates/${uuid}`);
+    expect(failed.status).toBe(500);
+    expect(db.prepare('SELECT * FROM candidates WHERE id = ?').get(id)).toEqual(before);
+    expect(db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(id)).toEqual(oldText);
+    expect(db.prepare('SELECT * FROM candidate_files WHERE candidate_id = ?').all(id)).toEqual(oldFiles);
+    expect(fs.readdirSync(uploadsDir).filter(filename => filename.startsWith(`crm-${uuid}-`))).toEqual(oldFiles.map(file => file.filename));
+    expect(fs.existsSync(path.join(uploadsDir, oldFiles[0].filename))).toBe(true);
+    expect(db.prepare('SELECT id FROM matching_runs WHERE entity_type = ? AND entity_id = ?').all('candidate', id))
+      .toEqual([{ id: created.body.matchingRunId }]);
+    injected.mockRestore();
+    const updated = await request(app()).post(`/api/crm/import/${changed.body.token}/candidates/${uuid}`);
+    expect(updated.status).toBe(200);
+    expect(updated.body.status).toBe('updated');
+    expect(updated.body.matchingRunId).not.toBe(created.body.matchingRunId);
+    expect(db.prepare('SELECT skills, name FROM candidates WHERE id = ?').get(id)).toEqual({ skills: 'SQL', name: `Atomic Changed ${marker}` });
+    const savedText = db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(id);
+    expect(savedText.anonymized_text).toBeNull();
+    expect(savedText.anonymization_map).toBeNull();
+    expect(JSON.parse(savedText.profile_json).name).toBe(`Atomic Changed ${marker}`);
+    expect(db.prepare('SELECT employer FROM candidate_work_history WHERE candidate_id = ?').all(id)).toEqual([{ employer: 'New Company' }]);
+    expect(fs.existsSync(path.join(uploadsDir, oldFiles[0].filename))).toBe(false);
+    expect(db.prepare('SELECT id FROM matching_runs WHERE entity_type = ? AND entity_id = ?').all('candidate', id)).toHaveLength(2);
+  });
+
+  test('a CRM name change with the same CV invalidates old anonymization and queues once without parsing again', async () => {
+    const uuid = newUuid();
+    const lines = ['Original Name', 'Projektleiter mit langer Erfahrung'];
+    const original = await uploadCv(uuid, 'Original', `Name ${marker}`, lines);
+    const first = await request(app()).post(`/api/crm/import/${original.body.token}/candidates/${uuid}`);
+    const id = first.body.candidate.id;
+    db.prepare("UPDATE candidate_texts SET anonymized_text = 'old anonymized', anonymization_map = '{}' WHERE candidate_id = CAST(? AS TEXT)").run(id);
+    graphCalls = [];
+    const changed = await uploadCv(uuid, 'Renamed', `Name ${marker}`, lines);
+    const renamed = await request(app()).post(`/api/crm/import/${changed.body.token}/candidates/${uuid}`);
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.matchingStatus).toBe('queued');
+    expect(graphCalls.some(call => call.path === '/ingest/candidate')).toBe(false);
+    const saved = db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(id);
+    expect(saved.candidate_name).toBe(`Renamed Name ${marker}`);
+    expect(JSON.parse(saved.profile_json).name).toBe(saved.candidate_name);
+    expect(saved.anonymized_text).toBeNull();
+    expect(saved.anonymization_map).toBeNull();
+    expect(db.prepare('SELECT id FROM matching_runs WHERE entity_type = ? AND entity_id = ?').all('candidate', id)).toHaveLength(2);
+  });
+
+  test('parallel deliveries of the same CRM UUID commit one source, file and run', async () => {
+    const uuid = newUuid();
+    const session = await uploadCv(uuid, 'Parallel', `CRM ${marker}`, ['Parallel CRM', 'Projektleiter mit langer Erfahrung']);
+    const responses = await Promise.all(Array.from({ length: 3 }, () =>
+      request(app()).post(`/api/crm/import/${session.body.token}/candidates/${uuid}`)));
+    expect(responses.map(response => response.status)).toEqual([200, 200, 200]);
+    expect(responses.map(response => response.body.status).sort()).toEqual(['created', 'unchanged', 'unchanged']);
+    const id = responses[0].body.candidate.id;
+    expect(new Set(responses.map(response => response.body.candidate.id)).size).toBe(1);
+    expect(db.prepare('SELECT id FROM matching_runs WHERE entity_type = ? AND entity_id = ?').all('candidate', id)).toHaveLength(1);
+    const files = db.prepare('SELECT filename FROM candidate_files WHERE candidate_id = ?').all(id);
+    expect(files).toHaveLength(1);
+    expect(fs.readdirSync(uploadsDir).filter(filename => filename.startsWith(`crm-${uuid}-`))).toEqual([files[0].filename]);
   });
 
   test('says clearly when GraphRAG is not reachable', async () => {

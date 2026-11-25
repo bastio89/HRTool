@@ -5,6 +5,8 @@ const os = require('os');
 const multer = require('multer');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { randomUUID } = require('node:crypto');
+const { isDeepStrictEqual } = require('node:util');
 const db = require('../database');
 const { logAudit } = require('./audit');
 const { logAiCall } = require('../aiLogger');
@@ -13,7 +15,8 @@ const { promptGuard } = require('../middleware/promptSanitizer');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 const { tmpDir, extractText } = require('../utils/documentText');
 const { graphRagAuthHeaders } = require('../graphragAuth');
-const { DuplicateError, assertNoJobDuplicate, findJobDuplicate, sendIdentityError, translateUniqueViolation } = require('../identity');
+const { DuplicateError, assertNoJobDuplicate, findJobDuplicateAsync, sendIdentityError, translateUniqueViolation, translateJobUniqueViolationAsync } = require('../identity');
+const { enqueueMatchingImport } = require('../matchingImports');
 const { deleteJobFromGraphRag } = require('../utils/graphRagJob');
 const { forwardJobsChPluginRequest } = require('./plugins');
 
@@ -129,12 +132,26 @@ function buildGraphRagJobText(job) {
   return sections.filter(Boolean).join('\n').trim();
 }
 
-function buildGraphRagJobProfile(job) {
+function buildGraphRagJobProfile(job, profile = {}) {
+  const structuredSkills = new Map((Array.isArray(profile.required_skills) ? profile.required_skills : [])
+    .filter(skill => skill && typeof skill === 'object')
+    .map(skill => [String(skill.name || '').trim().toLowerCase(), skill]));
   return {
+    ...profile,
     title: String(job.title || '').trim(),
     company: job.company || null,
+    recruiter_company: job.recruiter_company || null,
+    employer_company: job.employer_company || null,
     location: job.location || null,
     employment_type: job.type || null,
+    about_us: job.about_us || null,
+    description: job.description || null,
+    requirements: job.requirements || null,
+    benefits: job.benefits || null,
+    required_skills: String(job.skills || '').split(',').map(name => name.trim()).filter(Boolean).map(name => ({
+      category: 'HardSkill', priority: 'Mandatory',
+      ...structuredSkills.get(name.toLowerCase()), name,
+    })),
   };
 }
 
@@ -157,47 +174,67 @@ function serializeJobSkills(skills) {
   return '';
 }
 
-// Eine Stelle gibt es genau einmal (gleiche URL oder gleicher Titel bei
-// gleicher Firma und gleichem Ort, siehe src/identity.js). Ein Treffer wirft
-// DuplicateError statt still den bestehenden Datensatz zurueckzugeben.
-// enrichExisting: Ein erneuter Import ergaenzt bei der vorhandenen Stelle
-// leere Felder (Quelle, Skills), legt aber keinen zweiten Datensatz an.
-function persistLocalJob(job, { enrichExisting = false } = {}) {
-  const hit = findJobDuplicate(db, job);
-  if (hit) {
-    if (enrichExisting) {
-      const existing = db.prepare('SELECT * FROM jobs WHERE id = ?').get(hit.existing.id) || hit.existing;
-      if (job.source && !existing.source) db.prepare('UPDATE jobs SET source = ? WHERE id = ?').run(job.source, existing.id);
-      if (job.skills && !String(existing.skills || '').trim()) db.prepare('UPDATE jobs SET skills = ? WHERE id = ?').run(job.skills, existing.id);
-    }
-    throw new DuplicateError('job', hit.reason, hit.existing);
-  }
-
-  let result;
+async function persistLocalJob(job, { req, profile = {}, rawText, refreshExisting = false } = {}) {
+  const value = (key, profileKey = key) => job[key] !== undefined ? job[key] : profile[profileKey];
+  const identity = {
+    title: value('title'), company: value('company'), location: value('location'), url: job.url,
+  };
   try {
-    result = db.prepare(`
-    INSERT INTO jobs (graph_job_id, company, title, about_us, description, requirements, skills, benefits, location, type, status, url, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    job.graph_job_id || null,
-    job.company || null,
-    job.title,
-    job.about_us || null,
-    job.description || null,
-    job.requirements || null,
-    job.skills || null,
-    job.benefits || null,
-    job.location || null,
-    job.type || 'Vollzeit',
-    job.status || 'Offen',
-    job.url || null,
-    job.source || null,
-  );
+    return await db.transactionAsync(async (tx) => {
+      const hit = await findJobDuplicateAsync(tx, identity);
+      if (hit && !refreshExisting) throw new DuplicateError('job', hit.reason, hit.existing);
+      const existing = hit ? await tx.prepare('SELECT * FROM jobs WHERE id = ? FOR UPDATE').get(hit.existing.id) : null;
+      if (hit && !existing) throw new Error('Die vorhandene Stelle wurde waehrend des Imports geloescht');
+      const values = {
+        company: value('company') || null,
+        title: identity.title,
+        about_us: value('about_us') || null,
+        description: value('description') || null,
+        requirements: value('requirements') || null,
+        skills: serializeJobSkills(value('skills', 'required_skills')) || null,
+        benefits: value('benefits') || null,
+        location: value('location') || null,
+        type: value('type', 'employment_type') || 'Vollzeit',
+        url: job.url || existing?.url || null,
+        source: job.source || null,
+        salary: job.salary !== undefined ? String(job.salary || '').trim() || null : existing?.salary || null,
+        recruiter_company: value('recruiter_company') || null,
+        employer_company: value('employer_company') || null,
+      };
+      values.raw_text = String(rawText ?? buildGraphRagJobText(values)).trim();
+      const matchingProfile = buildGraphRagJobProfile(values, profile);
+      values.parsed_profile_json = JSON.stringify(matchingProfile);
+      const changed = !existing || Object.entries(values).filter(([key]) => key !== 'source').some(([key, next]) => key === 'parsed_profile_json'
+        ? !isDeepStrictEqual(existing[key] ? JSON.parse(existing[key]) : null, matchingProfile)
+        : existing[key] !== next);
+      if (!changed) return {
+        ...existing, duplicate: true, changed: false, matchingRunId: null,
+        matchingStatus: 'not_required', preparationStatus: 'not_requested',
+      };
+      let id = existing?.id;
+      if (existing) {
+        await tx.prepare(`UPDATE jobs SET ${Object.keys(values).map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+          .run(...Object.values(values), id);
+      } else {
+        const inserted = { graph_job_id: job.graph_job_id || null, ...values, status: job.status || 'Offen' };
+        id = (await tx.prepare(`INSERT INTO jobs (${Object.keys(inserted).join(', ')}) VALUES (${Object.keys(inserted).map(() => '?').join(', ')})`)
+          .run(...Object.values(inserted))).lastInsertRowid;
+      }
+      const matching = await enqueueMatchingImport(tx, {
+        entityType: 'job', entityId: id, req, source: profile && Object.keys(profile).length ? 'Job-Profil-Import' : 'Job-Import',
+        eventKey: existing ? `job:${id}:${randomUUID()}` : undefined,
+      });
+      return {
+        ...await tx.prepare('SELECT * FROM jobs WHERE id = ?').get(id),
+        ...matching, duplicate: Boolean(existing), changed: true,
+      };
+    });
   } catch (error) {
-    throw translateUniqueViolation(db, error, 'job', job);
+    if (error?.code === '23505') {
+      throw await db.transactionAsync(tx => translateJobUniqueViolationAsync(tx, error, identity));
+    }
+    throw error;
   }
-
-  return db.prepare('SELECT * FROM jobs WHERE id = ?').get(result.lastInsertRowid);
 }
 
 // jobId: UUID der Stelle aus PostgreSQL. GraphRAG legt den Neo4j-Knoten
@@ -373,34 +410,48 @@ router.get('/:id', (req, res) => {
  *           schema: { $ref: '#/components/schemas/Job' }
  *     responses:
  *       201: { description: Erstellte Stelle }
+ *       200: { description: Aktualisierter oder unveraenderter Profil-Reimport. Neue Datenversionen enthalten matchingRunId und matchingStatus; unveraenderte Importe melden not_required. }
+ *       409: { description: Bereits vorhandene Stelle beim manuellen Anlegen ohne Importprofil }
  */
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { title, company, description, requirements, skills, location, type, status, about_us, benefits, source, graphRagProfile } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
+    if (graphRagProfile !== undefined && (!graphRagProfile || typeof graphRagProfile !== 'object' || Array.isArray(graphRagProfile))) {
+      return res.status(400).json({ error: 'graphRagProfile muss ein Job-Profil sein' });
+    }
     // Ohne URL: Link aus "Quelle: ..." im Text (z. B. jobs.ch-PDF), damit die
     // Stelle eindeutig ist und in die CRM-Rueckgabe kann.
-    const url = String(req.body.url || '').trim() || sourceUrlFromText(description, requirements, about_us, benefits);
+    const url = String(req.body.url || '').trim()
+      || sourceUrlFromText(description, requirements, about_us, benefits, graphRagProfile?.description, req.body.raw_text);
 
-    const job = persistLocalJob({ title, company, about_us, description, requirements, skills, benefits, location, type, status, url, source });
-    // Lohn laut Stellenbeschreibung (optional, z. B. fuer die CRM-Rueckgabe).
-    if (String(req.body.salary || '').trim()) {
-      db.prepare('UPDATE jobs SET salary = ? WHERE id = ?').run(String(req.body.salary).trim(), job.id);
-    }
-    logAudit(req, 'erstellt', 'Job', job.id, job.title);
-
-    ingestIntoGraphRag(req, buildGraphRagJobText(job), 'neo4j', graphRagProfile, job.uuid).catch((graphRagErr) => {
-      console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
-      return { error: graphRagErr.message };
-    }).then((graphRag) => {
-      if (graphRag?.id) {
-        db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(graphRag.id, job.id);
+    const job = await persistLocalJob({
+      title, company, about_us, description, requirements, skills, benefits, location, type, status, url, source,
+      salary: req.body.salary,
+    }, {
+      req, profile: graphRagProfile || {}, rawText: req.body.raw_text ?? graphRagProfile?.description,
+      refreshExisting: Boolean(graphRagProfile),
+    });
+    let graphRag = null;
+    if (job.changed) {
+      logAudit(req, job.duplicate ? 'aktualisiert' : 'erstellt', 'Job', job.id, job.title);
+      try {
+        graphRag = await ingestIntoGraphRag(
+          req, buildGraphRagJobText(job), 'neo4j', graphRagProfile ? JSON.parse(job.parsed_profile_json) : null, job.uuid,
+        );
+        if (graphRag?.id) db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(graphRag.id, job.id);
+      } catch (graphRagErr) {
+        console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
+        graphRag = { error: graphRagErr.message, preparationStatus: 'required', preparationError: 'graph_preparation_failed' };
       }
-      const savedJob = db.prepare('SELECT * FROM jobs WHERE id = ?').get(job.id);
-      res.status(201).json({
-        ...savedJob,
-        graphRag,
-      });
+    }
+    res.status(job.duplicate ? 200 : 201).json({
+      ...job,
+      ...db.prepare('SELECT * FROM jobs WHERE id = ?').get(job.id),
+      preparationStatus: graphRag?.preparationStatus || job.preparationStatus,
+      preparationError: graphRag?.preparationError,
+      preparedRevision: graphRag?.preparedRevision,
+      graphRag,
     });
   } catch (err) {
     if (sendIdentityError(res, err)) return;
@@ -493,7 +544,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       ? String(profile.title).trim()
       : filenameTitle;
     const parsedJob = persist
-      ? persistLocalJob({
+      ? await persistLocalJob({
         graph_job_id: null,
         title: resolvedTitle,
         company: profile.company || profile.company_name || '',
@@ -506,18 +557,18 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
         location: profile.location || null,
         type: profile.employment_type || 'Vollzeit',
         status: 'Offen',
-        url: null,
-      }, { enrichExisting: true })
+        url: sourceUrlFromText(trimmedText),
+      }, { req, profile, rawText: trimmedText, refreshExisting: true })
       : null;
 
-    if (parsedJob) {
+    if (parsedJob?.changed) {
       try {
-        const stored = await ingestIntoGraphRag(req, null, 'neo4j', graphRag?.profile || null, parsedJob.uuid);
-        graphRag = { ...graphRag, ...stored, profile: graphRag?.profile };
+        const stored = await ingestIntoGraphRag(req, null, 'neo4j', JSON.parse(parsedJob.parsed_profile_json), parsedJob.uuid);
+        graphRag = { ...graphRag, ...stored, profile: JSON.parse(parsedJob.parsed_profile_json) };
         if (stored?.id) db.prepare('UPDATE jobs SET graph_job_id = ? WHERE id = ?').run(stored.id, parsedJob.id);
       } catch (graphRagErr) {
         console.warn('GraphRAG job ingestion failed:', graphRagErr.message);
-        graphRag = { ...graphRag, error: graphRagErr.message };
+        graphRag = { ...graphRag, error: graphRagErr.message, preparationStatus: 'required', preparationError: 'graph_preparation_failed' };
       }
     }
 
@@ -526,7 +577,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
         ok: Boolean(graphRag?.profile),
       },
       graphRagSaved: {
-        ok: Boolean(graphRag && !graphRag.error),
+        ok: Boolean(parsedJob?.changed && graphRag?.preparationStatus === 'ready' && !graphRag.error),
       },
       dbSaved: {
         ok: Boolean(parsedJob),
@@ -547,6 +598,12 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       benefits: parsedJob?.benefits || profile.benefits || '',
       importSteps,
       graphRag,
+      matchingRunId: parsedJob?.matchingRunId || null,
+      matchingStatus: parsedJob?.matchingStatus || 'not_requested',
+      matchingStatusUrl: parsedJob?.matchingStatusUrl,
+      preparationStatus: graphRag?.preparationStatus || parsedJob?.preparationStatus || 'not_requested',
+      preparationError: graphRag?.preparationError,
+      preparedRevision: graphRag?.preparedRevision,
     });
   } catch (err) {
     if (err instanceof DuplicateError) return res.status(409).json(err.toJSON());

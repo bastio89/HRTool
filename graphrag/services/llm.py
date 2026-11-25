@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from collections.abc import Awaitable, Callable
+from copy import copy
+from dataclasses import replace
 import asyncio
 import hashlib
 import json
@@ -9,9 +12,10 @@ import math
 import os
 import re
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 
 import httpx
+import psycopg
 from services.postgres_store import PostgresStore
 from services.model_config import ModelConfigService, ModelRuntimeConfig
 from services.prompt_service import PromptNotFoundError, PromptService, PromptServiceUnavailableError
@@ -113,6 +117,17 @@ _ROLE_TITLE_PATTERN = re.compile(
 
 
 class LLMService:
+    RERANK_INSTRUCTION = (
+        "Bewerte die Kandidatinnen und Kandidaten relativ zueinander und erkläre die Rangfolge nachvollziehbar. "
+        "Die Antwort muss für jedes Objekt candidate_id, score, explanation, strengths und weaknesses enthalten. "
+        "strengths und weaknesses müssen jeweils Arrays mit 3 bis 5 prägnanten, aber inhaltlich konkreten Punkten sein. "
+        "Jeder Punkt soll eine echte fachliche oder fachnahe Aussage enthalten, keine generischen Floskeln. "
+        "Nenne pro Punkt nach Möglichkeit konkrete Skills, Erfahrungsaspekte, Rollenbezüge, Standort- oder Sprach-Aspekte. "
+        "Die explanation muss 2 bis 4 Sätze lang sein, das Gesamturteil enthalten und auf die wichtigsten Abwägungen eingehen. "
+        "Vermeide Wiederholungen zwischen strengths, weaknesses und explanation. "
+        "Wenn etwas nicht belegt ist, schreibe das explizit als Unsicherheit statt es zu erfinden."
+    )
+
     def __init__(
         self,
         base_url: str,
@@ -146,6 +161,9 @@ class LLMService:
         self.postgres_store = PostgresStore(database_url) if database_url else None
         self.model_config_service = model_config_service
         self.prompt_service = prompt_service
+        self._matching_frozen = False
+        self._owns_client = True
+        self.before_model_call: Callable[[], Awaitable[None]] | None = None
         self._static_chat_config = ModelRuntimeConfig(
             task="chat",
             provider=self.provider,
@@ -167,6 +185,52 @@ class LLMService:
         )
         self._latency_counts: dict[str, int] = defaultdict(int)
         self.client = httpx.AsyncClient(timeout=120.0)
+
+    async def freeze_matching(
+        self, method: Literal["vector", "ai"], *, connection: psycopg.AsyncConnection[Any] | None = None,
+    ) -> tuple[LLMService, dict[str, Any]]:
+        task = "embedding" if method == "vector" else "chat"
+        runtime = await self.model_config_service.snapshot(task, connection=connection) if self.model_config_service else (
+            self._static_embedding_config if method == "vector" else self._static_chat_config
+        )
+        runtime = replace(
+            runtime, base_url=runtime.base_url or self.base_url,
+            model=runtime.model or (self.embedding_model if method == "vector" else self.chat_model),
+            api_key=runtime.api_key if runtime.api_key is not None else self.api_key,
+            reasoning_level=runtime.reasoning_level or self.reasoning_level,
+        )
+        frozen = copy(self)
+        frozen.model_config_service = None
+        frozen._matching_frozen = True
+        frozen._owns_client = False
+        configuration: dict[str, Any] = {
+            "provider": runtime.provider, "base_url": runtime.base_url, "model": runtime.model,
+        }
+        if method == "vector":
+            frozen._static_embedding_config = runtime
+            frozen.embedding_model = runtime.model
+            configuration["dimensions"] = frozen.embedding_dimensions
+        else:
+            if self.prompt_service is None:
+                raise RuntimeError("AI-Matching benoetigt konfigurierte Datenbank-Prompts.")
+            frozen._static_chat_config = runtime
+            frozen.chat_model = runtime.model
+            frozen.prompt_service = await self.prompt_service.snapshot(
+                ["matching_rerank", "json_only_response_instruction"], connection=connection,
+            )
+            prompt = await frozen.prompt_service.get_prompt_record("matching_rerank")
+            configuration.update({
+                "reasoning_level": runtime.reasoning_level,
+                "prompt": prompt["template"], "prompt_version": prompt["version"],
+                "fixed_instruction": self.RERANK_INSTRUCTION,
+                "json_instruction": await frozen._resolve_json_response_instruction(),
+                "generation_parameters": {
+                    "temperature": 0, "max_tokens": 1400,
+                    "think": frozen.enable_reasoning if runtime.provider == "ollama" else None,
+                },
+                "schema_version": "selected-pair-v1",
+            })
+        return frozen, configuration
 
     @staticmethod
     def _normalize_provider(provider: str) -> str:
@@ -203,7 +267,8 @@ class LLMService:
         return await self._resolve_prompt("json_only_response_instruction")
 
     async def close(self) -> None:
-        await self.client.aclose()
+        if self._owns_client:
+            await self.client.aclose()
 
     @staticmethod
     def _extract_skill_names(parsed_result: dict[str, Any] | None) -> str | None:
@@ -415,6 +480,8 @@ class LLMService:
         output_tokens: int | None = None
 
         try:
+            if self.before_model_call is not None:
+                await self.before_model_call()
             response = await self.client.post(request_url, headers=headers, json=request_body)
             if getattr(response, "status_code", None) == 401 and not _auth_retry and self.model_config_service is not None:
                 self.model_config_service.invalidate("chat")
@@ -1078,10 +1145,13 @@ class LLMService:
             payload.get("entity"),
             payload.get("name"),
         )
-        max_attempts = 3
+        can_fallback = not self._matching_frozen and (allow_fallback or provider == "ollama")
+        max_attempts = 1 if self._matching_frozen else 3
         auth_refresh_attempted = False
         for attempt in range(1, max_attempts + 1):
             try:
+                if self.before_model_call is not None:
+                    await self.before_model_call()
                 if provider == "openrouter":
                     response = await self.client.post(
                         f"{base_url}/embeddings",
@@ -1137,7 +1207,7 @@ class LLMService:
                     )
                     await asyncio.sleep(delay_seconds)
                     continue
-                if not allow_fallback and provider != "ollama":
+                if not can_fallback:
                     error_message = ""
                     try:
                         error_payload = exc.response.json()
@@ -1160,14 +1230,14 @@ class LLMService:
                 logger.warning("embedding_fallback provider=%s model=%s: %s", provider, embedding_model, exc)
                 return self._deterministic_fallback_embedding(payload_text)
             except Exception as exc:
-                if not allow_fallback and provider != "ollama":
+                if not can_fallback:
                     raise RuntimeError(
                         f"Embedding generation failed for provider={provider}, model={embedding_model}"
                     ) from exc
                 logger.warning("embedding_fallback provider=%s model=%s: %s", provider, embedding_model, exc)
                 return self._deterministic_fallback_embedding(payload_text)
 
-        if not allow_fallback and provider != "ollama":
+        if not can_fallback:
             raise RuntimeError(
                 f"Embedding generation returned no vector for provider={provider}, model={embedding_model}"
             )
@@ -1178,18 +1248,8 @@ class LLMService:
         job_profile: dict[str, Any],
         candidates: list[dict[str, Any]],
     ) -> LLMRerankResponse:
-        detailed_rerank_instruction = (
-            "Bewerte die Kandidatinnen und Kandidaten relativ zueinander und erkläre die Rangfolge nachvollziehbar. "
-            "Die Antwort muss für jedes Objekt candidate_id, score, explanation, strengths und weaknesses enthalten. "
-            "strengths und weaknesses müssen jeweils Arrays mit 3 bis 5 prägnanten, aber inhaltlich konkreten Punkten sein. "
-            "Jeder Punkt soll eine echte fachliche oder fachnahe Aussage enthalten, keine generischen Floskeln. "
-            "Nenne pro Punkt nach Möglichkeit konkrete Skills, Erfahrungsaspekte, Rollenbezüge, Standort- oder Sprach-Aspekte. "
-            "Die explanation muss 2 bis 4 Sätze lang sein, das Gesamturteil enthalten und auf die wichtigsten Abwägungen eingehen. "
-            "Vermeide Wiederholungen zwischen strengths, weaknesses und explanation. "
-            "Wenn etwas nicht belegt ist, schreibe das explizit als Unsicherheit statt es zu erfinden."
-        )
         parsed = await self._generate_json(
-            system_prompt=f"{await self._resolve_prompt('matching_rerank')}\n\n{detailed_rerank_instruction}",
+            system_prompt=f"{await self._resolve_prompt('matching_rerank')}\n\n{self.RERANK_INSTRUCTION}",
             user_content=json.dumps(
                 {
                     "job_profile": job_profile,

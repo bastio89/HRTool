@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 import re
 
 from typing import Any, Literal
@@ -372,6 +373,12 @@ class JobProfileExtraction(BaseModel):
 class IngestResponse(BaseModel):
     id: str
     message: str
+    matchingRunId: str | None = None
+    matchingStatus: Literal["queued", "blocked_credits", "not_required", "not_requested"] = "not_requested"
+    matchingStatusUrl: str | None = None
+    preparationStatus: Literal["ready", "required", "not_requested"] = "not_requested"
+    preparationError: str | None = None
+    preparedRevision: str | None = None
 
 
 class CandidateIngestResponse(IngestResponse):
@@ -395,6 +402,7 @@ class JobSyncResponse(BaseModel):
     failed: int = 0
     removed_stale_nodes: int = 0
     errors: list[dict[str, Any]] = Field(default_factory=list)
+    preparedRevisions: dict[str, str] = Field(default_factory=dict)
 
 
 class CandidateSyncResponse(BaseModel):
@@ -402,6 +410,7 @@ class CandidateSyncResponse(BaseModel):
     failed: int = 0
     removed_stale_nodes: int = 0
     errors: list[dict[str, Any]] = Field(default_factory=list)
+    preparedRevisions: dict[str, str] = Field(default_factory=dict)
 
 
 class CandidateDeleteRequest(BaseModel):
@@ -433,6 +442,7 @@ class CandidatePrivacyResponse(BaseModel):
 class JobIngestResponse(IngestResponse):
     profile: JobProfileExtraction
     persisted: bool = True
+    postgres_id: int | None = None
 
 
 class JobDeleteRequest(BaseModel):
@@ -553,7 +563,21 @@ class KiMatchPairsRequest(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
-class KiMatchPairResult(BaseModel):
+class MatchingResultMetadata(BaseModel):
+    cacheStatus: Literal["hit", "computed"] | None = None
+    matchedAt: datetime | None = None
+    evaluationId: int | None = Field(default=None, gt=0)
+    model: str | None = None
+
+
+class MatchingRunMetadata(BaseModel):
+    runId: UUID | None = None
+    statusUrl: str | None = None
+
+
+class KiMatchPairResult(MatchingResultMetadata):
+    method: Literal["ai"] = "ai"
+    qualified: None = None
     jobId: str
     jobTitle: str | None = None
     candidateId: str
@@ -562,7 +586,6 @@ class KiMatchPairResult(BaseModel):
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
     summary: str = ""
-    model: str | None = None
 
 
 class KiMatchPairFailure(BaseModel):
@@ -573,7 +596,9 @@ class KiMatchPairFailure(BaseModel):
     error: str
 
 
-class KiMatchPairsResponse(BaseModel):
+class KiMatchPairsResponse(MatchingRunMetadata):
+    method: Literal["ai"] = "ai"
+    pairsPersisted: bool = False
     results: list[KiMatchPairResult] = Field(default_factory=list)
     failures: list[KiMatchPairFailure] = Field(default_factory=list)
     selectedCount: int = 0
@@ -660,7 +685,9 @@ class MatchingMatrixRequest(BaseModel):
     engine: Literal["python", "neo4j"] = Field(default="python")
 
 
-class MatchingResultItem(BaseModel):
+class MatchingResultItem(MatchingResultMetadata):
+    method: Literal["vector"] = "vector"
+    qualified: bool | None = None
     candidateId: str
     candidateName: str | None = None
     score: int = Field(..., ge=0, le=100)
@@ -669,11 +696,15 @@ class MatchingResultItem(BaseModel):
     summary: str = ""
 
 
-class MatchingResultsPayload(BaseModel):
+class MatchingResultsPayload(MatchingRunMetadata):
+    method: Literal["vector"] = "vector"
+    pairsPersisted: bool = False
     results: list[MatchingResultItem] = Field(default_factory=list)
 
 
-class MatchingMatrixRow(BaseModel):
+class MatchingMatrixRow(MatchingResultMetadata):
+    method: Literal["vector"] = "vector"
+    qualified: bool | None = None
     jobId: str
     jobTitle: str | None = None
     candidateId: str
@@ -684,7 +715,9 @@ class MatchingMatrixRow(BaseModel):
     summary: str = ""
 
 
-class MatchingMatrixPayload(BaseModel):
+class MatchingMatrixPayload(MatchingRunMetadata):
+    method: Literal["vector"] = "vector"
+    pairsPersisted: bool = False
     type: Literal["matrix"] = "matrix"
     mode: str
     model: str | None = None
@@ -715,7 +748,9 @@ class VectorMatchRequest(BaseModel):
         return self
 
 
-class VectorMatchRow(BaseModel):
+class VectorMatchRow(MatchingResultMetadata):
+    method: Literal["vector"] = "vector"
+    qualified: bool | None = None
     jobId: str
     jobTitle: str | None = None
     candidateId: str
@@ -730,7 +765,9 @@ class VectorMatchRow(BaseModel):
     matchedSkills: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class VectorMatchPayload(BaseModel):
+class VectorMatchPayload(MatchingRunMetadata):
+    method: Literal["vector"] = "vector"
+    pairsPersisted: bool = False
     type: Literal["vectormatch"] = "vectormatch"
     mode: str = "job_cv_vector"
     model: str | None = None
@@ -746,7 +783,9 @@ class VectorMatchPayload(BaseModel):
     missingCandidateIds: list[str] = Field(default_factory=list)
 
 
-class VectorMatchNeo4jPayload(BaseModel):
+class VectorMatchNeo4jPayload(MatchingRunMetadata):
+    method: Literal["vector"] = "vector"
+    pairsPersisted: bool = False
     type: Literal["vectormatch_neo4j"] = "vectormatch_neo4j"
     mode: str = "job_cv_vector_neo4j"
     model: str | None = None
@@ -759,6 +798,98 @@ class VectorMatchNeo4jPayload(BaseModel):
     candidatesRanked: list[dict[str, Any]] = Field(default_factory=list)
     missingJobIds: list[str] = Field(default_factory=list)
     missingCandidateIds: list[str] = Field(default_factory=list)
+
+
+class StoredSkillPairInput(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: int = Field(gt=0, validation_alias=AliasChoices("job_id", "jobId"))
+    candidate_id: int = Field(gt=0, validation_alias=AliasChoices("candidate_id", "candidateId"))
+
+
+class SelectedSkillRequest(BaseModel):
+    pairs: list[StoredSkillPairInput] = Field(min_length=1, max_length=200)
+    engine: Literal["python", "neo4j"] = "python"
+    localFailures: list[KiMatchPairFailure] = Field(default_factory=list, max_length=200)
+    selectedCount: int | None = Field(default=None, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def validate_count(self) -> "SelectedSkillRequest":
+        minimum = len(self.pairs) + len(self.localFailures)
+        if minimum > 200 or (self.selectedCount is not None and self.selectedCount < minimum):
+            raise ValueError("Auswahlzaehler und Paar-/Fehleranzahl sind inkonsistent.")
+        return self
+
+
+class SelectedSkillResponse(MatchingRunMetadata):
+    mode: Literal["vector"] = "vector"
+    method: Literal["vector"] = "vector"
+    pairsPersisted: bool = True
+    engine: Literal["python", "neo4j"]
+    model: str | None = None
+    results: list[VectorMatchRow] = Field(default_factory=list)
+    failures: list[KiMatchPairFailure] = Field(default_factory=list)
+    selectedCount: int
+    matchedCount: int
+    failedCount: int
+
+
+class MatchingPendingPair(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["vector", "ai"]
+    candidateId: str
+    jobId: str
+    evaluationId: int | None = Field(default=None, gt=0)
+    status: Literal["queued", "running"] = "queued"
+
+
+class MatchingPendingResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["pending"] = "pending"
+    runId: UUID
+    statusUrl: str
+    pendingPairs: list[MatchingPendingPair]
+    availableResults: list[MatchingMatrixRow | KiMatchPairResult] = Field(default_factory=list)
+
+
+class MatchingRunProgress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    targetCount: int | None
+    processedCount: int
+    computedCount: int
+    cachedCount: int
+    sharedCount: int
+    failedCount: int
+    skippedCount: int
+    needsReviewCount: int
+    preparationRequiredCount: int
+    pendingCount: int
+    queuedCount: int
+    runningCount: int
+    updatedAt: datetime
+    progressPercent: float | None
+
+
+class MatchingRunStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    runId: UUID
+    statusUrl: str
+    method: Literal["vector", "ai"]
+    stage: Literal[
+        "queued", "preparing", "matching", "blocked_credits", "completed",
+        "completed_with_errors", "needs_review", "failed",
+    ]
+    targetCount: int | None
+    updatedAt: datetime
+    errorCode: str | None
+    pendingPairs: list[MatchingPendingPair]
+    availableResults: list[MatchingMatrixRow | KiMatchPairResult]
+    resultPayload: dict[str, Any] | None
+    counters: MatchingRunProgress
 
 
 class Stage1Candidate(BaseModel):
@@ -780,6 +911,8 @@ class Stage2Candidate(BaseModel):
     combined_score: float
 
 class CandidateJobMatch(BaseModel):
+    method: Literal["vector"] = "vector"
+    qualified: bool | None = None
     job_id: str
     title: str | None = None
     department: str | None = None
@@ -793,6 +926,8 @@ class CandidateJobMatch(BaseModel):
 
 
 class JobCandidateMatch(BaseModel):
+    method: Literal["vector"] = "vector"
+    qualified: bool | None = None
     candidate_id: str
     name: str | None = None
     location: str | None = None
@@ -806,7 +941,7 @@ class JobCandidateMatch(BaseModel):
 
 class LLMRerankItem(BaseModel):
     candidate_id: str
-    score: int = Field(..., ge=1, le=100)
+    score: int = Field(..., ge=0, le=100)
     explanation: str = Field(..., min_length=10)
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
@@ -816,19 +951,21 @@ class LLMRerankResponse(BaseModel):
     ranked_candidates: list[LLMRerankItem] = Field(default_factory=list)
 
 
-class MatchCandidateResponse(BaseModel):
+class MatchCandidateResponse(MatchingResultMetadata):
     candidate_id: str
-    score: int = Field(..., ge=1, le=100)
+    score: int = Field(..., ge=0, le=100)
+    method: Literal["vector"] = "vector"
+    qualified: bool | None = None
     explanation: str
     strengths: list[str] = Field(default_factory=list)
     weaknesses: list[str] = Field(default_factory=list)
-    vector_score: float
-    jaccard_score: float
-    combined_score: float
+    vector_score: float | None = Field(default=None, deprecated=True)
+    jaccard_score: float | None = Field(default=None, deprecated=True)
+    combined_score: float | None = Field(default=None, deprecated=True)
     profile: dict[str, Any]
 
 
-class MatchResponse(BaseModel):
+class MatchResponse(MatchingRunMetadata):
     job_id: str
     stage1_count: int
     stage2_count: int

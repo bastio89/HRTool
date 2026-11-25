@@ -199,11 +199,11 @@ export default function Pipeline() {
   }
 
   const startMatchingFromPipeline = async () => {
-    if (!job?.description || totalInPipeline === 0) return
+    if (!job || totalInPipeline === 0) return
     setMatchingRunning(true)
     try {
       const candidateIds = Object.values(board).flat().map(e => e.candidate_id)
-      const result = await matchingApi.run(job.description, job.title, candidateIds)
+      const result = await matchingApi.vectorMatch({ jobId, candidateIds })
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
       toast.error(`${t('pipeline.matching_failed')}: ${err.message}`)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI
 
@@ -16,7 +17,8 @@ from .settings import default_enabled
 
 
 class JobsChPlugin(BasePlugin):
-    def __init__(self, settings: Settings, postgres_store: PostgresStore, llm_service: LLMService, db_service: Neo4jService) -> None:
+    def __init__(self, settings: Settings, postgres_store: PostgresStore, llm_service: LLMService, db_service: Neo4jService,
+                 *, prepare_job: Callable[[int], Awaitable[tuple[str, int]]]) -> None:
         self.settings = settings
         self.postgres_store = postgres_store
         self.llm_service = llm_service
@@ -26,6 +28,7 @@ class JobsChPlugin(BasePlugin):
             llm_service=self.llm_service,
             postgres_store=self.postgres_store,
             db_service=self.db_service,
+            prepare_job=prepare_job,
         )
 
     @property

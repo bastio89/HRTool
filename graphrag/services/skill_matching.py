@@ -325,15 +325,13 @@ class SkillMatchingService:
                                 * match.weighted_similarity
                                 / total_weight
                                 * 100
-                            )
-                            if qualified
-                            else 0.0,
+                            ),
                             4,
                         ),
                     )
         score = round((weighted_sum / total_weight) * 100) if total_weight else 0
         return SkillMatchingResult(
-            score=score if qualified else 0,
+            score=score,
             qualified=qualified,
             matches=tuple(matches),
             matrix=tuple(matrix),

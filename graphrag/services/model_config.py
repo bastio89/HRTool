@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+import psycopg
 
 from services.postgres_store import PostgresStore
 
@@ -16,7 +18,7 @@ class ModelRuntimeConfig:
     provider: str
     base_url: str
     model: str
-    api_key: str | None
+    api_key: str | None = field(repr=False)
     reasoning_level: str = "none"
 
 
@@ -56,6 +58,11 @@ class ModelConfigService:
     async def get_embedding_model(self) -> ModelRuntimeConfig:
         return await self._get_config("embedding")
 
+    async def snapshot(
+        self, task: TaskName, *, connection: psycopg.AsyncConnection[Any] | None = None,
+    ) -> ModelRuntimeConfig:
+        return await self._load_config(task, connection=connection)
+
     async def _get_config(self, task: TaskName) -> ModelRuntimeConfig:
         now = time.monotonic()
         cached = self._cache.get(task)
@@ -72,7 +79,9 @@ class ModelConfigService:
             self._cache[task] = (config, now + self._ttl_seconds)
             return config
 
-    async def _load_config(self, task: TaskName) -> ModelRuntimeConfig:
+    async def _load_config(
+        self, task: TaskName, *, connection: psycopg.AsyncConnection[Any] | None = None,
+    ) -> ModelRuntimeConfig:
         settings = await self._postgres_store.get_settings(
             [
                 "ai_base_url",
@@ -81,7 +90,8 @@ class ModelConfigService:
                 "ai_provider",
                 "ai_api_key",
                 "ai_reasoning_level",
-            ]
+            ],
+            **({"connection": connection} if connection is not None else {}),
         )
         base_url = self._normalize_base_url(settings.get("ai_base_url") or self._default_chat_base_url)
         provider = self._normalize_provider(settings.get("ai_provider") or self._default_provider, base_url)

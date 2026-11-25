@@ -19,6 +19,7 @@ _SEED_CASES_PATH = (
     / "skill_matching_cases.csv"
 )
 _SEED_VERSION = 1
+_SCORE_RULE_VERSION = 2
 _EXPECTED_SEED_COLUMNS = [
     "Testid",
     "need-skills (Liste)",
@@ -88,6 +89,7 @@ class SkillMatchingTestCaseStore:
                     (_SEED_VERSION,),
                 )
                 if await cursor.fetchone():
+                    await self._migrate_score_rule(cursor)
                     return
 
                 await cursor.execute("SELECT COUNT(*) FROM skill_matching_test_cases")
@@ -104,6 +106,42 @@ class SkillMatchingTestCaseStore:
                     """,
                     (_SEED_VERSION,),
                 )
+                await self._migrate_score_rule(cursor)
+
+    @staticmethod
+    async def _migrate_score_rule(cursor: Any) -> None:
+        await cursor.execute(
+            "SELECT 1 FROM skill_matching_test_case_migrations WHERE version = %s",
+            (_SCORE_RULE_VERSION,),
+        )
+        if await cursor.fetchone():
+            return
+        case = next(
+            case for case in SkillMatchingTestCaseStore._read_seed_cases()
+            if case.test_id == "missing_mandatory_gate"
+        )
+        await cursor.execute(
+            """
+            UPDATE skill_matching_test_cases
+            SET expected_score = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE test_id = %s AND expected_score = 0
+              AND need_skills = %s AND has_skills = %s
+            """,
+            (
+                case.expected_score,
+                case.test_id,
+                Jsonb([skill.model_dump() for skill in case.need_skills]),
+                Jsonb(case.has_skills),
+            ),
+        )
+        await cursor.execute(
+            """
+            INSERT INTO skill_matching_test_case_migrations (version)
+            VALUES (%s)
+            ON CONFLICT (version) DO NOTHING
+            """,
+            (_SCORE_RULE_VERSION,),
+        )
 
     @staticmethod
     async def _insert_case(cursor: Any, case: SkillMatchingTestCaseInput) -> None:

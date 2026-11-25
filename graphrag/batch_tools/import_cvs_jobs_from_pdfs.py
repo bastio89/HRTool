@@ -14,6 +14,8 @@ from pathlib import Path
 from uuid import uuid4
 from urllib import error, request
 from urllib.parse import urlsplit, urlunsplit
+import httpx
+import psycopg
 
 GRAPHRAG_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +55,7 @@ from services.db import Neo4jService
 from services.model_config import ModelConfigService
 from services.llm import LLMService
 from services.pdf import PDFService
+from services.prompt_service import PromptService
 from services.postgres_store import PostgresStore
 from scripts.init_neo4j import init_schema
 
@@ -73,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--api-base",
         default=os.environ.get("HRTOOL_BACKEND_API_BASE", "http://127.0.0.1:3001/api"),
-        help="GUI backend API base URL used for job imports (default: HRTOOL_BACKEND_API_BASE or http://127.0.0.1:3001/api)",
+        help="Backend API for job imports and CV token verification (default: HRTOOL_BACKEND_API_BASE or http://127.0.0.1:3001/api)",
     )
     parser.add_argument(
         "--input-dir",
@@ -100,7 +103,7 @@ def parse_args() -> argparse.Namespace:
         "--match-limit",
         type=int,
         default=10,
-        help="Number of job matches to print per imported CV (default: 10)",
+        help="Deprecated and ignored: imports queue asynchronous matching against all stored counterparts",
     )
     parser.add_argument(
         "--token",
@@ -289,7 +292,7 @@ def resolve_auth_token(args: argparse.Namespace) -> str | None:
 
     username = args.username or os.environ.get("HRTOOL_USERNAME")
     password = args.password or os.environ.get("HRTOOL_PASSWORD")
-    if not username and not password:
+    if not username and not password and args.mode == "job":
         username = "admin"
         password = "admin123"
 
@@ -307,6 +310,26 @@ def resolve_auth_token(args: argparse.Namespace) -> str | None:
     raise RuntimeError(
         "No backend auth token available. Set HRTOOL_API_TOKEN or provide HRTOOL_USERNAME/HRTOOL_PASSWORD."
     )
+
+
+async def validate_cv_import_actor(
+    api_base: str, timeout_seconds: int, token: str | None, postgres_store: PostgresStore,
+) -> int:
+    if not token:
+        raise RuntimeError("CV import requires an authenticated bearer token")
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        response = await client.get(
+            f"{api_base.rstrip('/')}/auth/me", headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+    payload = response.json()
+    raw_id = payload.get("id") if isinstance(payload, dict) else None
+    if isinstance(raw_id, bool) or not isinstance(raw_id, (int, str)):
+        raise RuntimeError("Backend did not confirm an authenticated user")
+    user_id = int(raw_id)
+    if user_id <= 0 or await postgres_store.get_matching_actor(user_id) is None:
+        raise RuntimeError("Authenticated import user no longer exists in the configured PostgreSQL database")
+    return user_id
 
 
 async def _build_skill_embeddings(
@@ -367,6 +390,10 @@ async def process_job_file(
     created_id = job_payload.get("id") or parsed.get("id")
     if not created_id:
         return False, "backend job parsing response has no job id"
+    run_id = parsed.get("matchingRunId") or job_payload.get("matchingRunId")
+    matching_status = parsed.get("matchingStatus") or job_payload.get("matchingStatus")
+    if not run_id and matching_status != "not_required":
+        return False, f"backend saved job id={created_id} but did not confirm a durable matching run"
 
     done_dir.mkdir(parents=True, exist_ok=True)
     destination = ensure_unique_destination(done_dir, pdf_path.name)
@@ -376,6 +403,10 @@ async def process_job_file(
     lines = [f"imported as job id={created_id}"]
     if title:
         lines.append(f"title={title}")
+    if run_id:
+        lines.append(f"matching run id={run_id} status={matching_status}")
+    elif matching_status == "not_required":
+        lines.append("matching not required: unchanged import")
     return True, "\n".join(lines)
 
 
@@ -389,7 +420,13 @@ async def process_cv_file(
     postgres_store: PostgresStore,
     candidate_privacy_service,
     match_limit: int,
+    *,
+    actor_user_id: int | None = None,
 ) -> tuple[bool, str]:
+    if not dry_run:
+        if (isinstance(actor_user_id, bool) or not isinstance(actor_user_id, int) or actor_user_id <= 0
+                or await postgres_store.get_matching_actor(actor_user_id) is None):
+            return False, "CV import requires an existing authenticated user"
     # Step 1: read and normalize the PDF text so duplicate detection is stable.
     try:
         extracted_text = pdf_service.extract_text(pdf_path.read_bytes())
@@ -434,6 +471,7 @@ async def process_cv_file(
             source="CV-Batch-Import",
             source_hash=source_hash,
             profile_hash=_normalized_profile_hash(profile),
+            actor_user_id=actor_user_id,
         )
     except DuplicateCandidateError as exc:
         duplicate_dir.mkdir(parents=True, exist_ok=True)
@@ -446,32 +484,39 @@ async def process_cv_file(
         return False, f"candidate persistence failed: {exc}"
 
     candidate_id = stored["uuid"]
-    try:
-        matches = [match.model_dump() for match in await db_service.get_top_job_matches_for_candidate(candidate_id, limit=match_limit)]
-    except Exception:
-        matches = []
+    run_id = stored.get("matchingRunId")
+    if not run_id:
+        return False, f"candidate id={candidate_id} saved without confirmation of a durable matching run"
 
-    # Step 3: move the processed PDF only after Neo4j persistence succeeded.
+    # Move only after the PostgreSQL source and durable outbox are confirmed.
     done_dir.mkdir(parents=True, exist_ok=True)
     destination = ensure_unique_destination(done_dir, pdf_path.name)
     shutil.move(str(pdf_path), str(destination))
 
     lines = [f"imported as candidate id={candidate_id}"]
-    if matches:
-        lines.append("top job matches:")
-        lines.extend(f"  {line}" for line in _format_job_matches(matches))
-    else:
-        lines.append("top job matches: none found")
+    lines.append(f"matching run id={run_id} status={stored['matchingStatus']} (asynchronous, all stored jobs)")
+    lines.append(f"preparation status={stored['preparationStatus']}")
+    if stored.get("preparationError"):
+        lines.append(f"preparation error={stored['preparationError']}")
     return True, "\n".join(lines)
 
 
 async def run_cv_import(args: argparse.Namespace) -> int:
-    await init_schema()
-
-    pdf_service = PDFService()
     database_url = _resolve_local_database_url(settings.database_url)
     postgres_store = PostgresStore(database_url)
+    actor_user_id = None
+    if not args.dry_run:
+        try:
+            token = await asyncio.to_thread(resolve_auth_token, args)
+            actor_user_id = await validate_cv_import_actor(args.api_base, args.timeout_seconds, token, postgres_store)
+        except (RuntimeError, ValueError, httpx.HTTPError, psycopg.Error) as exc:
+            print(f"CV import authentication failed before writes: {exc}")
+            return 1
+        await init_schema()
+
+    pdf_service = PDFService()
     candidate_privacy_service = CandidatePrivacyService(postgres_store)
+    prompt_service = PromptService(postgres_store)
     db_service = Neo4jService(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
@@ -501,6 +546,7 @@ async def run_cv_import(args: argparse.Namespace) -> int:
         parse_latency_log_every=settings.parse_latency_log_every,
         database_url=database_url,
         model_config_service=model_config_service,
+        prompt_service=prompt_service,
     )
 
     input_dir = _resolve_input_dir(args)
@@ -533,6 +579,7 @@ async def run_cv_import(args: argparse.Namespace) -> int:
                     postgres_store=postgres_store,
                     candidate_privacy_service=candidate_privacy_service,
                     match_limit=args.match_limit,
+                    actor_user_id=actor_user_id,
                 )
                 if ok:
                     ok_count += 1

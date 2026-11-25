@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
+import json
+from uuid import uuid4
 
 import pytest
+import httpx
+import psycopg
+
+from models import MatchingCandidateInput, MatchingJobInput
+from services.llm import LLMService
 
 from services.skill_matching import (
     RequiredSkill,
@@ -11,6 +18,7 @@ from services.skill_matching import (
     compare_skills,
     cosine_similarity,
 )
+from services.matching_orchestrator import MatchingOrchestrator, normalize_skill_entries
 
 
 class _FakeCatalog:
@@ -34,6 +42,128 @@ class _MapEmbedding:
         allow_fallback: bool = True,
     ) -> list[float]:
         return self.vectors[str(payload["name"])]
+
+
+def test_orchestrator_preserves_priorities_categories_and_skill_formats() -> None:
+    skills = normalize_skill_entries([
+        {"label": " Python ", "importance": "Mandatory", "category": "HardSkill"},
+        {"skill": "Coaching", "priority": "NiceToHave", "category": "SoftSkill"},
+        {"name": "SQL"},
+        {"name": "Testing", "priority": "nice_to_have"},
+    ])
+    assert [(skill.name, skill.priority, skill.category) for skill in skills] == [
+        ("Python", "mandatory", "HardSkill"),
+        ("Coaching", "nice_to_have", "SoftSkill"),
+        ("SQL", "mandatory", "HardSkill"),
+        ("Testing", "nice_to_have", "HardSkill"),
+    ]
+    assert [skill.name for skill in normalize_skill_entries("Python; SQL\nTesting")] == [
+        "Python", "SQL", "Testing",
+    ]
+    with pytest.raises(ValueError, match="Prioritaet"):
+        normalize_skill_entries([{"name": "Python", "priority": "Optional"}])
+    with pytest.raises(ValueError, match="Skill-Namen"):
+        normalize_skill_entries([{"name": " "}])
+
+
+@pytest.mark.anyio
+async def test_orchestrator_requires_prepared_job_skills_without_model_calls() -> None:
+    embeddings = AsyncMock()
+    service = SkillMatchingService(
+        type("EmbeddingService", (), {"create_embedding": embeddings})(),
+        _FakeCatalog([]),
+    )
+    with pytest.raises(ValueError, match="vor dem Matching aufbereiten"):
+        await MatchingOrchestrator(service).match_skills(None, ["Python"])
+    embeddings.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_orchestrator_preserves_partial_coverage_and_reports_missing_mandatory_skills() -> None:
+    embeddings = _MapEmbedding({"Python": [1.0, 0.0], "Coaching": [0.0, 1.0]})
+    orchestrator = MatchingOrchestrator(SkillMatchingService(embeddings, _FakeCatalog([])))
+    result = await orchestrator.match_skills([
+        {"name": "Python", "category": "HardSkill"},
+        {"name": "Coaching", "category": "SoftSkill"},
+    ], [{"name": "Python", "priority": "Neutral"}])
+
+    assert result.result.score == 50
+    assert result.result.qualified is False
+    assert result.categories["HardSkill"].score == 100
+    assert result.categories["SoftSkill"].score == 0
+    assert len(result.result.matrix) == 2
+    assert result.method == "vector"
+
+    empty = await orchestrator.match_skills(
+        [{"name": "Python", "category": "SoftSkill", "priority": "NiceToHave"}], [],
+    )
+    assert empty.result.score == 0
+    assert empty.result.qualified is True
+    assert empty.categories["SoftSkill"].score == 0
+    assert "HardSkill" not in empty.categories
+
+
+@pytest.mark.anyio
+async def test_stored_matrix_reuses_full_results_across_id_forms_and_only_computes_missing_pairs(
+    stored_matching_pair, monkeypatch,
+):
+    store, candidate_id, job_id = stored_matching_pair
+    requests, scoring_calls = [], []
+    service = LLMService("http://embedding-provider", "chat", "embedding-v1", 2)
+
+    def respond(request):
+        requests.append(request)
+        skill = json.loads(json.loads(request.content)["prompt"])["name"]
+        return httpx.Response(200, json={"embedding": [1.0, 0.0] if skill == "Python" else [0.0, 1.0]})
+
+    original_match = SkillMatchingService.match
+
+    async def tracked_match(self, need_skills, has_skills):
+        scoring_calls.append((need_skills, has_skills))
+        return await original_match(self, need_skills, has_skills)
+
+    monkeypatch.setattr(SkillMatchingService, "match", tracked_match)
+    await service.client.aclose()
+    service.client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    orchestrator = MatchingOrchestrator(
+        SkillMatchingService(service, _FakeCatalog([])), postgres_store=store,
+    )
+    async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+        candidate_uuid = (await (await connection.execute(
+            "SELECT uuid::text FROM candidates WHERE id = %s", (candidate_id,),
+        )).fetchone())[0]
+        job_uuid = (await (await connection.execute(
+            "SELECT uuid::text FROM jobs WHERE id = %s", (job_id,),
+        )).fetchone())[0]
+        peer = await (await connection.execute(
+            "INSERT INTO candidates (name) VALUES (%s) RETURNING id", (f"cache-peer-{uuid4()}",),
+        )).fetchone()
+    peer_id = peer[0]
+    job = MatchingJobInput(id=str(job_id), title="Engineer", required_skills=[{"name": "Python"}, {"name": "SQL"}])
+    candidate = MatchingCandidateInput(id=str(candidate_id), name="Ada", has_skill=["Python"])
+    try:
+        first, _ = await orchestrator.match_skill_matrix([job], [candidate], model="compatibility-label")
+        count = len(requests), len(scoring_calls)
+        assert count[0] > 0 and count[1] > 0
+        assert first[0]["score"] == 50 and first[0]["qualified"] is False
+        assert first[0]["model"] == "embedding-v1" and first[0]["cacheStatus"] == "computed"
+        second, _ = await orchestrator.match_skill_matrix(
+            [job.model_copy(update={"id": job_uuid})],
+            [candidate.model_copy(update={"id": candidate_uuid})], model="another-compatibility-label", engine="neo4j",
+        )
+        assert second == [{
+            **first[0], "cacheStatus": "hit", "candidateId": candidate_uuid, "jobId": job_uuid,
+        }]
+        assert (len(requests), len(scoring_calls)) == count
+        mixed, _ = await orchestrator.match_skill_matrix(
+            [job], [candidate, candidate.model_copy(update={"id": str(peer_id), "name": "Peer"})], model="label",
+        )
+        assert [row["cacheStatus"] for row in mixed] == ["hit", "computed"]
+        assert (len(requests), len(scoring_calls)) == (count[0] * 2, count[1] * 2)
+    finally:
+        await service.close()
+        async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+            await connection.execute("DELETE FROM candidates WHERE id = %s", (peer_id,))
 
 
 @pytest.mark.anyio
@@ -112,7 +242,7 @@ async def test_matching_result_contains_each_required_candidate_pair() -> None:
 
 
 @pytest.mark.anyio
-async def test_score_contribution_is_weighted_and_zero_when_mandatory_gate_fails() -> None:
+async def test_score_contribution_remains_weighted_when_a_mandatory_skill_is_missing() -> None:
     service = SkillMatchingService(
         _MapEmbedding({
             "Mandatory": [1.0, 0.0],
@@ -128,7 +258,7 @@ async def test_score_contribution_is_weighted_and_zero_when_mandatory_gate_fails
         [RequiredSkill("Mandatory"), RequiredSkill("Nice-to-have", "nice_to_have")],
         ["Candidate"],
     )
-    gated = await service.match(
+    partial = await service.match(
         [RequiredSkill("Unmatched mandatory"), RequiredSkill("Nice-to-have", "nice_to_have")],
         ["Candidate"],
     )
@@ -136,9 +266,10 @@ async def test_score_contribution_is_weighted_and_zero_when_mandatory_gate_fails
     assert qualified.score == 100
     assert sum(cell.score_contribution for cell in qualified.matrix) == pytest.approx(100.0)
     assert [cell.score_contribution for cell in qualified.matrix] == [66.6667, 33.3333]
-    assert gated.score == 0
-    assert [cell.best_candidate for cell in gated.matrix] == [True, True]
-    assert all(cell.score_contribution == 0.0 for cell in gated.matrix)
+    assert partial.score == 33
+    assert partial.qualified is False
+    assert [cell.best_candidate for cell in partial.matrix] == [True, True]
+    assert [cell.score_contribution for cell in partial.matrix] == [0.0, 33.3333]
 
 
 @pytest.mark.anyio
@@ -225,7 +356,7 @@ async def test_cutoff_and_full_match_boundary(raw_similarity, weighted_similarit
 
 
 @pytest.mark.anyio
-async def test_nice_to_have_gap_is_weighted_but_does_not_trigger_gate() -> None:
+async def test_nice_to_have_gap_is_weighted_but_does_not_change_mandatory_status() -> None:
     service = SkillMatchingService(
         _MapEmbedding({"Mandatory": [1.0, 0.0], "Nice-to-have": [0.0, 1.0], "Candidate": [1.0, 0.0]}),
         _FakeCatalog([]),
@@ -242,7 +373,7 @@ async def test_nice_to_have_gap_is_weighted_but_does_not_trigger_gate() -> None:
 
 
 @pytest.mark.anyio
-async def test_missing_mandatory_skill_zeroes_score_and_additional_candidate_skills_do_not_reduce_score() -> None:
+async def test_missing_mandatory_skill_preserves_partial_score_and_extra_skills_do_not_reduce_score() -> None:
     vectors = {
         "Mandatory": [0.0, 1.0],
         "Nice-to-have": [1.0, 0.0],
@@ -261,7 +392,7 @@ async def test_missing_mandatory_skill_zeroes_score_and_additional_candidate_ski
     )
 
     assert result.qualified is False
-    assert result.score == 0
+    assert result.score == 33
     assert result.missing_skills[0].need_skill == "Mandatory"
     assert with_extra.score == result.score
     assert [match.has_skill for match in with_extra.matches] == [match.has_skill for match in result.matches]

@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../database');
 const { logAudit } = require('./audit');
+const { enqueueMatchingImport } = require('../matchingImports');
+const { writeCandidateHistory, writeCandidateText } = require('../utils/candidateImportPersistence');
 const {
   deleteCandidateTexts,
   deleteGraphCandidate,
@@ -14,10 +16,12 @@ const {
   IdentityValidationError,
   assertNoCandidateDuplicate,
   findCandidateDuplicate,
+  findCandidateDuplicateAsync,
   normalizeBirthDate,
   requireCandidateIdentity,
   sendIdentityError,
   translateUniqueViolation,
+  translateCandidateUniqueViolationAsync,
 } = require('../identity');
 
 const router = express.Router();
@@ -1002,7 +1006,7 @@ router.post('/batch/status', (req, res) => {
  *     responses:
  *       200: { description: Import-Ergebnis mit Statistiken }
  */
-router.post('/import', (req, res) => {
+router.post('/import', async (req, res) => {
   try {
     // Dubletten werden immer uebersprungen (eine Person gibt es nur einmal);
     // skipDuplicates bleibt aus Kompatibilitaet im Request erlaubt.
@@ -1015,16 +1019,17 @@ router.post('/import', (req, res) => {
     let skipped = 0;
     let errors = [];
     const duplicates = [];
-
-    const insertStmt = db.prepare(`
-      INSERT INTO candidates (name, email, phone, location, experience, skills,
-        education, desired_salary, availability, languages, certificates,
-        drivers_license, mobility, notes, status, tags, source, birth_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
     const importedIds = [];
+    const matchingRuns = [];
 
-    const importMany = db.transaction(() => {
+    await db.transactionAsync(async (tx) => {
+      const insertStmt = tx.prepare(`
+        INSERT INTO candidates (name, email, phone, location, experience, skills,
+          education, desired_salary, availability, languages, certificates,
+          drivers_license, mobility, notes, status, tags, source, birth_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const rowNum = i + 1;
@@ -1040,7 +1045,7 @@ router.post('/import', (req, res) => {
 
         // Sieht auch Zeilen, die in diesem Import schon angelegt wurden
         // (gleiche Transaktion), und erkennt so Dubletten innerhalb der Datei.
-        const dup = findCandidateDuplicate(db, identity);
+        const dup = await findCandidateDuplicateAsync(tx, identity);
         if (dup) {
           duplicates.push({ row: rowNum, name: identity.name, birth_date: identity.birth_date, existingId: dup.id, existingName: dup.name });
           skipped++;
@@ -1049,9 +1054,9 @@ router.post('/import', (req, res) => {
 
         // Savepoint je Zeile: ein Fehler (z. B. gleichzeitig angelegte
         // Dublette) bricht sonst die ganze PostgreSQL-Transaktion ab.
-        db.exec('SAVEPOINT csv_import_row');
+        await tx.exec('SAVEPOINT csv_import_row');
         try {
-          const result = insertStmt.run(
+          const result = await insertStmt.run(
             identity.name,
             row.email || null, row.phone || null, row.location || null,
             row.experience || null, row.skills || null, row.education || null,
@@ -1060,12 +1065,21 @@ router.post('/import', (req, res) => {
             row.notes || null, row.status || 'Aktiv', row.tags || null, row.source || null,
             identity.birth_date
           );
-          db.exec('RELEASE SAVEPOINT csv_import_row');
-          importedIds.push(result.lastInsertRowid);
+          const candidateId = result.lastInsertRowid;
+          const profile = { ...row, name: identity.name };
+          await writeCandidateHistory(candidateId, profile, { database: tx });
+          await writeCandidateText(candidateId, identity.name, null, profile, row.source || 'CSV-Import', tx);
+          const matching = await enqueueMatchingImport(tx, {
+            entityType: 'candidate', entityId: candidateId, req, source: 'CSV-Import',
+          });
+          await tx.exec('RELEASE SAVEPOINT csv_import_row');
+          importedIds.push(candidateId);
+          matchingRuns.push({ row: rowNum, candidateId, ...matching });
           imported++;
         } catch (rawErr) {
-          db.exec('ROLLBACK TO SAVEPOINT csv_import_row');
-          const err = translateUniqueViolation(db, rawErr, 'candidate', identity);
+          await tx.exec('ROLLBACK TO SAVEPOINT csv_import_row');
+          await tx.exec('RELEASE SAVEPOINT csv_import_row');
+          const err = await translateCandidateUniqueViolationAsync(tx, rawErr, identity);
           if (err.code === 'DUPLICATE_CANDIDATE') {
             duplicates.push({ row: rowNum, name: identity.name, birth_date: identity.birth_date, existingId: err.existing?.id, existingName: err.existing?.name });
             skipped++;
@@ -1076,7 +1090,6 @@ router.post('/import', (req, res) => {
       }
     });
 
-    importMany();
     syncGraphCandidatesInBackground(importedIds, req);
 
     logAudit(req, 'csv-import', 'Candidate', null, null, {
@@ -1089,7 +1102,8 @@ router.post('/import', (req, res) => {
       skipped,
       errors: errors.length,
       errorDetails: errors.slice(0, 20),
-      duplicates: duplicates.slice(0, 20)
+      duplicates: duplicates.slice(0, 20),
+      matchingRuns,
     });
   } catch (error) {
     console.error('Error importing candidates:', error);

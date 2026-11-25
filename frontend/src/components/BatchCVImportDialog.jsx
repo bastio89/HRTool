@@ -3,6 +3,7 @@ import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, Chevron
 import { cvParserApi, uploadsApi } from '../api'
 import { Button } from './UI'
 import Modal from './Modal'
+import ImportMatchingStatus from './ImportMatchingStatus'
 import { useI18n } from '../I18nContext'
 import { useSystemStatus } from './SystemStatus'
 import { localeTag } from '../utils/format'
@@ -120,6 +121,8 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
           parsingMethod: result.parsingMethod || c.parsing_method || null,
           duplicate: Boolean(result.duplicate),
           duplicateCandidate: result.duplicateCandidate || null,
+          matchingRunId: result.matchingRunId,
+          matchingStatus: result.matchingStatus,
         })
       } catch (err) {
         // Gleicher Name + Geburtsdatum: die Person gibt es schon, nichts
@@ -321,6 +324,7 @@ export default function BatchCVImportDialog({ open = true, onClose, onImported }
                 {item.status === STATUS.DONE && (
                   <div className="mt-0.5 space-y-0.5">
                     <p className="text-[12px] text-[#34c759]">{t('batch_import.created')}</p>
+                    <ImportMatchingStatus runId={item.matchingRunId} status={item.matchingStatus} />
                     <div className="flex flex-wrap gap-2 text-[11px]">
                       <span className={`px-2 py-0.5 rounded-full ${item.storage?.postgres ? 'bg-[#34c759]/10 text-[#1e7f38]' : 'bg-gray-200 text-gray-500'}`}>
                         PostgreSQL: {item.storage?.postgres ? 'gespeichert' : 'nicht gespeichert'}

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 import re
 from dataclasses import asdict
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
+import httpx
+import psycopg
 
 from config import settings
+from batch_api import public_matching_error
 from plugins.billing.service import BillingService
 from models import (
 	MatchingCandidateInput,
@@ -23,6 +28,7 @@ from models import (
 	MatchingResultItem,
 	MatchingResultsPayload,
 	MatchingRunRequest,
+	MatchingRunStatusResponse,
 	SkillMatchingRequest,
 	SkillMatchingResponse,
 	SkillMatchItem,
@@ -31,17 +37,40 @@ from models import (
 	VectorMatchRequest,
 	VectorMatchRow,
 	VectorMatchNeo4jPayload,
+	SelectedSkillRequest,
+	SelectedSkillResponse,
 )
 from services.skill_matching import RequiredSkill, SkillMatchingService
+from services.matching_orchestrator import MatchingOrchestrator
+from services.matching_cache import MatchingPendingError
+from services.matching_pipeline import MatchingRequestCoordinator
 
 SKILL_MATCHING_API_METHOD = "POST"
 SKILL_MATCHING_API_PATH = "/match/skills"
 
 
-def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
+def create_matching_router(llm_service=None, db_service=None, *, matching_requests=None) -> APIRouter:
 	router = APIRouter()
 	billing_store = getattr(db_service, 'postgres_store', None) or getattr(llm_service, 'postgres_store', None)
 	billing_service = BillingService(billing_store) if billing_store is not None else None
+	requests = matching_requests or MatchingRequestCoordinator(billing_store)
+
+	@router.get('/matching/runs/{run_id}', response_model=MatchingRunStatusResponse)
+	async def matching_run_status(run_id: UUID, request: Request):
+		if billing_store is None or billing_service is None:
+			raise HTTPException(status_code=503, detail='Matching services are not available')
+		actor = await billing_service.actor_for_request(request)
+		run = await billing_store.get_matching_run(str(run_id))
+		if run is None or (run['actor_user_id'] != actor.user_id and actor.role != 'admin'):
+			raise HTTPException(status_code=404, detail='Matching run not found')
+		pending = await billing_store.get_matching_pending_response(str(run_id))
+		progress = await billing_store.get_matching_run_progress(str(run_id))
+		return MatchingRunStatusResponse(
+			**pending, method=run['method'], stage=run['stage'], targetCount=run['target_count'],
+			updatedAt=progress['updatedAt'], errorCode=public_matching_error(run['error_code']),
+			resultPayload=run['result_payload'], counters=progress,
+		)
+
 	skill_matching_service = (
 		SkillMatchingService(
 			llm_service,
@@ -51,6 +80,26 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		if llm_service is not None and db_service is not None
 		else None
 	)
+	orchestrator = (
+		MatchingOrchestrator(skill_matching_service, postgres_store=billing_store, llm_service=llm_service)
+		if skill_matching_service is not None else None
+	)
+
+	async def central_skill_matrix(jobs, candidates, request: Request, engine='python'):
+		if orchestrator is None:
+			raise HTTPException(status_code=503, detail='Skill matching services are not available')
+		try:
+			return await orchestrator.match_skill_matrix(
+				jobs, candidates, model=settings.resolved_embedding_model, engine=engine,
+				run_id=request.state.matching_run_id, on_plan=request.state.matching_on_plan,
+			)
+		except MatchingPendingError:
+			raise
+		except ValueError as error:
+			raise HTTPException(status_code=422, detail=str(error)) from error
+		except (RuntimeError, psycopg.Error, httpx.HTTPError) as error:
+			logging.getLogger(__name__).exception('Skill-Matching oder Paarpersistenz fehlgeschlagen')
+			raise HTTPException(status_code=503, detail=str(error)) from error
 
 	async def resolve_graph_ids(table: str, requested: list[Any]) -> dict[str, str]:
 		"""Angefragte ID -> ID des Neo4j-Knotens. PostgreSQL-IDs (Zahlen) werden
@@ -167,6 +216,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return max(0.25, 1.0 + adjustment) * base_weight
 
 	def overlap_score(job_value: Any, candidate_value: Any) -> tuple[float, list[str]]:
+		"""Deprecated reference; skill coverage uses MatchingOrchestrator, never overlap."""
 		job_terms = extract_terms(job_value)
 		candidate_terms = extract_terms(candidate_value)
 		if not job_terms or not candidate_terms:
@@ -217,6 +267,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return base_terms
 
 	def normalize_skill_entries(value: Any, default_priority: str = 'Mandatory') -> list[dict[str, Any]]:
+		"""Deprecated reference; use matching_orchestrator.normalize_skill_entries."""
 		if value is None:
 			return []
 
@@ -249,6 +300,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return normalized
 
 	def normalize_vector_skill_entries(value: Any, default_priority: str = 'Mandatory', default_category: str = 'HardSkill') -> list[dict[str, Any]]:
+		"""Deprecated reference; central normalization preserves priorities and categories."""
 		if value is None:
 			return []
 
@@ -288,6 +340,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return normalized
 
 	def get_required_skills(job: MatchingJobInput) -> list[dict[str, Any]]:
+		"""Deprecated text fallback; productive matching requires prepared structured skills."""
 		required = normalize_skill_entries(getattr(job, 'required_skills', None))
 		if required:
 			return required
@@ -295,6 +348,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return normalize_skill_entries(fallback_source)
 
 	def get_candidate_skills(candidate: MatchingCandidateInput) -> list[dict[str, Any]]:
+		"""Deprecated reference; MatchingOrchestrator normalizes stored candidate skills."""
 		has_skill = normalize_vector_skill_entries(getattr(candidate, 'has_skill', None), default_priority='Neutral')
 		if has_skill:
 			return has_skill
@@ -304,6 +358,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return normalize_vector_skill_entries(fallback_source, default_priority='Neutral')
 
 	async def build_skill_embedding_cache(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput]) -> dict[str, list[float]]:
+		"""Deprecated reference; SkillMatchingService owns skill embedding/resolution."""
 		skill_embeddings: dict[str, list[float]] = {}
 		for job in jobs:
 			for entry in get_required_skills(job):
@@ -330,6 +385,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return skill_embeddings
 
 	def cosine_similarity(left: list[float] | tuple[float, ...], right: list[float] | tuple[float, ...]) -> float:
+		"""Deprecated skill scorer; use SkillMatchingService.match."""
 		if not left or not right:
 			return 0.0
 		length = min(len(left), len(right))
@@ -343,6 +399,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return max(0.0, min(1.0, dot_product / (left_norm * right_norm)))
 
 	def lexical_similarity(left_name: str, right_name: str) -> float:
+		"""Deprecated reference; use SkillMatchingService canonical/name resolution."""
 		left_text = normalize_text(left_name).lower()
 		right_text = normalize_text(right_name).lower()
 		if not left_text or not right_text:
@@ -360,6 +417,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return intersection / union if union else 0.0
 
 	def skill_weight(priority: Any) -> float:
+		"""Deprecated reference; SkillMatchingService owns priority weights and gates."""
 		priority_text = normalize_text(priority).lower().replace('-', '_').replace(' ', '_')
 		if priority_text == 'mandatory':
 			return 2.0
@@ -371,6 +429,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return normalize_text(name) or 'Unbekannter Skill'
 
 	def score_skill_pair(job: MatchingJobInput, candidate: MatchingCandidateInput, skill_embeddings: dict[str, list[float]]) -> dict[str, Any]:
+		"""Deprecated reference; productive pairs use MatchingOrchestrator.match_skill_matrix."""
 		job_skills = get_required_skills(job)
 		candidate_skills = get_candidate_skills(candidate)
 		job_title = job.title or 'Unbenannte Stelle'
@@ -487,6 +546,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return [skill for skill in skills if skill.get('category') == category]
 
 	def score_vector_pair_for_skills(job: MatchingJobInput, candidate: MatchingCandidateInput, job_skills: list[dict[str, Any]], candidate_skills: list[dict[str, Any]], skill_embeddings: dict[str, list[float]]) -> dict[str, Any]:
+		"""Deprecated reference; SkillMatchingService supplies total/category coverage."""
 		job_title = job.title or 'Unbenannte Stelle'
 		candidate_name = candidate.name or f'Kandidat {candidate.id}'
 
@@ -584,6 +644,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		}
 
 	def score_vector_pair(job: MatchingJobInput, candidate: MatchingCandidateInput, skill_embeddings: dict[str, list[float]]) -> dict[str, Any]:
+		"""Deprecated reference; productive pairs use MatchingOrchestrator.match_skill_matrix."""
 		job_skills = normalize_vector_skill_entries(getattr(job, 'required_skills', None))
 		candidate_skills = normalize_vector_skill_entries(getattr(candidate, 'has_skill', None), default_priority='Neutral')
 		overall = score_vector_pair_for_skills(job, candidate, job_skills, candidate_skills, skill_embeddings)
@@ -609,25 +670,20 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		}
 
 	@router.post('/match/vectormatch', response_model=VectorMatchPayload | VectorMatchNeo4jPayload)
+	@requests.endpoint(method='vector', amount='-0.10', action='3D_MATCH')
 	async def vector_match(payload: VectorMatchRequest, request: Request) -> VectorMatchPayload | VectorMatchNeo4jPayload:
 		if payload.engine == 'neo4j':
 			return await vector_match_neo4j(payload, request)
+		return await run_vector_match(payload, request)
 
+	async def run_vector_match(payload: VectorMatchRequest, request: Request) -> VectorMatchPayload:
 		if db_service is None:
 			raise HTTPException(status_code=503, detail='Neo4j service is not available')
 
 		jobs_raw, candidates_raw, missing_jobs, missing_candidates = await load_vectormatch_inputs(payload)
-		if billing_service is not None:
-			await billing_service.charge(request, '-0.10', '3D_MATCH', note='vectormatch')
-
 		jobs = [MatchingJobInput.model_validate(job) for job in jobs_raw]
 		candidates = [MatchingCandidateInput.model_validate(candidate) for candidate in candidates_raw]
-		skill_embeddings = await build_skill_embedding_cache(jobs, candidates)
-
-		rows = []
-		for job in jobs:
-			for candidate in candidates:
-				rows.append(score_vector_pair(job, candidate, skill_embeddings))
+		rows, matched_at = await central_skill_matrix(jobs, candidates, request, payload.engine)
 
 		rows.sort(key=lambda item: item['score'], reverse=True)
 		jobs_ranked = [
@@ -656,10 +712,11 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		]
 
 		return VectorMatchPayload(
+			pairsPersisted=True,
 			mode='vectormatch',
-			model='graph-rag-python-skill-vector-match',
+			model=f'graph-rag-{payload.engine}-skill-match',
 			embeddingModel=settings.resolved_embedding_model,
-			matchedAt=datetime.now(timezone.utc).isoformat(),
+			matchedAt=matched_at.isoformat(),
 			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
 			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
 			matrix=[VectorMatchRow(**row) for row in rows],
@@ -692,12 +749,64 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			],
 		)
 
-	async def build_vector_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str, model_name: str) -> MatchingMatrixPayload:
-		skill_embeddings = await build_skill_embedding_cache(jobs, candidates)
-		rows = []
-		for job in jobs:
-			for candidate in candidates:
-				rows.append(score_skill_pair(job, candidate, skill_embeddings))
+	@router.post('/match/vectormatch-selected', response_model=SelectedSkillResponse)
+	@requests.endpoint(method='vector', amount=None, action=None, selection=True)
+	async def vector_match_selected(payload: SelectedSkillRequest, request: Request) -> SelectedSkillResponse:
+		groups: dict[int, set[int]] = {}
+		for pair in payload.pairs:
+			groups.setdefault(pair.job_id, set()).add(pair.candidate_id)
+		tasks = []
+		for job_id, candidate_ids in groups.items():
+			task = await requests.skill_child(request, job_id, sorted(candidate_ids), payload.engine)
+			if task is not None:
+				tasks.append(task)
+		if tasks:
+			await asyncio.wait(tasks)
+		children = await billing_store.sync_matching_children(
+			request.state.matching_run_id, request.state.matching_run_owner,
+		)
+		failures = list(payload.localFailures)
+		rows: dict[tuple[str, str], VectorMatchRow] = {}
+		pending = False
+		blocked = False
+		model = None
+		for child in children:
+			job_id = int(child['child_key'])
+			if child['stage'] in {'queued', 'preparing', 'matching', 'blocked_credits'}:
+				pending = True
+				blocked |= child['stage'] == 'blocked_credits'
+				continue
+			result = child['result_payload']
+			if result is not None and child['stage'] in {'completed', 'completed_with_errors'}:
+				model = result.get('model') or model
+				for value in result['matrix']:
+					row = VectorMatchRow.model_validate(value)
+					rows[(row.jobId, row.candidateId)] = row
+				missing = set(map(str, result.get('missingCandidateIds', [])))
+				for candidate_id in missing:
+					failures.append(KiMatchPairFailure(
+						jobId=str(job_id), candidateId=candidate_id, error='Kein Eintrag in Neo4j',
+					))
+			else:
+				for candidate_id in sorted(groups[job_id]):
+					failures.append(KiMatchPairFailure(
+						jobId=str(job_id), candidateId=str(candidate_id),
+						error=f"Teilmatching fehlgeschlagen: {child['error_code'] or child['stage']}",
+					))
+		if pending:
+			if blocked:
+				await billing_store.block_matching_run(request.state.matching_run_id, 'child_blocked_credits')
+			raise MatchingPendingError([])
+		results = sorted(rows.values(), key=lambda row: row.score, reverse=True)
+		return SelectedSkillResponse(
+			engine=payload.engine, model=model, results=results, failures=failures,
+			selectedCount=payload.selectedCount or len(payload.pairs) + len(payload.localFailures),
+			matchedCount=len(results), failedCount=len(failures),
+		)
+
+	async def build_vector_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str, model_name: str, request: Request) -> MatchingMatrixPayload:
+		engine = 'neo4j' if 'neo4j' in model_name else 'python'
+		rows, matched_at = await central_skill_matrix(jobs, candidates, request, engine)
 		rows.sort(key=lambda item: item['score'], reverse=True)
 		jobs_ranked = [
 			{
@@ -724,11 +833,12 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			for candidate in candidates
 		]
 		return MatchingMatrixPayload(
+			pairsPersisted=True,
 			type='matrix',
 			mode=mode,
 			model=model_name,
 			embeddingModel=settings.resolved_embedding_model,
-			matchedAt=datetime.now(timezone.utc).isoformat(),
+			matchedAt=matched_at.isoformat(),
 			jobs=[{'id': job.id, 'title': job.title} for job in jobs],
 			candidates=[{'id': candidate.id, 'name': candidate.name} for candidate in candidates],
 			matrix=rows,
@@ -737,6 +847,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		)
 
 	def build_neo4j_vector_result(row: dict[str, Any]) -> dict[str, Any]:
+		"""Deprecated reference adapter; productive rows already contain central category scores."""
 		matched_skills = [
 			{
 				'jobSkill': item.get('jobSkill'),
@@ -752,6 +863,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		matched_skills.sort(key=lambda item: item['similarity'], reverse=True)
 
 		def category_score(category: str) -> float:
+			"""Deprecated reference; use category assessments from SkillMatchingService."""
 			category_matches = [
 				match
 				for match in matched_skills
@@ -839,6 +951,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		}
 
 	def _score_pair(job: MatchingJobInput, candidate: MatchingCandidateInput, weights: dict[str, int] | None = None) -> dict[str, Any]:
+		"""Deprecated reference; no lexical fallback for central skill or selected AI matching."""
 		job_terms = build_job_text_terms(job)
 		candidate_terms = build_candidate_terms(candidate)
 		candidate_general_terms = build_candidate_general_terms(candidate)
@@ -923,6 +1036,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return weaknesses[:3]
 
 	def score_pair(job: MatchingJobInput, candidate: MatchingCandidateInput, weights: dict[str, int] | None = None) -> dict[str, Any]:
+		"""Deprecated reference; use match_skill_matrix or explicitly selected match_ai_pair."""
 		pair = _score_pair(job, candidate, weights)
 		strengths = build_strengths(job, candidate, pair)
 		weaknesses = build_weaknesses(job, candidate, pair)
@@ -945,6 +1059,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		}
 
 	def build_results(job: MatchingJobInput, candidates: list[MatchingCandidateInput], weights: dict[str, int] | None = None) -> MatchingResultsPayload:
+		"""Deprecated reference; productive result builders consume central pair rows."""
 		items = []
 		for candidate in candidates:
 			pair = score_pair(job, candidate, weights)
@@ -962,6 +1077,7 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		return MatchingResultsPayload(results=items)
 
 	def build_matrix(jobs: list[MatchingJobInput], candidates: list[MatchingCandidateInput], mode: str, weights: dict[str, int] | None = None) -> MatchingMatrixPayload:
+		"""Deprecated reference; use build_vector_matrix and MatchingOrchestrator."""
 		rows = []
 		for job in jobs:
 			for candidate in candidates:
@@ -1004,32 +1120,19 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		)
 
 	@router.post('/match/external/run', response_model=MatchingResultsPayload)
+	@requests.endpoint(method='vector', amount='-1.00', action='AI_MATCH')
 	async def external_run(payload: MatchingRunRequest, request: Request) -> MatchingResultsPayload:
 		if not payload.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
 		if not payload.job.title and not payload.job.description and not payload.job.requirements:
 			raise HTTPException(status_code=400, detail='Stellentitel, Beschreibung oder Anforderungen sind erforderlich')
-		if billing_service is not None:
-			await billing_service.charge(request, '-1.00', 'AI_MATCH', note='external run')
-		skill_embeddings = await build_skill_embedding_cache([payload.job], payload.candidates)
-		items = [
-			MatchingResultItem(
-				candidateId=pair['candidateId'],
-				candidateName=pair['candidateName'],
-				score=pair['score'],
-				strengths=pair['strengths'],
-				weaknesses=pair['weaknesses'],
-				summary=pair['summary'],
-			)
-			for pair in (
-				score_vector_pair(payload.job, candidate, skill_embeddings)
-				for candidate in payload.candidates
-			)
-		]
+		rows, _matched_at = await central_skill_matrix([payload.job], payload.candidates, request)
+		items = [MatchingResultItem.model_validate(pair) for pair in rows]
 		items.sort(key=lambda item: item.score, reverse=True)
-		return MatchingResultsPayload(results=items)
+		return MatchingResultsPayload(results=items, pairsPersisted=True)
 
 	@router.post('/match/external/matrix', response_model=MatchingMatrixPayload)
+	@requests.endpoint(method='vector', amount='-0.10', action='3D_MATCH')
 	async def external_matrix(payload: MatchingMatrixRequest, request: Request) -> MatchingMatrixPayload:
 		if not payload.jobs:
 			raise HTTPException(status_code=400, detail='Mindestens eine Stelle ist erforderlich')
@@ -1037,22 +1140,49 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
 		if payload.engine == 'neo4j':
 			return await external_matrix_neo4j(payload, request)
-		if billing_service is not None:
-			await billing_service.charge(request, '-0.10', '3D_MATCH', note='external matrix')
-		return await build_vector_matrix(payload.jobs, payload.candidates, payload.mode, 'graph-rag-vector-matrix')
+		return await build_vector_matrix(payload.jobs, payload.candidates, payload.mode, 'graph-rag-vector-matrix', request)
 
 	@router.post('/match/external/matrix_neo4j', response_model=MatchingMatrixPayload)
+	@requests.endpoint(method='vector', amount='-0.10', action='3D_MATCH')
 	async def external_matrix_neo4j(payload: MatchingMatrixRequest, request: Request) -> MatchingMatrixPayload:
 		if not payload.jobs:
 			raise HTTPException(status_code=400, detail='Mindestens eine Stelle ist erforderlich')
 		if not payload.candidates:
 			raise HTTPException(status_code=400, detail='Mindestens ein Kandidat ist erforderlich')
-		if billing_service is not None:
-			await billing_service.charge(request, '-0.10', '3D_MATCH', note='external matrix neo4j')
-		return await build_vector_matrix(payload.jobs, payload.candidates, payload.mode, 'graph-rag-neo4j-skill-vector-match')
+		return await build_vector_matrix(payload.jobs, payload.candidates, payload.mode, 'graph-rag-neo4j-skill-vector-match', request)
 
 	@router.post('/match/ki_match_pairs', response_model=KiMatchPairsResponse)
+	@requests.endpoint(method='ai', amount='-1.00', action='AI_MATCH')
 	async def ki_match_pairs(payload: KiMatchPairsRequest, request: Request) -> KiMatchPairsResponse:
+		if orchestrator is None:
+			raise HTTPException(status_code=503, detail='Matching service is not available')
+		if not payload.pairs or len(payload.pairs) > 20:
+			raise HTTPException(status_code=400, detail='Zwischen 1 und 20 explizite Paarungen sind erforderlich')
+		results = []
+		failures = []
+		for pair in payload.pairs:
+			try:
+				results.append(await orchestrator.match_ai_pair(
+					str(pair.job_id).strip(), str(pair.candidate_id).strip(),
+					run_id=request.state.matching_run_id, on_plan=request.state.matching_on_plan,
+				))
+			except MatchingPendingError:
+				raise
+			except (ValueError, RuntimeError, psycopg.Error, httpx.HTTPError) as error:
+				logging.getLogger(__name__).exception('AI-Paarmatching fehlgeschlagen')
+				failures.append(KiMatchPairFailure(
+					jobId=str(pair.job_id), jobTitle=pair.job_title,
+					candidateId=str(pair.candidate_id), candidateName=pair.candidate_name, error=str(error),
+				))
+		results.sort(key=lambda result: result.score, reverse=True)
+		return KiMatchPairsResponse(
+			results=results, failures=failures, pairsPersisted=True, selectedCount=len(payload.pairs),
+			matchedCount=len(results), failedCount=len(failures), timestamp=datetime.now(timezone.utc).isoformat(),
+			model=getattr(llm_service, 'chat_model', None),
+		)
+
+	async def _deprecated_ki_match_pairs(payload: KiMatchPairsRequest, request: Request) -> KiMatchPairsResponse:
+		"""Deprecated: nicht registrierte Referenz des alten AI-/Overlap-Fallbacks."""
 		if db_service is None or llm_service is None:
 			raise HTTPException(status_code=503, detail='Matching service is not available')
 		if not payload.pairs:
@@ -1213,7 +1343,13 @@ def create_matching_router(llm_service=None, db_service=None) -> APIRouter:
 		)
 
 	@router.post('/match/vectormatch_neo4j', response_model=VectorMatchNeo4jPayload)
+	@requests.endpoint(method='vector', amount='-0.10', action='3D_MATCH')
 	async def vector_match_neo4j(payload: VectorMatchRequest, request: Request) -> VectorMatchNeo4jPayload:
+		result = await run_vector_match(payload.model_copy(update={'engine': 'neo4j'}), request)
+		return VectorMatchNeo4jPayload(**result.model_dump(exclude={'type', 'mode'}))
+
+	async def _deprecated_vector_match_neo4j(payload: VectorMatchRequest, request: Request) -> VectorMatchNeo4jPayload:
+		"""Deprecated: nicht registrierte Referenz des alten Cypher-Scorings."""
 		if db_service is None:
 			raise HTTPException(status_code=503, detail='Neo4j service is not available')
 

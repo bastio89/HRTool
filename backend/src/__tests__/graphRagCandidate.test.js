@@ -1,4 +1,4 @@
-const { deleteGraphCandidate, deleteGraphCandidates } = require('../utils/graphRagCandidate');
+const { deleteGraphCandidate, deleteGraphCandidates, syncGraphCandidates, syncGraphCandidatesInBackground } = require('../utils/graphRagCandidate');
 const express = require('express');
 const request = require('supertest');
 
@@ -6,13 +6,14 @@ const nativeFetch = globalThis.fetch;
 const nativeGraphRagBaseUrl = process.env.GRAPHRAG_BASE_URL;
 const nativeGraphRagApiKey = process.env.GRAPHRAG_API_KEY;
 
-describe('GraphRAG candidate deletion', () => {
+describe('GraphRAG candidate lifecycle', () => {
   beforeEach(() => {
     process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag/';
     delete process.env.GRAPHRAG_API_KEY;
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     globalThis.fetch = nativeFetch;
     if (nativeGraphRagBaseUrl === undefined) delete process.env.GRAPHRAG_BASE_URL;
     else process.env.GRAPHRAG_BASE_URL = nativeGraphRagBaseUrl;
@@ -84,6 +85,31 @@ describe('GraphRAG candidate deletion', () => {
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     expect(globalThis.fetch.mock.calls.map(([, options]) => JSON.parse(options.body).candidate_id))
       .toEqual(['graph-candidate-old', 'graph-candidate-new']);
+  });
+
+  test('sync forwards only stored source IDs and preserves service-confirmed revisions without a second import', async () => {
+    const confirmed = { synced: 2, failed: 0, errors: [], preparedRevisions: { 17: 'revision-a', 18: 'revision-b' } };
+    globalThis.fetch = jest.fn(async () => ({ ok: true, json: async () => confirmed }));
+    expect(await syncGraphCandidates([17, 17, 18], { headers: {} })).toEqual(confirmed);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://fake-graphrag/sync/candidates',
+      expect.objectContaining({ body: JSON.stringify({ candidate_ids: [17, 18] }) }),
+    );
+  });
+
+  test('partial preparation errors remain isolated for callers and are visible in background sync', async () => {
+    const partial = { synced: 1, failed: 1, errors: [{ candidate_id: 17, error: 'source_changed' }], preparedRevisions: { 18: 'revision-b' } };
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true, json: async () => partial,
+    }));
+    expect(await syncGraphCandidates([17, 18], { headers: {} })).toEqual(partial);
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    syncGraphCandidatesInBackground([17, 18], { headers: {} });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(warning).toHaveBeenCalledWith(
+      'Neo4j-Abgleich der Bewerber teilweise fehlgeschlagen:', JSON.stringify(partial.errors),
+    );
   });
 
   test('candidate delete route removes the graph node before the local row', async () => {

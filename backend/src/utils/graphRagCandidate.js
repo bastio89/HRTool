@@ -66,10 +66,8 @@ async function deleteGraphCandidates(candidates, req) {
   return Promise.all([...unique.values()].map((candidate) => deleteGraphCandidate(candidate, req)));
 }
 
-// Uebertraegt Bewerber aus PostgreSQL nach Neo4j (Knoten-ID = UUID des
-// Bewerbers). Laeuft im Hintergrund: Ist GraphRAG nicht erreichbar, bleibt der
-// Bewerber ohne Neo4j-Knoten und wird ueber "Abgleich nachholen" in der
-// Dubletten-Uebersicht spaeter uebertragen.
+// Der Graph-Service bestaetigt die aktuelle PostgreSQL-Revision.
+// Dieser Abgleich erzeugt keinen weiteren Importauftrag.
 async function syncGraphCandidates(candidateIds, req) {
   const ids = [...new Set((candidateIds || []).map(Number).filter(Number.isInteger))];
   if (ids.length === 0) return { synced: 0 };
@@ -79,13 +77,17 @@ async function syncGraphCandidates(candidateIds, req) {
     headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
     body: JSON.stringify({ candidate_ids: ids }),
   });
-  const payload = await response.json().catch(() => ({}));
+  const payload = await response.json();
   if (!response.ok) throw new Error(payload.detail || payload.error || `GraphRAG HTTP ${response.status}`);
   return payload;
 }
 
 function syncGraphCandidatesInBackground(candidateIds, req) {
-  syncGraphCandidates(candidateIds, req).catch((error) => {
+  syncGraphCandidates(candidateIds, req).then((payload) => {
+    if (Number(payload.failed) > 0) {
+      console.warn('Neo4j-Abgleich der Bewerber teilweise fehlgeschlagen:', JSON.stringify(payload.errors || []));
+    }
+  }).catch((error) => {
     console.warn('Neo4j-Abgleich der Bewerber fehlgeschlagen:', error.message);
   });
 }

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Awaitable, Callable
 
 from config import Settings
 
@@ -11,9 +12,10 @@ from services.postgres_store import PostgresStore
 from services.llm import LLMService
 
 
-def build_plugins(settings: Settings, postgres_store: PostgresStore, llm_service: LLMService, db_service: Neo4jService) -> list[BasePlugin]:
+def build_plugins(settings: Settings, postgres_store: PostgresStore, llm_service: LLMService, db_service: Neo4jService,
+                  *, prepare_job: Callable[[int], Awaitable[tuple[str, int]]]) -> list[BasePlugin]:
     return [
         BillingPlugin(settings=settings, postgres_store=postgres_store),
-        JobsChPlugin(settings=settings, postgres_store=postgres_store, llm_service=llm_service, db_service=db_service),
+        JobsChPlugin(settings=settings, postgres_store=postgres_store, llm_service=llm_service, db_service=db_service, prepare_job=prepare_job),
         LinkedInPlugin(settings=settings, postgres_store=postgres_store),
     ]

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, Download, FileText, Target, User, UserCheck, XCircle, CheckSquare, Square } from 'lucide-react'
-import { matchingApi } from '../api'
+import { matchingApi, matchingScorePercent, resolveMatchingResult } from '../api'
+import MatchingResultMetadata, { MatchingRunNotice } from '../components/MatchingResultMetadata'
 import { Card, Button, ScoreBadge, ScoreRing, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
 
@@ -16,22 +17,31 @@ export default function SelectedMatchingResults() {
   const [loadingMode, setLoadingMode] = useState(location.state?.mode || null)
   const [error, setError] = useState('')
   const [selectedRowKeys, setSelectedRowKeys] = useState([])
+  const [progress, setProgress] = useState(null)
+  const requestRef = useRef(null)
 
   useEffect(() => {
+    const controller = new AbortController()
+    requestRef.current = controller
+    let active = true
+    setProgress(null)
     const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) {
+    if (!raw && !location.state?.pairs) {
       setLoading(false)
       return
     }
 
     const loadSelectedMatching = async () => {
       try {
-        const parsed = JSON.parse(raw)
+        const parsed = raw ? JSON.parse(raw) : {}
+        const resume = parsed.navigationKey === location.key && Boolean(parsed.response)
         const fromStatePairs = location.state?.pairs
-        const pairs = fromStatePairs || parsed.pairs || []
-        const mode = location.state?.mode || parsed.mode || 'ai'
+        const pairs = (resume ? parsed.pairs : fromStatePairs || parsed.pairs) || []
+        const mode = (resume ? parsed.mode : location.state?.mode || parsed.mode) || 'ai'
+        if (!['vector', 'ai'].includes(mode)) throw new Error(t('matching.method_mismatch'))
+        const method = mode === 'vector' ? 'vector' : 'ai'
         setLoadingMode(mode)
-        const precomputed = location.state?.precomputed
+        const precomputed = resume ? parsed.response : location.state?.precomputed || (!fromStatePairs && parsed.mode === mode ? parsed.response : null)
         const sourceJobDescription = location.state?.sourceJobDescription || parsed.sourceJobDescription || ''
 
         if (!Array.isArray(pairs) || pairs.length === 0) {
@@ -42,69 +52,75 @@ export default function SelectedMatchingResults() {
 
         setLoading(true)
         setError('')
-        let rows = []
-        let failures = []
-
-        if (mode === 'vector') {
-          // Ein Aufruf fuer alle Paarungen: das Backend sucht per UUID, holt
-          // fehlende Neo4j-Eintraege nach und meldet nicht matchbare Paarungen
-          // als failures (statt dass eine einzelne alles scheitern laesst).
-          const engine = location.state?.engine || parsed.engine || 'python'
-          const response = await matchingApi.vectorMatchSelected(pairs, engine)
-          rows = (response?.results || []).map((row) => ({
-            ...row,
-            score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
-          })).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
-          failures = response?.failures || []
-        } else if (precomputed) {
-          rows = (precomputed?.results || []).map((row) => ({
-            ...row,
-            score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
-          })).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
-          failures = precomputed?.failures || []
-        } else {
-          const response = await matchingApi.runSelected(pairs)
-          rows = (response?.results || []).map((row) => ({
-            ...row,
-            score: typeof row.score === 'number' && row.score <= 1 ? row.score * 100 : row.score,
-          })).sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0))
-          failures = response?.failures || []
+        const engine = location.state?.engine || parsed.engine || 'python'
+        const options = {
+          signal: controller.signal,
+          onProgress: current => {
+            if (!active) return
+            if (current.method && current.method !== method) throw new Error(t('matching.method_mismatch'))
+            setProgress(current)
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+              ...parsed, pairs, mode, engine, sourceJobDescription, navigationKey: location.key,
+              response: { ...current, status: 'pending' },
+            }))
+          },
         }
+        const response = precomputed
+          ? await resolveMatchingResult(precomputed, options)
+          : mode === 'vector'
+            ? await matchingApi.vectorMatchSelected(pairs, engine, options)
+            : await matchingApi.runSelected(pairs, null, options)
+        if (!active) return
+        if (!Array.isArray(response?.results)) throw new Error(t('matching.invalid_results'))
+        if (response?.method && response.method !== method) throw new Error(t('matching.method_mismatch'))
+        const rows = (response?.results || []).map(row => {
+          if (row.method && row.method !== method) throw new Error(t('matching.method_mismatch'))
+          return { ...row, method, score: matchingScorePercent(row.score, method) }
+        }).sort((left, right) => (right.score ?? -1) - (left.score ?? -1))
+        const failures = response?.failures || []
+        const resultPayload = { ...response, results: rows, failures, selectedCount: pairs.length, mode, method }
 
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
           ...parsed,
           pairs,
           mode,
+          navigationKey: location.key,
           sourceJobDescription,
-          response: { results: rows, failures, selectedCount: pairs.length, mode },
+          response: resultPayload,
         }))
-        setPayload({ results: rows, failures, selectedCount: pairs.length, mode })
+        setPayload({ ...resultPayload, sourceJobDescription, sourceResultId: parsed.sourceResultId, historical: Boolean(precomputed && precomputed.status !== 'pending') })
+        setProgress(null)
         setSelectedRowKeys([])
       } catch (err) {
+        if (!active || err.name === 'AbortError') return
         setPayload(null)
         setError(err.message || 'KI-Matching konnte nicht gestartet werden.')
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
     }
 
     loadSelectedMatching()
-  }, [location.state])
+    return () => { active = false; controller.abort() }
+  }, [location.state, location.key])
+
+  useEffect(() => () => requestRef.current?.abort(), [])
 
   const results = payload?.results || []
   const failures = payload?.failures || []
   const total = payload?.selectedCount ?? (results.length + failures.length)
-  const avgScore = results.length > 0 ? results.reduce((sum, row) => sum + (Number(row.score) || 0), 0) / results.length : 0
-  const bestScore = results[0]?.score || 0
-  const modeLabel = payload?.mode === 'vector' ? '3D-Matching' : 'KI-Matching'
+  const bestScore = results.find(row => row.score != null)?.score ?? null
+  const modeLabel = t(payload?.method === 'vector' ? 'matching.method_skill' : 'matching.method_ai')
   const pageTitle = payload?.mode === 'vector' ? t('selected_results.title_vector') : t('selected_results.title_ai')
   const loadingLabel = (loadingMode ?? payload?.mode) === 'vector'
     ? t('selected_results.loading_vector')
     : t('selected_results.loading_ai')
   const isVectorMode = payload?.mode === 'vector'
   const getRowKey = (row) => `${row.jobId}-${row.candidateId}`
+  const hasStoredIds = row => Boolean((row.jobId ?? row.sourceJobId) && (row.candidateId ?? row.sourceCandidateId))
+  const selectableRows = results.filter(hasStoredIds)
   const selectedRows = results.filter((row) => selectedRowKeys.includes(getRowKey(row)))
-  const allRowsSelected = results.length > 0 && selectedRowKeys.length === results.length
+  const allRowsSelected = selectableRows.length > 0 && selectedRowKeys.length === selectableRows.length
 
   const toggleRowSelection = (row) => {
     const key = getRowKey(row)
@@ -118,11 +134,15 @@ export default function SelectedMatchingResults() {
   }
 
   const toggleAllRows = () => {
-    setSelectedRowKeys((prev) => (prev.length === results.length ? [] : results.map(getRowKey)))
+    setSelectedRowKeys((prev) => (prev.length === selectableRows.length ? [] : selectableRows.map(getRowKey)))
   }
 
   const handleRunSelectedAiMatching = async () => {
     if (selectedRows.length === 0) return
+    if (selectedRows.length > 20) {
+      setError(t('matching.selection_limit'))
+      return
+    }
 
     setLoadingMode('ai')
     setLoading(true)
@@ -139,26 +159,41 @@ export default function SelectedMatchingResults() {
       candidateName: row.candidateName,
     }))
 
+    const controller = new AbortController()
+    requestRef.current = controller
     try {
-      const response = await matchingApi.runSelected(batchPayload)
+      const response = await matchingApi.runSelected(batchPayload, null, {
+        signal: controller.signal,
+        onProgress: current => {
+          if (controller.signal.aborted) return
+          setProgress(current)
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+            pairs: batchPayload, mode: 'ai', navigationKey: location.key,
+            sourceResultId: payload?.sourceResultId, sourceJobDescription: payload?.sourceJobDescription,
+            response: { ...current, status: 'pending' },
+          }))
+        },
+      })
+      if (controller.signal.aborted) return
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         pairs: batchPayload,
         mode: 'ai',
         sourceResultId: payload?.sourceResultId || null,
-        sourceLabel: '3D-Matching',
+        sourceLabel: t('matching.method_skill'),
         sourceJobDescription: payload?.sourceJobDescription || '',
         response,
       }))
       navigate('/matching/results/selected', { state: { pairs: batchPayload, mode: 'ai', precomputed: response } })
     } catch (err) {
+      if (controller.signal.aborted || err.name === 'AbortError') return
       setError(err.message || 'KI-Matching konnte nicht gestartet werden.')
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
   }
 
   const formatVectorScore = (value) => {
-    if (typeof value !== 'number' || Number.isNaN(value)) return '0.000'
+    if (typeof value !== 'number' || !Number.isFinite(value)) return t('matching.score_missing')
     return value.toFixed(3)
   }
 
@@ -175,7 +210,7 @@ export default function SelectedMatchingResults() {
     const jobSkill = skill?.jobSkill || 'Unbekannt'
     const candidateSkill = skill?.candidateSkill || 'Unbekannt'
     const category = resolveMatchedSkillCategory(skill)
-    return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity ?? 0)})`
+    return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity)})`
   }
 
   const renderCategoryDebug = (row) => {
@@ -241,18 +276,19 @@ export default function SelectedMatchingResults() {
     { label: 'Ausgewählt', value: total, color: '#0071e3', icon: User },
     { label: 'Treffer', value: results.length, color: '#34c759', icon: CheckCircle },
     { label: 'Fehler', value: failures.length, color: '#ff3b30', icon: XCircle },
-    { label: 'Bester Match', value: bestScore ? `${bestScore}%` : '-', color: '#ff9f0a', icon: Target },
-  ]), [bestScore, failures.length, results.length, total])
+    { label: 'Bester Match', value: bestScore != null ? `${bestScore}%` : t('matching.score_missing'), color: '#ff9f0a', icon: Target },
+  ]), [bestScore, failures.length, results.length, total, t])
 
-  if (loading) return <LoadingSpinner text={loadingLabel} />
+  if (loading) return <PageContainer><LoadingSpinner text={loadingLabel} /><MatchingRunNotice progress={progress} /></PageContainer>
 
   if (!payload) {
     return (
       <PageContainer width="content" className="flex flex-col flex-1 min-h-[calc(100dvh-11rem)] pb-12">
+        <MatchingRunNotice progress={progress} />
         <Card className="p-10 text-center">
           {error ? (
             <>
-              <p className="text-[18px] font-medium text-[#ff3b30] mb-6">
+              <p role="alert" className="text-[18px] font-medium text-[#ff3b30] mb-6">
                 {error}
               </p>
               <Button variant="dark" size="md" onClick={() => navigate(-1)}>
@@ -302,6 +338,8 @@ export default function SelectedMatchingResults() {
         </div>
       </div>
 
+      {error && <div role="alert" className="mb-6 text-[#ff3b30]">{error}</div>}
+      <MatchingRunNotice progress={progress} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
         {metrics.map(({ label, value, color, icon: Icon }) => (
           <Card key={label} className="p-10">
@@ -338,18 +376,19 @@ export default function SelectedMatchingResults() {
                   size="md"
                   variant="dark"
                   onClick={handleRunSelectedAiMatching}
-                  disabled={selectedRows.length === 0}
+                  disabled={selectedRows.length === 0 || selectedRows.length > 20}
                 >
-                  KI-Matching selektierte
+                  {t('matching.run_selected_ai')}
                 </Button>
+                {selectedRows.length > 20 && <p role="alert">{t('matching.selection_limit')}</p>}
               </div>
             )}
 
             <div className="space-y-4 pr-1">
             {results.map((result, index) => {
-              const hardScore = Number(result.hardSkillScore ?? 0)
-              const softScore = Number(result.softSkillScore ?? 0)
-              const displayScore = Number(result.score) || 0
+              const hardScore = result.hardSkillScore
+              const softScore = result.softSkillScore
+              const displayScore = result.score
               const rowKey = getRowKey(result)
               const isSelected = selectedRowKeys.includes(rowKey)
 
@@ -361,6 +400,8 @@ export default function SelectedMatchingResults() {
                         type="button"
                         aria-pressed={isSelected}
                         aria-label={`${isSelected ? 'Auswahl aufheben' : 'Auswählen'}: ${result.candidateName || ''}`}
+                        disabled={!hasStoredIds(result)}
+                        title={!hasStoredIds(result) ? t('matching.stored_selection_required') : undefined}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => toggleRowSelection(result)}
                         className="w-10 h-10 rounded-full bg-white dark:bg-[#1c1c1e] border border-gray-200 dark:border-gray-700 flex items-center justify-center cursor-pointer"
@@ -371,18 +412,24 @@ export default function SelectedMatchingResults() {
                     <div className="flex items-center justify-center">
                       <span className="text-[18px] font-semibold text-gray-500 dark:text-gray-400">#{index + 1}</span>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[16px] font-semibold text-black dark:text-white">{result.candidateName}</p>
-                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_candidate')}</p>
+                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1 break-all">
+                        {t('detail.candidate_id')}: <span className="font-mono select-all">{result.candidateId ?? result.sourceCandidateId ?? '—'}</span>
+                      </p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[16px] font-semibold text-black dark:text-white">{result.jobTitle}</p>
-                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">{t('matching.label_job')}</p>
+                      <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1 break-all">
+                        {t('jobs.id')}: <span className="font-mono select-all">{result.jobId ?? result.sourceJobId ?? '—'}</span>
+                      </p>
                     </div>
                     <div className="flex items-center justify-end gap-3">
                       {isVectorMode ? (
                         <div className="flex items-end gap-3">
                           <div className="flex flex-col items-end gap-1.5">
+                            <span>{t('matching.method_skill')}: {displayScore != null ? `${displayScore}%` : t('matching.score_missing')}</span>
+                            {typeof result.qualified === 'boolean' && <span>{t(result.qualified ? 'matching.qualified' : 'matching.not_qualified')}</span>}
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#0071e3]/10 text-[#0071e3]">
                               HardSkill {formatVectorScore(hardScore)}
                             </span>
@@ -393,13 +440,32 @@ export default function SelectedMatchingResults() {
                           <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400 flex-shrink-0 mb-1" />
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3">
+                        displayScore == null ? <span>{t('matching.score_missing')}</span> : <div className="flex items-center gap-3">
                           <ScoreRing score={displayScore / 100} size={72} strokeWidth={5} />
                           <ScoreBadge score={displayScore / 100} />
                         </div>
                       )}
                     </div>
                   </div>
+
+                  <MatchingResultMetadata result={result} historical={payload.historical} />
+                  {isVectorMode && (result.summary || result.qualified === false) && (
+                    <div className="mt-4 text-[13px] text-gray-600 dark:text-gray-300">
+                      {result.summary && <p>{result.summary}</p>}
+                      {result.qualified === false && (
+                        <div className="mt-2 rounded-[14px] bg-[#ff9f0a]/10 p-3">
+                          <p className="font-medium">{t('matching.mandatory_skills_explanation')}</p>
+                          {result.weaknesses?.length > 0 && (
+                            <ul className="list-disc pl-5 mt-2 space-y-1">
+                              {result.weaknesses.map((weakness, weaknessIndex) => (
+                                <li key={weaknessIndex}>{typeof weakness === 'object' ? weakness.text : weakness}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {isVectorMode ? (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5 text-[13px]">

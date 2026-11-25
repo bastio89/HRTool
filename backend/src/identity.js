@@ -124,7 +124,7 @@ function requireCandidateIdentity(input = {}) {
   return { name, birth_date: normalizeBirthDate(input.birth_date) };
 }
 
-function findCandidateDuplicate(db, { name, birth_date: birthDate, excludeId = null }) {
+function candidateDuplicateQuery({ name, birth_date: birthDate, excludeId = null }) {
   if (!name || !birthDate) return null;
   const params = [String(name), birthDate];
   let sql = `
@@ -135,8 +135,20 @@ function findCandidateDuplicate(db, { name, birth_date: birthDate, excludeId = n
     sql += ' AND id <> ?';
     params.push(Number(excludeId));
   }
-  const row = db.prepare(`${sql} ORDER BY id LIMIT 1`).get(...params);
+  return { sql: `${sql} ORDER BY id LIMIT 1`, params };
+}
+
+function findCandidateDuplicate(db, input) {
+  const query = candidateDuplicateQuery(input);
+  if (!query) return null;
+  const row = db.prepare(query.sql).get(...query.params);
   return row || null;
+}
+
+async function findCandidateDuplicateAsync(db, input) {
+  const query = candidateDuplicateQuery(input);
+  if (!query) return null;
+  return (await db.prepare(query.sql).get(...query.params)) || null;
 }
 
 function assertNoCandidateDuplicate(db, input) {
@@ -144,27 +156,42 @@ function assertNoCandidateDuplicate(db, input) {
   if (existing) throw new DuplicateError('candidate', 'name_birth_date', existing);
 }
 
-function findJobDuplicate(db, { url, title, company, location, excludeId = null }) {
+function jobDuplicateQueries({ url, title, company, location, excludeId = null }) {
+  const queries = [];
   const exclude = excludeId !== null && excludeId !== undefined;
   const excludeSql = exclude ? ' AND id <> ?' : '';
   const excludeParams = exclude ? [Number(excludeId)] : [];
   if (url && String(url).trim()) {
-    const row = db.prepare(`
+    queries.push({ reason: 'url', sql: `
       SELECT id, uuid, title, company, location, url FROM jobs
       WHERE url IS NOT NULL AND btrim(url) <> '' AND ${urlKey('url')} = ${urlKey('CAST(? AS TEXT)')}${excludeSql}
       ORDER BY id LIMIT 1
-    `).get(String(url), ...excludeParams);
-    if (row) return { reason: 'url', existing: row };
+    `, params: [String(url), ...excludeParams] });
   }
   if (title && String(title).trim()) {
-    const row = db.prepare(`
+    queries.push({ reason: 'title_company_location', sql: `
       SELECT id, uuid, title, company, location, url FROM jobs
       WHERE ${textKey('title')} = ${textKey('CAST(? AS TEXT)')}
         AND ${textKey('company')} = ${textKey('CAST(? AS TEXT)')}
         AND ${textKey('location')} = ${textKey('CAST(? AS TEXT)')}${excludeSql}
       ORDER BY id LIMIT 1
-    `).get(String(title), company ?? null, location ?? null, ...excludeParams);
-    if (row) return { reason: 'title_company_location', existing: row };
+    `, params: [String(title), company ?? null, location ?? null, ...excludeParams] });
+  }
+  return queries;
+}
+
+function findJobDuplicate(db, input) {
+  for (const query of jobDuplicateQueries(input)) {
+    const row = db.prepare(query.sql).get(...query.params);
+    if (row) return { reason: query.reason, existing: row };
+  }
+  return null;
+}
+
+async function findJobDuplicateAsync(db, input) {
+  for (const query of jobDuplicateQueries(input)) {
+    const row = await db.prepare(query.sql).get(...query.params);
+    if (row) return { reason: query.reason, existing: row };
   }
   return null;
 }
@@ -182,8 +209,25 @@ function translateUniqueViolation(db, error, entity, input) {
   if (entity === 'candidate' && constraint.includes('uq_candidates_identity')) {
     return new DuplicateError('candidate', 'name_birth_date', findCandidateDuplicate(db, input) || {});
   }
+
   if (entity === 'job' && (constraint.includes('uq_jobs_url') || constraint.includes('uq_jobs_identity'))) {
     const hit = findJobDuplicate(db, input);
+    return new DuplicateError('job', hit?.reason || (constraint.includes('uq_jobs_url') ? 'url' : 'title_company_location'), hit?.existing || {});
+  }
+  return error;
+}
+
+async function translateCandidateUniqueViolationAsync(db, error, input) {
+  if (error?.code === '23505' && String(error.constraint || '').includes('uq_candidates_identity')) {
+    return new DuplicateError('candidate', 'name_birth_date', (await findCandidateDuplicateAsync(db, input)) || {});
+  }
+  return error;
+}
+
+async function translateJobUniqueViolationAsync(db, error, input) {
+  const constraint = String(error?.constraint || error?.message || '');
+  if (error?.code === '23505' && (constraint.includes('uq_jobs_url') || constraint.includes('uq_jobs_identity'))) {
+    const hit = await findJobDuplicateAsync(db, input);
     return new DuplicateError('job', hit?.reason || (constraint.includes('uq_jobs_url') ? 'url' : 'title_company_location'), hit?.existing || {});
   }
   return error;
@@ -276,12 +320,16 @@ module.exports = {
   enableIdentityIndexes,
   ensureIdentitySchema,
   findCandidateDuplicate,
+  findCandidateDuplicateAsync,
   findJobDuplicate,
+  findJobDuplicateAsync,
   identityIndexStatus,
   normalizeBirthDate,
   requireCandidateIdentity,
   sendIdentityError,
   textKey,
   translateUniqueViolation,
+  translateCandidateUniqueViolationAsync,
+  translateJobUniqueViolationAsync,
   urlKey,
 };

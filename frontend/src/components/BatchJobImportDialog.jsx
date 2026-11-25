@@ -3,6 +3,7 @@ import { Upload, FileText, CheckCircle2, XCircle, Loader2, Play, Trash2, Chevron
 import { jobsApi } from '../api'
 import { Button } from './UI'
 import Modal from './Modal'
+import ImportMatchingStatus from './ImportMatchingStatus'
 import { useI18n } from '../I18nContext'
 
 const ALLOWED_TYPES = ['application/pdf']
@@ -124,6 +125,8 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
             graphRag: created.graphRag || null,
           },
           elapsed,
+          matchingRunId: created.matchingRunId,
+          matchingStatus: created.matchingStatus,
         })
       } catch (err) {
         const elapsed = item.startedAt ? Math.floor((Date.now() - item.startedAt) / 1000) : null
@@ -303,6 +306,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
                       )
                     })()}
                     <p className="text-[12px] text-[#34c759] mt-0.5">{t('batch_job_import.created')}{item.elapsed != null ? ` · ${item.elapsed}s` : ''}</p>
+                    <ImportMatchingStatus runId={item.matchingRunId} status={item.matchingStatus} />
                   </>
                 )}
                 {item.status === STATUS.ERROR && (

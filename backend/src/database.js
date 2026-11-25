@@ -641,6 +641,7 @@ db.ensureIdentityDefaults();
 // Eindeutige Identitaet: Geburtsdatum, UUID und Eindeutigkeitsindizes fuer
 // Bewerber und Stellen (siehe src/identity.js).
 require('./identity').ensureIdentitySchema(db);
+require('./matchingImports').ensureMatchingImportSchema(db);
 
 // Stellen-URLs, die aeltere Importe nur im Text ("Quelle: ...") hatten.
 try {

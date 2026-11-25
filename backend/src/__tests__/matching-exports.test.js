@@ -10,10 +10,12 @@ const request = require('supertest');
 const db = require('../database');
 const exportsRouter = require('../routes/exports');
 const matchingRouter = require('../routes/matching');
+const { aiMatchingEntity, vectorMatchingEntity } = require('../exports/entities/matchings');
 const {
   backfillMatchingPairs,
   classifyStoredRun,
   recordMatchingPairs,
+  recordMatchingPairsSafely,
   toPercent,
 } = require('../matchingPairs');
 
@@ -92,7 +94,102 @@ describe('score normalisation', () => {
   });
 });
 
+test('confirmed cached results never rewrite the pair projection when read repeatedly', () => {
+  const candidateId = insertCandidate(`Cached Projection ${marker}`);
+  const read = () => db.prepare(
+    "SELECT * FROM matching_pair_results WHERE method = 'vector' AND candidate_id = ? AND job_id = ?"
+  ).get(candidateId, backend);
+  try {
+    recordMatchingPairs(db, 'vector', [{ candidateId, jobId: backend, score: 0, qualified: false }], {
+      model: 'original-model', matchedAt: '2025-01-03T11:12:13Z',
+    });
+    const original = read();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      recordMatchingPairsSafely(db, 'vector', [{
+        candidateId, jobId: backend, score: 99, cacheStatus: 'hit', evaluationId: 1234,
+      }], { pairsPersisted: true, model: 'must-not-replace-original' });
+      expect(read()).toEqual(original);
+      expect(vectorMatchingEntity.load(db, { candidate_ids: [candidateId] })[0]).toMatchObject({
+        score: 0, model: 'original-model',
+      });
+    }
+  } finally {
+    db.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
+  }
+});
+
 describe('recording matching pairs', () => {
+  test.each(['vector', 'ai'])('clears only overwritten %s evaluation references on legacy writes', method => {
+    // The version table belongs to GraphRAG; exercise startup compatibility without requiring it.
+    db.exec(`CREATE TEMP TABLE matching_pair_results
+      (LIKE public.matching_pair_results INCLUDING DEFAULTS INCLUDING CONSTRAINTS INCLUDING INDEXES)`);
+    try {
+      const row = { candidateId: carla, jobId: backend, score: 0, qualified: false };
+      const read = () => db.prepare('SELECT * FROM matching_pair_results WHERE method = ?').get(method);
+      recordMatchingPairs(db, method, [row], { matchedAt: '2026-01-02T00:00:00Z' });
+      db.prepare('UPDATE matching_pair_results SET evaluation_id = 123 WHERE method = ?').run(method);
+      const before = read();
+      recordMatchingPairs(db, method, [{ ...row, score: 99 }], { matchedAt: '2026-01-01T00:00:00Z' });
+      expect(read()).toEqual(before);
+      recordMatchingPairs(db, method, [{ ...row, score: 50 }], { matchedAt: '2026-01-03T00:00:00Z' });
+      expect(read()).toMatchObject({
+        method, score: 50, evaluation_id: null, qualified: method === 'vector' ? false : null,
+      });
+    } finally {
+      db.exec('DROP TABLE pg_temp.matching_pair_results');
+    }
+  });
+
+  test('isolates methods, exports zero and missing scores honestly, and reports failed writes', async () => {
+    const candidateId = insertCandidate(`Isolated Score ${marker}`);
+    const read = () => db.prepare(
+      'SELECT * FROM matching_pair_results WHERE candidate_id = ? ORDER BY method'
+    ).all(candidateId);
+    try {
+      const row = { candidateId, jobId: backend, score: 0, qualified: false };
+      recordMatchingPairs(db, 'vector', [row], { model: 'skills', matchedAt: '2026-01-01T00:00:00Z' });
+      const filters = { candidate_ids: [candidateId] };
+      expect(aiMatchingEntity.load(db, filters)).toEqual([]);
+      recordMatchingPairs(db, 'ai', [{ ...row, score: 85 }], { model: 'ai', matchedAt: '2026-01-01T00:00:00Z' });
+      expect(vectorMatchingEntity.load(db, filters)[0]).toMatchObject({ score: 0, model: 'skills' });
+      expect(aiMatchingEntity.load(db, filters)[0]).toMatchObject({ score: 85, model: 'ai' });
+      const first = read();
+      expect(first.find(result => result.method === 'vector')).toMatchObject({ score: 0, qualified: false });
+      expect(first.find(result => result.method === 'ai')).toMatchObject({ score: 85, qualified: null });
+      recordMatchingPairs(db, 'vector', [{ ...row, score: 80, qualified: true }], { model: 'skills-v2', matchedAt: '2026-01-02T00:00:00Z' });
+      const second = read();
+      expect(second.find(result => result.method === 'ai')).toEqual(first.find(result => result.method === 'ai'));
+      recordMatchingPairs(db, 'ai', [{ ...row, score: 79 }], { model: 'ai-v2', matchedAt: '2026-01-03T00:00:00Z' });
+      const third = read();
+      expect(third.find(result => result.method === 'vector')).toEqual(second.find(result => result.method === 'vector'));
+      expect(() => recordMatchingPairsSafely(db, 'vector', [
+        { ...row, score: 99 }, { ...row, candidateId: 'not-stored', score: 99 },
+      ], { matchedAt: '2026-01-04T00:00:00Z' })).toThrow(/nicht eindeutig/);
+      expect(read()).toEqual(third);
+      expect(vectorMatchingEntity.load(db, filters)[0]).toEqual(expect.objectContaining({
+        ...third.find(result => result.method === 'vector'),
+      }));
+      expect(aiMatchingEntity.load(db, filters)[0]).toEqual(expect.objectContaining({
+        ...third.find(result => result.method === 'ai'),
+      }));
+      for (const [entity, header] of [
+        ['matching_vector', 'candidate_id;candidate_name;job_id;job_title;score;hard_skill_score;soft_skill_score;matched_at'],
+        ['matching_ai', 'candidate_id;candidate_name;job_id;job_title;score;summary;matched_at'],
+      ]) {
+        const exported = await request(buildApp(admin)).post('/api/exports/run').send({
+          entity, filters, format: 'csv', format_options: { delimiter: 'semicolon', bom: false },
+        });
+        expect(exported.status).toBe(200);
+        expect(exported.text.split('\r\n')[0]).toBe(header);
+      }
+      expect(recordMatchingPairsSafely(db, 'vector', [{ ...row, score: 100 }], { pairsPersisted: true }))
+        .toEqual({ stored: 0, skipped: 0 });
+      expect(read()).toEqual(third);
+    } finally {
+      db.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
+    }
+  });
+
   test('stores a 3D N:N run and resolves Neo4j job UUIDs and names', () => {
     const result = recordMatchingPairs(db, 'vector', [
       { candidateId: String(carla), jobId: String(backend), score: 82, hardSkillScore: 0.9, softSkillScore: 0.4, summary: 'passt' },
@@ -266,12 +363,13 @@ describe('matching routes record every pair', () => {
         candidateId: String(candidate.id),
         candidateName: candidate.name,
         score: (j * 15 + c) % 101,
+        qualified: true,
         strengths: [],
         weaknesses: [],
         summary: 'x',
         matchedSkills: [{ jobSkill: 'java', candidateSkill: 'java', similarity: 1 }],
       })));
-      return { ok: true, json: async () => ({ type: 'matrix', mode: body.mode, model: 'graph-rag-vector-matrix', matrix }) };
+      return { ok: true, json: async () => ({ method: 'vector', matchedAt: '2026-01-05T00:00:00Z', embeddingModel: 'test-embedding', type: 'matrix', mode: body.mode, model: 'graph-rag-vector-matrix', matrix }) };
     });
 
     const res = await request(buildApp(admin)).post('/api/matching/run-matrix').send({
@@ -286,6 +384,10 @@ describe('matching routes record every pair', () => {
     const stored = JSON.parse(db.prepare('SELECT results FROM matching_results WHERE id = ?').get(res.body.id).results);
     expect(stored.matrix).toHaveLength(100);
     expect(stored.truncated).toBe(true);
+    expect(stored).toMatchObject({ method: 'vector', matchedAt: '2026-01-05T00:00:00Z', embeddingModel: 'test-embedding' });
+    expect(stored.matrix.every(row => row.method === 'vector' && row.qualified === true)).toBe(true);
+    const history = await request(buildApp(admin)).get(`/api/matching/history/${res.body.id}`);
+    expect(history.body.results).toMatchObject({ method: 'vector', engine: 'python', embeddingModel: 'test-embedding' });
 
     const rows = runPairs('vector');
     expect(rows).toHaveLength(120);
@@ -335,6 +437,29 @@ describe('matching routes record every pair', () => {
 });
 
 describe('history backfill', () => {
+  test('explicit AI metadata wins over graph model and engine without changing the historical payload', () => {
+    const candidateId = insertCandidate(`Explicit AI ${marker}`);
+    const payload = JSON.stringify({
+      method: 'ai', model: 'graph-rag-selected-ai', engine: 'neo4j',
+      results: [{ method: 'ai', jobId: backend, candidateId, score: 85 }],
+    });
+    const id = db.prepare('INSERT INTO matching_results (job_title, job_description, results, job_id) VALUES (?, ?, ?, ?)')
+      .run('Explicit AI', 'Vector-Matching legacy title', payload, backend).lastInsertRowid;
+    historyIds.push(id);
+    try {
+      recordMatchingPairs(db, 'vector', [{ candidateId, jobId: backend, score: 0, qualified: false }]);
+      backfillMatchingPairs(db);
+      const readback = db.prepare('SELECT method, score, model, engine FROM matching_pair_results WHERE candidate_id = ? ORDER BY method').all(candidateId);
+      expect(readback).toEqual([
+        { method: 'ai', score: 85, model: 'graph-rag-selected-ai', engine: null },
+        { method: 'vector', score: 0, model: null, engine: null },
+      ]);
+      expect(db.prepare('SELECT results FROM matching_results WHERE id = ?').get(id).results).toBe(payload);
+    } finally {
+      db.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
+    }
+  });
+
   test('classifies stored runs by method', () => {
     expect(classifyStoredRun({}, { type: 'matrix', model: 'graph-rag-vector-matrix', matrix: [] }).method).toBe('vector');
     expect(classifyStoredRun({}, { direction: 'job_to_candidates', engine: 'neo4j', matrix: [] })).toMatchObject({ method: 'vector', engine: 'neo4j' });

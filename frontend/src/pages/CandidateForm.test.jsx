@@ -17,6 +17,9 @@ vi.mock('../api', () => ({
   uploadsApi: { upload: vi.fn() },
   candidateDetailsApi: {
     getCustomFieldDefinitions: vi.fn().mockResolvedValue({ data: [] }),
+    getWorkHistory: vi.fn().mockResolvedValue({ data: [] }),
+    getEducation: vi.fn().mockResolvedValue({ data: [] }),
+    getCustomValues: vi.fn().mockResolvedValue({ data: [] }),
     bulkWorkHistory: vi.fn(),
     bulkEducation: vi.fn(),
     saveCustomValues: vi.fn(),
@@ -26,15 +29,17 @@ vi.mock('../api', () => ({
 vi.mock('../components/ConfirmDialog', () => ({ useConfirm: () => vi.fn().mockResolvedValue(true) }))
 
 // Wie in der App: Datenrouter, sonst wirft useBlocker (useUnsavedChanges).
-function renderForm() {
+function renderForm(initialEntry = '/candidates/new') {
   localStorage.setItem('hr-locale', 'de')
+  const element = <I18nProvider><ToastProvider><CandidateForm /></ToastProvider></I18nProvider>
   const router = createMemoryRouter(
     [
-      { path: '/candidates/new', element: <I18nProvider><ToastProvider><CandidateForm /></ToastProvider></I18nProvider> },
+      { path: '/candidates/new', element },
+      { path: '/candidates/:id/edit', element },
       { path: '/candidates', element: <div>Bewerberliste</div> },
       { path: '/candidates/:id', element: <div>Bewerberdetail</div> },
     ],
-    { initialEntries: ['/candidates/new'] },
+    { initialEntries: [initialEntry] },
   )
   return render(<RouterProvider router={router} />)
 }
@@ -47,9 +52,19 @@ describe('CandidateForm – eine Person gibt es nur einmal', () => {
     candidatesApi.checkDuplicate.mockResolvedValue({ duplicates: [] })
   })
 
+  test('zeigt die Bewerber-ID auch in der Bearbeitungsansicht', async () => {
+    candidatesApi.getById.mockResolvedValue({ id: 23, name: 'Anna Muster' })
+
+    renderForm('/candidates/23/edit')
+
+    expect(await screen.findByText('Bewerber-ID:')).toHaveTextContent('Bewerber-ID: 23')
+    expect(screen.getByLabelText('Name *')).toHaveValue('Anna Muster')
+  })
+
   test('saves with the name alone, the date of birth is optional', async () => {
     candidatesApi.create.mockResolvedValue({ id: 5 })
     renderForm()
+    expect(screen.queryByText('Bewerber-ID:')).not.toBeInTheDocument()
     expect(saveButton().disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Anna Muster' } })
     expect(screen.getByLabelText('Geburtsdatum').required).toBe(false)

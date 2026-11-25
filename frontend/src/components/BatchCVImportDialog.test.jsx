@@ -1,8 +1,11 @@
 import { render, waitFor, screen, fireEvent } from '@testing-library/react'
 import { vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import BatchCVImportDialog from './BatchCVImportDialog'
 import { I18nProvider } from '../I18nContext'
 import { cvParserApi, uploadsApi } from '../api'
+const auth = vi.hoisted(() => ({ role: 'recruiter' }))
+vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: auth.role } }) }))
 
 vi.mock('../api', () => ({
   cvParserApi: {
@@ -19,6 +22,7 @@ vi.mock('../api', () => ({
 describe('BatchCVImportDialog', () => {
   beforeEach(() => {
     localStorage.setItem('hr-locale', 'de')
+    auth.role = 'recruiter'
   })
 
   test('renders through a portal so a transformed page wrapper cannot displace it', async () => {
@@ -82,5 +86,23 @@ describe('BatchCVImportDialog', () => {
     await waitFor(() => {
       expect(uploadsApi.upload).toHaveBeenCalledWith('candidate-123', file)
     })
+
+  })
+
+  test.each(['admin', 'recruiter'])('shows saved import and the role-appropriate durable run link (%s)', async role => {
+      auth.role = role
+      const runId = '00000000-0000-0000-0000-000000000001'
+      cvParserApi.parse.mockResolvedValue({
+        candidate: { id: 42, name: 'CV Person' }, persisted: true,
+        matchingRunId: runId, matchingStatus: 'queued',
+      })
+      uploadsApi.upload.mockResolvedValue({})
+      render(<MemoryRouter><I18nProvider><BatchCVImportDialog onClose={vi.fn()} /></I18nProvider></MemoryRouter>)
+      fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['pdf'], 'queued-cv.pdf', { type: 'application/pdf' })] } })
+      fireEvent.click(screen.getByRole('button', { name: '1 CVs importieren' }))
+      expect(await screen.findByText('Import gespeichert, Matching eingeplant')).toBeInTheDocument()
+      const link = screen.getByRole('link', { name: new RegExp(runId) })
+      expect(link).toHaveAttribute('href', role === 'admin' ? `/admin/batches?runId=${runId}` : `/matching/runs/${runId}`)
+      expect(screen.queryByText('Matching abgeschlossen')).not.toBeInTheDocument()
   })
 })

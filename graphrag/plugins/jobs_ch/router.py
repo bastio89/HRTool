@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
@@ -8,15 +9,16 @@ from services.llm import LLMService
 from services.postgres_store import PostgresStore
 from plugins.billing.service import BillingService
 
-from .schemas import JobsChExportRequest, JobsChImportRequest, JobsChSearchResponse
+from .schemas import JobsChExportRequest, JobsChImportRequest, JobsChImportResponse, JobsChSearchResponse
 from .service import JobsChExportService, JobsChImportService
 from .settings import is_enabled
 
 
-def build_jobs_ch_router(settings: Settings, *, llm_service: LLMService, postgres_store: PostgresStore, db_service: Neo4jService) -> APIRouter:
+def build_jobs_ch_router(settings: Settings, *, llm_service: LLMService, postgres_store: PostgresStore,
+                         db_service: Neo4jService, prepare_job: Callable[[int], Awaitable[tuple[str, int]]]) -> APIRouter:
     router = APIRouter(prefix="/plugins/jobs_ch", tags=["Jobs.ch"])
     export_service = JobsChExportService()
-    import_service = JobsChImportService(llm_service=llm_service, postgres_store=postgres_store, db_service=db_service)
+    import_service = JobsChImportService(llm_service=llm_service, postgres_store=postgres_store, db_service=db_service, prepare_job=prepare_job)
     billing_service = BillingService(postgres_store)
 
     async def ensure_enabled() -> None:
@@ -49,15 +51,16 @@ def build_jobs_ch_router(settings: Settings, *, llm_service: LLMService, postgre
             headers["X-HRTool-JobsCh-Warning"] = result.warning
         return Response(content=result.payload, media_type="application/zip", headers=headers)
 
-    @router.post("/import-db")
+    @router.post("/import-db", response_model=JobsChImportResponse)
     async def import_to_database(request: JobsChImportRequest, http_request: Request):
         await ensure_enabled()
         fast_parser = getattr(http_request.app.state, 'cv_job_parser', None)
         if request.import_mode == 'fast_import' and fast_parser is None:
             raise HTTPException(status_code=503, detail='Fast-Parser ist nicht bereit.')
         try:
+            actor = await billing_service.actor_for_request(http_request)
             await billing_service.charge(http_request, '-0.10', 'JOBS_CH_CALL', note='jobs.ch import-db')
-            result = await import_service.import_links(request, fast_parser=fast_parser)
+            result = await import_service.import_links(request, fast_parser=fast_parser, actor_user_id=actor.user_id)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except RuntimeError as exc:
@@ -66,6 +69,7 @@ def build_jobs_ch_router(settings: Settings, *, llm_service: LLMService, postgre
         response = {
             "imported": result.imported,
             "failed": result.failed,
+            "duplicates": result.duplicates,
             "warning": result.warning,
             "items": [item.model_dump() if hasattr(item, "model_dump") else item.__dict__ for item in result.items],
         }

@@ -5,13 +5,14 @@ import hashlib
 import json
 import logging
 import os
-import re
 from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+import httpx
+import psycopg
 from fast_cvjob_parsing.app.errors import InvalidPDFError
 from fast_cvjob_parsing.app.schemas import CVResponse
 
@@ -39,6 +40,8 @@ from models import (
 	JobSyncResponse,
 	MatchCandidateResponse,
 	MatchResponse,
+	MatchingCandidateInput,
+	MatchingJobInput,
 )
 from services.candidate_privacy import CandidatePrivacyService
 from services.candidate_extraction import extract_candidate_profile
@@ -52,6 +55,9 @@ from services.candidate_identity import (
 from services.candidate_persistence import create_candidate
 from services.db import Neo4jService
 from matching_api import create_matching_router
+from batch_api import create_batch_router
+from services.matching_cache import MatchingPendingError
+from services.matching_pipeline import MatchingImportWorker, MatchingRequestCoordinator
 from services.model_config import ModelConfigService
 from services.prompt_service import PromptService
 from services.job_persistence import persist_job_profile
@@ -59,6 +65,8 @@ from services.llm import LLMService
 from services.document_text import ALLOWED_DOCUMENT_TYPES, extract_document_text
 from services.pdf import PDFService
 from services.postgres_store import PostgresStore
+from services.matching_orchestrator import MatchingOrchestrator, normalize_skill_entries
+from services.skill_matching import SkillMatchingService
 from services.skill_matching_test_cases import SkillMatchingTestCaseStore
 from services.candidate_text_renderer import render_candidate_fulltext
 from plugins.billing.service import BillingService
@@ -72,6 +80,8 @@ skill_matching_test_case_store = SkillMatchingTestCaseStore(settings.database_ur
 candidate_privacy_service = CandidatePrivacyService(postgres_store)
 prompt_service = PromptService(postgres_store)
 billing_service = BillingService(postgres_store)
+matching_requests = MatchingRequestCoordinator(postgres_store)
+matching_imports = MatchingImportWorker(postgres_store)
 model_config_service = ModelConfigService(
 	postgres_store,
 	default_chat_base_url="",
@@ -105,7 +115,7 @@ db_service = Neo4jService(
 	postgres_store=postgres_store,
 )
 logger = logging.getLogger(__name__)
-plugins = build_plugins(settings, postgres_store, llm_service, db_service)
+plugins = build_plugins(settings, postgres_store, llm_service, db_service, prepare_job=lambda job_id: _prepare_job(job_id))
 
 
 def _normalized_text_hash(text: str | None) -> str | None:
@@ -250,10 +260,24 @@ async def lifespan(app: FastAPI):
 	from fast_cvjob_parsing.app.parser import ResumeJobParser
 
 	app.state.cv_job_parser = await asyncio.to_thread(ResumeJobParser.load)
-	yield
-	app.state.cv_job_parser = None
-	await db_service.close()
-	await llm_service.close()
+	try:
+		await matching_requests.start()
+		await matching_imports.start(
+			db_service=db_service,
+			orchestrator=MatchingOrchestrator(
+				SkillMatchingService(llm_service, db_service, similarity_cutoff=settings.skill_matching_cutoff),
+				postgres_store=postgres_store, llm_service=llm_service,
+			),
+			prepare_candidate=_prepare_candidate,
+			prepare_job=_prepare_job,
+		)
+		yield
+	finally:
+		await matching_imports.shutdown()
+		await matching_requests.shutdown()
+		app.state.cv_job_parser = None
+		await db_service.close()
+		await llm_service.close()
 
 
 app = FastAPI(
@@ -263,7 +287,8 @@ app = FastAPI(
 	lifespan=lifespan,
 )
 
-app.include_router(create_matching_router(llm_service, db_service))
+app.include_router(create_matching_router(llm_service, db_service, matching_requests=matching_requests))
+app.include_router(create_batch_router(postgres_store))
 app.include_router(create_legacy_router(postgres_store))
 app.include_router(create_prompts_router(prompt_service))
 app.include_router(create_cv_job_parser_router())
@@ -346,7 +371,10 @@ async def _existing_identity(profile: CandidateProfileExtraction) -> dict[str, A
 		return None
 
 
-async def _create_candidate(profile: CandidateProfileExtraction, candidate_text: str, source: str, text_hash: str | None = None, profile_hash: str | None = None) -> dict[str, Any]:
+async def _create_candidate(
+	profile: CandidateProfileExtraction, candidate_text: str, source: str,
+	text_hash: str | None = None, profile_hash: str | None = None, *, actor_user_id: int,
+) -> dict[str, Any]:
 	try:
 		return await create_candidate(
 			postgres_store=postgres_store,
@@ -359,6 +387,8 @@ async def _create_candidate(profile: CandidateProfileExtraction, candidate_text:
 			source=source,
 			source_hash=text_hash,
 			profile_hash=profile_hash,
+			actor_user_id=actor_user_id,
+			prepare_candidate=_prepare_candidate_revision,
 		)
 	except (CandidateIdentityError, DuplicateCandidateError) as exc:
 		raise _identity_http_error(exc) from exc
@@ -367,6 +397,20 @@ async def _create_candidate(profile: CandidateProfileExtraction, candidate_text:
 	except Exception as exc:
 		logger.exception("Candidate persistence failed")
 		raise HTTPException(status_code=503, detail=f"Candidate persistence failed: {exc}") from exc
+
+
+def _import_metadata(stored: dict[str, Any] | None) -> dict[str, Any]:
+	if stored is None:
+		return {}
+	run_id = stored.get("matchingRunId")
+	return {
+		"matchingRunId": run_id,
+		"matchingStatus": stored["matchingStatus"],
+		"matchingStatusUrl": f"/matching/runs/{run_id}" if run_id else None,
+		"preparationStatus": stored["preparationStatus"],
+		"preparationError": stored.get("preparationError"),
+		"preparedRevision": stored.get("preparedRevision"),
+	}
 
 
 async def _extract_candidate_payload_from_request(request: Request) -> tuple[str | None, CandidateProfileExtraction | None]:
@@ -549,6 +593,7 @@ async def parse_cv(
 			detail="Kein lesbarer Text in den Dateien gefunden. Möglicherweise ist OCR erforderlich.",
 		)
 
+	actor = await billing_service.actor_for_request(request) if persist else None
 	await billing_service.charge(request, "-1.00", "CV_PARSE", note="CV ingest")
 
 	try:
@@ -567,13 +612,15 @@ async def parse_cv(
 
 	graph_candidate_id: str | None = None
 	postgres_candidate_id: int | None = None
+	stored = None
 	if persist:
+		assert actor is not None
 		candidate_text = combined_text or render_candidate_fulltext(
 			profile.model_dump(mode="json"),
 			work_history=[item.model_dump(mode="json") for item in profile.work_history],
 			education_history=[item.model_dump(mode="json") for item in profile.education_history],
 		)
-		stored = await _create_candidate(profile, candidate_text, "CV-Import", text_hash, profile_hash)
+		stored = await _create_candidate(profile, candidate_text, "CV-Import", text_hash, profile_hash, actor_user_id=actor.user_id)
 		graph_candidate_id = stored["uuid"]
 		postgres_candidate_id = stored["id"]
 
@@ -584,6 +631,7 @@ async def parse_cv(
 		"message": "Candidate ingested successfully" if persist else "Candidate parsed successfully",
 		"profile": profile_payload,
 		"persisted": persist,
+		**_import_metadata(stored),
 	}
 	return {
 		"success": True,
@@ -595,10 +643,11 @@ async def parse_cv(
 		"duplicate": duplicate_candidate is not None,
 		"duplicateCandidate": duplicate_candidate,
 		"graphRag": graph_rag,
-		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": graph_candidate_id is not None},
+		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": stored is not None and stored["preparationStatus"] == "ready"},
 		"textLength": len(combined_text),
 		"persisted": persist,
 		"parsingMethod": profile.parsing_method,
+		**_import_metadata(stored),
 	}
 
 
@@ -664,6 +713,7 @@ async def import_fast_cv(
 
 	profile = _merge_fast_cv_profiles(profiles)
 	combined_text = "\n\n".join(text_parts)
+	actor = await billing_service.actor_for_request(request) if persist else None
 	await billing_service.charge(request, "-1.00", "CV_PARSE", note="Fast CV import")
 
 	ensure_birth_date(profile, combined_text)
@@ -674,13 +724,15 @@ async def import_fast_cv(
 
 	graph_candidate_id: str | None = None
 	postgres_candidate_id: int | None = None
+	stored = None
 	if persist:
+		assert actor is not None
 		candidate_text = combined_text or render_candidate_fulltext(
 			profile.model_dump(mode="json"),
 			work_history=[item.model_dump(mode="json") for item in profile.work_history],
 			education_history=[item.model_dump(mode="json") for item in profile.education_history],
 		)
-		stored = await _create_candidate(profile, candidate_text, "CV-Fast-Import", text_hash, profile_hash)
+		stored = await _create_candidate(profile, candidate_text, "CV-Fast-Import", text_hash, profile_hash, actor_user_id=actor.user_id)
 		graph_candidate_id = stored["uuid"]
 		postgres_candidate_id = stored["id"]
 
@@ -691,6 +743,7 @@ async def import_fast_cv(
 		"message": "Candidate ingested successfully" if persist else "Candidate parsed successfully",
 		"profile": profile_payload,
 		"persisted": persist,
+		**_import_metadata(stored),
 	}
 	filenames = [filename for filename, _ in uploads]
 	return {
@@ -703,10 +756,11 @@ async def import_fast_cv(
 		"duplicate": duplicate_candidate is not None,
 		"duplicateCandidate": duplicate_candidate,
 		"graphRag": graph_rag,
-		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": graph_candidate_id is not None},
+		"storage": {"postgres": postgres_candidate_id is not None, "neo4j": stored is not None and stored["preparationStatus"] == "ready"},
 		"textLength": len(combined_text),
 		"persisted": persist,
 		"parsingMethod": profile.parsing_method,
+		**_import_metadata(stored),
 	}
 
 
@@ -718,6 +772,8 @@ async def ingest_candidate(
 	"""Liest einen CV aus und legt den Bewerber an (persist=1, Standard).
 	persist=0 liest nur aus - das Backend speichert dann selbst mit
 	Dublettenpruefung und uebertraegt den Bewerber per /sync/candidates."""
+	persist_candidate = str(persist or "").strip().lower() not in {"0", "false", "no", "none", "off"}
+	actor = await billing_service.actor_for_request(request) if persist_candidate else None
 	text, provided_profile = await _extract_candidate_payload_from_request(request=request)
 	try:
 		if provided_profile is None:
@@ -733,9 +789,11 @@ async def ingest_candidate(
 	await billing_service.charge(request, "-1.00", "CV_PARSE", note="CV ingest")
 	ensure_birth_date(profile, text)
 
-	if str(persist or "").strip().lower() in {"0", "false", "no", "none", "off"}:
+	if not persist_candidate:
 		return CandidateIngestResponse(id="", message="Candidate parsed successfully", profile=profile, persisted=False)
 
+	if actor is None:
+		raise HTTPException(status_code=401, detail="Missing import actor")
 	candidate_text = text or render_candidate_fulltext(
 		profile.model_dump(mode="json"),
 		work_history=[item.model_dump(mode="json") for item in profile.work_history],
@@ -747,6 +805,7 @@ async def ingest_candidate(
 		"Candidate-Ingest",
 		_normalized_text_hash(text),
 		_normalized_profile_hash(profile),
+		actor_user_id=actor.user_id,
 	)
 	return CandidateIngestResponse(
 		id=stored["uuid"],
@@ -754,7 +813,23 @@ async def ingest_candidate(
 		profile=profile,
 		persisted=True,
 		postgres_id=stored["id"],
+		**_import_metadata(stored),
 	)
+
+
+def _current_skill_profile(value: Any, structured: Any, *, required: bool = False) -> list[dict[str, Any]]:
+	metadata = {
+		entry["name"].strip().casefold(): entry
+		for entry in structured or []
+		if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+	}
+	result = []
+	for skill in normalize_skill_entries(value):
+		entry = {**metadata.get(skill.name.casefold(), {}), "name": skill.name}
+		if required and "priority" not in entry and "importance" not in entry:
+			entry["priority"] = "Mandatory"
+		result.append(entry)
+	return result
 
 
 def _profile_for_sync(row: dict[str, Any], text_payload: dict[str, Any] | None) -> CandidateProfileExtraction:
@@ -774,17 +849,24 @@ def _profile_for_sync(row: dict[str, Any], text_payload: dict[str, Any] | None) 
 		"mobility", "desired_salary", "availability", "notice_period", "linkedin_url", "xing_url", "github_url",
 		"portfolio_url", "tags", "notes", "current_employer", "current_position", "nationality", "gender",
 	):
-		if row.get(key) not in (None, ""):
+		if key in row:
 			data[key] = row[key]
-	if not data.get("skills") and row.get("skills"):
-		data["skills"] = row["skills"]
-	if not data.get("languages") and row.get("languages"):
-		data["languages"] = row["languages"]
-	if row.get("work_history"):
+	if "skills" in row:
+		data["skills"] = _current_skill_profile(row["skills"], data.get("skills"))
+	if "languages" in row:
+		languages = CandidateProfileExtraction.model_validate({
+			"name": row["name"], "languages": data.get("languages") or [],
+		}).languages
+		stored_names = ", ".join(
+			f"{item.name} ({item.level})" if item.level else item.name for item in languages
+		)
+		if (row["languages"] or "") != stored_names:
+			data["languages"] = row["languages"] or []
+	if "work_history" in row:
 		data["work_history"] = [
 			{**entry, "is_current": bool(entry.get("is_current"))} for entry in row["work_history"]
 		]
-	if row.get("education_history"):
+	if "education_history" in row:
 		data["education_history"] = row["education_history"]
 	data.pop("birth_date", None)
 	return CandidateProfileExtraction.model_validate(data)
@@ -798,55 +880,66 @@ async def sync_candidates(payload: CandidateSyncRequest) -> CandidateSyncRespons
 	nur einmal gibt. Kostet keine Credits (es wird nichts geparst)."""
 	if not payload.candidate_ids:
 		return CandidateSyncResponse()
-	rows = await postgres_store.list_candidates_for_backfill(payload.candidate_ids)
 	result = CandidateSyncResponse()
-	for row in rows:
-		candidate_id = int(row["candidate_id"])
+	for candidate_id in dict.fromkeys(payload.candidate_ids):
 		try:
-			text_payload = await postgres_store.get_candidate_text(str(candidate_id))
-			profile = _profile_for_sync(row, text_payload)
-			embedding = await llm_service.create_embedding(without_identity_fields(profile.model_dump()), allow_fallback=False)
-			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
-			await db_service.upsert_candidate(
-				candidate_id=row["uuid"],
-				profile=profile,
-				embedding=embedding,
-				skill_embeddings=skill_embeddings,
-			)
-			stale_ids = {
-				str(value).strip()
-				for value in [row.get("graph_candidate_id"), *(row.get("graph_candidate_ids") or [])]
-				if value and str(value).strip() and str(value).strip() != row["uuid"]
-			}
-			for stale_id in stale_ids:
-				if await postgres_store.graph_candidate_id_in_use(stale_id, exclude_candidate_id=candidate_id):
-					continue
-				result.removed_stale_nodes += await db_service.delete_candidate(stale_id)
-			await postgres_store.reset_candidate_graph_ids(candidate_id, row["uuid"])
-			if not text_payload:
-				# Manuell angelegte Bewerber haben keinen CV-Text; ohne ihn findet
-				# das KI-Matching ausgewaehlter Paarungen sie nicht.
-				profile_data = profile.model_dump(mode="json")
-				await postgres_store.store_candidate_text(
-					str(candidate_id),
-					render_candidate_fulltext(
-						profile_data,
-						work_history=profile_data.get("work_history") or [],
-						education_history=profile_data.get("education_history") or [],
-					),
-					candidate_name=profile.name,
-					source="Profil (manuell angelegt)",
-					profile_json=without_identity_fields(profile_data),
-				)
-				await candidate_privacy_service.anonymize_candidate(str(candidate_id))
-			elif not text_payload.get("anonymized_text"):
-				await candidate_privacy_service.anonymize_candidate(str(candidate_id))
+			revision, removed = await _prepare_candidate(candidate_id)
+			result.preparedRevisions[str(candidate_id)] = revision
+			result.removed_stale_nodes += removed
 			result.synced += 1
 		except Exception as exc:
 			logger.warning("Neo4j-Abgleich fuer Bewerber %s fehlgeschlagen", candidate_id, exc_info=True)
 			result.failed += 1
 			result.errors.append({"candidate_id": candidate_id, "error": str(exc)})
 	return result
+
+
+async def _prepare_candidate(candidate_id: int) -> tuple[str, int]:
+	await postgres_store.ensure_matching_pair_schema()
+	async with postgres_store.matching_preparation_lock("candidate", candidate_id):
+		snapshot = await postgres_store.matching_source_snapshot("candidate", candidate_id)
+		text_payload = snapshot["text"]
+		if not text_payload:
+			profile = _profile_for_sync(snapshot["row"], None)
+			profile_data = profile.model_dump(mode="json")
+			await postgres_store.store_candidate_text(
+				str(candidate_id),
+				render_candidate_fulltext(
+					profile_data, work_history=profile_data.get("work_history") or [],
+					education_history=profile_data.get("education_history") or [],
+				),
+				candidate_name=profile.name, source="Profil (manuell angelegt)",
+				profile_json=without_identity_fields(profile_data),
+			)
+			await candidate_privacy_service.anonymize_candidate(str(candidate_id))
+			snapshot = await postgres_store.matching_source_snapshot("candidate", candidate_id)
+		elif not text_payload.get("anonymized_text"):
+			await candidate_privacy_service.anonymize_candidate(str(candidate_id))
+		row = snapshot["row"]
+		profile = _profile_for_sync(row, snapshot["text"])
+		embedding = await llm_service.create_embedding(without_identity_fields(profile.model_dump()), allow_fallback=False)
+		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.skills])
+		await db_service.upsert_candidate(
+			candidate_id=row["uuid"], profile=profile, embedding=embedding, skill_embeddings=skill_embeddings,
+			source_hash=_normalized_text_hash((snapshot["text"] or {}).get("original_text")),
+			profile_hash=_normalized_profile_hash(profile),
+		)
+		stale_ids = {
+			str(value).strip()
+			for value in [row.get("graph_candidate_id"), *(row.get("graph_candidate_ids") or [])]
+			if value and str(value).strip() and str(value).strip() != row["uuid"]
+		}
+		removed = 0
+		for stale_id in stale_ids:
+			if not await postgres_store.graph_candidate_id_in_use(stale_id, exclude_candidate_id=candidate_id):
+				removed += await db_service.delete_candidate(stale_id)
+		await postgres_store.reset_candidate_graph_ids(candidate_id, row["uuid"])
+		return await postgres_store.confirm_matching_preparation(snapshot), removed
+
+
+async def _prepare_candidate_revision(candidate_id: int) -> str:
+	revision, _ = await _prepare_candidate(candidate_id)
+	return revision
 
 
 def _job_profile_for_sync(row: dict[str, Any]) -> JobProfileExtraction:
@@ -867,14 +960,10 @@ def _job_profile_for_sync(row: dict[str, Any]) -> JobProfileExtraction:
 		("employer_company", "employer_company"), ("location", "location"), ("employment_type", "type"),
 		("description", "description"), ("requirements", "requirements"), ("about_us", "about_us"), ("benefits", "benefits"),
 	):
-		if row.get(column) not in (None, ""):
+		if column in row:
 			data[key] = row[column]
-	if not data.get("required_skills") and row.get("skills"):
-		data["required_skills"] = [
-			{"name": name.strip(), "priority": "Mandatory"}
-			for name in re.split(r"[,;\n]+", str(row["skills"]))
-			if name.strip()
-		]
+	if "skills" in row:
+		data["required_skills"] = _current_skill_profile(row["skills"], data.get("required_skills"), required=True)
 	data["title"] = data.get("title") or f"Stelle {row['id']}"
 	return JobProfileExtraction.model_validate(data)
 
@@ -887,28 +976,38 @@ async def sync_jobs(payload: JobSyncRequest) -> JobSyncResponse:
 	if not payload.job_ids:
 		return JobSyncResponse()
 	result = JobSyncResponse()
-	for row in await postgres_store.list_jobs_for_sync(payload.job_ids):
-		job_id = int(row["id"])
+	for job_id in dict.fromkeys(payload.job_ids):
 		try:
-			profile = _job_profile_for_sync(row)
-			embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
-			skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
-			await db_service.upsert_job(
-				job_id=row["uuid"],
-				profile=profile,
-				embedding=embedding,
-				skill_embeddings=skill_embeddings,
-			)
-			stale_id = str(row.get("graph_job_id") or "").strip()
-			if stale_id and stale_id != row["uuid"] and not await postgres_store.graph_job_id_in_use(stale_id, exclude_job_id=job_id):
-				result.removed_stale_nodes += await db_service.delete_job(stale_id)
-			await postgres_store.reset_job_graph_id(job_id, row["uuid"])
+			revision, removed = await _prepare_job(job_id)
+			result.preparedRevisions[str(job_id)] = revision
+			result.removed_stale_nodes += removed
 			result.synced += 1
 		except Exception as exc:
 			logger.warning("Neo4j-Abgleich fuer Stelle %s fehlgeschlagen", job_id, exc_info=True)
 			result.failed += 1
 			result.errors.append({"job_id": job_id, "error": str(exc)})
 	return result
+
+
+async def _prepare_job(job_id: int) -> tuple[str, int]:
+	await postgres_store.ensure_matching_pair_schema()
+	async with postgres_store.matching_preparation_lock("job", job_id):
+		snapshot = await postgres_store.matching_source_snapshot("job", job_id)
+		row = snapshot["row"]
+		profile = _job_profile_for_sync(row)
+		embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
+		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
+		await db_service.upsert_job(
+			job_id=row["uuid"], profile=profile, embedding=embedding, skill_embeddings=skill_embeddings,
+			source_hash=_normalized_text_hash(row.get("raw_text")),
+			profile_hash=_normalized_profile_hash(profile),
+		)
+		stale_id = str(row.get("graph_job_id") or "").strip()
+		removed = 0
+		if stale_id and stale_id != row["uuid"] and not await postgres_store.graph_job_id_in_use(stale_id, exclude_job_id=job_id):
+			removed = await db_service.delete_job(stale_id)
+		await postgres_store.reset_job_graph_id(job_id, row["uuid"])
+		return await postgres_store.confirm_matching_preparation(snapshot), removed
 
 
 @app.delete("/ingest/candidate", response_model=CandidateDeleteResponse)
@@ -1027,18 +1126,12 @@ async def ingest_job(
 				"existing": existing_job,
 			})
 
+	actor = await billing_service.actor_for_request(request) if persist_postgres else None
 	await billing_service.charge(request, "-1.00", "JOB_PARSE", note=profile.title or "Job ingest")
 
-	try:
-		embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
-		skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
-	except HTTPException:
-		raise
-	except Exception as exc:
-		logger.exception("Job embedding creation failed")
-		raise HTTPException(status_code=502, detail=f"Job embedding creation failed: {exc}") from exc
-
+	stored_job = None
 	if persist_postgres:
+		assert actor is not None
 		try:
 			stored_job = await persist_job_profile(
 				postgres_store=postgres_store,
@@ -1047,6 +1140,7 @@ async def ingest_job(
 				profile=profile,
 				source_hash=text_hash,
 				profile_hash=profile_hash,
+				actor_user_id=actor.user_id,
 			)
 		except Exception as exc:
 			logger.exception("Job PostgreSQL persistence failed")
@@ -1055,22 +1149,60 @@ async def ingest_job(
 			raise HTTPException(status_code=409, detail={"error": "Diese Stelle ist bereits im Tool angelegt", "code": "DUPLICATE_JOB", "existing": stored_job})
 		# Neo4j-Knoten und PostgreSQL-Zeile teilen sich die UUID.
 		graph_job_id = stored_job["uuid"]
+		stored_job["preparationStatus"] = "required"
 
 	if persist_neo4j:
 		try:
-			await db_service.upsert_job(
-				job_id=graph_job_id,
-				profile=profile,
-				embedding=embedding,
-				skill_embeddings=skill_embeddings,
-				source_hash=text_hash,
-				profile_hash=profile_hash,
-			)
+			if stored_job is not None:
+				revision, _ = await _prepare_job(int(stored_job["id"]))
+				stored_job.update(preparationStatus="ready", preparedRevision=revision)
+			else:
+				preparation = await _prepare_graph_only_job(graph_job_id, profile, text_hash, profile_hash)
 		except Exception as exc:
-			logger.exception("Job persistence failed")
-			raise HTTPException(status_code=503, detail=f"Job persistence failed: {exc}") from exc
+			logger.exception("Job-Graph-Aufbereitung fehlgeschlagen")
+			if stored_job is None:
+				raise HTTPException(status_code=503, detail=f"Job persistence failed: {exc}") from exc
+			stored_job["preparationError"] = "graph_preparation_failed"
 
-	return JobIngestResponse(id=graph_job_id, message="Job ingested successfully", profile=profile, persisted=True)
+	metadata = _import_metadata(stored_job) if stored_job is not None else preparation
+	return JobIngestResponse(
+		id=graph_job_id, message="Job ingested successfully", profile=profile, persisted=True,
+		postgres_id=stored_job["id"] if stored_job else None, **metadata,
+	)
+
+
+async def _prepare_graph_only_job(
+	graph_job_id: str, profile: JobProfileExtraction, text_hash: str | None, profile_hash: str | None,
+) -> dict[str, Any]:
+	ids = await postgres_store.matching_ids_for("jobs", [graph_job_id])
+	stored_id = ids.get(graph_job_id)
+	if stored_id is not None:
+		await postgres_store.ensure_matching_pair_schema()
+		async with postgres_store.matching_preparation_lock("job", stored_id):
+			snapshot = await postgres_store.matching_source_snapshot("job", stored_id)
+			await postgres_store.invalidate_matching_preparation("job", stored_id)
+			await _upsert_graph_job(graph_job_id, profile, text_hash, profile_hash)
+			if _job_profile_for_sync(snapshot["row"]) == profile and graph_job_id == snapshot["row"]["uuid"]:
+				revision = await postgres_store.confirm_matching_preparation(snapshot)
+				return {"preparationStatus": "ready", "preparedRevision": revision}
+			logger.warning("Graph-Stelle %s benoetigt Abgleich mit dem gespeicherten Strukturprofil", stored_id)
+			return {
+				"preparationStatus": "required",
+				"preparationError": "graph_identity_differs" if graph_job_id != snapshot["row"]["uuid"] else "stored_profile_differs",
+			}
+	await _upsert_graph_job(graph_job_id, profile, text_hash, profile_hash)
+	return {"preparationStatus": "not_requested"}
+
+
+async def _upsert_graph_job(
+	graph_job_id: str, profile: JobProfileExtraction, text_hash: str | None, profile_hash: str | None,
+) -> None:
+	embedding = await llm_service.create_embedding(profile.model_dump(), allow_fallback=False)
+	skill_embeddings = await _build_skill_embeddings([item.name for item in profile.required_skills])
+	await db_service.upsert_job(
+		job_id=graph_job_id, profile=profile, embedding=embedding, skill_embeddings=skill_embeddings,
+		source_hash=text_hash, profile_hash=profile_hash,
+	)
 
 
 @app.delete("/ingest/job", response_model=JobDeleteResponse)
@@ -1118,86 +1250,53 @@ async def delete_job(payload: JobDeleteRequest) -> JobDeleteResponse:
 
 
 @app.post("/match/{job_id}", response_model=MatchResponse)
+@matching_requests.endpoint(method="vector", amount="-1.00", action="AI_MATCH")
 async def match_candidates(job_id: str, request: Request) -> MatchResponse:
-	job_profile = await db_service.get_job_profile(job_id)
-	if not job_profile:
+	graph_ids = await postgres_store.graph_ids_for("jobs", [job_id]) if job_id.isdigit() else {}
+	jobs_raw, candidates_raw = await db_service.get_skill_matching_inputs(job_ids=[graph_ids.get(job_id, job_id)])
+	if not jobs_raw:
 		raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
-
-	stage1 = await db_service.stage1_filter_candidates(job_id=job_id, limit=100)
-	if not stage1:
-		return MatchResponse(job_id=job_id, stage1_count=0, stage2_count=0, matches=[])
-
-	await billing_service.charge(request, "-1.00", "AI_MATCH", note=f"match:{job_id}")
-
-	stage2 = await db_service.stage2_rank_candidates(
-		job_profile=job_profile,
-		candidate_ids=[item.id for item in stage1],
-		limit=10,
-	)
-	if not stage2:
-		return MatchResponse(job_id=job_id, stage1_count=len(stage1), stage2_count=0, matches=[])
-
-	reranked = await llm_service.rerank_candidates(
-		job_profile={
-			"id": job_profile["id"],
-			"title": job_profile["title"],
-			"department": job_profile["department"],
-			"company": job_profile.get("company"),
-			"location": job_profile["location"],
-			"employment_type": job_profile.get("employment_type"),
-			"required_skills": job_profile["required_skills"],
-			"required_languages": job_profile.get("required_languages", []),
-			"required_degrees": job_profile.get("required_degrees", []),
-			"industries": job_profile.get("industries", []),
-		},
-		candidates=[
-			{
-				"id": item.id,
-				"name": item.name,
-				"location": item.location,
-				"experience_years": item.experience_years,
-				"skills": item.skills,
-				"preferred_roles": item.preferred_roles,
-				"vector_score": item.vector_score,
-				"jaccard_score": item.jaccard_score,
-				"combined_score": item.combined_score,
-			}
-			for item in stage2
-		],
-	)
-
-	stage2_map = {item.id: item for item in stage2}
-	matches: list[MatchCandidateResponse] = []
-	for item in reranked.ranked_candidates:
-		stage2_profile = stage2_map.get(item.candidate_id)
-		if stage2_profile is None:
-			continue
-		strengths = item.strengths if item.strengths else ["Sehr guter Fit"]
-		weaknesses = item.weaknesses if item.weaknesses else ["Keine wesentlichen Schwächen erkannt"]
-		matches.append(
-			MatchCandidateResponse(
-				candidate_id=item.candidate_id,
-				score=item.score,
-				explanation=item.explanation,
-				strengths=strengths,
-				weaknesses=weaknesses,
-				vector_score=stage2_profile.vector_score,
-				jaccard_score=stage2_profile.jaccard_score,
-				combined_score=stage2_profile.combined_score,
-				profile={
-					"name": stage2_profile.name,
-					"location": stage2_profile.location,
-					"experience_years": stage2_profile.experience_years,
-					"skills": stage2_profile.skills,
-					"preferred_roles": stage2_profile.preferred_roles,
-				},
-			)
+	try:
+		jobs = [MatchingJobInput.model_validate(job) for job in jobs_raw]
+		if any(not normalize_skill_entries(job.required_skills) for job in jobs):
+			raise ValueError("Strukturierte Job-Anforderungen vor dem Matching aufbereiten.")
+		if not candidates_raw:
+			return MatchResponse(job_id=job_id, stage1_count=0, stage2_count=0, matches=[])
+		orchestrator = MatchingOrchestrator(
+			SkillMatchingService(llm_service, db_service, similarity_cutoff=settings.skill_matching_cutoff),
+			postgres_store=postgres_store,
 		)
-
-	matches.sort(key=lambda m: m.score, reverse=True)
+		rows, _matched_at = await orchestrator.match_skill_matrix(
+			jobs, [MatchingCandidateInput.model_validate(candidate) for candidate in candidates_raw],
+			model=settings.resolved_embedding_model,
+			run_id=request.state.matching_run_id, on_plan=request.state.matching_on_plan,
+		)
+	except MatchingPendingError:
+		raise
+	except ValueError as error:
+		raise HTTPException(status_code=422, detail=str(error)) from error
+	except (RuntimeError, psycopg.Error, httpx.HTTPError) as error:
+		logging.getLogger(__name__).exception("Job-Skill-Matching oder Paarpersistenz fehlgeschlagen")
+		raise HTTPException(status_code=503, detail=str(error)) from error
+	profiles = {str(candidate["id"]): candidate for candidate in candidates_raw}
+	matches = [
+		MatchCandidateResponse(
+			**{key: row.get(key) for key in ("cacheStatus", "matchedAt", "evaluationId", "model")},
+			candidate_id=row["candidateId"], score=row["score"], qualified=row["qualified"],
+			explanation=row["summary"], strengths=row["strengths"], weaknesses=row["weaknesses"],
+			profile={
+				**{key: profiles[row["candidateId"]].get(key) for key in ("name", "location", "experience_years")},
+				"skills": [skill.name for skill in normalize_skill_entries(
+					profiles[row["candidateId"]].get("has_skill") or profiles[row["candidateId"]].get("skills"), required=False,
+				)],
+				"preferred_roles": profiles[row["candidateId"]].get("preferred_roles") or [],
+			},
+		)
+		for row in rows[:10]
+	]
 	return MatchResponse(
 		job_id=job_id,
-		stage1_count=len(stage1),
-		stage2_count=len(stage2),
+		stage1_count=len(candidates_raw),
+		stage2_count=len(rows),
 		matches=matches,
 	)

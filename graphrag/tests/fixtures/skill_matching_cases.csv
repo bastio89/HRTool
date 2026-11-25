@@ -2,5 +2,5 @@ Testid,"need-skills (Liste)","has-skills (Liste)",soll-Score
 exact_python,"[{""name"": ""Python""}]","[""Python""]",100
 empty_candidate_gate,"[{""name"": ""Python""}]",[],0
 nice_to_have_weighted_gap,"[{""name"": ""Python"", ""priority"": ""mandatory""}, {""name"": ""welding"", ""priority"": ""nice_to_have""}]","[""Python""]",67
-missing_mandatory_gate,"[{""name"": ""welding"", ""priority"": ""mandatory""}, {""name"": ""Python"", ""priority"": ""nice_to_have""}]","[""Python""]",0
+missing_mandatory_gate,"[{""name"": ""welding"", ""priority"": ""mandatory""}, {""name"": ""Python"", ""priority"": ""nice_to_have""}]","[""Python""]",33
 extra_candidate_skill_no_penalty,"[{""name"": ""Python""}]","[""Python"", ""welding""]",100

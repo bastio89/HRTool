@@ -10,12 +10,16 @@ const { graphRagAuthHeaders } = require('../graphragAuth');
 const {
   DuplicateError,
   IdentityValidationError,
-  assertNoCandidateDuplicate,
+  findCandidateDuplicateAsync,
   normalizeBirthDate,
   requireCandidateIdentity,
-  translateUniqueViolation,
+  translateCandidateUniqueViolationAsync,
 } = require('../identity');
 const { syncGraphCandidatesInBackground } = require('../utils/graphRagCandidate');
+const { enqueueMatchingImport } = require('../matchingImports');
+const {
+  normalizeHistoryEntries, normalizeWorkHistory, writeCandidateHistory, writeCandidateText,
+} = require('../utils/candidateImportPersistence');
 
 const router = express.Router();
 
@@ -69,39 +73,6 @@ function toCsv(value, field = 'name') {
     })
     .filter(Boolean)
     .join(', ') || null;
-}
-
-function normalizeHistoryEntries(value, kind) {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item) => {
-    if (!item || typeof item !== 'object') return false;
-    if (kind === 'work') return Boolean(item.employer || item.position);
-    return Boolean(item.institution || item.degree || item.field_of_study);
-  });
-}
-
-function normalizeWorkHistory(profile) {
-  const entries = normalizeHistoryEntries(profile.work_history, 'work');
-  const hasCurrentRole = entries.some((item) => {
-    const employer = String(item.employer || '').trim().toLowerCase();
-    const position = String(item.position || '').trim().toLowerCase();
-    return employer === String(profile.current_employer || '').trim().toLowerCase()
-      && position === String(profile.current_position || '').trim().toLowerCase();
-  });
-
-  if (!hasCurrentRole && (profile.current_employer || profile.current_position)) {
-    entries.unshift({
-      employer: profile.current_employer || null,
-      position: profile.current_position || null,
-      from_date: null,
-      to_date: null,
-      is_current: true,
-      description: profile.experience || null,
-      location: profile.location || null,
-    });
-  }
-
-  return entries;
 }
 
 function extractWorkHistoryFromText(rawText) {
@@ -326,15 +297,20 @@ function birthDateFromCv(value) {
 // UUID des Bewerbers).
 // options.syncGraph=false: der Aufrufer stoesst den Neo4j-Abgleich selbst an
 // (z. B. der CRM-Import, nachdem er die CRM-UUID gesetzt hat).
-function persistCandidate(profile, req, cvText, options = {}) {
-  const { syncGraph = true, textSource = 'CV-Import' } = options;
+async function persistCandidate(profile, req, cvText, options = {}) {
+  const { syncGraph = true, textSource = 'CV-Import', database = db, audit = true } = options;
+  if (syncGraph && database !== db) throw new Error('Graph-Sync erst nach der aeusseren Importtransaktion starten');
   const row = buildCandidateRow(profile);
   const identity = requireCandidateIdentity({ name: row.name, birth_date: birthDateFromCv(profile.birth_date) });
-  assertNoCandidateDuplicate(db, identity);
   row.name = identity.name;
   row.birth_date = identity.birth_date;
 
-  const insert = db.prepare(`
+  let candidate;
+  try {
+    candidate = await database.transactionAsync(async (tx) => {
+      const existing = await findCandidateDuplicateAsync(tx, identity);
+      if (existing) throw new DuplicateError('candidate', 'name_birth_date', existing);
+      const insert = tx.prepare(`
     INSERT INTO candidates (name, email, phone, location, experience, skills,
       education, desired_salary, availability, languages, certificates,
       drivers_license, mobility, notes, status, tags, source,
@@ -348,123 +324,41 @@ function persistCandidate(profile, req, cvText, options = {}) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  let result;
-  try {
-    result = insert.run(
-    row.name, row.email, row.phone, row.location,
-    row.experience, row.skills, row.education,
-    row.desired_salary, row.availability, row.languages,
-    row.certificates, row.drivers_license, row.mobility,
-    row.notes, row.status, row.tags, row.source,
-    row.linkedin_url, row.xing_url, row.github_url, row.portfolio_url,
-    row.salary_min, row.salary_max, row.salary_currency, row.salary_interval,
-    row.notice_period, row.available_from,
-    row.gdpr_consent_date, row.gdpr_consent_type, row.gdpr_consent_expires,
-    row.nationality, row.work_permit, row.work_permit_until,
-    row.referrer_name, row.referrer_email,
-    row.current_employer, row.current_position, row.gender, row.birth_date,
-    );
+      const result = await insert.run(
+        row.name, row.email, row.phone, row.location,
+        row.experience, row.skills, row.education,
+        row.desired_salary, row.availability, row.languages,
+        row.certificates, row.drivers_license, row.mobility,
+        row.notes, row.status, row.tags, row.source,
+        row.linkedin_url, row.xing_url, row.github_url, row.portfolio_url,
+        row.salary_min, row.salary_max, row.salary_currency, row.salary_interval,
+        row.notice_period, row.available_from,
+        row.gdpr_consent_date, row.gdpr_consent_type, row.gdpr_consent_expires,
+        row.nationality, row.work_permit, row.work_permit_until,
+        row.referrer_name, row.referrer_email,
+        row.current_employer, row.current_position, row.gender, row.birth_date,
+      );
+      const candidateId = result.lastInsertRowid;
+      await writeCandidateHistory(candidateId, profile, { database: tx });
+      await writeCandidateText(candidateId, row.name, cvText, profile, textSource, tx);
+      const matching = await enqueueMatchingImport(tx, {
+        entityType: 'candidate', entityId: candidateId, req, source: textSource, eventKey: options.eventKey,
+      });
+      return {
+        ...await tx.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId),
+        ...matching,
+        work_history: await tx.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(candidateId),
+        education_history: await tx.prepare('SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY from_date DESC').all(candidateId),
+      };
+    });
   } catch (error) {
-    throw translateUniqueViolation(db, error, 'candidate', identity);
+    throw await translateCandidateUniqueViolationAsync(database, error, identity);
   }
 
-  const candidateId = result.lastInsertRowid;
-  writeCandidateHistory(candidateId, profile);
-  writeCandidateText(candidateId, row.name, cvText, profile, textSource);
-  if (syncGraph) syncGraphCandidatesInBackground([candidateId], req);
+  if (syncGraph) syncGraphCandidatesInBackground([candidate.id], req);
+  if (audit) logAudit(req, 'erstellt', 'Candidate', candidate.id, candidate.name);
 
-  const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId);
-  const candidateWorkHistory = db.prepare('SELECT * FROM candidate_work_history WHERE candidate_id = ? ORDER BY is_current DESC, from_date DESC').all(candidateId);
-  const candidateEducationHistory = db.prepare('SELECT * FROM candidate_education WHERE candidate_id = ? ORDER BY from_date DESC').all(candidateId);
-  logAudit(req, 'erstellt', 'Candidate', candidate.id, candidate.name);
-
-  return {
-    ...candidate,
-    work_history: candidateWorkHistory,
-    education_history: candidateEducationHistory,
-  };
-}
-
-// Werdegang und Ausbildung aus dem CV-Profil; replace=true ersetzt die
-// vorhandenen Eintraege (erneuter Import eines geaenderten CVs).
-function writeCandidateHistory(candidateId, profile, { replace = false } = {}) {
-  const workHistory = normalizeWorkHistory(profile).filter((item) => Boolean(item.employer && item.position));
-  const educationHistory = normalizeHistoryEntries(profile.education_history, 'education')
-    .filter((item) => Boolean(item.institution));
-
-  const currentRole = profile.current_employer && profile.current_position
-    ? {
-      employer: profile.current_employer,
-      position: profile.current_position,
-      from_date: null,
-      to_date: null,
-      is_current: true,
-      description: profile.experience || null,
-      location: profile.location || null,
-    }
-    : null;
-
-  if (currentRole && !workHistory.some((item) => item.is_current && item.employer === currentRole.employer && item.position === currentRole.position)) {
-    workHistory.unshift(currentRole);
-  }
-
-  const workInsert = db.prepare(`
-    INSERT INTO candidate_work_history (candidate_id, employer, position, from_date, to_date, is_current, description, location)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const educationInsert = db.prepare(`
-    INSERT INTO candidate_education (candidate_id, institution, degree, field_of_study, from_date, to_date, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const tx = db.transaction(() => {
-    if (replace) {
-      db.prepare('DELETE FROM candidate_work_history WHERE candidate_id = ?').run(candidateId);
-      db.prepare('DELETE FROM candidate_education WHERE candidate_id = ?').run(candidateId);
-    }
-    for (const item of workHistory) {
-      workInsert.run(
-        candidateId,
-        item.employer || null,
-        item.position || null,
-        item.from_date || null,
-        item.to_date || null,
-        item.is_current ? 1 : 0,
-        item.description || null,
-        item.location || null,
-      );
-    }
-    for (const item of educationHistory) {
-      educationInsert.run(
-        candidateId,
-        item.institution || null,
-        item.degree || null,
-        item.field_of_study || null,
-        item.from_date || null,
-        item.to_date || null,
-        item.description || null,
-      );
-    }
-  });
-  tx();
-}
-
-// CV-Volltext und Profil fuer das KI-Matching (candidate_texts).
-function writeCandidateText(candidateId, name, cvText, profile, source = 'CV-Import') {
-  if (cvText && String(cvText).trim()) {
-    // Das Geburtsdatum dient nur der Identifikation und bleibt aus den
-    // Strukturdaten heraus, die ins KI-Matching gehen.
-    const { birth_date: _birthDate, ...matchingProfile } = profile;
-    db.prepare(`
-      INSERT INTO candidate_texts (candidate_id, candidate_name, source, original_text, profile_json)
-      VALUES (CAST(? AS TEXT), ?, ?, ?, ?)
-      ON CONFLICT (candidate_id) DO UPDATE SET
-        candidate_name = EXCLUDED.candidate_name, source = EXCLUDED.source,
-        original_text = EXCLUDED.original_text, profile_json = EXCLUDED.profile_json,
-        updated_at = CURRENT_TIMESTAMP
-      RETURNING candidate_id
-    `).run(candidateId, name, source, String(cvText).trim(), JSON.stringify(matchingProfile));
-  }
+  return candidate;
 }
 
 // CV-Text von GraphRAG auslesen lassen (ohne Speichern) und das Profil
@@ -760,7 +654,7 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       }
       sendProgress('postgres_save', 'Speichere Kandidat in PostgreSQL...', 85);
       try {
-        localCandidate = persistCandidate(profile, req, combinedText);
+        localCandidate = await persistCandidate(profile, req, combinedText);
         storedInPostgres = Boolean(localCandidate);
         neo4jSyncQueued = storedInPostgres;
       } catch (persistErr) {
@@ -790,6 +684,10 @@ router.post('/parse', upload.array('file', 10), async (req, res) => {
       candidate: localCandidate || profile,
       profile,
       localCandidate,
+      matchingRunId: localCandidate?.matchingRunId || null,
+      matchingStatus: localCandidate?.matchingStatus || 'not_requested',
+      matchingStatusUrl: localCandidate?.matchingStatusUrl || null,
+      preparationStatus: localCandidate?.preparationStatus || 'not_requested',
       graphRag,
       storage: {
         postgres: storedInPostgres,

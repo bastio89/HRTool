@@ -17,9 +17,10 @@ from unittest.mock import AsyncMock
 import psycopg
 import pytest
 
-from plugins.billing.service import BillingService
+from plugins.billing.service import BillingService, BillingUserClaims
 from services.db import Neo4jService
 from services.postgres_store import PostgresStore
+from services.model_config import ModelRuntimeConfig
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
@@ -93,9 +94,20 @@ async def seeded():
 
 
 @needs_db
-async def test_vectormatch_resolves_postgres_ids_to_uuids_and_reports_missing(app_module, api_client, monkeypatch, seeded):
-	monkeypatch.setattr(BillingService, "charge", AsyncMock())
-	jobs = AsyncMock(return_value=[{"id": seeded["job_uuid"], "title": "Data Engineer", "required_skills": []}])
+@pytest.mark.parametrize("engine", ["python", "neo4j"])
+async def test_vectormatch_resolves_postgres_ids_to_uuids_and_reports_missing(app_module, api_client, monkeypatch, seeded, engine, matching_actor):
+	monkeypatch.setattr(BillingService, "actor_for_request", AsyncMock(
+		return_value=BillingUserClaims(matching_actor, "test", None, None, "recruiter"),
+	))
+	monkeypatch.setattr(BillingService, "charge_matching_run", AsyncMock())
+	monkeypatch.setattr(app_module.model_config_service, "snapshot", AsyncMock(return_value=ModelRuntimeConfig(
+		task="embedding", provider="ollama", base_url="http://test", model="test-embedding", api_key=None,
+	)))
+	monkeypatch.setattr(app_module.db_service, "get_esco_concepts_for_aliases", AsyncMock(return_value=[]))
+	monkeypatch.setattr(app_module.llm_service, "create_embedding", AsyncMock(return_value=[1.0, 0.0]))
+	legacy = AsyncMock(side_effect=AssertionError("Kein Cypher-Scoring"))
+	monkeypatch.setattr(app_module.db_service, "get_vectormatch_neo4j_rows", legacy)
+	jobs = AsyncMock(return_value=[{"id": seeded["job_uuid"], "title": "Data Engineer", "required_skills": [{"name": "Python"}]}])
 	candidates = AsyncMock(return_value=[{"id": seeded["candidate_uuid"], "name": "Manuel", "has_skill": [], "skills": []}])
 	monkeypatch.setattr(app_module.db_service, "get_jobs_for_vectormatch", jobs)
 	monkeypatch.setattr(app_module.db_service, "get_candidates_for_vectormatch", candidates)
@@ -103,9 +115,9 @@ async def test_vectormatch_resolves_postgres_ids_to_uuids_and_reports_missing(ap
 	response = await api_client.post("/match/vectormatch", json={
 		"jobIds": [seeded["job_id"]],
 		"cvIds": [seeded["candidate_id"], "0b7a7e55-0000-4000-8000-000000000000"],
-		"engine": "python",
+		"engine": engine,
 	})
-	assert response.status_code == 200
+	assert response.status_code == 200, response.text
 	body = response.json()
 	# PostgreSQL-IDs wurden ueber die UUID gesucht.
 	assert jobs.await_args.args[0] == [seeded["job_uuid"]]
@@ -113,11 +125,23 @@ async def test_vectormatch_resolves_postgres_ids_to_uuids_and_reports_missing(ap
 	assert body["matrix"][0]["candidateId"] == seeded["candidate_uuid"]
 	assert body["missingCandidateIds"] == ["0b7a7e55-0000-4000-8000-000000000000"]
 	assert body["missingJobIds"] == []
+	assert body["matrix"][0]["score"] == 0
+	assert body["matrix"][0]["qualified"] is False
+	assert body["pairsPersisted"] is True
+	legacy.assert_not_awaited()
+	async with await psycopg.AsyncConnection.connect(DATABASE_URL) as connection:
+		row = await (await connection.execute(
+			"SELECT score, qualified, engine FROM matching_pair_results WHERE method = 'vector' AND candidate_id = %s AND job_id = %s",
+			(seeded["candidate_id"], seeded["job_id"]),
+		)).fetchone()
+	assert row == (0, False, engine)
 
 
 @needs_db
-async def test_vectormatch_explains_when_no_candidate_is_in_neo4j(app_module, api_client, monkeypatch, seeded):
-	monkeypatch.setattr(BillingService, "charge", AsyncMock())
+async def test_vectormatch_explains_when_no_candidate_is_in_neo4j(app_module, api_client, monkeypatch, seeded, matching_actor):
+	monkeypatch.setattr(BillingService, "actor_for_request", AsyncMock(
+		return_value=BillingUserClaims(matching_actor, "test", None, None, "recruiter"),
+	))
 	monkeypatch.setattr(app_module.db_service, "get_jobs_for_vectormatch", AsyncMock(return_value=[{"id": seeded["job_uuid"], "title": "x"}]))
 	monkeypatch.setattr(app_module.db_service, "get_candidates_for_vectormatch", AsyncMock(return_value=[]))
 
@@ -140,7 +164,11 @@ async def test_sync_jobs_writes_the_uuid_node_and_removes_the_old_one(app_module
 
 	response = await api_client.post("/sync/jobs", json={"job_ids": [seeded["job_id"]]})
 	assert response.status_code == 200
-	assert response.json() == {"synced": 1, "failed": 0, "removed_stale_nodes": 1, "errors": []}
+	body = response.json()
+	assert body == {
+		"synced": 1, "failed": 0, "removed_stale_nodes": 1, "errors": [],
+		"preparedRevisions": {str(seeded["job_id"]): (await seeded["store"].matching_source_snapshot("job", seeded["job_id"]))["revision"]},
+	}
 	assert upsert.await_args.kwargs["job_id"] == seeded["job_uuid"]
 	profile = upsert.await_args.kwargs["profile"]
 	assert [skill.name for skill in profile.required_skills] == ["Python", "Kubernetes"]

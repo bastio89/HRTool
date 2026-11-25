@@ -4,8 +4,11 @@ import json
 import re
 import time
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
+
+import psycopg
 
 from services.postgres_store import PostgresStore
 
@@ -57,9 +60,9 @@ class PromptService:
 
         return re.sub(r"\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}", replace, template)
 
-    async def _load_prompts(self) -> list[dict[str, Any]]:
+    async def _load_prompts(self, *, force_refresh: bool = False) -> list[dict[str, Any]]:
         now = time.monotonic()
-        if self._cache and self._cache.expires_at > now:
+        if not force_refresh and self._cache and self._cache.expires_at > now:
             return self._cache.items
 
         try:
@@ -70,6 +73,20 @@ class PromptService:
             ) from exc
         self._cache = PromptCache(items=prompts, expires_at=now + self._ttl_seconds)
         return prompts
+
+    async def snapshot(
+        self, keys: list[str], *, connection: psycopg.AsyncConnection[Any] | None = None,
+    ) -> PromptService:
+        records = await self._load_prompts(force_refresh=True) if connection is None else (
+            await self._postgres_store.list_prompts(connection=connection)
+        )
+        selected = [record for record in records if record["key"] in keys]
+        missing = set(keys) - {record["key"] for record in selected}
+        if missing:
+            raise PromptNotFoundError(f"Prompt nicht gefunden: {', '.join(sorted(missing))}")
+        frozen = PromptService(self._postgres_store)
+        frozen._cache = PromptCache(deepcopy(selected), float("inf"))
+        return frozen
 
     async def list_prompts(self) -> list[dict[str, Any]]:
         return list(await self._load_prompts())

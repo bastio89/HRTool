@@ -238,9 +238,14 @@ export default function CandidateForm() {
         <button onClick={() => leaveTo('/candidates')} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-[#e8e8ed] dark:hover:bg-[#3a3a3c] flex items-center justify-center transition-colors cursor-pointer flex-shrink-0">
           <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6 text-black dark:text-white" />
         </button>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-[24px] sm:text-[40px] font-semibold tracking-tight text-black dark:text-white">{isEdit ? t('candidates.edit') : t('candidates.new')}</h1>
           <p className="text-[14px] sm:text-[18px] text-gray-500 dark:text-gray-400 mt-1 sm:mt-2">{isEdit ? t('candidates.edit_desc') : t('candidates.create_desc')}</p>
+          {isEdit && (
+            <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-2 break-all">
+              {t('detail.candidate_id')}: <span className="font-mono select-all">{id}</span>
+            </p>
+          )}
         </div>
       </div>
 

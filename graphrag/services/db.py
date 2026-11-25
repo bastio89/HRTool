@@ -10,11 +10,14 @@ from models import (
     CandidateProfileExtraction,
     JobProfileExtraction,
     JobCandidateMatch,
+    MatchingCandidateInput,
+    MatchingJobInput,
     Stage1Candidate,
     Stage2Candidate,
 )
 from services.esco_catalog import normalize_alias
 from services.postgres_store import PostgresStore
+from services.matching_orchestrator import MatchingOrchestrator, normalize_skill_entries
 
 
 class Neo4jService:
@@ -488,8 +491,8 @@ class Neo4jService:
         WHERE toLower(coalesce(j.title, '')) = toLower($job_name)
         RETURN j.id AS id,
                j.title AS title,
-               j.department AS department,
                j.company AS company,
+               j.department AS department,
                j.location AS location,
                j.employmentType AS employment_type
         LIMIT 1
@@ -520,9 +523,11 @@ class Neo4jService:
            OPTIONAL MATCH (j)-[req:REQUIRES_SKILL|NEED_SKILL]->(s:Skill)
         RETURN j.id AS id,
                j.title AS title,
+               j.company AS company,
+               j.department AS department,
                j.location AS location,
                j.employmentType AS employment_type,
-               collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), priority: coalesce(req.priority, 'Mandatory'), embedding: s.embedding}) AS required_skills
+               [skill IN collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), priority: coalesce(req.priority, 'Mandatory'), embedding: s.embedding}) WHERE skill.name IS NOT NULL] AS required_skills
         ORDER BY toLower(coalesce(j.title, '')), j.id
         """
         # Mit IDs wird nur per ID gesucht: ein Rueckfall auf den Titel trifft
@@ -552,11 +557,14 @@ class Neo4jService:
         MATCH (c:Candidate)
         WHERE toString(c.id) IN $candidate_ids
         OPTIONAL MATCH (c)-[:HAS_SKILL]->(s:Skill)
+        OPTIONAL MATCH (c)-[:PREFERS_ROLE]->(r:Role)
         RETURN c.id AS id,
                c.name AS name,
                c.location AS location,
                c.experience AS experience,
-             collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), embedding: s.embedding}) AS has_skill,
+               c.experience_years AS experience_years,
+               collect(DISTINCT r.name) AS preferred_roles,
+             [skill IN collect(DISTINCT {name: toLower(s.name), category: coalesce(s.category, 'HardSkill'), embedding: s.embedding}) WHERE skill.name IS NOT NULL] AS has_skill,
                collect(DISTINCT toLower(s.name)) AS skills
         ORDER BY toLower(coalesce(c.name, '')), c.id
         """
@@ -577,11 +585,77 @@ class Neo4jService:
                 fallback_rows.extend(await result.data())
         return fallback_rows
 
+    async def get_skill_matching_inputs(
+        self,
+        *,
+        job_ids: Iterable[str] | None = None,
+        candidate_ids: Iterable[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        async def ids_for(label: str, selected: Iterable[str] | None) -> list[str]:
+            if selected is not None:
+                return [str(value) for value in selected]
+            async with self.driver.session() as session:
+                result = await session.run(f"MATCH (n:{label}) RETURN n.id AS id ORDER BY n.id")
+                return [str(row["id"]) for row in await result.data()]
+
+        jobs = await self.get_jobs_for_vectormatch(await ids_for("Job", job_ids))
+        candidates = await self.get_candidates_for_vectormatch(await ids_for("Candidate", candidate_ids))
+        return jobs, candidates
+
     async def get_top_job_matches_for_candidate(
         self,
         candidate_id: str,
         limit: int = 10,
+        *,
+        orchestrator: MatchingOrchestrator,
+        model: str,
     ) -> list[CandidateJobMatch]:
+        """Deprecated facade: inject MatchingOrchestrator for central persisted skill matching."""
+        if limit < 1:
+            raise ValueError("Match limit must be positive.")
+        rows, jobs, candidates = await self._central_skill_matches(
+            candidate_ids=[candidate_id], orchestrator=orchestrator, model=model,
+        )
+        return [
+            CandidateJobMatch(
+                job_id=row["jobId"], title=row["jobTitle"],
+                **{key: jobs[row["jobId"]].get(key) for key in ("department", "company", "location")},
+                **self._skill_match_details(row, jobs[row["jobId"]], candidates[row["candidateId"]]),
+            )
+            for row in rows[:limit]
+        ]
+
+    @staticmethod
+    def _skill_match_details(row: dict[str, Any], job: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+        covered = [match for match in row["matchedSkills"] if match["covered"]]
+        return {
+            "method": "vector", "qualified": row["qualified"], "skill_similarity": row["score"] / 100,
+            "shared_skills": [match["need_skill"] for match in covered if match["need_skill"].casefold() == (match["has_skill"] or "").casefold()],
+            "similar_skills": [match["need_skill"] for match in covered if match["need_skill"].casefold() != (match["has_skill"] or "").casefold()],
+            "job_skills": [skill.name for skill in normalize_skill_entries(job.get("required_skills"))],
+            "candidate_skills": [skill.name for skill in normalize_skill_entries(
+                candidate.get("has_skill") if candidate.get("has_skill") is not None else candidate.get("skills"), required=False,
+            )],
+        }
+
+    async def _central_skill_matches(
+        self, *, orchestrator: MatchingOrchestrator, model: str,
+        job_ids: list[str] | None = None, candidate_ids: list[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        jobs, candidates = await self.get_skill_matching_inputs(job_ids=job_ids, candidate_ids=candidate_ids)
+        if (job_ids is not None and not jobs) or (candidate_ids is not None and not candidates):
+            raise ValueError("Ausgewaehlte Matching-Entitaet fehlt im Graph.")
+        rows, _matched_at = await orchestrator.match_skill_matrix(
+            [MatchingJobInput.model_validate(job) for job in jobs],
+            [MatchingCandidateInput.model_validate(candidate) for candidate in candidates],
+            model=model,
+        )
+        return rows, {str(job["id"]): job for job in jobs}, {str(candidate["id"]): candidate for candidate in candidates}
+
+    async def _deprecated_top_job_matches_by_overlap(
+        self, candidate_id: str, limit: int = 10,
+    ) -> list[CandidateJobMatch]:
+        """Deprecated reference only; use get_top_job_matches_for_candidate with an orchestrator."""
         query = """
         MATCH (c:Candidate {id: $candidate_id})
         OPTIONAL MATCH (c)-[:HAS_SKILL]->(cs:Skill)
@@ -660,7 +734,29 @@ class Neo4jService:
         self,
         job_id: str,
         limit: int = 10,
+        *,
+        orchestrator: MatchingOrchestrator,
+        model: str,
     ) -> list[JobCandidateMatch]:
+        """Deprecated facade: inject MatchingOrchestrator for central persisted skill matching."""
+        if limit < 1:
+            raise ValueError("Match limit must be positive.")
+        rows, jobs, candidates = await self._central_skill_matches(
+            job_ids=[job_id], orchestrator=orchestrator, model=model,
+        )
+        return [
+            JobCandidateMatch(
+                candidate_id=row["candidateId"], name=row["candidateName"],
+                **{key: candidates[row["candidateId"]].get(key) for key in ("location", "experience_years")},
+                **self._skill_match_details(row, jobs[row["jobId"]], candidates[row["candidateId"]]),
+            )
+            for row in rows[:limit]
+        ]
+
+    async def _deprecated_top_candidates_by_overlap(
+        self, job_id: str, limit: int = 10,
+    ) -> list[JobCandidateMatch]:
+        """Deprecated reference only; use get_top_candidate_matches_for_job with an orchestrator."""
         query = """
         MATCH (j:Job {id: $job_id})
         OPTIONAL MATCH (j)-[:REQUIRES_SKILL]->(js:Skill)
@@ -858,12 +954,14 @@ class Neo4jService:
         job_ids: Iterable[str],
         candidate_ids: Iterable[str],
     ) -> list[dict[str, Any]]:
+        """Deprecated reference; load raw skills and call MatchingOrchestrator.match_skill_matrix."""
         normalized_job_ids = [str(job_id) for job_id in job_ids if str(job_id).strip()]
         normalized_candidate_ids = [str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()]
         if not normalized_job_ids or not normalized_candidate_ids:
             return []
 
         def _best_match_list(category: str | None) -> str:
+            """Deprecated Cypher scorer; SkillMatchingService supplies the full pair matrix."""
             if category is None:
                 job_filter = "true"
                 candidate_filter = "true"
@@ -886,6 +984,7 @@ class Neo4jService:
             """
 
         def _priority_weight_expression(alias: str) -> str:
+            """Deprecated Cypher weights; SkillMatchingService owns priorities and gates."""
             return (
                 f"CASE WHEN toLower(replace(replace(coalesce({alias}.priority, 'Mandatory'), '-', '_'), ' ', '_')) = 'mandatory' "
                 "THEN 2.0 ELSE 1.0 END"
@@ -1097,6 +1196,7 @@ class Neo4jService:
         job_id: str,
         limit: int = 100,
     ) -> list[Stage1Candidate]:
+        """Deprecated prefilter; get_skill_matching_inputs loads candidates without skill filtering."""
         query = """
         MATCH (j:Job {id: $job_id})
         OPTIONAL MATCH (j)-[req:REQUIRES_SKILL]->(ms:Skill)
@@ -1131,6 +1231,7 @@ class Neo4jService:
         candidate_ids: Iterable[str],
         limit: int = 10,
     ) -> list[Stage2Candidate]:
+        """Deprecated hybrid ranking; use MatchingOrchestrator.match_skill_matrix before Top-N."""
         candidate_ids = list(candidate_ids)
         if not candidate_ids:
             return []
@@ -1206,6 +1307,7 @@ class Neo4jService:
 
     @staticmethod
     def _jaccard_similarity(a: list[str], b: list[str]) -> float:
+        """Deprecated reference; use directed coverage from SkillMatchingService."""
         left = set(a)
         right = set(b)
         union = left | right
@@ -1215,6 +1317,7 @@ class Neo4jService:
 
     @staticmethod
     def _score_from_matched_skills(matched_skills: list[dict[str, Any]], category: str | None = None) -> int:
+        """Deprecated regression reference; use SkillMatchingService category assessments."""
         relevant = [
             pair
             for pair in matched_skills

@@ -8,13 +8,11 @@ const { promptGuard } = require('../middleware/promptSanitizer');
 const { sanitizeObject } = require('../middleware/promptSanitizer');
 const apiKeyAuth = require('../middleware/apiKey');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
-const { graphRagAuthHeaders } = require('../graphragAuth');
+const { graphRagRequest, RUN_ID } = require('../graphragRequest');
 // Alle Paarungen eines Laufs landen zusaetzlich in matching_pair_results,
 // damit sie als N:N-Export (Administration -> Datenexport) abrufbar sind.
-// Das Speichern ist fehlertolerant: Ein Fehler dort laesst kein Matching
-// scheitern, der Lauf wird dann beim naechsten Export aus der Historie
-// nachgetragen.
-const { recordMatchingPairsSafely } = require('../matchingPairs');
+// Produktive Schreibfehler werden gemeldet; GraphRAG bestaetigt eigene Writes.
+const { recordMatchingPairsSafely, rememberMatchingRequest, saveMatchingHistory } = require('../matchingPairs');
 // 3D-Matching ueber die UUID: vorher fehlende Neo4j-Eintraege nachholen.
 const { ensureGraphNodes } = require('../graphNodes');
 
@@ -159,10 +157,6 @@ function splitSkillValues(value) {
   return [String(value).trim()].filter(Boolean);
 }
 
-function toRequiredSkills(value) {
-  return splitSkillValues(value).map((name) => ({ name, priority: 'Mandatory' }));
-}
-
 function normalizeKey(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -172,6 +166,12 @@ const MAX_STORED_MATCH_ROWS = 100;
 function compactStoredMatchingResult(result, { direction, engine } = {}) {
   const matrix = Array.isArray(result?.matrix) ? result.matrix : [];
   const compactRow = (row) => ({
+    method: row.method,
+    qualified: row.qualified,
+    model: row.model,
+    matchedAt: row.matchedAt,
+    cacheStatus: row.cacheStatus,
+    evaluationId: row.evaluationId,
     jobId: row.jobId,
     candidateId: row.candidateId,
     sourceJobId: row.sourceJobId,
@@ -198,13 +198,17 @@ function compactStoredMatchingResult(result, { direction, engine } = {}) {
   }));
 
   return {
+    method: result?.method,
+    pairsPersisted: result?.pairsPersisted,
     type: result?.type,
     mode: result?.mode,
     model: result?.model,
     matchedAt: result?.matchedAt,
+    runId: result?.runId,
+    statusUrl: result?.statusUrl,
     embeddingModel: result?.embeddingModel,
     direction: direction ?? result?.direction,
-    engine,
+    engine: engine ?? result?.engine,
     jobs: (Array.isArray(result?.jobs) ? result.jobs : []).map(({ id, title }) => ({ id, title })),
     candidates: (Array.isArray(result?.candidates) ? result.candidates : []).map(({ id, name }) => ({ id, name })),
     jobsRanked: compactRankings(result?.jobsRanked, 'jobId', 'jobTitle'),
@@ -314,27 +318,186 @@ function explainGraphRagMiss(error, { jobsByUuid, candidatesByUuid }) {
   return userError(`${detail.error || 'Kein Eintrag in Neo4j'}${names.length ? `: ${names.join(', ')}` : ''}`, 422, detail);
 }
 
-async function callGraphRagMatching(req, endpoint, payload) {
-  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
-  const response = await fetch(`${baseUrl.replace(/\/+$/, '')}${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
-    body: JSON.stringify(payload),
-  });
+const runMetadata = data => data.runId
+  ? { runId: data.runId, statusUrl: `/api/matching/runs/${data.runId}` } : {};
 
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detailObject = data.detail && typeof data.detail === 'object' && !Array.isArray(data.detail) ? data.detail : null;
-    const message = detailObject?.error || (typeof data.detail === 'string' ? data.detail : null) || data.error || `GraphRAG HTTP ${response.status}`;
-    const error = new Error(message);
-    error.status = response.status;
-    error.details = message;
-    error.detailObject = detailObject;
-    throw error;
-  }
-
-  return data;
+function matchingContext(kind, { jobs = [], candidates = [], ...fields }) {
+  const unique = rows => [...new Map(rows.map(row => [String(row.id), row])).values()];
+  const jobRows = unique(jobs).map(({ id, uuid, title }) => ({ id, uuid, title }));
+  const candidateRows = unique(candidates).map(({ id, uuid, name }) => ({ id, uuid, name }));
+  return {
+    startedAt: Date.now(), ...fields, kind, jobs: jobRows, candidates: candidateRows,
+    job_refs: jobRows.map(row => String(row.id)), candidate_refs: candidateRows.map(row => String(row.id)),
+  };
 }
+
+function sendMatchingPending(res, error) {
+  if (!error.matchingPending) return false;
+  res.status(202).json(error.matchingPending);
+  return true;
+}
+
+function tagMatchingResponse(data, method, rowsKey) {
+  if (!Array.isArray(data?.[rowsKey])) throw userError('Unvollstaendige GraphRAG-Matchingantwort', 502);
+  if (data.method && data.method !== method) throw userError('Unerwartete GraphRAG-Matchingmethode', 502);
+  const tagRow = row => {
+    if (row.method && row.method !== method) throw userError('Unerwartete GraphRAG-Paarmethode', 502);
+    return { ...row, method };
+  };
+  return {
+    ...data, method, ...runMetadata(data),
+    [rowsKey]: data[rowsKey].map(tagRow),
+    ...(Array.isArray(data.jobsRanked) ? { jobsRanked: data.jobsRanked.map(group => ({ ...group, results: group.results.map(tagRow) })) } : {}),
+    ...(Array.isArray(data.candidatesRanked) ? { candidatesRanked: data.candidatesRanked.map(group => ({ ...group, results: group.results.map(tagRow) })) } : {}),
+  };
+}
+
+async function callGraphRagMatching(req, endpoint, payload) {
+  const { data, status } = await graphRagRequest(req, endpoint, payload);
+  if (status === 202 || data.runId) {
+    if (!RUN_ID.test(data.runId) || !req.matchingContext) {
+      throw userError('Unvollstaendige GraphRAG-Laufantwort', 502);
+    }
+    rememberMatchingRequest(db, data.runId, req.user?.id, { ...req.matchingContext, actorId: req.user?.id });
+  }
+  if (status === 202) {
+    if (data.status !== 'pending' || !Array.isArray(data.pendingPairs) || !Array.isArray(data.availableResults)) {
+      throw userError('Ungueltige GraphRAG-Pending-Antwort', 502);
+    }
+    throw Object.assign(new Error('Matching laeuft im Hintergrund'), {
+      matchingPending: { ...data, ...runMetadata(data) },
+    });
+  }
+  if (data.runId && data.pairsPersisted !== true) {
+    throw userError('GraphRAG hat die Paarpersistenz nicht bestaetigt', 502);
+  }
+  return tagMatchingResponse(data, endpoint === '/match/ki_match_pairs' ? 'ai' : 'vector',
+    ['/match/ki_match_pairs', '/match/external/run', '/match/vectormatch-selected'].includes(endpoint) ? 'results' : 'matrix');
+}
+
+function finishMatching(req, remote, context, completedAt = null) {
+  const { kind, jobs, candidates, engine, direction } = context;
+  const maps = {
+    jobsByUuid: new Map(jobs.flatMap(row => [[String(row.id), row], [String(row.uuid), row]])),
+    candidatesByUuid: new Map(candidates.flatMap(row => [[String(row.id), row], [String(row.uuid), row]])),
+  };
+  let result = { ...remote, ...runMetadata(remote) };
+  if (kind === 'vector') {
+    result = { ...remapByUuid(result, maps), direction };
+    result.missing = [...(context.missing || []), ...describeMissing({ graphRagResult: remote, ...maps })];
+  } else if (['ai-run', 'ai-selected', 'vector-selected'].includes(kind)) {
+    result.results = remapByUuid({ matrix: result.results }, maps).matrix;
+    result.failures = [...(result.failures || []), ...(kind === 'vector-selected' ? [] : context.localFailures || [])];
+    result.selectedCount = context.selectedCount;
+    result.matchedCount = result.results.length;
+    result.failedCount = result.failures.length;
+  } else if (kind === 'external') {
+    const external = new Map(context.externalCandidates.map(row => [String(row.id), row]));
+    result.results = result.results.map(row => ({
+      ...row, externalCandidateId: external.get(String(row.candidateId))?.externalId || String(row.candidateId),
+      candidateName: external.get(String(row.candidateId))?.name || row.candidateName,
+      strengths: row.strengths || [], weaknesses: row.weaknesses || [], summary: row.summary || '',
+    }));
+  }
+  const hasHistory = ['ai-run', 'matrix', 'vector'].includes(kind);
+  const history = hasHistory ? saveMatchingHistory(db, {
+    runId: result.runId, description: context.description, title: context.title,
+    result: kind === 'ai-run' ? result : compactStoredMatchingResult(result, { direction, engine }),
+    summary: kind === 'ai-run' ? buildMatchingSummary(result) : null, jobId: context.jobId,
+  }) : null;
+  if (!history || history.created) {
+    recordMatchingPairsSafely(db, result.method, result.matrix || result.results, {
+      pairsPersisted: result.pairsPersisted === true, matchingResultId: history?.lastInsertRowid,
+      jobIds: jobs.map(row => row.id), candidateIds: candidates.map(row => row.id),
+      model: result.model, matchedAt: result.matchedAt, engine,
+    });
+    logAudit(req, kind === 'ai-selected' ? 'ki-matching-batch'
+      : kind === 'ai-run' ? 'ki-matching' : kind === 'matrix' ? 'ki-matching-matrix'
+        : kind === 'external' ? 'external-matching' : 'ki-matching-vector',
+    'Matching', history?.lastInsertRowid ?? null, context.title || 'Matching selektierte Paarungen', {
+      engine, direction, jobCount: jobs.length,
+      candidateCount: kind === 'ai-run' ? context.selectedCount : candidates.length,
+      selectedCount: context.selectedCount, matchedCount: result.matchedCount, failedCount: result.failedCount,
+      jobId: context.jobId, candidateId: direction === 'candidate_to_jobs' ? candidates[0]?.id : undefined,
+      pairCount: (result.matrix || result.results).length, topScore: (result.matrix || result.results)[0]?.score ?? null,
+      model: result.model, durationMs: Date.now() - context.startedAt,
+    });
+    if (kind === 'ai-run') logAiCall({
+      userId: context.actorId || req.user?.id, feature: 'matching', model: result.model,
+      prompt: JSON.stringify(context.prompt), response: JSON.stringify(result), parsedResult: result,
+      durationMs: Date.now() - context.startedAt, success: true,
+    });
+  }
+  result.pairsPersisted = true;
+  const metadata = runMetadata(result);
+  const timestamp = completedAt || result.matchedAt || new Date(context.startedAt).toISOString();
+  if (kind === 'external') return {
+    ...metadata, job: context.externalJob, results: result.results,
+    candidateCount: context.externalCandidates.length, model: result.model || null, method: result.method,
+    pairsPersisted: true, matchedAt: result.matchedAt,
+    durationMs: Math.max(0, Date.parse(completedAt || new Date().toISOString()) - context.startedAt), timestamp,
+  };
+  if (!hasHistory) return result;
+  return {
+    ...metadata, id: history.lastInsertRowid, jobTitle: context.title, results: result,
+    candidateCount: kind === 'ai-run' ? context.selectedCount : candidates.length,
+    ...(kind === 'matrix' || direction === 'candidate_to_jobs' ? { jobCount: jobs.length } : {}),
+    ...(kind === 'matrix' ? { pairCount: result.matrix.length } : {}),
+    ...(kind === 'ai-run' ? { jobId: context.jobId } : { engine }),
+    ...(direction ? { direction } : {}), timestamp,
+  };
+}
+
+/**
+ * @swagger
+ * /matching/runs/{runId}:
+ *   get:
+ *     summary: Eigenen dauerhaften Matching-Lauf und dessen Abschluss laden
+ *     description: Eigentuemern und aktuell gespeicherten Administratoren vorbehalten. Abschluss-Polling behaelt die urspruengliche Erfolgsform unter resultPayload, ohne doppelte Historie oder Paarwrites. Kein erneuter Matching-POST notwendig.
+ *     tags: [Matching]
+ *     parameters:
+ *       - in: path
+ *         name: runId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Laufstatus mit optionalem Abschluss
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/MatchingRunStatus' }
+ *       400: { description: Ungueltige Lauf-ID }
+ *       401: { description: Gueltiger bestehender Benutzer erforderlich }
+ *       404: { description: Lauf unbekannt, geloescht oder nicht zugreifbar }
+ */
+router.get('/runs/:runId', async (req, res) => {
+  try {
+    const { runId } = req.params;
+    if (!RUN_ID.test(runId)) throw userError('Ungueltige Matching-Lauf-ID', 400);
+    const { data } = await graphRagRequest(req, `/matching/runs/${runId}`);
+    const row = db.prepare(`SELECT client_context FROM matching_runs
+      WHERE id = ? AND (actor_user_id = ? OR EXISTS (
+        SELECT 1 FROM users WHERE id = ? AND role = 'admin'
+      )) AND error_code IS DISTINCT FROM 'source_deleted'`)
+      .get(runId, req.user?.id, req.user?.id);
+    if (!row) throw userError('Matching-Anfrage nicht gefunden', 404);
+    const context = row.client_context;
+    const response = { ...data, ...runMetadata({ runId }) };
+    if (data.resultPayload && context) {
+      if (data.resultPayload.runId !== runId || data.resultPayload.pairsPersisted !== true) {
+        throw userError('Unvollstaendiges gespeichertes Matching-Ergebnis', 502);
+      }
+      const method = context.kind.startsWith('ai-') ? 'ai' : 'vector';
+      response.resultPayload = finishMatching(req,
+        tagMatchingResponse(data.resultPayload, method, ['vector', 'matrix'].includes(context.kind) ? 'matrix' : 'results'),
+        context, data.updatedAt);
+    }
+    res.json(response);
+  } catch (error) {
+    console.error('Error reading matching run:', error);
+    res.status(error.status || 500).json({ error: 'Matching-Lauf konnte nicht geladen werden', details: error.message });
+  }
+});
 
 function buildJobDescription(job) {
   const parts = [];
@@ -605,15 +768,19 @@ async function runVectorMatch(req, { direction = 'job_to_candidates', jobId, job
     if (jobs.length === 0) throw userError(`Keine Stelle konnte nach Neo4j übertragen werden: ${[...jobErrors.values()][0]}`);
 
     const maps = { jobsByUuid: byUuid(allJobs), candidatesByUuid: byUuid([candidate]) };
+    req.matchingContext = matchingContext('vector', {
+      jobs: allJobs, candidates: [candidate], direction, engine,
+      title: `Bewerber → alle Stellen: ${candidate.name || 'Unbenannter Bewerber'}`,
+      description: `Vector-Matching (${engine}) für ${candidate.name || 'Unbenannter Bewerber'}`,
+      missing: describeMissing({ ...maps, jobErrors, skippedJobs }),
+    });
     let graphRagResult;
     try {
       graphRagResult = await callGraphRagMatching(req, endpoint, { jobIds: jobs.map(job => job.uuid), cvIds: [candidate.uuid], engine });
     } catch (error) {
       throw explainGraphRagMiss(error, maps);
     }
-    const remapped = remapByUuid(graphRagResult, maps);
-    remapped.missing = describeMissing({ graphRagResult, ...maps, jobErrors, skippedJobs });
-    return { direction, candidate, jobs: allJobs, graphRagResult: remapped };
+    return { graphRagResult };
   }
 
   const job = (jobId !== undefined && jobId !== null && resolveRecords('jobs', [jobId]).get(String(jobId))) || getJobByTitle(jobTitle);
@@ -636,15 +803,19 @@ async function runVectorMatch(req, { direction = 'job_to_candidates', jobId, job
   }
 
   const maps = { jobsByUuid: byUuid([job]), candidatesByUuid: byUuid(allCandidates) };
+  req.matchingContext = matchingContext('vector', {
+    jobs: [job], candidates: allCandidates, direction, engine, jobId: job.id,
+    title: `Stelle → Kandidaten: ${job.title || 'Unbenannte Stelle'}`,
+    description: `Vector-Matching (${engine}) für ${job.title || 'Unbenannte Stelle'}`,
+    missing: describeMissing({ ...maps, candidateErrors, skippedCandidates }),
+  });
   let graphRagResult;
   try {
     graphRagResult = await callGraphRagMatching(req, endpoint, { jobIds: [job.uuid], cvIds: candidates.map(c => c.uuid), engine });
   } catch (error) {
     throw explainGraphRagMiss(error, maps);
   }
-  const remapped = remapByUuid(graphRagResult, maps);
-  remapped.missing = describeMissing({ graphRagResult, ...maps, candidateErrors, skippedCandidates });
-  return { direction, job, candidates: allCandidates, graphRagResult: remapped };
+  return { graphRagResult };
 }
 
 function sanitizeExternalPayload({ job, candidates }) {
@@ -655,12 +826,13 @@ function sanitizeExternalPayload({ job, candidates }) {
 
 function normalizeExternalCandidates(candidates) {
   return candidates.map((candidate, index) => ({
-    id: index + 1,
-    externalId: String(candidate.id || `candidate-${index + 1}`),
+    id: candidate.id ?? null,
+    externalId: String(candidate.id ?? ''),
     name: candidate.name || `Kandidat ${index + 1}`,
     location: candidate.location,
     experience: candidate.experience,
     skills: candidate.skills,
+    has_skill: candidate.has_skill ?? candidate.skills,
     education: candidate.education,
     desired_salary: candidate.desired_salary,
     availability: candidate.availability,
@@ -694,8 +866,11 @@ function normalizeExternalCandidates(candidates) {
  *             schema:
  *               $ref: '#/components/schemas/ExternalMatchingResponse'
  *       400: { description: Ungueltige Eingabe }
+ *       202: { $ref: '#/components/responses/MatchingPending' }
+ *       402: { description: Credits fuer eine eigene Neuberechnung fehlen; Hits und Joins sind kostenlos }
  *       401: { description: API-Key fehlt oder ist ungueltig }
- *       503: { description: KI-Host nicht erreichbar oder externe API nicht konfiguriert }
+ *       422: { description: Gespeicherte IDs oder vorbereitete Job-Skills fehlen }
+ *       503: { description: Skillbewertung oder Paarpersistenz fehlgeschlagen }
  */
 router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) => {
   const startTime = Date.now();
@@ -712,6 +887,7 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
       title: sanitizedJob.title || 'Unbenannte Stelle',
       description: sanitizedJob.description,
       requirements: sanitizedJob.requirements,
+      required_skills: sanitizedJob.required_skills ?? sanitizedJob.skills,
       location: sanitizedJob.location,
       type: sanitizedJob.type,
     };
@@ -721,45 +897,22 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
       return res.status(400).json({ error: 'Stellentitel, Beschreibung oder Anforderungen sind erforderlich' });
     }
 
+    req.matchingContext = matchingContext('external', {
+      jobs: [...resolveRecords('jobs', [normalizedJob.id]).values()],
+      candidates: [...resolveRecords('candidates', normalizedCandidates.map(row => row.id)).values()],
+      externalJob: { externalJobId: normalizedJob.id, title: normalizedJob.title },
+      externalCandidates: normalizedCandidates.map(({ id, externalId, name }) => ({ id, externalId, name })),
+      title: normalizedJob.title, startedAt: startTime,
+    });
     const graphRagResult = await callGraphRagMatching(req, '/match/external/run', {
       job: normalizedJob,
       candidates: normalizedCandidates,
       weights,
       options,
     });
-
-    const byInternalId = new Map(normalizedCandidates.map(candidate => [candidate.id, candidate]));
-    const results = (graphRagResult.results || []).map((row) => {
-      const candidate = byInternalId.get(Number(row.candidateId));
-      return {
-        externalCandidateId: candidate?.externalId || String(row.candidateId),
-        candidateName: candidate?.name || row.candidateName,
-        score: row.score,
-        strengths: row.strengths || [],
-        weaknesses: row.weaknesses || [],
-        summary: row.summary || '',
-      };
-    });
-
-    const durationMs = Date.now() - startTime;
-    logAudit(req, 'external-matching', 'Matching', null, normalizedJob.title, {
-      candidateCount: normalizedCandidates.length,
-      topScore: results[0]?.score ?? null,
-      durationMs,
-    });
-
-    res.json({
-      job: {
-        externalJobId: normalizedJob.id,
-        title: normalizedJob.title,
-      },
-      results,
-      candidateCount: normalizedCandidates.length,
-      model: graphRagResult.model || null,
-      durationMs,
-      timestamp: new Date().toISOString(),
-    });
+    res.json(finishMatching(req, graphRagResult, req.matchingContext));
   } catch (error) {
+    if (sendMatchingPending(res, error)) return;
     console.error('Error running external matching:', error);
     res.status(error.status || (error.name === 'AbortError' ? 504 : 500)).json({
       error: error.name === 'AbortError' ? 'KI-Timeout beim externen Matching' : 'Fehler beim externen Matching',
@@ -772,118 +925,46 @@ router.post('/external/run', apiKeyAuth, matchingRateLimiter, async (req, res) =
  * @swagger
  * /matching/run:
  *   post:
- *     summary: KI-Matching starten
+ *     summary: Unabhaengiges AI-Matching fuer explizite gespeicherte Paare
  *     tags: [Matching]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
+ *             required: [jobId, candidateIds]
  *             properties:
- *               jobDescription: { type: string, description: Stellenbeschreibung }
- *               jobTitle: { type: string }
- *               candidateIds: { type: array, items: { type: integer }, description: Optional - sonst alle Bewerber }
+ *               jobId: { oneOf: [{ type: integer }, { type: string }], description: Gespeicherte ID oder UUID der Stelle }
+ *               candidateIds: { type: array, minItems: 1, maxItems: 20, items: { oneOf: [{ type: integer }, { type: string }] }, description: Explizite gespeicherte Profil-IDs oder UUIDs }
  *     responses:
  *       200: { description: Matching-Ergebnis mit Scores }
- *       400: { description: Keine Beschreibung oder keine Bewerber }
+ *       202: { $ref: '#/components/responses/MatchingPending' }
+ *       402: { description: Credits fuer eine eigene AI-Neuberechnung fehlen }
+ *       400: { description: Keine explizite gespeicherte Paarauswahl }
  *       502: { description: Externes Matching fehlgeschlagen }
  */
 router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
   try {
-    const { jobDescription, jobTitle, candidateIds, candidateId, candidateNames, candidateName, weights, jobId } = req.body;
-
+    const { candidateIds, candidateId, weights, jobId } = req.body;
     const normalizedCandidateIds = Array.isArray(candidateIds)
       ? candidateIds
       : (candidateId != null ? [candidateId] : []);
-    const normalizedCandidateNames = Array.isArray(candidateNames)
-      ? candidateNames
-      : (candidateName ? [candidateName] : []);
-
-    const jobRecord = jobId
-      ? (getJobs([jobId])[0] || null)
-      : (jobTitle ? getJobByTitle(jobTitle) || null : null);
-
-    const resolvedJob = jobRecord
-      ? {
-          ...jobRecord,
-          description: buildJobDescription(jobRecord),
-        }
-      : {
-          id: jobId || null,
-          title: jobTitle || 'Unbenannte Stelle',
-          description: (jobDescription || '').trim(),
-          requirements: null,
-          skills: null,
-          location: null,
-          type: null,
-        };
-
-    if (!resolvedJob.id && !resolvedJob.description) {
-      return res.status(400).json({ error: 'jobId oder Stellenbeschreibung ist erforderlich' });
+    if (jobId == null || !String(jobId).trim() || normalizedCandidateIds.length === 0) {
+      return res.status(400).json({ error: 'Gespeicherte jobId und explizite candidateIds sind erforderlich' });
     }
-
-    let candidates = getCandidates(normalizedCandidateIds);
-    if (candidates.length === 0) {
-      candidates = getCandidatesByNames(normalizedCandidateNames);
-    }
-
-    if (candidates.length === 0) {
-      return res.status(400).json({ error: 'Keine Bewerber vorhanden' });
-    }
-
-    const { prompt, raw, matchingResults, model: OLLAMA_MODEL, durationMs: matchingDuration } = await runAiMatchingCore({
-      resolvedJob,
-      candidates,
+    const jobRecord = resolveRecords('jobs', [jobId]).get(String(jobId).trim());
+    if (!jobRecord) return res.status(404).json({ error: 'Gespeicherte Stelle nicht gefunden' });
+    req.matchingContext = matchingContext('ai-run', {
+      jobs: [jobRecord], jobId: jobRecord.id, title: jobRecord.title, description: buildJobDescription(jobRecord),
+      prompt: { jobId: jobRecord.id, candidateIds: normalizedCandidateIds, weights },
+    });
+    const matchingResults = await runSelectedAiPairs(req, {
+      pairs: normalizedCandidateIds.map(id => ({ jobId: jobRecord.id, candidateId: id })),
       weights,
     });
-
-    const storedJobId = Number.isFinite(Number(resolvedJob.id || jobId)) ? Number(resolvedJob.id || jobId) : null;
-    const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(resolvedJob.description || buildJobDescription(resolvedJob), resolvedJob.title, JSON.stringify(matchingResults), JSON.stringify(buildMatchingSummary(matchingResults)), storedJobId);
-
-    // Nur Stellen aus dem Tool gehoeren in die N:N-Uebersicht; ein Matching
-    // gegen eine frei eingegebene Beschreibung hat keine Stelle.
-    if (jobRecord) {
-      recordMatchingPairsSafely(db, 'ai', matchingResults.results, {
-        matchingResultId: saveResult.lastInsertRowid,
-        jobId: jobRecord.id,
-        candidateIds: candidates.map(candidate => candidate.id),
-        model: OLLAMA_MODEL,
-      });
-    } else {
-      recordMatchingPairsSafely(db, 'ai', [], { matchingResultId: saveResult.lastInsertRowid });
-    }
-
-    logAiCall({
-      userId: req.user?.id,
-      feature: 'matching',
-      model: OLLAMA_MODEL,
-      prompt,
-      response: raw,
-      parsedResult: matchingResults,
-      durationMs: matchingDuration,
-      success: true,
-    });
-
-    logAudit(req, 'ki-matching', 'Matching', saveResult.lastInsertRowid, resolvedJob.title, {
-      candidateCount: candidates.length,
-      jobId: storedJobId,
-      topScore: matchingResults.results?.[0]?.score,
-      durationMs: matchingDuration,
-      model: OLLAMA_MODEL,
-    });
-
-    res.json({
-      id: saveResult.lastInsertRowid,
-      jobTitle: resolvedJob.title,
-      results: matchingResults,
-      candidateCount: candidates.length,
-      jobId: storedJobId,
-      timestamp: new Date().toISOString(),
-    });
+    res.json(finishMatching(req, matchingResults, req.matchingContext));
   } catch (error) {
+    if (sendMatchingPending(res, error)) return;
     console.error('Error running matching:', error);
     const statusCode = error.status || (error.name === 'AbortError' ? 504 : 500);
     res.status(statusCode).json({ 
@@ -897,15 +978,12 @@ router.post('/run', matchingRateLimiter, promptGuard('matching'), async (req, re
   }
 });
 
-router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
-  try {
-    const { pairs, weights } = req.body;
-
+async function runSelectedAiPairs(req, { pairs, weights }) {
     if (!Array.isArray(pairs) || pairs.length === 0) {
-      return res.status(400).json({ error: 'Mindestens eine Paarung ist erforderlich' });
+      throw userError('Mindestens eine Paarung ist erforderlich', 400);
     }
     if (pairs.length > 20) {
-      return res.status(400).json({ error: 'Maximal 20 Paarungen pro Anfrage erlaubt' });
+      throw userError('Maximal 20 Paarungen pro Anfrage erlaubt', 400);
     }
 
     // IDs serverseitig aufloesen (PostgreSQL-ID oder UUID) und eindeutig an
@@ -923,31 +1001,37 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
         resolvedPairs.push({ jobId: String(job.id), jobTitle: job.title, candidateId: String(candidate.id), candidateName: candidate.name });
       }
     }
+    req.matchingContext = matchingContext(req.matchingContext?.kind || 'ai-selected', {
+      ...req.matchingContext, jobs: [...jobMap.values()], candidates: [...candidateMap.values()],
+      localFailures, selectedCount: pairs.length,
+    });
     if (resolvedPairs.length === 0) {
-      return res.json({ results: [], failures: localFailures, selectedCount: pairs.length, matchedCount: 0, failedCount: localFailures.length });
+      return { method: 'ai', results: [], failures: [], selectedCount: pairs.length, matchedCount: 0, failedCount: 0 };
     }
     // Manuell angelegte Bewerber erhalten dabei ihren CV-Text (ohne ihn findet
     // GraphRAG sie fuer das KI-Matching nicht).
     await ensureGraphNodes(db, req, { candidateIds: resolvedPairs.map(pair => Number(pair.candidateId)) });
 
-    const remoteResult = await callGraphRagMatching(req, '/match/ki_match_pairs', { pairs: resolvedPairs, weights });
-    const graphRagResult = {
-      ...remoteResult,
-      failures: [...(remoteResult?.failures || []), ...localFailures],
-      selectedCount: pairs.length,
-      failedCount: (remoteResult?.failedCount ?? remoteResult?.failures?.length ?? 0) + localFailures.length,
-    };
+    return callGraphRagMatching(req, '/match/ki_match_pairs', { pairs: resolvedPairs, weights });
+}
 
-    recordMatchingPairsSafely(db, 'ai', graphRagResult?.results, { model: graphRagResult?.model || null });
-
-    logAudit(req, 'ki-matching-batch', 'Matching', null, 'KI-Matching selektierte Paarungen', {
-      selectedCount: pairs.length,
-      matchedCount: graphRagResult?.matchedCount ?? graphRagResult?.results?.length ?? 0,
-      failedCount: graphRagResult?.failedCount ?? graphRagResult?.failures?.length ?? 0,
-    });
-
-    res.json(graphRagResult);
+/**
+ * @swagger
+ * /matching/run-selected:
+ *   post:
+ *     summary: AI-Gesamtbewertung fuer 1 bis 20 explizite gespeicherte Paare
+ *     description: Delegiert an GraphRAG. method=ai; score 0 bis 100; qualified=null. Keine Skill-Gates oder Hybridformel. Einzelne Paarfehler stehen in failures.
+ *     tags: [Matching]
+ *     responses:
+ *       200: { description: Methodentreue Ergebnisse mit Cache- und Paarzeitmetadaten }
+ *       202: { $ref: '#/components/responses/MatchingPending' }
+ */
+router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
+  try {
+    const graphRagResult = await runSelectedAiPairs(req, req.body);
+    res.json(finishMatching(req, graphRagResult, req.matchingContext));
   } catch (error) {
+    if (sendMatchingPending(res, error)) return;
     console.error('Error running selected matching batch:', error);
     res.status(error.status || 500).json({
       error: error.name === 'AbortError'
@@ -962,8 +1046,11 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
  * @swagger
  * /matching/run-matrix:
  *   post:
- *     summary: Matrix-Matching starten (alle Stellen gegen alle Bewerber oder Bewerber gegen alle Stellen)
+ *     summary: Zentrale Skill-Abdeckung als Matrix (method=vector, Score 0 bis 100)
  *     tags: [Matching]
+ *     responses:
+ *       200: { description: Matrix mit Historien-ID und Cache-Metadaten }
+ *       202: { $ref: '#/components/responses/MatchingPending' }
  */
 router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
   const { mode = 'all_jobs_all_candidates', jobIds, candidateIds, weights, engine = 'python' } = req.body;
@@ -979,6 +1066,13 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       return res.status(400).json({ error: 'Ungültige Vector-Matching-Engine' });
     }
 
+    req.matchingContext = matchingContext('matrix', {
+      jobs, candidates, engine, mode,
+      title: mode === 'candidate_to_jobs'
+        ? `Bewerber → alle Stellen (${candidates.length} × ${jobs.length})`
+        : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber, ${engine === 'neo4j' ? 'Neo4j' : 'Python'})`,
+      description: `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
+    });
     const graphRagResult = await callGraphRagMatching(req, engine === 'neo4j' ? '/match/external/matrix_neo4j' : '/match/external/matrix', {
       mode,
       jobs: jobs.map((job) => ({
@@ -986,7 +1080,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
         title: job.title,
         description: job.description,
         requirements: job.requirements,
-        required_skills: toRequiredSkills(job.skills || job.requirements || job.description),
+        required_skills: job.skills,
         location: job.location,
         type: job.type,
       })),
@@ -1002,53 +1096,14 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
         languages: candidate.languages,
         certificates: candidate.certificates,
         mobility: candidate.mobility,
-        has_skill: splitSkillValues(candidate.skills),
+        has_skill: candidate.skills,
       })),
       weights,
     });
 
-    const resultTitle = mode === 'candidate_to_jobs'
-      ? `Bewerber → alle Stellen (${candidates.length} × ${jobs.length})`
-      : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber, ${engine === 'neo4j' ? 'Neo4j' : 'Python'})`;
-
-    const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
-      resultTitle,
-      JSON.stringify(compactStoredMatchingResult(graphRagResult, { engine })),
-      null,
-      null
-    );
-
-    // Die Historie behaelt nur die besten Paarungen; fuer den N:N-Export
-    // werden hier alle Paarungen des Laufs gespeichert.
-    recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
-      matchingResultId: saveResult.lastInsertRowid,
-      jobIds: jobs.map(job => job.id),
-      candidateIds: candidates.map(candidate => candidate.id),
-      model: graphRagResult.model || null,
-      engine,
-    });
-
-    logAudit(req, 'ki-matching-matrix', 'Matching', saveResult.lastInsertRowid, resultTitle, {
-      jobCount: jobs.length,
-      candidateCount: candidates.length,
-      pairCount: graphRagResult.matrix?.length || 0,
-    });
-
-    res.json({
-      id: saveResult.lastInsertRowid,
-      jobTitle: resultTitle,
-      results: graphRagResult,
-      jobCount: jobs.length,
-      candidateCount: candidates.length,
-      pairCount: graphRagResult.matrix?.length || 0,
-      engine,
-      timestamp: new Date().toISOString(),
-    });
+    res.json(finishMatching(req, graphRagResult, req.matchingContext));
   } catch (error) {
+    if (sendMatchingPending(res, error)) return;
     console.error('Error running matrix matching:', error);
     res.status(error.status || 500).json({
       error: error.name === 'AbortError'
@@ -1065,8 +1120,11 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
  * @swagger
  * /matching/vectormatch:
  *   post:
- *     summary: Vector-Matching gegen eine ausgewählte Stelle und Kandidaten
+ *     summary: Zentrale Skill-Abdeckung in beiden Richtungen (method=vector)
  *     tags: [Matching]
+ *     responses:
+ *       200: { description: Skill-Ergebnisse mit Historien-ID und Cache-Metadaten }
+ *       202: { $ref: '#/components/responses/MatchingPending' }
  */
 router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
   try {
@@ -1084,47 +1142,8 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
         return res.status(400).json({ error: 'candidateId oder candidateName ist erforderlich' });
       }
 
-      const { candidate, jobs, graphRagResult } = await runVectorMatch(req, { direction, candidateId, candidateName, candidateIds, engine });
-      const resultTitle = `Bewerber → alle Stellen: ${candidate?.name || 'Unbenannter Bewerber'}`;
-
-      const matchingResult = { ...graphRagResult, direction };
-      const saveResult = db.prepare(`
-        INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(
-        `Vector-Matching (${engine}) für ${candidate?.name || 'Unbenannter Bewerber'}`,
-        resultTitle,
-        JSON.stringify(compactStoredMatchingResult(graphRagResult, { direction, engine })),
-        null,
-        null,
-      );
-
-      recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
-        matchingResultId: saveResult.lastInsertRowid,
-        candidateId: candidate?.id ?? null,
-        jobIds: jobs.map(job => job.id),
-        model: graphRagResult.model || null,
-        engine,
-      });
-
-      logAudit(req, 'ki-matching-vector', 'Matching', saveResult.lastInsertRowid, resultTitle, {
-        engine,
-        direction,
-        candidateId: candidate?.id || null,
-        jobCount: jobs.length,
-        topScore: graphRagResult.matrix?.[0]?.score ?? null,
-      });
-
-      return res.json({
-        id: saveResult.lastInsertRowid,
-        jobTitle: resultTitle,
-        results: matchingResult,
-        candidateCount: 1,
-        jobCount: jobs.length,
-        engine,
-        direction,
-        timestamp: new Date().toISOString(),
-      });
+      const { graphRagResult } = await runVectorMatch(req, { direction, candidateId, candidateName, candidateIds, engine });
+      return res.json(finishMatching(req, graphRagResult, req.matchingContext));
     }
 
     if (!jobId && !jobTitle) {
@@ -1134,46 +1153,10 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
       return res.status(400).json({ error: 'Mindestens ein Bewerber ist erforderlich' });
     }
 
-    const { job, graphRagResult } = await runVectorMatch(req, { direction, jobId, jobTitle, candidateIds, engine });
-    const resultTitle = `Stelle → Kandidaten: ${job.title || 'Unbenannte Stelle'}`;
-    const storedJobId = Number.isFinite(Number(job.id)) ? Number(job.id) : null;
-
-    const matchingResult = { ...graphRagResult, direction };
-    const saveResult = db.prepare(`
-      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      `Vector-Matching (${engine}) für ${job.title || 'Unbenannte Stelle'}`,
-      resultTitle,
-      JSON.stringify(compactStoredMatchingResult(graphRagResult, { direction, engine })),
-      null,
-      storedJobId,
-    );
-
-    recordMatchingPairsSafely(db, 'vector', graphRagResult.matrix, {
-      matchingResultId: saveResult.lastInsertRowid,
-      jobId: storedJobId,
-      model: graphRagResult.model || null,
-      engine,
-    });
-
-    logAudit(req, 'ki-matching-vector', 'Matching', saveResult.lastInsertRowid, resultTitle, {
-      engine,
-      jobId: storedJobId,
-      candidateCount: candidateIds.length,
-      topScore: graphRagResult.matrix?.[0]?.score ?? null,
-    });
-
-    res.json({
-      id: saveResult.lastInsertRowid,
-      jobTitle: resultTitle,
-      results: { ...graphRagResult, direction },
-      candidateCount: candidateIds.length,
-      engine,
-      direction,
-      timestamp: new Date().toISOString(),
-    });
+    const { graphRagResult } = await runVectorMatch(req, { direction, jobId, jobTitle, candidateIds, engine });
+    res.json(finishMatching(req, graphRagResult, req.matchingContext));
   } catch (error) {
+    if (sendMatchingPending(res, error)) return;
     console.error('Error running vector matching:', error);
     res.status(error.status || 500).json({
       error: error.userMessage
@@ -1192,12 +1175,18 @@ router.post('/vectormatch', matchingRateLimiter, promptGuard('matching'), async 
  * @swagger
  * /matching/vectormatch-selected:
  *   post:
- *     summary: 3D-Matching fuer ausgewaehlte Paarungen (Bewerber x Stelle)
+ *     summary: Skill-Abdeckung fuer ausgewaehlte Paarungen (kein AI-Matching)
  *     description: |
  *       Sucht Bewerber und Stellen per UUID in Neo4j, holt fehlende Eintraege
  *       vorher nach und liefert Teilergebnisse plus failures fuer Paarungen,
  *       die nicht gematcht werden konnten.
+ *       Mehrere Stellen bilden einen dauerhaften Sammelauftrag ohne eigene
+ *       Gebuehr. Je Stellen-Teillauf mit eigener Neuberechnung bleibt der
+ *       bisherige Tarif von 0,10 Credits erhalten; Hits und Joins kosten nichts.
  *     tags: [Matching]
+ *     responses:
+ *       200: { description: Vollstaendige Auswahl mit Ergebnissen und expliziten Paarfehlern }
+ *       202: { $ref: '#/components/responses/MatchingPending' }
  */
 router.post('/vectormatch-selected', matchingRateLimiter, async (req, res) => {
   try {
@@ -1227,8 +1216,7 @@ router.post('/vectormatch-selected', matchingRateLimiter, async (req, res) => {
       jobIds: [...groups.keys()],
     });
 
-    const results = [];
-    let model = null;
+    const selectedPairs = [];
     for (const { job, candidates: candidateGroup } of groups.values()) {
       const failure = (candidate, error) => failures.push({ jobId: job.id, jobTitle: job.title, candidateId: candidate.id, candidateName: candidate.name, error });
       if (jobErrors.has(Number(job.id))) {
@@ -1241,28 +1229,17 @@ router.post('/vectormatch-selected', matchingRateLimiter, async (req, res) => {
         else candidates.push(candidate);
       }
       if (candidates.length === 0) continue;
-      const maps = { jobsByUuid: byUuid([job]), candidatesByUuid: byUuid(candidates) };
-      try {
-        const graphRagResult = await callGraphRagMatching(req, '/match/vectormatch', { jobIds: [job.uuid], cvIds: candidates.map(c => c.uuid), engine });
-        model = graphRagResult.model || model;
-        results.push(...remapByUuid(graphRagResult, maps).matrix);
-        for (const uuid of graphRagResult.missingCandidateIds || []) {
-          const candidate = maps.candidatesByUuid.get(String(uuid));
-          if (candidate) failure(candidate, 'Kein Eintrag in Neo4j');
-        }
-      } catch (rawError) {
-        const error = explainGraphRagMiss(rawError, maps);
-        for (const candidate of candidates) failure(candidate, error.message);
-      }
+      selectedPairs.push(...candidates.map(candidate => ({ jobId: job.id, candidateId: candidate.id })));
     }
-
-    results.sort((left, right) => (Number(right.score) || 0) - (Number(left.score) || 0));
-    recordMatchingPairsSafely(db, 'vector', results, { model, engine });
-    logAudit(req, 'ki-matching-vector', 'Matching', null, '3D-Matching selektierte Paarungen', {
-      engine, selectedCount: pairs.length, matchedCount: results.length, failedCount: failures.length,
+    req.matchingContext = matchingContext('vector-selected', {
+      jobs: [...jobMap.values()], candidates: [...candidateMap.values()], engine, selectedCount: pairs.length,
     });
-    res.json({ mode: 'vector', engine, model, results, failures, selectedCount: pairs.length, matchedCount: results.length, failedCount: failures.length });
+    const graphRagResult = selectedPairs.length ? await callGraphRagMatching(req, '/match/vectormatch-selected', {
+      pairs: selectedPairs, engine, localFailures: failures, selectedCount: pairs.length,
+    }) : { method: 'vector', mode: 'vector', engine, model: null, results: [], failures };
+    res.json(finishMatching(req, graphRagResult, req.matchingContext));
   } catch (error) {
+    if (sendMatchingPending(res, error)) return;
     console.error('Error running selected vector matching:', error);
     res.status(error.status || 500).json({ error: error.userMessage ? error.message : 'Fehler beim 3D-Matching', details: error.details || error.message });
   }

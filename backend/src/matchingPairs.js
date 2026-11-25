@@ -43,12 +43,57 @@ function ensureMatchingPairSchema(db) {
       UNIQUE (method, candidate_id, job_id)
     )
   `);
+  db.exec('ALTER TABLE matching_pair_results ADD COLUMN IF NOT EXISTS qualified BOOLEAN');
+  db.exec('ALTER TABLE matching_pair_results ADD COLUMN IF NOT EXISTS evaluation_id BIGINT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_matching_pairs_method_score ON matching_pair_results (method, score DESC)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_matching_pairs_job ON matching_pair_results (job_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_matching_pairs_run ON matching_pair_results (matching_result_id)');
   // Merkt sich, welche Laeufe der Historie schon uebernommen wurden.
   db.exec('ALTER TABLE matching_results ADD COLUMN IF NOT EXISTS pairs_recorded INTEGER DEFAULT 0');
+  db.exec('ALTER TABLE matching_results ADD COLUMN IF NOT EXISTS matching_run_id UUID');
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_matching_results_matching_run
+    ON matching_results (matching_run_id) WHERE matching_run_id IS NOT NULL`);
   readyDatabases.add(db);
+}
+
+function saveMatchingHistory(db, { runId = null, description, title, result, summary = null, jobId = null }) {
+  ensureMatchingPairSchema(db);
+  return db.transaction(() => {
+    if (runId) {
+      const run = db.prepare(`SELECT id FROM matching_runs
+        WHERE id = ? AND error_code IS DISTINCT FROM 'source_deleted' FOR SHARE`).get(runId);
+      if (!run) throw Object.assign(new Error('Matching-Lauf ist nicht mehr verfuegbar'), { status: 409 });
+    }
+    const inserted = db.prepare(`
+      INSERT INTO matching_results (job_description, job_title, results, results_summary, job_id, matching_run_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (matching_run_id) WHERE matching_run_id IS NOT NULL DO NOTHING RETURNING id
+    `).get(description, title, JSON.stringify(result), summary ? JSON.stringify(summary) : null, jobId, runId);
+    if (inserted) return { lastInsertRowid: inserted.id, created: true };
+    const existing = db.prepare('SELECT id FROM matching_results WHERE matching_run_id = ?').get(runId);
+    if (!existing) throw new Error('Matching-Historie konnte nicht gelesen werden');
+    return { lastInsertRowid: existing.id, created: false };
+  })();
+}
+
+function rememberMatchingRequest(db, runId, actorId, context) {
+  return db.transaction(() => {
+    const actor = db.prepare('SELECT id FROM users WHERE id = ? FOR KEY SHARE').get(actorId);
+    if (!actor) throw Object.assign(new Error('Matching-Benutzer nicht mehr vorhanden'), { status: 401 });
+    for (const [table, refs] of [['candidates', context.candidate_refs], ['jobs', context.job_refs]]) {
+      const ids = [...new Set(refs)];
+      if (!ids.length) continue;
+      const rows = db.prepare(`SELECT id FROM ${table}
+        WHERE id IN (${ids.map(() => '?').join(',')}) FOR KEY SHARE`).all(...ids);
+      if (rows.length !== ids.length) {
+        throw Object.assign(new Error('Matching-Quelldaten wurden zwischenzeitlich geloescht'), { status: 409 });
+      }
+    }
+    const run = db.prepare(`UPDATE matching_runs SET client_context = COALESCE(client_context, ?::jsonb)
+      WHERE id = ? AND actor_user_id = ? AND error_code IS DISTINCT FROM 'source_deleted' RETURNING id`)
+      .get(JSON.stringify(context), runId, actorId);
+    if (!run) throw Object.assign(new Error('Matching-Lauf ist nicht verfuegbar'), { status: 409 });
+  })();
 }
 
 // Scores kommen als 0-100 (Ganzzahl) oder als Anteil 0-1 (Kommazahl).
@@ -247,9 +292,15 @@ const toIdSet = (values) => (Array.isArray(values) && values.length
  *   allowNameLookup       - Zuordnung ueber eindeutigen Namen/Titel erlauben
  *   matchingResultId, model, engine, matchedAt
  */
-function recordMatchingPairs(db, method, rows, options = {}) {
+function recordMatchingPairsCore(db, method, rows, options = {}) {
   if (!METHODS.includes(method)) throw new Error(`Unbekannte Matching-Methode "${method}"`);
   ensureMatchingPairSchema(db);
+  if (options.pairsPersisted === true) {
+    if (options.matchingResultId) {
+      db.prepare('UPDATE matching_results SET pairs_recorded = 1 WHERE id = ?').run(options.matchingResultId);
+    }
+    return { stored: 0, skipped: 0 };
+  }
   const list = Array.isArray(rows) ? rows.filter(row => row && typeof row === 'object') : [];
   const { matchingResultId = null, model = null, engine = null } = options;
   const matchedAt = new Date(options.matchedAt || Date.now());
@@ -268,8 +319,10 @@ function recordMatchingPairs(db, method, rows, options = {}) {
       const job = resolver.job(row);
       const score = toPercent(row.score);
       if (!candidate || !job || score === null
+        || (row.method && row.method !== method)
         || (allowedCandidates && !allowedCandidates.has(candidate))
         || (allowedJobs && !allowedJobs.has(job))) {
+        if (options.strict) throw new Error('Matching-Paar kann nicht eindeutig mit gueltigem Score und Methode gespeichert werden');
         skipped += 1;
         continue;
       }
@@ -287,6 +340,7 @@ function recordMatchingPairs(db, method, rows, options = {}) {
         method === 'vector' ? shortText(engine, 50) : null,
         matchingResultId,
         matchedAtIso,
+        method === 'vector' && typeof row.qualified === 'boolean' ? row.qualified : null,
       ]);
     }
 
@@ -294,8 +348,8 @@ function recordMatchingPairs(db, method, rows, options = {}) {
       const result = db.prepare(`
         INSERT INTO matching_pair_results (
           method, candidate_id, job_id, score, hard_skill_score, soft_skill_score,
-          summary, strengths, weaknesses, model, engine, matching_result_id, matched_at
-        ) VALUES ${part.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}
+          summary, strengths, weaknesses, model, engine, matching_result_id, matched_at, qualified
+        ) VALUES ${part.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}
         ON CONFLICT (method, candidate_id, job_id) DO UPDATE SET
           score = EXCLUDED.score,
           hard_skill_score = EXCLUDED.hard_skill_score,
@@ -306,7 +360,9 @@ function recordMatchingPairs(db, method, rows, options = {}) {
           model = EXCLUDED.model,
           engine = EXCLUDED.engine,
           matching_result_id = EXCLUDED.matching_result_id,
-          matched_at = EXCLUDED.matched_at
+          matched_at = EXCLUDED.matched_at,
+          qualified = EXCLUDED.qualified,
+          evaluation_id = NULL
         WHERE matching_pair_results.matched_at <= EXCLUDED.matched_at
       `).run(...part.flat());
       stored += result.changes;
@@ -319,15 +375,14 @@ function recordMatchingPairs(db, method, rows, options = {}) {
   return { stored, skipped };
 }
 
-// Ein fehlgeschlagenes Speichern darf das Matching selbst nicht scheitern
-// lassen; der Lauf wird dann spaeter aus der Historie nachgetragen.
+function recordMatchingPairs(db, method, rows, options = {}) {
+  ensureMatchingPairSchema(db);
+  return db.transaction(() => recordMatchingPairsCore(db, method, rows, options))();
+}
+
+// Deprecated: Produktionsaufrufe melden Schreibfehler, statt Erfolg vorzutäuschen.
 function recordMatchingPairsSafely(db, method, rows, options) {
-  try {
-    return recordMatchingPairs(db, method, rows, options);
-  } catch (error) {
-    console.warn(`Matching-Paarungen (${method}) konnten nicht gespeichert werden:`, error.message);
-    return { stored: 0, skipped: Array.isArray(rows) ? rows.length : 0, error: error.message };
-  }
+  return recordMatchingPairs(db, method, rows, { strict: true, ...options });
 }
 
 const VECTOR_TYPES = new Set(['vectormatch', 'vectormatch_neo4j']);
@@ -341,11 +396,16 @@ function classifyStoredRun(row, parsed) {
       ? parsed.results
       : Array.isArray(parsed?.results?.results) ? parsed.results.results : [];
 
-  let method = 'ai';
-  if (model.startsWith('graph-rag') || parsed?.engine || parsed?.embeddingModel || parsed?.direction
-    || VECTOR_TYPES.has(parsed?.type) || parsed?.mode === 'vectormatch') {
+  const explicitMethod = parsed?.method ?? parsed?.results?.method;
+  if (explicitMethod != null && !METHODS.includes(explicitMethod)) {
+    throw new Error(`Unbekannte gespeicherte Matching-Methode "${explicitMethod}"`);
+  }
+  let method = explicitMethod || 'ai';
+  // Deprecated: Heuristik nur fuer Altlaeufe ohne explizite Methode.
+  if (!explicitMethod && (model.startsWith('graph-rag') || parsed?.engine || parsed?.embeddingModel || parsed?.direction
+    || VECTOR_TYPES.has(parsed?.type) || parsed?.mode === 'vectormatch')) {
     method = 'vector';
-  } else if (!(parsed?.type === 'matrix' && model) && /^(Vector|Matrix)-Matching/i.test(String(row.job_description || ''))) {
+  } else if (!explicitMethod && !(parsed?.type === 'matrix' && model) && /^(Vector|Matrix)-Matching/i.test(String(row.job_description || ''))) {
     method = 'vector';
   }
 
@@ -386,6 +446,7 @@ function backfillMatchingPairs(db) {
       // keine Stelle im Tool und werden nicht zugeordnet.
       fallbackJobId: run.method === 'ai' || direction === 'job_to_candidates' ? row.job_id : null,
       allowNameLookup: run.method === 'vector',
+      strict: false,
     });
     if (result.error) {
       // Nicht endlos neu versuchen; der Lauf bleibt in der Historie sichtbar.
@@ -404,5 +465,7 @@ module.exports = {
   ensureMatchingPairSchema,
   recordMatchingPairs,
   recordMatchingPairsSafely,
+  rememberMatchingRequest,
+  saveMatchingHistory,
   toPercent,
 };

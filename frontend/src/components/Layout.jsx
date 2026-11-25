@@ -23,6 +23,7 @@ const navItems = [
 ]
 
 const adminItems = [
+  { to: '/admin/batches', icon: ClipboardList, labelKey: 'nav.batches' },
   { to: '/admin/users', icon: Shield, labelKey: 'nav.users' },
   { to: '/admin/email', icon: Mail, labelKey: 'nav.email' },
   { to: '/admin/plugins', icon: Wrench, labelKey: 'nav.plugins' },

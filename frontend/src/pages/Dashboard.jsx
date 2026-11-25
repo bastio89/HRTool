@@ -726,7 +726,7 @@ function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
         ) : (
           <div className="space-y-4">
             {matches.map((match) => {
-              const topScore = match.summary?.topScore || 0
+              const topScore = match.summary?.topScore
               return (
                 <Link key={match.id} to={`/matching/results/${match.id}`} className="block">
                   <div className="flex items-center justify-between p-6 rounded-[24px] hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition duration-300 border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50">
@@ -742,7 +742,7 @@ function MatchesAndLocationsWidget({ matches, stats, visibleWidgets, t }) {
                         </p>
                       </div>
                     </div>
-                    <ScoreRing score={topScore} size={68} strokeWidth={5} />
+                    {topScore != null ? <ScoreRing score={topScore} size={68} strokeWidth={5} /> : <span>{t('matching.score_missing')}</span>}
                   </div>
                 </Link>
               )

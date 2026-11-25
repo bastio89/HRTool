@@ -21,6 +21,12 @@ class JobsChImportItem(BaseModel):
     imported: bool = False
     duplicate: bool = False
     error: str | None = None
+    matchingRunId: str | None = None
+    matchingStatus: Literal["queued", "blocked_credits", "not_required", "not_requested"] = "not_requested"
+    matchingStatusUrl: str | None = None
+    preparationStatus: Literal["ready", "required", "not_requested"] = "not_requested"
+    preparationError: str | None = None
+    preparedRevision: str | None = None
 
 
 class JobsChImportResponse(BaseModel):

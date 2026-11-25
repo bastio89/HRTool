@@ -83,6 +83,7 @@ function createMockDb(seed = {}) {
     activities: seed.activities ? [...seed.activities] : [],
     aiLogs: seed.aiLogs ? [...seed.aiLogs] : [],
     matchingResults: seed.matchingResults ? [...seed.matchingResults] : [],
+    matchingRuns: [],
     seq: {
       candidateId: 1,
       candidateFileId: 1,
@@ -96,11 +97,15 @@ function createMockDb(seed = {}) {
 
   const db = {
     __state: state,
+    transactionAsync: async callback => callback(db),
     prepare(sql) {
       const q = normalize(sql);
 
       return {
         get: (...args) => {
+          if (q.includes('FROM matching_runs WHERE import_event_key = ?')) {
+            return state.matchingRuns.find(run => run.import_event_key === args[0]);
+          }
           if (q.includes("to_regclass('public.candidate_texts')")) {
             return { exists: state.candidateTexts.length > 0 ? 'candidate_texts' : null };
           }
@@ -285,6 +290,15 @@ function createMockDb(seed = {}) {
         },
 
         run: (...args) => {
+          if (q.includes('INSERT INTO matching_runs')) {
+            const [key, source, entityType, entityId, actor, stage] = args;
+            const run = {
+              id: `test-run-${state.matchingRuns.length + 1}`, import_event_key: key,
+              source, entity_type: entityType, entity_id: entityId, actor_user_id: actor, stage,
+            };
+            state.matchingRuns.push(run);
+            return { lastInsertRowid: run.id };
+          }
           if (q.includes('INSERT INTO candidates')) {
             const [
               name, email, phone, location, experience, skills,
@@ -399,42 +413,11 @@ function createMockDb(seed = {}) {
           }
 
           if (q.includes('INSERT INTO jobs')) {
-            let graphJobId = null;
-            let company = null;
-            let title;
-            let maybeAboutUs;
-            let maybeDescription;
-            let maybeRequirements;
-            let maybeSkills;
-            let maybeBenefits;
-            let maybeLocation;
-            let maybeType;
-            let maybeStatus;
-            let maybeUrl;
-
-            if (args.length >= 12) {
-              [graphJobId, company, title, maybeAboutUs, maybeDescription, maybeRequirements, maybeSkills, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
-            } else if (args.length >= 11) {
-              [graphJobId, title, maybeAboutUs, maybeDescription, maybeRequirements, maybeSkills, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
-            } else {
-              [title, maybeAboutUs, maybeDescription, maybeRequirements, maybeBenefits, maybeLocation, maybeType, maybeStatus, maybeUrl] = args;
-            }
-
-            const hasExtendedShape = args.length >= 9;
+            const columns = q.match(/INSERT INTO jobs\s*\(([^)]+)\)/i)?.[1];
+            if (!columns) throw new Error(`Unexpected job insert: ${q}`);
             const row = {
               id: state.seq.jobId++,
-              graph_job_id: graphJobId || null,
-              company,
-              title,
-              about_us: hasExtendedShape ? maybeAboutUs : null,
-              description: hasExtendedShape ? maybeDescription : maybeAboutUs,
-              requirements: hasExtendedShape ? maybeRequirements : maybeDescription,
-              skills: hasExtendedShape ? maybeSkills : null,
-              benefits: hasExtendedShape ? maybeBenefits : null,
-              location: hasExtendedShape ? maybeLocation : maybeRequirements,
-              type: hasExtendedShape ? maybeType : maybeLocation,
-              status: hasExtendedShape ? maybeStatus : maybeType,
-              url: hasExtendedShape ? maybeUrl : maybeStatus,
+              ...Object.fromEntries(columns.split(',').map((column, index) => [column.trim(), args[index]])),
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             };
@@ -2361,5 +2344,243 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
 
     expect(response.status).toBe(503);
     expect(response.body.error).toMatch(/KI-Host nicht erreichbar/i);
+  });
+});
+
+describe('Durable CV and CSV import transactions against isolated PostgreSQL', () => {
+  let db;
+  let app;
+  let actorId;
+  let profile;
+  let marker;
+  let baseMarker;
+
+  beforeAll(() => {
+    jest.resetModules();
+    jest.dontMock('../database');
+    jest.doMock('../routes/audit', () => ({ logAudit: jest.fn() }));
+    jest.doMock('../aiLogger', () => ({ logAiCall: jest.fn() }));
+    jest.doMock('pdf-parse', () => jest.fn(async () => ({
+      text: 'Imported CV with Java and SQL experience and a complete work history.',
+    })));
+    db = require('../database');
+    baseMarker = `atomic-node-import-${require('node:crypto').randomUUID()}`;
+    actorId = db.prepare(`
+      INSERT INTO users (username, password_hash, display_name, role)
+      VALUES (?, 'test-only', 'Import Test', 'recruiter')
+    `).run(baseMarker).lastInsertRowid;
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = { id: actorId, username: baseMarker, role: 'recruiter' };
+      next();
+    });
+    app.use('/api/cv-parser', require('../routes/cv-parser'));
+    app.use('/api/candidates', require('../routes/candidates'));
+  });
+
+  beforeEach(() => {
+    marker = `${baseMarker}-${require('node:crypto').randomUUID()}`;
+    profile = {
+      name: marker, birth_date: '1990-02-14',
+      skills: [{ name: 'Java', category: 'HardSkill' }, { name: 'Communication', category: 'SoftSkill' }],
+      work_history: [{ employer: 'Test Employer', position: 'Developer' }],
+      education_history: [{ institution: 'Test University', degree: 'BSc' }],
+    };
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    global.fetch = jest.fn(async (url, options) => {
+      const path = new URL(String(url)).pathname;
+      if (path === '/ingest/candidate') {
+        expect(new URL(String(url)).searchParams.get('persist')).toBe('0');
+        return { ok: true, json: async () => ({ id: '', profile, persisted: false }) };
+      }
+      if (path === '/sync/candidates') {
+        const body = JSON.parse(options.body);
+        return { ok: true, json: async () => ({ synced: body.candidate_ids.length, failed: 0, errors: [] }) };
+      }
+      throw new Error(`Unexpected provider or matching call: ${path}`);
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    const candidates = db.prepare('SELECT id FROM candidates WHERE name LIKE ?').all(`${baseMarker}%`);
+    db.prepare('DELETE FROM matching_runs WHERE actor_user_id = ?').run(actorId);
+    for (const candidate of candidates) {
+      db.prepare('DELETE FROM candidate_texts WHERE candidate_id = ?').run(String(candidate.id));
+      db.prepare('DELETE FROM candidates WHERE id = ?').run(candidate.id);
+    }
+    global.fetch = nativeFetch;
+  });
+
+  afterAll(() => {
+    db.prepare('DELETE FROM users WHERE id = ?').run(actorId);
+    db.close();
+    jest.dontMock('../database');
+    jest.dontMock('pdf-parse');
+    if (nativeGraphRagBaseUrl === undefined) delete process.env.GRAPHRAG_BASE_URL;
+    else process.env.GRAPHRAG_BASE_URL = nativeGraphRagBaseUrl;
+  });
+
+  function upload(persist = '1') {
+    return request(app).post(`/api/cv-parser/parse?persist=${persist}`)
+      .attach('file', Buffer.from('%PDF-test-only'), { filename: 'cv.pdf', contentType: 'application/pdf' });
+  }
+
+  function ownedRuns() {
+    return db.prepare('SELECT * FROM matching_runs WHERE actor_user_id = ?').all(actorId);
+  }
+
+  function failAfterEnqueue(predicate = () => true) {
+    const transaction = db.transactionAsync.bind(db);
+    jest.spyOn(db, 'transactionAsync').mockImplementation(callback => transaction(async (tx) => {
+      const prepare = tx.prepare.bind(tx);
+      tx.prepare = (sql) => {
+        const statement = prepare(sql);
+        if (/INSERT INTO matching_runs/.test(sql)) {
+          const run = statement.run.bind(statement);
+          statement.run = async (...args) => {
+            const result = await run(...args);
+            if (predicate(args)) throw new Error('injected outbox failure after insert');
+            return result;
+          };
+        }
+        return statement;
+      };
+      return callback(tx);
+    }));
+  }
+
+  test('CV profile, history and owned import run are committed once; duplicate and preview enqueue nothing', async () => {
+    const preview = await upload('0');
+    expect(preview.status).toBe(200);
+    expect(preview.body.matchingRunId).toBeNull();
+    expect(ownedRuns()).toHaveLength(0);
+    const imported = await upload();
+    expect(imported.status).toBe(200);
+    expect(imported.body).toMatchObject({
+      matchingStatus: 'queued', preparationStatus: 'required',
+      matchingStatusUrl: `/api/matching/runs/${imported.body.matchingRunId}`,
+      storage: { postgres: true, neo4j: false, neo4jSyncQueued: true },
+    });
+    const [run] = ownedRuns();
+    expect(run).toMatchObject({
+      id: imported.body.matchingRunId, actor_user_id: actorId, entity_id: imported.body.localCandidate.id,
+      source: 'CV-Import', method: 'vector', stage: 'queued',
+    });
+    const text = db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = ?').get(String(run.entity_id));
+    const storedProfile = typeof text.profile_json === 'string' ? JSON.parse(text.profile_json) : text.profile_json;
+    expect(storedProfile.skills).toEqual(profile.skills);
+    expect(storedProfile.birth_date).toBeUndefined();
+    expect(db.prepare('SELECT COUNT(*) AS count FROM candidate_work_history WHERE candidate_id = ?').get(run.entity_id).count).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM candidate_education WHERE candidate_id = ?').get(run.entity_id).count).toBe(1);
+    const duplicate = await upload();
+    expect(duplicate.status).toBe(409);
+    expect(ownedRuns()).toHaveLength(1);
+    expect(global.fetch.mock.calls.every(([url]) => ['/ingest/candidate', '/sync/candidates'].includes(new URL(String(url)).pathname))).toBe(true);
+  });
+
+  test('an outbox failure rolls back the candidate, nested history transaction, text and inserted run', async () => {
+    let failedId;
+    failAfterEnqueue((args) => { failedId = args[3]; return true; });
+    const response = await upload();
+    expect(response.status).toBe(503);
+    expect(response.body.error).toMatch(/PostgreSQL/);
+    expect(db.prepare('SELECT id FROM candidates WHERE name = ?').get(marker)).toBeUndefined();
+    expect(db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = ?').get(String(failedId))).toBeUndefined();
+    expect(db.prepare('SELECT COUNT(*) AS count FROM candidate_work_history WHERE candidate_id = ?').get(failedId).count).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM candidate_education WHERE candidate_id = ?').get(failedId).count).toBe(0);
+    expect(ownedRuns()).toHaveLength(0);
+    expect(global.fetch.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(['/ingest/candidate']);
+  });
+
+  test('CSV import creates one run per new source and retains row association without duplicate runs', async () => {
+    const rows = [
+      { name: `${marker}-A`, birth_date: '1990-02-14', skills: 'Java, SQL' },
+      { name: `${marker}-B`, birth_date: '1991-02-14', skills: 'Python', status: 'Archiviert' },
+    ];
+    const response = await request(app).post('/api/candidates/import').send({ rows: [...rows, rows[0]] });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ imported: 2, skipped: 1, errors: 0 });
+    expect(response.body.matchingRuns).toHaveLength(2);
+    expect(response.body.matchingRuns.map(run => run.row)).toEqual([1, 2]);
+    expect(ownedRuns()).toHaveLength(2);
+    for (const result of response.body.matchingRuns) {
+      expect(result.matchingStatus).toBe('queued');
+      expect(ownedRuns().find(run => run.id === result.matchingRunId)).toMatchObject({
+        entity_id: result.candidateId, actor_user_id: actorId, source: 'CSV-Import',
+      });
+      const text = db.prepare('SELECT * FROM candidate_texts WHERE candidate_id = ?').get(String(result.candidateId));
+      const structured = typeof text.profile_json === 'string' ? JSON.parse(text.profile_json) : text.profile_json;
+      expect(structured.name).toBe(rows[result.row - 1].name);
+      expect(structured.skills).toBe(rows[result.row - 1].skills);
+      expect(structured.birth_date).toBeUndefined();
+    }
+    const repeated = await request(app).post('/api/candidates/import').send({ rows });
+    expect(repeated.body).toMatchObject({ imported: 0, skipped: 2, matchingRuns: [] });
+    expect(ownedRuns()).toHaveLength(2);
+    expect(global.fetch.mock.calls.every(([url]) => new URL(String(url)).pathname === '/sync/candidates')).toBe(true);
+  });
+
+  test('CSV enqueue failure rolls back only the failed source and continues with subsequent rows', async () => {
+    let attempts = 0;
+    failAfterEnqueue(() => ++attempts === 1);
+    const response = await request(app).post('/api/candidates/import').send({ rows: [
+      { name: `${marker}-failed`, skills: 'Java' },
+      { name: `${marker}-saved`, skills: 'Python' },
+    ] });
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ imported: 1, errors: 1 });
+    expect(response.body.errorDetails[0]).toMatchObject({ row: 1, reason: 'injected outbox failure after insert' });
+    expect(response.body.matchingRuns).toHaveLength(1);
+    expect(response.body.matchingRuns[0].row).toBe(2);
+    expect(ownedRuns()).toHaveLength(1);
+    expect(db.prepare('SELECT id FROM candidates WHERE name = ?').get(`${marker}-failed`)).toBeUndefined();
+    expect(db.prepare('SELECT candidate_id FROM candidate_texts WHERE candidate_name = ?').get(`${marker}-failed`)).toBeUndefined();
+  });
+
+  test('concurrent CSV imports retain every acknowledged source and its own committed run', async () => {
+    const responses = await Promise.all(Array.from({ length: 4 }, (_, batch) => (
+      request(app).post('/api/candidates/import').send({ rows: [
+        { name: `${marker}-batch-${batch}-A`, skills: 'Java' },
+        { name: `${marker}-batch-${batch}-B`, skills: 'SQL' },
+      ] })
+    )));
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ imported: 2, skipped: 0, errors: 0 });
+      for (const result of response.body.matchingRuns) {
+        expect(db.prepare('SELECT id FROM candidates WHERE id = ?').get(result.candidateId)).toBeDefined();
+        expect(ownedRuns().find(run => run.id === result.matchingRunId)?.entity_id).toBe(result.candidateId);
+      }
+    }
+    expect(ownedRuns()).toHaveLength(8);
+  });
+
+  test('concurrent delivery of one CV identity creates one source and one run', async () => {
+    const responses = await Promise.all([upload(), upload()]);
+    expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
+    expect(ownedRuns()).toHaveLength(1);
+    expect(db.prepare('SELECT id FROM candidates WHERE name = ?').all(marker)).toHaveLength(1);
+  });
+
+  test('one concurrent import rollback cannot discard another acknowledged source', async () => {
+    let attempts = 0;
+    failAfterEnqueue(() => ++attempts === 1);
+    const responses = await Promise.all(Array.from({ length: 4 }, (_, batch) => (
+      request(app).post('/api/candidates/import').send({ rows: [
+        { name: `${marker}-isolated-${batch}`, skills: 'Java' },
+      ] })
+    )));
+    expect(responses.every(response => response.status === 200)).toBe(true);
+    expect(responses.reduce((total, response) => total + response.body.imported, 0)).toBe(3);
+    expect(responses.reduce((total, response) => total + response.body.errors, 0)).toBe(1);
+    expect(ownedRuns()).toHaveLength(3);
+    for (const response of responses) {
+      for (const result of response.body.matchingRuns) {
+        expect(db.prepare('SELECT id FROM candidates WHERE id = ?').get(result.candidateId)).toBeDefined();
+        expect(ownedRuns().find(run => run.id === result.matchingRunId)?.entity_id).toBe(result.candidateId);
+      }
+    }
   });
 });

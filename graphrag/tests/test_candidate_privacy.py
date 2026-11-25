@@ -12,12 +12,12 @@ class _FakePrivacyStore:
         self.record = record
         self.anonymization_calls: list[tuple[str, str, dict[str, str]]] = []
 
-    async def get_candidate_text(self, candidate_id: str):
+    async def get_candidate_text(self, candidate_id: str, *, connection=None):
         if self.record and self.record.get("candidate_id") == candidate_id:
             return self.record
         return None
 
-    async def store_candidate_anonymization(self, candidate_id: str, anonymized_text: str, mapping: dict[str, str]) -> None:
+    async def store_candidate_anonymization(self, candidate_id: str, anonymized_text: str, mapping: dict[str, str], *, connection=None) -> None:
         self.anonymization_calls.append((candidate_id, anonymized_text, mapping))
         if self.record is not None:
             self.record = {**self.record, "anonymized_text": anonymized_text, "mapping": mapping}

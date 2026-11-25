@@ -15,7 +15,7 @@ export default function JobToCandidates() {
   const { t } = useI18n()
   const initialJobIds = location.state?.jobIds || null
   const initialCandidateIds = location.state?.candidateIds || null
-  const [jobMode, setJobMode] = useState(() => initialJobIds?.length || initialCandidateIds?.length ? 'existing' : 'manual') // 'manual' | 'existing'
+  const [jobMode, setJobMode] = useState('existing')
   const [jobTitle, setJobTitle] = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [candidates, setCandidates] = useState([])
@@ -177,7 +177,7 @@ export default function JobToCandidates() {
     setError('')
     setMatching(true)
     try {
-      const result = await matchingApi.run(jobDescription, jobTitle, selectedIds, weights, selectedJobId || null)
+      const result = await matchingApi.run({ jobId: selectedJobId, candidateIds: selectedIds, weights })
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
       setError(err.message)
@@ -215,7 +215,8 @@ export default function JobToCandidates() {
             <div className="flex gap-3 mb-10 p-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] w-fit">
               <button
                 type="button"
-                onClick={() => handleModeSwitch('manual')}
+                disabled
+                title={t('matching.stored_selection_required')}
                 className={`flex items-center gap-2.5 px-6 py-3 rounded-[16px] text-[15px] font-semibold transition cursor-pointer ${
                   jobMode === 'manual' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
                 }`}

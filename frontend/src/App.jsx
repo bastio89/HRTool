@@ -40,6 +40,7 @@ import AdminCreditsPage from './pages/AdminCreditsPage'
 import DataExport from './pages/DataExport'
 import Duplicates from './pages/Duplicates'
 import CrmExchange from './pages/CrmExchange'
+import BatchProcessing, { OwnMatchingRunStatus } from './pages/BatchProcessing'
 import { PluginProvider, usePlugins } from './plugins/PluginContext'
 import { getPluginDefinition } from './plugins/registry'
 
@@ -122,6 +123,7 @@ function AppRouter() {
                 <Route path="matrix" element={<MatrixMatching />} />
               </Route>
               <Route path="matching/results/selected" element={<SelectedMatchingResults />} />
+              <Route path="matching/runs/:runId" element={<OwnMatchingRunStatus />} />
               <Route path="matching/results/:id" element={<MatchingResults />} />
               <Route path="history" element={<History />} />
               <Route path="tools" element={<ToolsRoute><Tools /></ToolsRoute>} />
@@ -140,6 +142,7 @@ function AppRouter() {
               <Route path="admin/export" element={<AdminRoute><DataExport /></AdminRoute>} />
               <Route path="admin/duplicates" element={<AdminRoute><Duplicates /></AdminRoute>} />
               <Route path="admin/crm" element={<AdminRoute><CrmExchange /></AdminRoute>} />
+              <Route path="admin/batches" element={<AdminRoute><BatchProcessing /></AdminRoute>} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

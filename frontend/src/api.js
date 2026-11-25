@@ -129,43 +129,118 @@ export function subscribeCreditRefresh(handler) {
 }
 
 async function request(url, options = {}) {
-  const { timeout, ...fetchOptions } = options;
+  const { timeout, signal, ...fetchOptions } = options;
   let controller, timeoutId;
+  let timedOut = false;
+  const abort = () => controller.abort(signal.reason);
   if (timeout) {
     controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), timeout);
+    if (signal?.aborted) controller.abort(signal.reason);
+    else signal?.addEventListener('abort', abort, { once: true });
+    timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
   }
 
-  let response;
   try {
-    response = await fetch(`${API_BASE}${url}`, {
+    const response = await fetch(`${API_BASE}${url}`, {
       ...fetchOptions,
       headers: { 'Content-Type': 'application/json', ...authHeaders(), ...fetchOptions.headers },
-      ...(controller ? { signal: controller.signal } : {}),
+      signal: controller?.signal || signal,
     });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }));
+      const failure = apiErrorFromPayload(error, `HTTP ${response.status ?? 'unknown'}`);
+      failure.status = response.status;
+      throw failure;
+    }
+    return await response.json();
   } catch (err) {
-    if (timeoutId) clearTimeout(timeoutId);
-    if (err.name === 'AbortError') {
+    if (err.name === 'AbortError' && timedOut) {
       throw new Error('Zeitüberschreitung — die Anfrage hat zu lange gedauert. Bitte erneut versuchen.');
     }
     throw err;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abort);
   }
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Netzwerkfehler' }));
-    const failure = new Error(normalizeErrorMessage(error, `HTTP ${response.status ?? 'unknown'}`));
-    // Z. B. bei einer Dublette (409): code und bestehender Datensatz.
-    failure.status = response.status;
-    failure.code = error?.code;
-    failure.existing = error?.existing;
-    failure.field = error?.field;
-    throw failure;
-  }
-
-  return response.json();
 }
+
+function waitForMatchingPoll(signal) {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      reject(new DOMException('Matching-Abfrage abgebrochen', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, 3000);
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
+export async function resolveMatchingResult(initial, { signal, onProgress } = {}) {
+  if (initial?.status !== 'pending') return initial;
+  const runId = initial.runId;
+  if (typeof runId !== 'string' || !runId) throw new Error('Pending-Antwort ohne Matching-Lauf-ID');
+  const loadStatus = async previous => {
+    try {
+      return await request(`/matching/runs/${encodeURIComponent(runId)}`, { signal });
+    } catch (error) {
+      error.runId = runId;
+      error.progress = previous;
+      throw error;
+    }
+  };
+  let current = initial;
+  if (current.stage) {
+    if (signal?.aborted) throw new DOMException('Matching-Abfrage abgebrochen', 'AbortError');
+    onProgress?.(current);
+    current = await loadStatus(current);
+  }
+  while (true) {
+    if (signal?.aborted) throw new DOMException('Matching-Abfrage abgebrochen', 'AbortError');
+    onProgress?.(current);
+    if (['completed', 'completed_with_errors'].includes(current.stage)) {
+      if (!current.resultPayload || (!Array.isArray(current.resultPayload.results) && !Array.isArray(current.resultPayload.matrix))) {
+        throw Object.assign(new Error('Matching-Abschluss ohne vollstaendiges Ergebnis'), { runId, progress: current });
+      }
+      return current.resultPayload;
+    }
+    if (['failed', 'needs_review', 'blocked_credits'].includes(current.stage)) {
+      throw Object.assign(new Error(current.errorCode || `Matching: ${current.stage}`), {
+        runId, stage: current.stage, progress: current,
+      });
+    }
+    if (current !== initial && !['queued', 'preparing', 'matching'].includes(current.stage)) {
+      throw Object.assign(new Error('Unbekannter Matching-Laufstatus'), { runId, progress: current });
+    }
+    await waitForMatchingPoll(signal);
+    current = await loadStatus(current);
+  }
+}
+
+async function matchingRequest(url, options, progressOptions = {}) {
+  const initial = await request(url, { ...options, signal: progressOptions.signal });
+  if (initial?.status === 'pending') notifyCreditRefresh({ source: 'matching-pending' });
+  return resolveMatchingResult(initial, progressOptions);
+}
+
+export const batchesApi = {
+  list: (params = {}, options = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== ''));
+    return request(`/batches${query.size ? `?${query}` : ''}`, options);
+  },
+  get: (runId, params = {}, options = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== ''));
+    return request(`/batches/${encodeURIComponent(runId)}${query.size ? `?${query}` : ''}`, options);
+  },
+  retry: (runId, pairIds, confirmUncertain = false, options = {}) =>
+    request(`/batches/${encodeURIComponent(runId)}/retry`, {
+      ...options, method: 'POST', body: JSON.stringify({ pairIds, confirmUncertain }),
+    }),
+};
 
 // Auth API
 export const authApi = {
@@ -218,41 +293,66 @@ export const candidatesApi = {
 };
 
 // Matching API
+export function matchingScorePercent(value, method) {
+  if (value == null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
+    throw new Error('Ungueltiger Matching-Score');
+  }
+  // Nur historische Antworten ohne Methodenvertrag verwendeten auch 0..1.
+  return !method && value <= 1 ? value * 100 : value;
+}
+
 export const matchingApi = {
-  run: (jobDescription, jobTitle, candidateIds = [], weights = null, jobId = null, candidateNames = []) =>
-    request('/matching/run', {
+  run: async ({ jobId, candidateIds, weights = null } = {}, options = {}) => {
+    if (jobId == null || !Array.isArray(candidateIds) || candidateIds.length === 0) {
+      throw new Error('Gespeicherte jobId und explizite candidateIds sind erforderlich');
+    }
+    const result = await matchingRequest('/matching/run', {
       method: 'POST',
-      body: JSON.stringify({ jobDescription, jobTitle, candidateIds, candidateNames, weights, jobId }),
+      body: JSON.stringify({ candidateIds, weights, jobId }),
       timeout: 200000,
-    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.run' }); return result; }),
-  runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null, engine = 'python' } = {}) =>
-    request('/matching/run-matrix', {
+    }, options);
+    notifyCreditRefresh({ source: 'matchingApi.run' });
+    return result;
+  },
+  runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null, engine = 'python' } = {}, options = {}) =>
+    matchingRequest('/matching/run-matrix', {
       method: 'POST',
       body: JSON.stringify({ mode, jobIds, candidateIds, weights, engine }),
       timeout: 600000,
-    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.runMatrix' }); return result; }),
-  vectorMatch: (payload = {}) =>
-    request('/matching/vectormatch', {
+    }, options).then((result) => { notifyCreditRefresh({ source: 'matchingApi.runMatrix' }); return result; }),
+  vectorMatch: (payload = {}, options = {}) =>
+    matchingRequest('/matching/vectormatch', {
       method: 'POST',
       body: JSON.stringify(payload),
       timeout: 600000,
-    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.vectorMatch' }); return result; }),
+    }, options).then((result) => { notifyCreditRefresh({ source: 'matchingApi.vectorMatch' }); return result; }),
   // 3D-Matching ausgewaehlter Paarungen ueber das Backend: Suche per UUID,
   // fehlende Neo4j-Eintraege werden nachgeholt, Uebriges kommt als failures.
-  vectorMatchSelected: (pairs = [], engine = 'python') =>
-    request('/matching/vectormatch-selected', {
+  vectorMatchSelected: (pairs = [], engine = 'python', options = {}) =>
+    matchingRequest('/matching/vectormatch-selected', {
       method: 'POST',
       body: JSON.stringify({ pairs, engine }),
       timeout: 600000,
-    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.vectorMatchSelected' }); return result; }),
-  runSelected: (pairs = [], weights = null) =>
-    request('/matching/run-selected', {
+    }, options).then((result) => { notifyCreditRefresh({ source: 'matchingApi.vectorMatchSelected' }); return result; }),
+  runSelected: async (pairs = [], weights = null, options = {}) => {
+    if (!Array.isArray(pairs) || pairs.length === 0 || pairs.length > 20) {
+      throw new Error('Fuer AI-Matching 1 bis 20 gespeicherte Paare auswaehlen');
+    }
+    if (pairs.some(pair => !(pair.jobId ?? pair.sourceJobId) || !(pair.candidateId ?? pair.sourceCandidateId))) {
+      throw new Error('Gespeicherte Job- und Profil-IDs sind erforderlich');
+    }
+    const result = await matchingRequest('/matching/run-selected', {
       method: 'POST',
       body: JSON.stringify({ pairs, weights }),
       timeout: 600000,
-    }).then((result) => { notifyCreditRefresh({ source: 'matchingApi.runSelected' }); return result; }),
-  getHistory: () => request('/matching/history'),
-  getResult: (id) => request(`/matching/history/${id}`),
+    }, options);
+    notifyCreditRefresh({ source: 'matchingApi.runSelected' });
+    return result;
+  },
+  getHistory: (options = {}) => request('/matching/history', options),
+  getRun: (runId, options = {}) => request(`/matching/runs/${encodeURIComponent(runId)}`, options),
+  getResult: (id, options = {}) => request(`/matching/history/${id}`, options),
   deleteResult: (id) => request(`/matching/history/${id}`, { method: 'DELETE' }),
   reviewResult: (id, notes) => request(`/matching/history/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }),
 };
@@ -428,6 +528,9 @@ export const jobsApi = {
       skills: job?.skills || jobData.skills,
       benefits: job?.benefits || jobData.benefits,
       graphRag: job?.graphRag || null,
+      matchingRunId: job?.matchingRunId,
+      matchingStatus: job?.matchingStatus,
+      matchingStatusUrl: job?.matchingStatusUrl,
       importSteps: {
         aiParsed: true,
         graphRagSaved: Boolean(job?.graphRag && !job.graphRag.error),

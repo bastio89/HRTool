@@ -28,12 +28,14 @@ export default function Breadcrumb() {
     'ki-transparenz': t('breadcrumb.ki_transparency'),
     'duplicates': t('nav.duplicates'),
     'crm': t('nav.crm'),
+    'batches': t('nav.batches'),
+    'runs': t('matching.run_status'),
   }
 
   if (segments.length === 0) return null
 
   // Segments that have no standalone route (only work with sub-params)
-  const nonLinkable = new Set(['pipeline'])
+  const nonLinkable = new Set(['pipeline', 'runs'])
 
   const crumbs = []
   let path = ''
@@ -44,6 +46,7 @@ export default function Breadcrumb() {
 
     // Skip numeric IDs as standalone crumbs — attach context to the label instead
     if (/^\d+$/.test(seg)) continue
+    if (segments[i - 2] === 'matching' && segments[i - 1] === 'runs') continue
 
     const label = routeLabels[seg] || seg.charAt(0).toUpperCase() + seg.slice(1)
     const isLast = nonLinkable.has(seg) || i === segments.length - 1 || (i === segments.length - 2 && /^\d+$/.test(segments[i + 1]))

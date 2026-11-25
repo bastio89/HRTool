@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import os
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import httpx
+import psycopg
+from psycopg.rows import dict_row
 import pytest
 
 from models import (
@@ -11,18 +16,245 @@ from models import (
     CandidateSkillExtraction,
     JobProfileExtraction,
     JobSkillExtraction,
+    MatchingCandidateInput,
+    MatchingJobInput,
     VectorMatchRequest,
     LLMRerankItem,
     LLMRerankResponse,
-    Stage1Candidate,
     LinkedInProfileRequest,
     LinkedInProfileResponse,
-    Stage2Candidate,
     LinkedInPeopleSearchRequest,
 )
 from plugins.billing.service import BillingService
 import services.linkedin_people_search as linkedin_people_search_module
 from services.linkedin_people_search import LinkedInPeopleSearchService
+from services.matching_orchestrator import MatchingOrchestrator
+from services.postgres_store import PostgresStore
+from services.skill_matching import SkillMatchingService
+from services.db import Neo4jService
+
+
+@pytest.mark.anyio
+async def test_unfiltered_loader_keeps_alias_only_candidates_and_priorities(monkeypatch, matching_cache_doubles):
+    service = Neo4jService("bolt://localhost:7687", "neo4j", "test")
+    await service.driver.close()
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    session.run.return_value = SimpleNamespace(data=AsyncMock(return_value=[
+        {"id": "alias-only"}, {"id": "no-skills"},
+    ]))
+    service.driver = SimpleNamespace(session=lambda: session)
+    jobs = [{"id": "job", "required_skills": [{"name": "Python", "priority": "NiceToHave"}]}]
+    candidates = [
+        {"id": "alias-only", "has_skill": [{"name": "Python programming"}]},
+        {"id": "no-skills", "has_skill": []},
+    ]
+    monkeypatch.setattr(service, "get_jobs_for_vectormatch", AsyncMock(return_value=jobs))
+    monkeypatch.setattr(service, "get_candidates_for_vectormatch", AsyncMock(return_value=candidates))
+    legacy = AsyncMock(side_effect=AssertionError("Kein Namens-/Vektor-Vorfilter"))
+    monkeypatch.setattr(service, "stage1_filter_candidates", legacy)
+    loaded_jobs, loaded_candidates = await service.get_skill_matching_inputs(job_ids=["job"])
+    service.get_candidates_for_vectormatch.assert_awaited_once_with(["alias-only", "no-skills"])
+    catalog = SimpleNamespace(get_esco_concepts_for_aliases=AsyncMock(return_value=[
+        {"uri": "skill:python", "preferred_label": "Python", "aliases": ["Python programming"]},
+    ]))
+    store = AsyncMock(spec=PostgresStore)
+    llm = SimpleNamespace(
+        create_embedding=AsyncMock(return_value=[1.0, 0.0]),
+        rerank_candidates=AsyncMock(),
+    )
+    matching_cache_doubles(store, llm)
+    rows, _timestamp = await MatchingOrchestrator(
+        SkillMatchingService(llm, catalog),
+        postgres_store=store,
+    ).match_skill_matrix(
+        [MatchingJobInput.model_validate(job) for job in loaded_jobs],
+        [MatchingCandidateInput.model_validate(candidate) for candidate in loaded_candidates],
+        model="test-embedding",
+    )
+    assert rows[0]["candidateId"] == "alias-only" and rows[0]["score"] == 100
+    assert rows[0]["matchedSkills"][0]["match_type"] == "canonical"
+    assert rows[0]["matchedSkills"][0]["priority"] == "nice_to_have"
+    assert rows[1]["candidateId"] == "no-skills" and rows[1]["qualified"] is True
+    legacy.assert_not_awaited()
+
+
+@pytest.fixture
+async def matching_store():
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        pytest.skip("DATABASE_URL fuer PostgreSQL-Integrationstests nicht gesetzt")
+    store = PostgresStore(database_url)
+    await store.ensure_schema()
+    marker = f"matching-store-{uuid4().hex}"
+    async with await psycopg.AsyncConnection.connect(database_url) as connection:
+        candidate = await (await connection.execute(
+            "INSERT INTO candidates (name, graph_candidate_ids) VALUES (%s, ARRAY[%s]) RETURNING id, uuid::text",
+            (marker, marker),
+        )).fetchone()
+        other = await (await connection.execute(
+            "INSERT INTO candidates (name, graph_candidate_ids) VALUES (%s, ARRAY[%s]) RETURNING id",
+            (marker, marker),
+        )).fetchone()
+        job = await (await connection.execute(
+            "INSERT INTO jobs (title, graph_job_id) VALUES (%s, %s) RETURNING id, uuid::text",
+            (marker, marker),
+        )).fetchone()
+    try:
+        yield store, candidate, job, marker
+    finally:
+        async with await psycopg.AsyncConnection.connect(database_url) as connection:
+            await connection.execute("DELETE FROM candidates WHERE id = ANY(%s)", ([candidate[0], other[0]],))
+            await connection.execute("DELETE FROM jobs WHERE id = %s", (job[0],))
+
+
+@pytest.mark.anyio
+async def test_matching_store_resolves_only_unambiguous_stored_ids(matching_store):
+    store, candidate, job, marker = matching_store
+    assert await store.matching_ids_for("candidates", [str(candidate[0]), candidate[1]]) == {
+        str(candidate[0]): candidate[0], candidate[1]: candidate[0],
+    }
+    assert await store.matching_ids_for("jobs", [job[1], marker]) == {
+        job[1]: job[0], marker: job[0],
+    }
+    with pytest.raises(ValueError, match="nicht eindeutig"):
+        await store.matching_ids_for("candidates", [marker])
+    with pytest.raises(ValueError, match="fehlen"):
+        await store.matching_ids_for("candidates", ["not-a-stored-id"])
+
+
+@pytest.mark.anyio
+async def test_matching_store_isolates_methods_timestamps_and_failed_writes(matching_store):
+    store, candidate, job, _ = matching_store
+    timestamp = datetime(2026, 11, 25, tzinfo=timezone.utc)
+    row = {"candidateId": candidate[1], "jobId": job[1], "score": 0, "qualified": False}
+    await store.record_matching_pairs("vector", [row], model="skill-model", matched_at=timestamp, engine="python")
+    await store.record_matching_pairs("ai", [{**row, "score": 85}], model="ai-model", matched_at=timestamp)
+
+    async def read():
+        async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+            async with connection.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    "SELECT * FROM matching_pair_results WHERE candidate_id = %s AND job_id = %s ORDER BY method",
+                    (candidate[0], job[0]),
+                )
+                return {record["method"]: record for record in await cursor.fetchall()}
+
+    first = await read()
+    assert first["vector"]["score"] == 0 and first["vector"]["qualified"] is False
+    assert first["ai"]["score"] == 85 and first["ai"]["qualified"] is None
+    await store.record_matching_pairs(
+        "vector", [{**row, "score": 80, "qualified": True}], model="skill-model-v2",
+        matched_at=timestamp + timedelta(seconds=1), engine="neo4j",
+    )
+    second = await read()
+    assert second["ai"] == first["ai"]
+    assert second["vector"]["model"] == "skill-model-v2"
+    assert second["vector"]["matched_at"] == timestamp + timedelta(seconds=1)
+    await store.record_matching_pairs(
+        "ai", [{**row, "score": 79}], model="ai-model-v2", matched_at=timestamp + timedelta(seconds=2),
+    )
+    third = await read()
+    assert third["vector"] == second["vector"]
+    assert third["ai"]["score"] == 79 and third["ai"]["model"] == "ai-model-v2"
+    await store.record_matching_pairs("ai", [{**row, "score": 1}], model="old", matched_at=timestamp)
+    assert await read() == third
+    with pytest.raises(psycopg.ProgrammingError):
+        await store.record_matching_pairs(
+            "vector", [{**row, "score": 99}, {**row, "summary": {"invalid": "SQL text"}}],
+            model="failed-write", matched_at=timestamp + timedelta(seconds=3),
+        )
+    assert await read() == third
+
+
+def _ai_orchestrator(matching_cache_doubles):
+    store = AsyncMock(spec=PostgresStore)
+
+    async def resolve_ids(table, ids):
+        expected = "job-2" if table == "jobs" else "candidate-7"
+        if ids != [expected]:
+            raise ValueError("Gespeicherte ID fehlt")
+        return {expected: 2 if table == "jobs" else 7}
+
+    store.matching_ids_for.side_effect = resolve_ids
+    store.graph_ids_for.return_value = {"7": "candidate-7"}
+    store.get_job_text.return_value = {"id": 2, "title": "Engineer", "raw_text": "Jobtext"}
+    store.get_candidate_text.return_value = {
+        "candidate_name": "Ada", "original_text": "Profiltext",
+        "profile_json": {"skills": [], "birth_date": "1980-01-01"},
+    }
+    llm = SimpleNamespace(
+        chat_model="test-ai",
+        create_embedding=AsyncMock(return_value=[1.0, 0.0]),
+        rerank_candidates=AsyncMock(return_value=LLMRerankResponse(ranked_candidates=[
+            LLMRerankItem(candidate_id="7", score=85, explanation="Unabhaengige AI-Gesamtbewertung."),
+        ])),
+    )
+    skills = SkillMatchingService(
+        llm, SimpleNamespace(get_esco_concepts_for_aliases=AsyncMock(return_value=[])),
+    )
+    matching_cache_doubles(store, llm, candidate={
+        "name": "Ada", "text": {
+            "original_text": "Profiltext", "profile_json": {"skills": [], "birth_date": "1980-01-01"},
+        },
+    }, job={"title": "Engineer", "raw_text": "Jobtext"})
+    store.matching_ids_for.side_effect = resolve_ids
+    return MatchingOrchestrator(skills, postgres_store=store, llm_service=llm), store, llm
+
+
+@pytest.mark.anyio
+async def test_orchestrator_ai_is_independent_of_missing_mandatory_skill(matching_cache_doubles):
+    orchestrator, store, llm = _ai_orchestrator(matching_cache_doubles)
+    skill = await orchestrator.match_skills(["Python"], [])
+    assert skill.result.score == 0 and skill.result.qualified is False
+    llm.create_embedding.reset_mock()
+
+    result = await orchestrator.match_ai_pair("job-2", "candidate-7")
+
+    assert result.score == 85 and result.qualified is None
+    job, candidates = llm.rerank_candidates.await_args.args
+    assert job["id"] == "2"
+    assert [candidate["id"] for candidate in candidates] == ["7"]
+    assert "birth_date" not in candidates[0]
+    llm.create_embedding.assert_not_awaited()
+    store.complete_matching_evaluation.assert_awaited_once()
+    snapshot, _, _, _, persisted = store.complete_matching_evaluation.await_args.args
+    assert snapshot.method == "ai"
+    assert {
+        **persisted, "jobId": "job-2", "candidateId": "candidate-7",
+        "cacheStatus": "computed", "evaluationId": result.evaluationId,
+    } == result.model_dump(mode="json")
+    assert persisted["model"] == "test-ai"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("failure", ["missing-id", "missing-result", "wrong-id", "invalid-score", "ai-error", "write-error"])
+async def test_orchestrator_ai_failures_never_persist_substitute_scores(failure, matching_cache_doubles):
+    orchestrator, store, llm = _ai_orchestrator(matching_cache_doubles)
+    candidate_id = "candidate-7"
+    if failure == "missing-id":
+        candidate_id = "missing"
+    elif failure == "missing-result":
+        llm.rerank_candidates.return_value = LLMRerankResponse()
+    elif failure == "wrong-id":
+        llm.rerank_candidates.return_value = LLMRerankResponse(ranked_candidates=[
+            LLMRerankItem(candidate_id="unselected", score=99, explanation="Nicht ausgewaehlter Kandidat."),
+        ])
+    elif failure == "invalid-score":
+        llm.rerank_candidates.side_effect = ValueError("Ungueltiger AI-Score")
+    elif failure == "ai-error":
+        llm.rerank_candidates.side_effect = RuntimeError("AI nicht erreichbar")
+    else:
+        store.complete_matching_evaluation.side_effect = RuntimeError("PostgreSQL-Schreibfehler")
+
+    with pytest.raises((ValueError, RuntimeError)):
+        await orchestrator.match_ai_pair("job-2", candidate_id)
+
+    if failure != "write-error":
+        store.complete_matching_evaluation.assert_not_awaited()
+    if failure == "missing-id":
+        llm.rerank_candidates.assert_not_awaited()
+    llm.create_embedding.assert_not_awaited()
 
 
 def assert_candidate_inserted(postgres_mock, expected_payload):
@@ -51,13 +283,18 @@ async def test_health_ok(api_client):
 
 
 @pytest.mark.anyio
-async def test_external_matrix_preserves_candidate_name():
+async def test_external_matrix_preserves_candidate_name(monkeypatch, matching_cache_doubles):
     from fastapi import FastAPI
     from httpx import ASGITransport, AsyncClient
     from matching_api import create_matching_router
 
+    _orchestrator, store, llm = _ai_orchestrator(matching_cache_doubles)
+    matching_cache_doubles(store, llm)
+    monkeypatch.setattr(BillingService, "charge", AsyncMock())
     app = FastAPI()
-    app.include_router(create_matching_router())
+    app.include_router(create_matching_router(
+        llm, SimpleNamespace(postgres_store=store, get_esco_concepts_for_aliases=AsyncMock(return_value=[])),
+    ))
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -474,11 +711,15 @@ async def test_linkedin_people_search_uses_async_apify_client(monkeypatch, caplo
 
 
 @pytest.mark.anyio
-async def test_vectormatch_uses_neo4j_skill_embeddings(app_module, api_client, monkeypatch):
+async def test_vectormatch_uses_central_skill_service(app_module, api_client, monkeypatch, matching_cache_doubles):
+    monkeypatch.setattr(BillingService, "charge", AsyncMock())
+    monkeypatch.setattr(app_module.db_service, "get_esco_concepts_for_aliases", AsyncMock(return_value=[]))
+    matching_cache_doubles(app_module.postgres_store, app_module.llm_service)
+    persist = app_module.postgres_store.complete_matching_evaluation
     monkeypatch.setattr(
         app_module.llm_service,
         "create_embedding",
-        AsyncMock(side_effect=lambda payload: [1.0, 0.0] if payload["name"] == "python" else [0.0, 1.0]),
+        AsyncMock(side_effect=lambda payload, **_kwargs: [1.0, 0.0] if payload["name"] == "python" else [0.0, 1.0]),
     )
     monkeypatch.setattr(
         app_module.db_service,
@@ -527,10 +768,22 @@ async def test_vectormatch_uses_neo4j_skill_embeddings(app_module, api_client, m
     assert payload["matrix"][0]["matchedSkills"]
     assert payload["matrix"][0]["matchedSkills"][0]["jobSkillCategory"] in {"HardSkill", "SoftSkill"}
     assert payload["matrix"][0]["matchedSkills"][0]["candidateSkillCategory"] in {"HardSkill", "SoftSkill"}
+    assert payload["matrix"][0]["qualified"] is True
+    assert payload["pairsPersisted"] is True
+    persist.assert_awaited_once()
+    assert persist.await_args.args[0].method == "vector"
 
 
 @pytest.mark.anyio
-async def test_vectormatch_neo4j_uses_neo4j_cosine_similarity(app_module, api_client, monkeypatch):
+async def test_vectormatch_neo4j_uses_central_service_not_cypher_scores(
+    app_module, api_client, monkeypatch, matching_cache_doubles,
+):
+    monkeypatch.setattr(BillingService, "charge", AsyncMock())
+    monkeypatch.setattr(app_module.db_service, "get_esco_concepts_for_aliases", AsyncMock(return_value=[]))
+    matching_cache_doubles(app_module.postgres_store, app_module.llm_service)
+    persist = app_module.postgres_store.complete_matching_evaluation
+    embedding = AsyncMock(return_value=[1.0, 0.0])
+    monkeypatch.setattr(app_module.llm_service, "create_embedding", embedding)
     monkeypatch.setattr(
         app_module.db_service,
         "get_jobs_for_vectormatch",
@@ -590,15 +843,22 @@ async def test_vectormatch_neo4j_uses_neo4j_cosine_similarity(app_module, api_cl
     assert payload["type"] == "vectormatch_neo4j"
     assert payload["matrix"][0]["jobId"] == "job-neo4j-1"
     assert payload["matrix"][0]["candidateId"] == "cv-neo4j-1"
-    assert payload["matrix"][0]["score"] == 92
-    assert payload["matrix"][0]["vectorScore"] == 0.92
-    assert payload["matrix"][0]["hardSkillScore"] == 0.97
-    assert payload["matrix"][0]["softSkillScore"] == 0.84
-    assert payload["matrix"][0]["matchedSkills"][0]["similarity"] == 0.97
+    assert payload["matrix"][0]["score"] == 100
+    assert payload["matrix"][0]["vectorScore"] == 1.0
+    assert payload["matrix"][0]["hardSkillScore"] == 1.0
+    assert payload["matrix"][0]["softSkillScore"] == 1.0
+    assert payload["matrix"][0]["matchedSkills"][0]["similarity"] == 1.0
+    app_module.db_service.get_vectormatch_neo4j_rows.assert_not_awaited()
+    assert all(call.kwargs == {"allow_fallback": False} for call in embedding.await_args_list)
+    persist.assert_awaited_once()
+    assert persist.await_args.kwargs["engine"] == "neo4j"
 
 
 @pytest.mark.anyio
-async def test_ki_match_pairs_uses_id_based_graph_rag_matching(app_module, api_client, monkeypatch):
+async def test_ki_match_pairs_uses_id_based_graph_rag_matching(
+    app_module, api_client, monkeypatch, matching_cache_doubles,
+):
+    monkeypatch.setattr(BillingService, "charge", AsyncMock())
     fake_store = type(
         "FakeStore",
         (),
@@ -636,12 +896,26 @@ async def test_ki_match_pairs_uses_id_based_graph_rag_matching(app_module, api_c
             }),
         },
     )()
-    monkeypatch.setattr(app_module.db_service, "postgres_store", fake_store)
+    fake_store.matching_ids_for = AsyncMock(side_effect=lambda table, ids: {
+        value: 2 if table == "jobs" else 7 for value in ids
+    })
+    fake_store.graph_ids_for = AsyncMock(return_value={})
+    fake_store.record_matching_pairs = AsyncMock()
+    for name in ("matching_ids_for", "graph_ids_for", "record_matching_pairs", "get_job_text", "get_candidate_text"):
+        monkeypatch.setattr(app_module.postgres_store, name, getattr(fake_store, name))
     monkeypatch.setattr(
         app_module.llm_service,
         "rerank_candidates",
-        AsyncMock(return_value=SimpleNamespace(ranked_candidates=[SimpleNamespace(score=91, explanation="Sehr guter Fit")]))
+        AsyncMock(return_value=LLMRerankResponse(ranked_candidates=[
+            LLMRerankItem(candidate_id="7", score=91, explanation="Sehr guter Fit"),
+        ]))
     )
+    text = fake_store.get_candidate_text.return_value
+    matching_cache_doubles(app_module.postgres_store, app_module.llm_service, candidate={
+        "name": text["candidate_name"],
+        "text": {"original_text": text["original_text"], "profile_json": text["profile_json"]},
+    }, job=fake_store.get_job_text.return_value)
+    app_module.postgres_store.matching_ids_for.side_effect = fake_store.matching_ids_for.side_effect
 
     response = await api_client.post(
         "/match/ki_match_pairs",
@@ -657,6 +931,49 @@ async def test_ki_match_pairs_uses_id_based_graph_rag_matching(app_module, api_c
     assert payload["results"][0]["candidateId"] == "cv-ki-1"
     assert payload["results"][0]["score"] == 91
     assert payload["results"][0]["summary"] == "Sehr guter Fit"
+    assert payload["results"][0]["method"] == "ai"
+    assert payload["pairsPersisted"] is True
+    app_module.postgres_store.complete_matching_evaluation.assert_awaited_once()
+    assert app_module.postgres_store.complete_matching_evaluation.await_args.args[0].method == "ai"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("scenario", ["mixed", "ai-error", "write-error", "empty"])
+async def test_selected_ai_endpoint_reports_pair_errors_without_legacy_fallback(
+    monkeypatch, scenario, matching_cache_doubles,
+):
+    from fastapi import FastAPI
+    from matching_api import create_matching_router
+
+    orchestrator, store, llm = _ai_orchestrator(matching_cache_doubles)
+    monkeypatch.setattr(BillingService, "charge", AsyncMock())
+    if scenario == "ai-error":
+        llm.rerank_candidates.side_effect = RuntimeError("AI nicht erreichbar")
+    elif scenario == "write-error":
+        store.complete_matching_evaluation.side_effect = RuntimeError("Paarpersistenz fehlgeschlagen")
+    app = FastAPI()
+    app.include_router(create_matching_router(
+        llm, SimpleNamespace(postgres_store=store, get_esco_concepts_for_aliases=AsyncMock(return_value=[])),
+    ))
+    pairs = [] if scenario == "empty" else [
+        {"jobId": "job-2", "candidateId": "candidate-7"},
+        {"jobId": "job-2", "candidateId": "missing"},
+    ]
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/match/ki_match_pairs", json={"pairs": pairs})
+    if scenario == "empty":
+        assert response.status_code == 400
+        llm.rerank_candidates.assert_not_awaited()
+    else:
+        assert response.status_code == 200
+        body = response.json()
+        assert body["matchedCount"] == (1 if scenario == "mixed" else 0)
+        assert body["failedCount"] == (1 if scenario == "mixed" else 2)
+        assert all(failure["error"] for failure in body["failures"])
+        if scenario == "mixed":
+            assert body["results"][0]["score"] == 85
+            assert body["results"][0]["qualified"] is None
+    llm.create_embedding.assert_not_awaited()
 
 
 @pytest.mark.anyio
@@ -858,9 +1175,9 @@ async def test_ingest_candidate_returns_400_for_missing_input(api_client):
 
 
 @pytest.mark.anyio
-async def test_match_returns_404_when_job_not_found(app_module, api_client, monkeypatch):
-    get_job_profile_mock = AsyncMock(return_value=None)
-    monkeypatch.setattr(app_module.db_service, "get_job_profile", get_job_profile_mock)
+async def test_match_returns_404_when_job_not_found(app_module, api_client, monkeypatch, matching_cache_doubles):
+    matching_cache_doubles(app_module.postgres_store, app_module.llm_service)
+    monkeypatch.setattr(app_module.db_service, "get_skill_matching_inputs", AsyncMock(return_value=([], [])))
 
     response = await api_client.post("/match/does-not-exist")
 
@@ -869,100 +1186,54 @@ async def test_match_returns_404_when_job_not_found(app_module, api_client, monk
 
 
 @pytest.mark.anyio
-async def test_match_returns_empty_when_stage1_has_no_candidates(app_module, api_client, monkeypatch):
-    get_job_profile_mock = AsyncMock(
-        return_value={
+async def test_match_returns_empty_when_no_candidates_exist(app_module, api_client, monkeypatch, matching_cache_doubles):
+    matching_cache_doubles(app_module.postgres_store, app_module.llm_service)
+    loader = AsyncMock(
+        return_value=([{
             "id": "job-1",
             "title": "Data Engineer",
             "department": "Analytics",
             "location": "Berlin",
             "embedding": [0.1, 0.2],
             "required_skills": [{"name": "python", "importance": "mandatory"}],
-        }
+        }], [])
     )
-    stage1_mock = AsyncMock(return_value=[])
-
-    monkeypatch.setattr(app_module.db_service, "get_job_profile", get_job_profile_mock)
-    monkeypatch.setattr(app_module.db_service, "stage1_filter_candidates", stage1_mock)
+    monkeypatch.setattr(app_module.db_service, "get_skill_matching_inputs", loader)
 
     response = await api_client.post("/match/job-1")
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    assert body.pop("statusUrl") == f"/matching/runs/{body.pop('runId')}"
+    assert body == {
         "job_id": "job-1",
         "stage1_count": 0,
         "stage2_count": 0,
         "matches": [],
     }
+    BillingService.charge_matching_run.assert_not_awaited()
 
 
 @pytest.mark.anyio
-async def test_match_successful_rerank_and_sorting(app_module, api_client, monkeypatch):
-    get_job_profile_mock = AsyncMock(
-        return_value={
-            "id": "job-1",
-            "title": "Data Engineer",
-            "department": "Analytics",
-            "location": "Berlin",
-            "embedding": [0.1, 0.2],
-            "required_skills": [
-                {"name": "python", "importance": "mandatory"},
-                {"name": "sql", "importance": "mandatory"},
-            ],
-        }
-    )
-    stage1_mock = AsyncMock(
-        return_value=[
-            Stage1Candidate(id="cand-a", mandatory_overlap=2, role_overlap=1, location_match=True),
-            Stage1Candidate(id="cand-b", mandatory_overlap=1, role_overlap=0, location_match=False),
-        ]
-    )
-    stage2_mock = AsyncMock(
-        return_value=[
-            Stage2Candidate(
-                id="cand-a",
-                name="Alice",
-                location="Berlin",
-                experience_years=7,
-                skills=["python", "sql"],
-                preferred_roles=["data engineer"],
-                vector_score=0.91,
-                jaccard_score=1.0,
-                combined_score=0.937,
-            ),
-            Stage2Candidate(
-                id="cand-b",
-                name="Bob",
-                location="Hamburg",
-                experience_years=5,
-                skills=["python"],
-                preferred_roles=["backend engineer"],
-                vector_score=0.82,
-                jaccard_score=0.5,
-                combined_score=0.724,
-            ),
-        ]
-    )
-    rerank_mock = AsyncMock(
-        return_value=LLMRerankResponse(
-            ranked_candidates=[
-                LLMRerankItem(
-                    candidate_id="cand-b",
-                    score=82,
-                    explanation="Strong Python background and relevant backend work. Needs ramp-up on SQL depth.",
-                ),
-                LLMRerankItem(
-                    candidate_id="cand-a",
-                    score=94,
-                    explanation="Excellent overlap with required skills and domain context. Location and role fit are strong.",
-                ),
-            ]
-        )
-    )
-
-    monkeypatch.setattr(app_module.db_service, "get_job_profile", get_job_profile_mock)
-    monkeypatch.setattr(app_module.db_service, "stage1_filter_candidates", stage1_mock)
-    monkeypatch.setattr(app_module.db_service, "stage2_rank_candidates", stage2_mock)
+async def test_match_limits_after_central_scoring_and_never_reranks(
+    app_module, api_client, monkeypatch, matching_cache_doubles,
+):
+    matching_cache_doubles(app_module.postgres_store, app_module.llm_service)
+    jobs = [{"id": "job-1", "title": "Engineer", "required_skills": [{"name": "Python"}]}]
+    candidates = [
+        {"id": f"missing-{index}", "name": f"No Skills {index}", "has_skill": []}
+        for index in range(10)
+    ] + [{"id": "late-alias", "name": "Ada", "has_skill": [{"name": "Coding"}]}]
+    monkeypatch.setattr(app_module.db_service, "get_skill_matching_inputs", AsyncMock(return_value=(jobs, candidates)))
+    monkeypatch.setattr(app_module.db_service, "get_esco_concepts_for_aliases", AsyncMock(return_value=[
+        {"uri": "skill:python", "preferred_label": "Python", "aliases": ["Coding"]},
+    ]))
+    monkeypatch.setattr(app_module.llm_service, "create_embedding", AsyncMock(return_value=[1.0, 0.0]))
+    monkeypatch.setattr(BillingService, "charge", AsyncMock())
+    legacy = AsyncMock(side_effect=AssertionError("Kein vorgelagertes Scoring"))
+    monkeypatch.setattr(app_module.db_service, "stage1_filter_candidates", legacy)
+    monkeypatch.setattr(app_module.db_service, "stage2_rank_candidates", legacy)
+    rerank_mock = AsyncMock(side_effect=AssertionError("Kein AI-Reranking"))
     monkeypatch.setattr(app_module.llm_service, "rerank_candidates", rerank_mock)
 
     response = await api_client.post("/match/job-1")
@@ -970,9 +1241,27 @@ async def test_match_successful_rerank_and_sorting(app_module, api_client, monke
     assert response.status_code == 200
     payload = response.json()
     assert payload["job_id"] == "job-1"
-    assert payload["stage1_count"] == 2
-    assert payload["stage2_count"] == 2
-    assert [item["candidate_id"] for item in payload["matches"]] == ["cand-a", "cand-b"]
-    assert payload["matches"][0]["score"] == 94
-    assert payload["matches"][1]["score"] == 82
-    rerank_mock.assert_awaited_once()
+    assert payload["stage1_count"] == 11
+    assert payload["stage2_count"] == 11
+    assert len(payload["matches"]) == 10
+    assert payload["matches"][0]["candidate_id"] == "late-alias"
+    assert payload["matches"][0]["score"] == 100
+    assert payload["matches"][1]["score"] == 0
+    assert payload["matches"][1]["qualified"] is False
+    assert payload["matches"][0]["jaccard_score"] is None
+    assert payload["matches"][0]["vector_score"] is None
+    assert payload["matches"][0]["combined_score"] is None
+    assert app_module.postgres_store.complete_matching_evaluation.await_count == 11
+    assert payload["matches"][0]["cacheStatus"] == "computed"
+    repeated = await api_client.post("/match/job-1")
+    assert repeated.status_code == 200
+    cached = repeated.json()["matches"][0]
+    assert cached["cacheStatus"] == "hit"
+    assert cached["matchedAt"] == payload["matches"][0]["matchedAt"]
+    assert cached["evaluationId"] == payload["matches"][0]["evaluationId"]
+    assert app_module.postgres_store.complete_matching_evaluation.await_count == 11
+    BillingService.charge_matching_run.assert_awaited_once()
+    assert BillingService.charge_matching_run.await_args.args[1:] == ("-1.00", "AI_MATCH")
+    BillingService.charge.assert_not_awaited()
+    rerank_mock.assert_not_awaited()
+    legacy.assert_not_awaited()

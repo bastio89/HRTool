@@ -6,6 +6,7 @@ import { Card, Button, ScoreRing, EmptyState, LoadingSpinner, PageContainer } fr
 import { useToast } from '../components/Toast'
 import { useI18n } from '../I18nContext'
 import { localeTag } from '../utils/format'
+import MatchingResultMetadata from '../components/MatchingResultMetadata'
 
 export default function History() {
   const toast = useToast()
@@ -14,12 +15,15 @@ export default function History() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState('newest')
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    matchingApi.getHistory()
-      .then(data => setResults(data.data || []))
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    const controller = new AbortController()
+    matchingApi.getHistory({ signal: controller.signal })
+      .then(data => { if (!controller.signal.aborted) setResults(data.data || []) })
+      .catch(failure => { if (failure.name !== 'AbortError' && !controller.signal.aborted) setError(failure.message) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
   }, [])
 
   const handleDelete = async (id) => {
@@ -47,7 +51,7 @@ export default function History() {
       if (sort === 'newest') return new Date(b.created_at) - new Date(a.created_at)
       if (sort === 'oldest') return new Date(a.created_at) - new Date(b.created_at)
       if (sort === 'score') {
-        return (b.summary?.topScore || 0) - (a.summary?.topScore || 0)
+        return (b.summary?.topScore ?? -1) - (a.summary?.topScore ?? -1)
       }
       if (sort === 'candidates') {
         return (b.summary?.candidateCount || 0) - (a.summary?.candidateCount || 0)
@@ -108,7 +112,7 @@ export default function History() {
         </p>
       )}
 
-      {results.length === 0 ? (
+      {error ? <p role="alert" className="text-red-600">{t('history.error')}: {error}</p> : results.length === 0 ? (
         <Card className="p-16">
           <EmptyState
             icon={HistoryIcon}
@@ -140,12 +144,14 @@ export default function History() {
               <Card key={result.id} className="p-5 sm:p-10" hover>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-10">
                   <div className="flex items-center gap-5 sm:gap-0">
-                    <ScoreRing score={summary.topScore || 0} size={64} strokeWidth={5} />
+                    {summary.topScore != null ? <ScoreRing score={summary.topScore} size={64} strokeWidth={5} /> : <span>{t('matching.score_missing')}</span>}
                     <h3 className="text-[18px] font-semibold tracking-tight text-black dark:text-white sm:hidden ml-2">{result.job_title}</h3>
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <h3 className="text-[20px] sm:text-[24px] font-semibold tracking-tight text-black dark:text-white hidden sm:block">{result.job_title}</h3>
+                    {!summary.method && <p>{t('matching.method_unknown')}</p>}
+                    <MatchingResultMetadata result={summary} historical />
                     <div className="flex items-center gap-4 sm:gap-8 mt-1 sm:mt-3 flex-wrap">
                       <span className="flex items-center gap-2 text-[13px] sm:text-[15px] font-medium text-gray-500 dark:text-gray-400">
                         <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -156,19 +162,20 @@ export default function History() {
                         {t('history.candidates_count').replace('{count}', summary.candidateCount || 0)}
                       </span>
                       <span className="text-[13px] sm:text-[15px] font-semibold text-[#0071e3]">
-                        ∅ {((summary.averageScore || 0) * 100).toFixed(0)}%
+                        ∅ {summary.averageScore == null ? t('matching.score_missing') : `${(summary.averageScore * 100).toFixed(0)}%`}
                       </span>
                     </div>
 
                     {topCandidates.length > 0 && (
                       <div className="flex items-center gap-3 sm:gap-5 mt-3 sm:mt-4 flex-wrap">
                         {topCandidates.map((r, i) => (
-                          <span key={i} className="text-[12px] sm:text-[14px] font-medium text-gray-500 dark:text-gray-400">
+                          <div key={i} className="text-[12px] sm:text-[14px] font-medium text-gray-500 dark:text-gray-400">
                             {i + 1}. {r.candidateName} 
                             <span className={`ml-1 sm:ml-1.5 font-semibold ${r.score >= 0.7 ? 'text-[#34c759]' : 'text-[#ff9f0a]'}`}>
-                              ({(r.score * 100).toFixed(0)}%)
+                              ({r.score == null ? t('matching.score_missing') : `${(r.score * 100).toFixed(0)}%`})
                             </span>
-                          </span>
+                            <MatchingResultMetadata result={r} historical />
+                          </div>
                         ))}
                       </div>
                     )}

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const deasync = require('deasync');
-const { Client, types } = require('pg');
+const { Client, Pool, types } = require('pg');
 
 
 types.setTypeParser(20, value => Number(value));
@@ -102,6 +102,12 @@ function translateSql(sql) {
   return replacePlaceholders(translated);
 }
 
+function insertReturningSql(sql) {
+  const insert = /^\s*INSERT(?:\s+OR\s+(?:IGNORE|REPLACE))?\s+INTO\s+([a-z_][a-z0-9_]*)/i.exec(sql);
+  return insert && insert[1].toLowerCase() !== 'settings' && !/\bRETURNING\b/i.test(sql)
+    ? `${sql.replace(/;?\s*$/, '')} RETURNING id` : sql;
+}
+
 class PostgresStatement {
   constructor(database, sql) {
     this.database = database;
@@ -117,12 +123,7 @@ class PostgresStatement {
   }
 
   run(...params) {
-    let sql = this.sql;
-    const insertMatch = /^\s*INSERT(?:\s+OR\s+(?:IGNORE|REPLACE))?\s+INTO\s+([a-z_][a-z0-9_]*)/i.exec(sql);
-    if (insertMatch && insertMatch[1].toLowerCase() !== 'settings' && !/\bRETURNING\b/i.test(sql)) {
-      sql = `${sql.replace(/;?\s*$/, '')} RETURNING id`;
-    }
-    const result = this.database.query(sql, params);
+    const result = this.database.query(insertReturningSql(this.sql), params);
     return {
       changes: result.rowCount || 0,
       lastInsertRowid: result.rows[0]?.id,
@@ -130,10 +131,57 @@ class PostgresStatement {
   }
 }
 
+class AsyncPostgresTransaction {
+  constructor(client) {
+    this.client = client;
+    this.savepoint = 0;
+  }
+
+  async query(sql, params = []) {
+    const translatedSql = translateSql(sql);
+    try {
+      return await this.client.query(translatedSql, params.map(value => value === undefined ? null : value));
+    } catch (error) {
+      error.translatedSql = translatedSql;
+      throw error;
+    }
+  }
+
+  prepare(sql) {
+    return {
+      get: async (...params) => (await this.query(sql, params)).rows[0],
+      all: async (...params) => (await this.query(sql, params)).rows,
+      run: async (...params) => {
+        const result = await this.query(insertReturningSql(sql), params);
+        return { changes: result.rowCount || 0, lastInsertRowid: result.rows[0]?.id };
+      },
+    };
+  }
+
+  async exec(sql) {
+    await this.query(sql);
+  }
+
+  async transactionAsync(callback) {
+    const savepoint = `hrtool_import_${++this.savepoint}`;
+    await this.query(`SAVEPOINT ${savepoint}`);
+    try {
+      const result = await callback(this);
+      await this.query(`RELEASE SAVEPOINT ${savepoint}`);
+      return result;
+    } catch (error) {
+      await this.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      await this.query(`RELEASE SAVEPOINT ${savepoint}`);
+      throw error;
+    }
+  }
+}
+
 class PostgresDatabase {
   constructor(connectionString = process.env.DATABASE_URL) {
     if (!connectionString) throw new Error('DATABASE_URL muss für PostgreSQL gesetzt sein');
     this.connectionString = connectionString;
+    this.asyncPool = null;
     this.client = new Client({ connectionString });
     waitFor(done => this.client.connect(done));
   }
@@ -176,6 +224,24 @@ class PostgresDatabase {
     };
   }
 
+  async transactionAsync(callback) {
+    this.asyncPool ||= new Pool({ connectionString: this.connectionString });
+    const client = await this.asyncPool.connect();
+    let failure;
+    try {
+      await client.query('BEGIN');
+      const result = await callback(new AsyncPostgresTransaction(client));
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      failure = error;
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release(failure);
+    }
+  }
+
   backup(targetPath) {
     return new Promise((resolve, reject) => {
       try {
@@ -215,6 +281,7 @@ class PostgresDatabase {
   }
 
   close() {
+    if (this.asyncPool) waitFor(done => this.asyncPool.end(done));
     waitFor(done => this.client.end(done));
   }
 }

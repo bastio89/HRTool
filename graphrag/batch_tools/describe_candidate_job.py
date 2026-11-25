@@ -28,6 +28,8 @@ from services.db import Neo4jService
 from services.model_config import ModelConfigService
 from services.llm import LLMService
 from services.postgres_store import PostgresStore
+from services.matching_orchestrator import MatchingOrchestrator
+from services.skill_matching import SkillMatchingResult, SkillMatchingService
 
 
 DEFAULT_CANDIDATE_NAME = "Chantal Moiree"
@@ -114,7 +116,7 @@ def parse_args() -> argparse.Namespace:
         "--top-pairs",
         type=int,
         default=DEFAULT_TOP_PAIRS,
-        help=f"How many top cosine pairs to print (default: {DEFAULT_TOP_PAIRS})",
+        help=f"How many central skill matrix cells to print after full scoring (default: {DEFAULT_TOP_PAIRS})",
     )
     return parser.parse_args()
 
@@ -149,6 +151,7 @@ def _print_kv(label: str, value: Any) -> None:
 
 
 def _cosine_similarity(left: list[float] | tuple[float, ...], right: list[float] | tuple[float, ...]) -> float:
+    """Document diagnostics only; deprecated for skills in favor of SkillMatchingService."""
     if not left or not right:
         return 0.0
     length = min(len(left), len(right))
@@ -163,11 +166,13 @@ def _cosine_similarity(left: list[float] | tuple[float, ...], right: list[float]
 
 
 def _dot_product(left: list[float] | tuple[float, ...], right: list[float] | tuple[float, ...]) -> float:
+    """Deprecated skill-diagnostic reference; use the central SkillMatchingResult matrix."""
     length = min(len(left), len(right))
     return sum(float(left[index]) * float(right[index]) for index in range(length)) if length else 0.0
 
 
 def _vector_norm(values: list[float] | tuple[float, ...]) -> float:
+    """Deprecated skill-diagnostic reference; use the central SkillMatchingResult matrix."""
     return math.sqrt(sum(float(value) ** 2 for value in values)) if values else 0.0
 
 
@@ -184,6 +189,7 @@ def _normalize_skill_name(value: Any) -> str:
 
 
 def _collect_skill_names(skill_pairs: list[dict[str, Any]]) -> list[str]:
+    """Deprecated diagnostic cache helper; SkillMatchingService handles resolution."""
     ordered_names: list[str] = []
     seen_names: set[str] = set()
     for row in skill_pairs:
@@ -196,6 +202,7 @@ def _collect_skill_names(skill_pairs: list[dict[str, Any]]) -> list[str]:
 
 
 async def _build_skill_embedding_cache(llm_service: LLMService, skill_names: list[str]) -> dict[str, list[float]]:
+    """Deprecated reference; SkillMatchingService owns embeddings and their configuration."""
     ordered_names = [name for name in skill_names if name]
     if not ordered_names:
         return {}
@@ -211,6 +218,7 @@ async def _load_top_cosine_pairs(
     job_id: str,
     limit: int,
 ) -> list[dict[str, Any]]:
+    """Deprecated reference only; use MatchingOrchestrator.match_skills and its full matrix."""
     query = """
     MATCH (j:Job {id: $job_id})
     MATCH (c:Candidate {id: $candidate_id})
@@ -304,6 +312,7 @@ def _vector_similarity_report(
     neo4j_embedding: list[float],
     python_embedding: list[float],
 ) -> dict[str, Any]:
+    """Deprecated skill-vector diagnostic reference; use the central pair matrix."""
     length = min(len(neo4j_embedding), len(python_embedding))
     if length:
         deltas = [abs(float(neo4j_embedding[index]) - float(python_embedding[index])) for index in range(length)]
@@ -322,6 +331,48 @@ def _vector_similarity_report(
         "l2_delta": l2_delta,
         "max_abs_delta": max_abs_delta,
     }
+
+
+async def _print_skill_matching(
+    orchestrator: MatchingOrchestrator, required_skills: object, candidate_skills: object, *, top_pairs: int,
+) -> SkillMatchingResult:
+    if top_pairs < 1:
+        raise ValueError("top_pairs must be positive.")
+    assessment = await orchestrator.match_skills(required_skills, candidate_skills)
+    result = assessment.result
+    _print_section("Zentrale Skill-Abdeckung (Diagnose ohne Paarpersistenz)")
+    _print_kv("Score (0-100)", result.score)
+    _print_kv("Muss-Skills abgedeckt", result.qualified)
+    _print_kv("Vollstaendige Skill-Paarmatrix", len(result.matrix))
+    for index, cell in enumerate(sorted(result.matrix, key=lambda cell: cell.similarity, reverse=True)[:top_pairs], start=1):
+        print(
+            f"{index}. {cell.need_skill} / {cell.has_skill or '-'} / "
+            f"raw={cell.similarity:.6f} / weighted={cell.weighted_similarity:.6f} / "
+            f"resolution={cell.need_resolution_status}:{cell.has_resolution_status or '-'} / "
+            f"priority={cell.priority} / best={cell.best_candidate} / contribution={cell.score_contribution:.6f} / "
+            f"covered={cell.covered} / reason={cell.reason}"
+        )
+    return result
+
+
+async def _print_document_diagnostics(db_service: Neo4jService, candidate_id: str, job_id: str) -> None:
+    _print_section("Ganzdokument-Diagnostik (kein Skill-/AI-Score)")
+    async with db_service.driver.session() as session:
+        result = await session.run(
+            "MATCH (c:Candidate {id: $candidate_id}), (j:Job {id: $job_id}) "
+            "RETURN c.embedding AS candidate_embedding, j.embedding AS job_embedding",
+            candidate_id=candidate_id, job_id=job_id,
+        )
+        record = await result.single()
+    if record is None or not record["candidate_embedding"] or not record["job_embedding"]:
+        print("Dokumentvektoren nicht vorhanden.")
+        return
+    candidate_vector, job_vector = record["candidate_embedding"], record["job_embedding"]
+    if len(candidate_vector) != len(job_vector):
+        raise ValueError("Dokumentvektoren haben unterschiedliche Dimensionen.")
+    _print_kv("CV-Vektor", _format_vector_preview(candidate_vector))
+    _print_kv("Job-Vektor", _format_vector_preview(job_vector))
+    _print_kv("Dokument-Cosinus (nur Diagnose)", _cosine_similarity(candidate_vector, job_vector))
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -424,88 +475,11 @@ async def run(args: argparse.Namespace) -> int:
         _print_kv("Chat Model", embedding_config["chat_model"])
         _print_kv("Embedding Model", embedding_config["embedding_model"])
 
-        cosine_pairs = await _load_top_cosine_pairs(
-            db_service,
-            candidate_id,
-            job_id,
-            limit=max(1, args.top_pairs),
+        await _print_skill_matching(
+            MatchingOrchestrator(SkillMatchingService(llm_service, db_service, similarity_cutoff=settings.skill_matching_cutoff)),
+            job_graph["skills"], candidate_graph["skills"], top_pairs=args.top_pairs,
         )
-        skill_embeddings = await _build_skill_embedding_cache(llm_service, _collect_skill_names(cosine_pairs))
-        compared_rows: list[dict[str, Any]] = []
-        for row in cosine_pairs:
-            job_embedding = row.get("job_embedding") or []
-            cv_embedding = row.get("cv_embedding") or []
-            dot_product = _dot_product(job_embedding, cv_embedding)
-            job_norm = _vector_norm(job_embedding)
-            cv_norm = _vector_norm(cv_embedding)
-            cypher_cosine = float(row.get("cosine") or 0.0)
-            python_cosine = _cosine_similarity(job_embedding, cv_embedding)
-            compared_rows.append(
-                {
-                    "job_skill": row.get("job_skill"),
-                    "cv_skill": row.get("cv_skill"),
-                    "cypher_cosine": cypher_cosine,
-                    "python_cosine": python_cosine,
-                    "delta": abs(cypher_cosine - python_cosine),
-                    "job_embedding_length": len(job_embedding),
-                    "cv_embedding_length": len(cv_embedding),
-                    "dot_product": dot_product,
-                    "job_norm": job_norm,
-                    "cv_norm": cv_norm,
-                    "job_preview": _format_vector_preview(job_embedding),
-                    "cv_preview": _format_vector_preview(cv_embedding),
-                    "job_embedding": job_embedding,
-                    "cv_embedding": cv_embedding,
-                    "job_python_embedding": skill_embeddings.get(_normalize_skill_name(row.get("job_skill")), []),
-                    "cv_python_embedding": skill_embeddings.get(_normalize_skill_name(row.get("cv_skill")), []),
-                }
-            )
-
-        compared_rows.sort(key=lambda item: item["cypher_cosine"], reverse=True)
-
-        _print_section("Skill-Cosinus")
-        if not compared_rows:
-            print("-")
-        else:
-            for index, row in enumerate(compared_rows, start=1):
-                print(
-                    f"{index}. {row['job_skill']} / {row['cv_skill']} / "
-                    f"{row['cypher_cosine']:.6f} / {row['python_cosine']:.6f} / "
-                    f"{row['delta']:.6f} / {row['job_embedding_length']} / {row['cv_embedding_length']}"
-                )
-
-        _print_section("Embedding Vergleich")
-        if not compared_rows:
-            print("-")
-        else:
-            for index, row in enumerate(compared_rows, start=1):
-                job_skill_name = _normalize_skill_name(row["job_skill"])
-                cv_skill_name = _normalize_skill_name(row["cv_skill"])
-                job_python = skill_embeddings.get(job_skill_name, [])
-                cv_python = skill_embeddings.get(cv_skill_name, [])
-                job_report = _vector_similarity_report(job_skill_name, row.get("job_embedding") or [], job_python)
-                cv_report = _vector_similarity_report(cv_skill_name, row.get("cv_embedding") or [], cv_python)
-                print(f"{index}. {row['job_skill']} / {row['cv_skill']}")
-                print(
-                    f"   Job-Embedding: Neo4j {job_report['neo4j_preview']} | Python {job_report['python_preview']} | "
-                    f"Cosine={job_report['embedding_cosine']:.6f} | L2-Delta={job_report['l2_delta']:.6f} | Max-Delta={job_report['max_abs_delta']:.6f}"
-                )
-                print(
-                    f"   CV-Embedding: Neo4j {cv_report['neo4j_preview']} | Python {cv_report['python_preview']} | "
-                    f"Cosine={cv_report['embedding_cosine']:.6f} | L2-Delta={cv_report['l2_delta']:.6f} | Max-Delta={cv_report['max_abs_delta']:.6f}"
-                )
-
-        _print_section("Debug Cosinus")
-        if not compared_rows:
-            print("-")
-        else:
-            for index, row in enumerate(compared_rows, start=1):
-                print(f"{index}. {row['job_skill']} / {row['cv_skill']}")
-                print(f"   Job-Preview: {row['job_preview']}")
-                print(f"   CV-Preview: {row['cv_preview']}")
-                print(f"   Dot-Product: {row['dot_product']:.6f}")
-                print(f"   Normen: job={row['job_norm']:.6f}, cv={row['cv_norm']:.6f}")
-                print(f"   Delta: {row['delta']:.6f}")
+        await _print_document_diagnostics(db_service, candidate_id, job_id)
 
         return 0
     finally:

@@ -52,6 +52,7 @@
 
 ### 👥 Bewerbermanagement
 - **Umfangreiche Profile** — Name, Kontakt, Standort, Skills, Erfahrung, Ausbildung, Gehaltswunsch, Verfügbarkeit, Sprachen, Zertifikate, Führerschein, Mobilität
+- **Datensatz-IDs** — Job-ID in der Stellenansicht und Bewerber-ID sowohl im Bewerberprofil als auch unter „Bewerber bearbeiten“ direkt im Kopfbereich; Matching-Ergebnislisten und Rankings zeigen beide IDs ebenfalls an, schreibgeschützt und zum Kopieren markierbar. Fehlende Muss-Skills werden mit verfügbaren Skill-Lücken angezeigt, setzen den gewichteten Skillscore aber nicht auf 0 %
 - **Status-Tracking** — Aktiv, Passiv, In Prozess, Blacklist
 - **Tags & Quellen** — Flexible Verschlagwortung und Herkunfts-Tracking (LinkedIn, Xing, Indeed, Stepstone, Empfehlung, Karriereseite, Messe, Initiativ)
 - **Eine Person gibt es nur einmal** — Name + Geburtsdatum machen einen Bewerber eindeutig (das Geburtsdatum ist optional, weil das führende CRM Dubletten verhindert; ohne Geburtsdatum wird nicht auf Dubletten geprüft); eine vorhandene Person wird beim Anlegen, im CSV- und im CV-Import blockiert bzw. übersprungen. Gleiche E-Mail oder gleicher Name allein sind nur ein Hinweis
@@ -77,7 +78,7 @@
 - **Pflichtnotizen** — Bei jedem Stufenwechsel wird der Grund dokumentiert
 - **Interview-Planung** — Termine direkt in der Pipeline erstellen (Datum, Typ, Ort, Meeting-Link, Teilnehmer)
 - **Bewertungen sichtbar** — Sterne-Ratings direkt auf den Kanban-Karten
-- **Matching aus Pipeline** — KI-Matching direkt mit den aktuellen Pipeline-Kandidaten starten
+- **Matching aus Pipeline** — schnelle Skill-Abdeckung für die aktuellen Pipeline-Kandidaten starten
 - **Mobil optimiert** — Touch-Swipe-Navigation zwischen Stufen auf Smartphones
 
 ### 📁 Stellenverwaltung
@@ -133,15 +134,28 @@
 - **OCR-Fallback:** Gescannte PDFs werden automatisch per Texterkennung verarbeitet (Deutsch + Englisch)
 - **Ein-Klick-Übernahme:** Extrahierte Daten werden direkt in das Bewerberformular übernommen
 
-### 2. KI-Kandidaten-Matching
+### 2. Skill-Abdeckung und AI-Matching
 > Finden Sie automatisch die besten Kandidaten für jede Stelle.
 
-- **Intelligente Bewertung:** Jeder Bewerber erhält einen Score von 0–100
+- **Skill-Abdeckung:** Matrizen, beide Suchrichtungen und Pipeline laufen über den zentralen `SkillMatchingService` (0–100).
+- **AI-Matching:** Langsamere unabhängige Gesamtbewertung ausschließlich explizit ausgewählter gespeicherter Paare (maximal 20 je Anfrage).
+- **Getrennte Ergebnisse:** Skill- und AI-Score besitzen eigene Modelle und Zeitpunkte; fehlende Muss-Skills verändern keinen AI-Score und setzen auch den Skillscore nicht pauschal auf 0. `qualified` zeigt weiterhin an, ob alle Muss-Skills abgedeckt sind. Fehlende Ergebnisse bleiben nicht berechnet, nicht 0.
 - **Detailanalyse:** Stärken und Schwächen pro Kandidat aufgeschlüsselt
 - **Visuelle Score-Ringe:** Sofort erkennbar, wer am besten passt
 - **Anonymisierte Bewertung:** Kandidatennamen werden vor der KI-Analyse anonymisiert
 - **CSV-Export:** Matching-Ergebnisse als Tabelle exportieren
 - **Historie:** Alle vergangenen Matchings abrufbar
+
+#### Cache und asynchrone Batchverarbeitung
+
+- **Ein Ergebnis je Paar und Version:** Unveränderte gespeicherte CV-/Job-Paare verwenden ihr vollständiges Skill- beziehungsweise AI-Ergebnis erneut, ohne Modellaufruf oder zusätzliche Matching-Abbuchung. Relevante Inhalts- oder Modelländerungen benötigen eine neue Version. Der ursprüngliche Berechnungszeitpunkt bleibt sichtbar; historische Ergebnisse ohne Nachweis sind **unverifiziert**. Ein historischer Cache-Treffer ist kein Beleg für die heutige Gültigkeit.
+- **Nach dem Import:** Erfolgreich gespeicherte neue oder geänderte CVs und Stellen planen automatisch einen dauerhaften Skill-Lauf gegen den gesamten Gegenbestand ein. **„Import gespeichert, Matching eingeplant“** bedeutet noch keinen Matching-Abschluss. AI-Matching bleibt eine ausdrückliche Auswahlaktion.
+- **Administration → Batchverarbeitung** (`/admin/batches`): Nur Admins sehen die globale Queue, Filter, paginierte Paardetails, Benutzer, Credits und echte Zähler. Drei neue Ergebnisse, zwei Cache-Treffer und ein Fehler bei acht Paaren ergeben **6/8 = 75 %**, nicht „erfolgreich abgeschlossen“. Bei unbekannter Zielmenge erscheint die Vorbereitung ohne Prozentwert.
+- **Eigener Status:** Der Auftragslink im CV-/Job-Importdialog und im PDF-Stellenformular führt Admins zur Batchverwaltung mit ausgewählter Auftrags-ID (`/admin/batches?runId=…`), anderen Importbenutzern ausschließlich zum eigenen Status (`/matching/runs/…`). Fremde Aufträge bleiben gesperrt.
+- **Aktualisierung:** Queue und Eigenstatus werden bei sichtbarer Seite alle drei Sekunden abgefragt. Bei einem Fehler bleiben letzter bestätigter Stand und Aktualisierungszeitpunkt sichtbar. Laufende ausgewählte Matchings zeigen verfügbare Ergebnisse und offene Paar-IDs; ein Neuladen setzt die Statusabfrage des gespeicherten Auftrags fort, statt Matching erneut zu starten.
+- **Wiederaufnahme:** Ursache eines Credit-, Vorbereitungs- oder Paarfehlers beheben, betroffene Paarziel-IDs auswählen und **„Ausgewählte Paare wiederholen“** bestätigen. Ein aktiver Worker verhindert die Aktion mit HTTP 409. Bei ungewissem Provideraufruf ist ausdrückliche Zustimmung zu möglichen zusätzlichen Providerkosten erforderlich. Erfolgreiche Ergebnisse, Originalzeitpunkte und bereits erfolgte Laufabbuchungen bleiben erhalten; die Quelle nicht erneut importieren.
+
+**English UI:** Switch the application language to English and open **Administration → Batch processing**. Import acknowledgements say **“Import saved, matching queued”** and link to **Open batch processing** (admins) or **Open own matching status** (other import users). The queue distinguishes computed, cached, pending, failed and review-required work. **Retry selected pairs** requires confirmation and an idle worker; it never silently reruns successful pairs.
 
 ### 3. KI-Stellenbeschreibung
 > Professionelle Stellenausschreibungen in Sekunden generieren.
@@ -411,7 +425,7 @@ http://localhost:3001/api/docs
 
 ### Matching-only REST API für Integrationen
 
-Kunden können die Matching-Funktion auch ohne HRTool-Frontend und ohne lokale Bewerber-/Stellenverwaltung verwenden. Die bisherige Schnittstelle ist veraltet; verwenden Sie nach Möglichkeit direkt den GraphRAG-Endpoint. Die API-Key-geschützte Schnittstelle bleibt noch als Legacy-Pfad verfügbar:
+Integrationen können ohne HRTool-Frontend arbeiten, benötigen für produktives Matching aber bereits gespeicherte Bewerber-/Stellen-IDs beziehungsweise UUIDs. Die API-Key-geschützte Schnittstelle bleibt als Legacy-Adapter für schnelle Skill-Abdeckung verfügbar; sie delegiert direkt an GraphRAG:
 
 ```http
 POST /api/matching/external/run
@@ -424,16 +438,20 @@ Beispiel-Request:
 ```json
 {
   "job": {
-    "id": "job-frontend-01",
+    "id": 2,
     "title": "Frontend Developer",
     "description": "React-Anwendung fuer ein SaaS-Produkt weiterentwickeln.",
     "requirements": "React, TypeScript, REST APIs, 3+ Jahre Erfahrung",
+    "required_skills": [
+      {"name": "React", "priority": "Mandatory", "category": "HardSkill"},
+      {"name": "TypeScript", "priority": "NiceToHave", "category": "HardSkill"}
+    ],
     "location": "Berlin / Remote",
     "type": "Vollzeit"
   },
   "candidates": [
     {
-      "id": "cand-4711",
+      "id": 7,
       "name": "Kandidat 4711",
       "skills": "React, Node.js, SQL",
       "experience": "5 Jahre Frontend-Entwicklung",
@@ -451,7 +469,18 @@ Beispiel-Request:
 }
 ```
 
-Die Antwort enthält Score, Stärken, Schwächen und Kurzbegründung je Kandidat. Die Daten werden nicht als Bewerber oder Stelle im HRTool gespeichert; die Schnittstelle nutzt nur das konfigurierte lokale KI-Modell.
+Die IDs im Beispiel müssen bereits existieren. Die Antwort enthält `method: "vector"`, den Skillscore 0–100, `qualified`, Stärken/Schwächen und Kurzbegründung. Sie legt keine Bewerber oder Stellen an, speichert aber die produktiven Paarergebnisse. `weights` bleibt ein akzeptiertes Legacy-Feld ohne Einfluss auf die zentrale Skillbewertung. Jobtext ohne vorbereitete Skills führt zu einem Aufbereitungsfehler statt automatischer LLM-Extraktion.
+
+| Backend-Aufruf | Methode / Vertrag |
+|---|---|
+| `/api/matching/run-matrix`, `/vectormatch`, `/vectormatch-selected` | Nur Skill-Abdeckung (`vector`), beide Engines verwenden denselben zentralen Dienst |
+| `/api/matching/run` | `{"jobId":2,"candidateIds":[7]}`; keine implizit allen Kandidaten, Namen oder Freitext ohne gespeichertes Paar |
+| `/api/matching/run-selected` | `{"pairs":[{"jobId":2,"candidateId":7}]}`; ausschließlich AI-Gesamtbewertung (`ai`) |
+| Persistenz | `pairsPersisted: true` erst nach bestätigten Paarwrites; keine doppelten Writes nach GraphRAG-Erfolg, Schreib-/Paarfehler werden explizit gemeldet |
+| Scoreanzeige | Neue explizite Methoden verwenden 0–100, auch 0 und 1; fehlend bleibt null/abwesend. Alte Diagnosefelder sind nullable/deprecated, kein neuer Ersatzwert |
+| Exporte | `matching_vector` und `matching_ai` bleiben getrennt, je Paar/Methode letzter Score samt eigenem Zeitpunkt und Modell; CSV-Standardspalten unverändert |
+
+Die GUI beginnt mit gespeicherten Stellen und schneller Skill-Abdeckung. Erst die Aktion **AI-Matching für Auswahl** startet die unabhängige AI-Bewertung; ein fehlendes Muss-Skill sperrt diese explizite Auswahl nicht. Reine Skilllisten-Diagnosen ohne gespeicherte Paar-IDs verwenden GraphRAG `/match/skills` und schreiben keine Paarzeilen.
 
 ### Eindeutige Identität von Bewerbern und Stellen
 

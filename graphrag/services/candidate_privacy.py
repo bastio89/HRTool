@@ -4,6 +4,8 @@ import re
 from collections import OrderedDict
 from typing import Any
 
+import psycopg
+
 from services.postgres_store import PostgresStore
 
 
@@ -11,8 +13,10 @@ class CandidatePrivacyService:
     def __init__(self, postgres_store: PostgresStore) -> None:
         self.postgres_store = postgres_store
 
-    async def anonymize_candidate(self, candidate_id: str) -> dict[str, Any]:
-        record = await self._load_candidate_text(candidate_id)
+    async def anonymize_candidate(
+        self, candidate_id: str, *, connection: psycopg.AsyncConnection[Any] | None = None,
+    ) -> dict[str, Any]:
+        record = await self._load_candidate_text(candidate_id, connection=connection)
         mapping = record.get("mapping") or {}
         anonymized_text = record.get("anonymized_text")
 
@@ -21,7 +25,9 @@ class CandidatePrivacyService:
                 record["original_text"],
                 candidate_name=record.get("candidate_name"),
             )
-            await self.postgres_store.store_candidate_anonymization(candidate_id, anonymized_text, mapping)
+            await self.postgres_store.store_candidate_anonymization(
+                candidate_id, anonymized_text, mapping, connection=connection,
+            )
 
         return {
             "candidate_id": candidate_id,
@@ -45,8 +51,10 @@ class CandidatePrivacyService:
             "mapping": mapping,
         }
 
-    async def _load_candidate_text(self, candidate_id: str) -> dict[str, Any]:
-        record = await self.postgres_store.get_candidate_text(candidate_id)
+    async def _load_candidate_text(
+        self, candidate_id: str, *, connection: psycopg.AsyncConnection[Any] | None = None,
+    ) -> dict[str, Any]:
+        record = await self.postgres_store.get_candidate_text(candidate_id, connection=connection)
         if record is None or not str(record.get("original_text") or "").strip():
             raise LookupError(f"No stored CV text found for candidate_id={candidate_id}")
         return record

@@ -39,6 +39,11 @@ os.environ.setdefault("DATABASE_URL", "postgresql://hrtool:hrtoolpw@localhost:54
 
 from config import settings
 from services.db import Neo4jService
+from services.llm import LLMService
+from services.postgres_store import PostgresStore
+from services.matching_orchestrator import MatchingOrchestrator
+from services.skill_matching import SkillMatchingService
+from models import MatchingCandidateInput, MatchingJobInput
 from scripts.init_neo4j import init_schema
 
 
@@ -102,6 +107,7 @@ async def _find_similar_skills(
 	limit: int = 5,
 	threshold: float = 0.80,
 ) -> set[str]:
+	"""Deprecated reference; SkillMatchingService compares every required/available skill."""
 	query = """
 	CALL db.index.vector.queryNodes('skill_embeddings_index', $limit, $embedding)
 	YIELD node, score
@@ -132,6 +138,7 @@ def _score_pair(
 	candidate_similar_skills: set[str],
 	job_skills: set[str],
 ) -> float:
+	"""Deprecated union/neighbor scorer; use MatchingOrchestrator.match_skill_matrix."""
 	shared_skills = candidate_skills & job_skills
 	similar_skills = candidate_similar_skills & job_skills
 	union_size = len(candidate_skills | job_skills)
@@ -142,7 +149,20 @@ def _score_pair(
 	return float(len(shared_skills) + (0.6 * len(similar_skills))) / float(union_size)
 
 
-async def _build_matrix(db_service: Neo4jService) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, set[str]]]:
+async def _build_matrix(
+	db_service: Neo4jService, *, orchestrator: MatchingOrchestrator, model: str,
+) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[tuple[str, str], float]]:
+	jobs, candidates = await db_service.get_skill_matching_inputs()
+	rows, _matched_at = await orchestrator.match_skill_matrix(
+		[MatchingJobInput.model_validate(job) for job in jobs],
+		[MatchingCandidateInput.model_validate(candidate) for candidate in candidates],
+		model=model,
+	)
+	return candidates, jobs, {(row["jobId"], row["candidateId"]): row["score"] / 100 for row in rows}
+
+
+async def _deprecated_build_matrix(db_service: Neo4jService) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, object]]:
+	"""Deprecated reference only; use _build_matrix with MatchingOrchestrator."""
 	candidates = await _fetch_candidates(db_service)
 	jobs = await _fetch_jobs(db_service)
 	skill_embeddings = await _fetch_skill_embeddings(db_service)
@@ -186,23 +206,33 @@ async def _build_matrix(db_service: Neo4jService) -> tuple[list[dict[str, object
 
 async def run() -> Path:
 	await init_schema()
+	store = PostgresStore(settings.database_url)
 	db_service = Neo4jService(
 		uri=settings.neo4j_uri,
 		user=settings.neo4j_user,
 		password=settings.neo4j_password,
+		postgres_store=store,
+	)
+	llm_service = LLMService(
+		base_url=settings.resolved_ai_base_url, chat_model=settings.resolved_chat_model,
+		embedding_model=settings.resolved_embedding_model, embedding_dimensions=settings.embedding_dimensions,
+		provider=settings.resolved_provider, api_key=settings.resolved_api_key,
+	)
+	orchestrator = MatchingOrchestrator(
+		SkillMatchingService(llm_service, db_service, similarity_cutoff=settings.skill_matching_cutoff),
+		postgres_store=store,
 	)
 
 	try:
-		candidates, jobs, cache = await _build_matrix(db_service)
+		candidates, jobs, scores = await _build_matrix(
+			db_service, orchestrator=orchestrator, model=settings.resolved_embedding_model,
+		)
 	finally:
+		await llm_service.close()
 		await db_service.close()
 
 	timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 	output_path = Path.cwd() / f"match_{timestamp}.csv"
-
-	candidate_skill_sets = cache["candidate_skill_sets"]
-	candidate_similar_skill_sets = cache["candidate_similar_skill_sets"]
-	job_skill_sets = cache["job_skill_sets"]
 
 	with output_path.open("w", newline="", encoding="utf-8") as csv_file:
 		writer = csv.writer(csv_file)
@@ -218,11 +248,7 @@ async def run() -> Path:
 
 			for candidate in candidates:
 				candidate_id = str(candidate["id"])
-				score = _score_pair(
-					candidate_skill_sets.get(candidate_id, set()),
-					candidate_similar_skill_sets.get(candidate_id, set()),
-					job_skill_sets.get(job_id, set()),
-				)
+				score = scores[(job_id, candidate_id)]
 				row.append(f"{score:.3f}")
 
 			writer.writerow(row)

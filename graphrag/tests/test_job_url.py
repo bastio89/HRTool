@@ -36,6 +36,10 @@ async def store():
 	await instance.ensure_schema()
 	yield instance
 	async with await psycopg.AsyncConnection.connect(DATABASE_URL, autocommit=True) as connection:
+		await connection.execute(
+			"DELETE FROM matching_runs WHERE entity_type = 'job' AND entity_id IN (SELECT id FROM jobs WHERE title LIKE %s)",
+			(f"%{MARKER}%",),
+		)
 		await connection.execute("DELETE FROM jobs WHERE title LIKE %s", (f"%{MARKER}%",))
 
 
@@ -56,7 +60,11 @@ async def test_import_stores_the_link_and_fills_it_in_for_an_existing_job(store)
 
 	# Dieselbe Stelle erneut: gefunden ueber die URL, nicht doppelt angelegt.
 	again = await persist_job_profile(postgres_store=store, job_id=None, raw_text="anderer Text", profile=profile.model_copy(update={"location": "Bern"}), url=link)
-	assert again == {"id": stored["id"], "uuid": stored["uuid"], "duplicate": True}
+	assert {key: again[key] for key in ("id", "uuid", "duplicate", "changed")} == {
+		"id": stored["id"], "uuid": stored["uuid"], "duplicate": True, "changed": True,
+	}
+	assert again["matchingRunId"] != stored["matchingRunId"]
+	assert (await store.get_job_text(str(stored["id"])))["location"] == "Bern"
 
 	# Eine vorhandene Stelle ohne URL bekommt sie beim naechsten Import.
 	other = JobProfileExtraction(title=f"Analyst {MARKER}", company="Quelle AG", location="Zug")

@@ -1,9 +1,13 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import BatchJobImportDialog from './BatchJobImportDialog'
 import { I18nProvider } from '../I18nContext'
 import { jobsApi } from '../api'
 import de from '../i18n/de'
+import en from '../i18n/en'
+const auth = vi.hoisted(() => ({ role: 'recruiter' }))
+vi.mock('../AuthContext', () => ({ useAuth: () => ({ user: { role: auth.role } }) }))
 
 vi.mock('../api', () => ({
   jobsApi: {
@@ -16,6 +20,7 @@ describe('BatchJobImportDialog', () => {
   beforeEach(() => {
     localStorage.setItem('hr-locale', 'de')
     vi.clearAllMocks()
+    auth.role = 'recruiter'
   })
 
   test('shows GraphRAG sync error after job creation', async () => {
@@ -91,5 +96,20 @@ describe('BatchJobImportDialog', () => {
     })
     expect(jobsApi.parseDescriptionFile).not.toHaveBeenCalled()
     expect(onImported).toHaveBeenCalledTimes(1)
+  })
+
+  test.each([['admin', 'de'], ['recruiter', 'de'], ['recruiter', 'en']])('links a queued job import to the correct protected status view (%s, %s)', async (role, locale) => {
+    auth.role = role
+    localStorage.setItem('hr-locale', locale)
+    const messages = locale === 'en' ? en : de
+    const runId = '00000000-0000-0000-0000-000000000001'
+    jobsApi.parseDescriptionFile.mockResolvedValue({ id: 42, title: 'Saved Job', matchingRunId: runId, matchingStatus: 'queued' })
+    render(<MemoryRouter><I18nProvider><BatchJobImportDialog onClose={vi.fn()} /></I18nProvider></MemoryRouter>)
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['pdf'], 'queued-job.pdf', { type: 'application/pdf' })] } })
+    fireEvent.click(screen.getByRole('button', { name: messages['batch_job_import.start'].replace('{n}', '1') }))
+    expect(await screen.findByText(messages['batches.import_queued'])).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: new RegExp(runId) })).toHaveAttribute(
+      'href', role === 'admin' ? `/admin/batches?runId=${runId}` : `/matching/runs/${runId}`,
+    )
   })
 })

@@ -27,6 +27,9 @@ describe('jobsApi.parseDescriptionFile', () => {
       source: 'Job-Fast-Import',
       description: parsedProfile.raw_text,
       graphRag: { id: 'graph-job-41', message: 'Job ingested successfully' },
+      matchingRunId: '00000000-0000-0000-0000-000000000001',
+      matchingStatus: 'queued',
+      matchingStatusUrl: '/api/matching/runs/00000000-0000-0000-0000-000000000001',
     }
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => parsedProfile })
@@ -56,6 +59,11 @@ describe('jobsApi.parseDescriptionFile', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty('raw_text')
     expect(result.id).toBe(41)
     expect(result.graphRag.id).toBe('graph-job-41')
+    expect(result).toMatchObject({
+      matchingRunId: persistedJob.matchingRunId,
+      matchingStatus: 'queued',
+      matchingStatusUrl: persistedJob.matchingStatusUrl,
+    })
   })
 
   test('rejects non-PDF files before making a request', async () => {

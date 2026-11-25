@@ -21,6 +21,7 @@ const { DuplicateError } = require('../identity');
 const { syncGraphCandidatesInBackground } = require('../utils/graphRagCandidate');
 const { uploadsDir } = require('../utils/candidateFiles');
 const { logAudit } = require('../routes/audit');
+const { enqueueMatchingImport } = require('../matchingImports');
 
 const CRM_SOURCE = 'CRM';
 const MiB = 1024 * 1024;
@@ -247,23 +248,40 @@ const normalizeText = text => String(text || '').replace(/\s+/g, ' ').trim();
 
 // Das Original-CV landet beim Bewerber unter "Dateien"; ein frueher aus dem
 // CRM uebernommenes CV desselben Bewerbers wird ersetzt.
-function storeCvFile(candidateId, uuid, name, buffer, ext) {
+function stageCvFile(uuid, buffer, ext) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  const previous = db.prepare('SELECT id, filename FROM candidate_files WHERE candidate_id = ? AND filename LIKE ?').all(candidateId, `crm-${uuid}-%`);
-  const filename = `crm-${uuid}-${Date.now()}${ext}`;
-  fs.writeFileSync(path.join(uploadsDir, filename), buffer);
-  db.prepare('INSERT INTO candidate_files (candidate_id, filename, original_name, mime_type, size) VALUES (?, ?, ?, ?, ?)')
-    .run(candidateId, filename, `CV ${name}${ext}`, CV_TYPES[ext], buffer.length);
-  for (const file of previous) {
-    db.prepare('DELETE FROM candidate_files WHERE id = ?').run(file.id);
-    try { fs.unlinkSync(path.join(uploadsDir, file.filename)); } catch (_) { /* schon weg */ }
+  const filename = `crm-${uuid}-${crypto.randomUUID()}${ext}`;
+  try {
+    fs.writeFileSync(path.join(uploadsDir, filename), buffer, { flag: 'wx' });
+  } catch (error) {
+    if (error.code !== 'EEXIST') removeCvFile(filename);
+    throw error;
   }
+  return { filename, size: buffer.length, ext };
+}
+
+function removeCvFile(filename) {
+  try {
+    fs.unlinkSync(path.join(uploadsDir, filename));
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.warn('CRM-CV-Datei konnte nicht entfernt werden:', filename, error.message);
+  }
+}
+
+async function storeCvFile(database, candidateId, uuid, name, staged) {
+  const previous = await database.prepare('SELECT id, filename FROM candidate_files WHERE candidate_id = ? AND filename LIKE ?').all(candidateId, `crm-${uuid}-%`);
+  await database.prepare('INSERT INTO candidate_files (candidate_id, filename, original_name, mime_type, size) VALUES (?, ?, ?, ?, ?)')
+    .run(candidateId, staged.filename, `CV ${name}${staged.ext}`, CV_TYPES[staged.ext], staged.size);
+  for (const file of previous) {
+    await database.prepare('DELETE FROM candidate_files WHERE id = ?').run(file.id);
+  }
+  return previous.map(file => file.filename);
 }
 
 // Stammdaten aus dem CRM: UUID, Name, Labels und die Namensteile fuer die
 // Rueckgabe. Ein leerer Name aus dem CRM aendert den Namen nicht.
-function applyCrmFields(candidate, row, name) {
-  db.prepare(`
+async function applyCrmFields(database, candidate, row, name) {
+  await database.prepare(`
     UPDATE candidates SET uuid = CAST(? AS UUID), name = ?, tags = ?, source = ?,
       crm_first_name = ?, crm_last_name = ?, crm_imported_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
@@ -276,19 +294,19 @@ const CV_FIELDS = ['email', 'phone', 'location', 'experience', 'skills', 'educat
   'drivers_license', 'mobility', 'linkedin_url', 'xing_url', 'github_url', 'portfolio_url', 'notice_period',
   'nationality', 'current_employer', 'current_position'];
 
-function refreshFromProfile(candidateId, profile, text, name) {
+async function refreshFromProfile(database, candidateId, profile, text, name) {
   const row = cvParser.buildCandidateRow(profile);
-  db.prepare(`UPDATE candidates SET ${CV_FIELDS.map(field => `${field} = COALESCE(NULLIF(?, ''), ${field})`).join(', ')} WHERE id = ?`)
+  await database.prepare(`UPDATE candidates SET ${CV_FIELDS.map(field => `${field} = COALESCE(NULLIF(?, ''), ${field})`).join(', ')} WHERE id = ?`)
     .run(...CV_FIELDS.map(field => (row[field] === undefined || row[field] === null ? null : String(row[field]))), candidateId);
-  cvParser.writeCandidateHistory(candidateId, profile, { replace: true });
-  cvParser.writeCandidateText(candidateId, name, text, profile, CRM_SOURCE);
+  await cvParser.writeCandidateHistory(candidateId, profile, { replace: true, database });
+  await cvParser.writeCandidateText(candidateId, name, text, profile, CRM_SOURCE, database);
 }
 
 async function readCvText(dir, row) {
   const ext = path.posix.extname(row.cvPath).toLowerCase();
   const buffer = await readEntry(path.join(dir, 'archive.zip'), row.cvPath, LIMITS.cvBytes);
   if (!buffer) throw new CrmImportError(`CV-Datei ${row.cvPath} fehlt im Archiv`, 422);
-  const tempFile = path.join(dir, `cv-${row.uuid}${ext}`);
+  const tempFile = path.join(dir, `cv-${row.uuid}-${crypto.randomUUID()}${ext}`);
   fs.writeFileSync(tempFile, buffer);
   try {
     const text = String(await extractText(tempFile, CV_TYPES[ext]) || '').trim();
@@ -327,22 +345,21 @@ function crmName(row) {
 // Tool ohne CRM-Bezug, wird sie mit der CRM-UUID verknuepft statt doppelt
 // angelegt. Fuehrt das CRM sie dagegen unter einer anderen UUID, sind es
 // laut CRM zwei Personen: dann ohne Geburtsdatum anlegen.
-function createCandidate(row, profile, text, req) {
+async function createCandidate(database, row, profile, text, req) {
+  const options = { syncGraph: false, textSource: CRM_SOURCE, database, audit: false };
   try {
-    return { status: 'created', candidate: cvParser.persistCandidate(profile, req, text, { syncGraph: false, textSource: CRM_SOURCE }) };
+    return { status: 'created', candidate: await cvParser.persistCandidate(profile, req, text, options) };
   } catch (error) {
     if (!(error instanceof DuplicateError)) throw error;
-    const other = db.prepare('SELECT * FROM candidates WHERE id = ?').get(error.existing?.id);
+    const other = await database.prepare('SELECT * FROM candidates WHERE id = ? FOR UPDATE').get(error.existing?.id);
     if (other && other.source !== CRM_SOURCE) {
-      if (!db.prepare('SELECT 1 AS found FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(other.id)) {
-        cvParser.writeCandidateText(other.id, profile.name, text, profile, CRM_SOURCE);
-      }
+      await refreshFromProfile(database, other.id, profile, text, profile.name);
       return { status: 'linked', candidate: other };
     }
     return {
       status: 'created',
       warning: `Gleicher Name und Geburtsdatum wie Bewerber #${error.existing?.id} (andere CRM-UUID). Das CRM führt beide als verschiedene Personen; das Geburtsdatum wurde nicht übernommen.`,
-      candidate: cvParser.persistCandidate({ ...profile, birth_date: null }, req, text, { syncGraph: false, textSource: CRM_SOURCE }),
+      candidate: await cvParser.persistCandidate({ ...profile, birth_date: null }, req, text, options),
     };
   }
 }
@@ -355,45 +372,79 @@ async function importCandidate(token, uuid, req) {
   if (row.error) throw new CrmImportError(row.error, 422);
 
   const { text, buffer, ext } = await readCvText(dir, row);
-  const existing = db.prepare('SELECT * FROM candidates WHERE uuid = ?').get(row.uuid);
-
-  let status;
-  let warning = null;
-  let candidate;
-  if (existing) {
-    const stored = db.prepare('SELECT original_text FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(existing.id);
-    const name = crmName(row) || existing.name;
-    const cvChanged = !stored || normalizeText(stored.original_text) !== normalizeText(text);
-    if (cvChanged) {
-      const profile = await parseProfile(text, row, req);
-      refreshFromProfile(existing.id, profile, text, name);
-      storeCvFile(existing.id, row.uuid, name, buffer, ext);
-    }
-    applyCrmFields(existing, row, name);
-    status = cvChanged ? 'updated' : 'unchanged';
-    candidate = existing;
-    logAudit(req, 'aktualisiert', 'Candidate', existing.id, name, `CRM-Import (${status === 'updated' ? 'neues CV' : 'Stammdaten'})`);
-  } else {
-    const profile = await parseProfile(text, row, req);
-    if (crmName(row)) profile.name = crmName(row);
+  const initial = await db.transactionAsync(async (tx) => {
+    const candidate = await tx.prepare('SELECT * FROM candidates WHERE uuid = ?').get(row.uuid);
+    const stored = candidate
+      ? await tx.prepare('SELECT original_text FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(candidate.id)
+      : null;
+    return { candidate, stored };
+  });
+  const needsParsing = !initial.candidate || !initial.stored || normalizeText(initial.stored.original_text) !== normalizeText(text);
+  const profile = needsParsing ? await parseProfile(text, row, req) : null;
+  if (profile) {
+    profile.name = crmName(row) || initial.candidate?.name || profile.name;
     if (!String(profile.name || '').trim()) {
       throw new CrmImportError('Kein Name: weder im CRM noch im CV angegeben', 422);
     }
-    ({ status, warning = null, candidate } = createCandidate(row, profile, text, req));
-    try {
-      applyCrmFields(candidate, row, crmName(row) || candidate.name);
-    } catch (error) {
-      if (status === 'created') db.prepare('DELETE FROM candidates WHERE id = ?').run(candidate.id);
-      throw error;
-    }
-    storeCvFile(candidate.id, row.uuid, crmName(row) || candidate.name, buffer, ext);
-    if (status === 'linked') logAudit(req, 'aktualisiert', 'Candidate', candidate.id, candidate.name, `Mit CRM-UUID ${row.uuid} verknüpft`);
   }
-
-  // Erst jetzt traegt der Bewerber die CRM-UUID, die auch der Neo4j-Knoten erhaelt.
-  syncGraphCandidatesInBackground([candidate.id], req);
-  const saved = db.prepare('SELECT id, uuid::text AS uuid, name, tags FROM candidates WHERE id = ?').get(candidate.id);
-  return { uuid: row.uuid, status, warning, candidate: saved };
+  const staged = profile ? stageCvFile(row.uuid, buffer, ext) : null;
+  let result;
+  try {
+    result = await db.transactionAsync(async (tx) => {
+      await tx.prepare('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))').get(`crm-import:${row.uuid}`);
+      let candidate = await tx.prepare('SELECT * FROM candidates WHERE uuid = ? FOR UPDATE').get(row.uuid);
+      let status;
+      let warning = null;
+      let cvChanged = !candidate;
+      let matchingChanged = !candidate;
+      let matching = { matchingRunId: null, matchingStatus: 'not_required', preparationStatus: 'not_requested' };
+      if (candidate) {
+        const stored = await tx.prepare('SELECT * FROM candidate_texts WHERE candidate_id = CAST(? AS TEXT)').get(candidate.id);
+        const name = crmName(row) || candidate.name;
+        cvChanged = !stored || normalizeText(stored.original_text) !== normalizeText(text);
+        matchingChanged = cvChanged || name !== candidate.name;
+        if (cvChanged) {
+          if (!profile) throw new CrmImportError('Das CV wurde zwischenzeitlich geaendert. Bitte den Import erneut starten.', 409);
+          await refreshFromProfile(tx, candidate.id, { ...profile, name }, text, name);
+        } else if (name !== candidate.name) {
+          const previousProfile = stored.profile_json ? JSON.parse(stored.profile_json) : {};
+          await cvParser.writeCandidateText(candidate.id, name, stored.original_text, { ...previousProfile, name }, CRM_SOURCE, tx);
+        }
+        status = matchingChanged ? 'updated' : 'unchanged';
+      } else {
+        if (!profile) throw new CrmImportError('Der Bewerber wurde zwischenzeitlich geloescht. Bitte den Import erneut starten.', 409);
+        ({ status, warning = null, candidate } = await createCandidate(tx, row, profile, text, req));
+        if (candidate.matchingRunId) matching = {
+          matchingRunId: candidate.matchingRunId, matchingStatus: candidate.matchingStatus,
+          matchingStatusUrl: candidate.matchingStatusUrl, preparationStatus: candidate.preparationStatus,
+        };
+      }
+      const name = crmName(row) || candidate.name;
+      await applyCrmFields(tx, candidate, row, name);
+      let previousFiles = [];
+      if (cvChanged) {
+        if (!staged) throw new Error('Das aufbereitete CRM-CV fehlt');
+        previousFiles = await storeCvFile(tx, candidate.id, row.uuid, name, staged);
+      }
+      if (matchingChanged && !matching.matchingRunId) {
+        matching = await enqueueMatchingImport(tx, {
+          entityType: 'candidate', entityId: candidate.id, req, source: CRM_SOURCE,
+          eventKey: `candidate:${candidate.id}:${crypto.randomUUID()}`,
+        });
+      }
+      const saved = await tx.prepare('SELECT id, uuid::text AS uuid, name, tags FROM candidates WHERE id = ?').get(candidate.id);
+      return { uuid: row.uuid, status, warning, candidate: saved, ...matching, previousFiles, usedFile: cvChanged, matchingChanged };
+    });
+  } catch (error) {
+    if (staged) removeCvFile(staged.filename);
+    throw error;
+  }
+  if (staged && !result.usedFile) removeCvFile(staged.filename);
+  for (const filename of result.previousFiles) removeCvFile(filename);
+  logAudit(req, result.status === 'created' ? 'erstellt' : 'aktualisiert', 'Candidate', result.candidate.id, result.candidate.name, `CRM-Import (${result.status})`);
+  if (result.matchingChanged) syncGraphCandidatesInBackground([result.candidate.id], req);
+  const { previousFiles: _previousFiles, usedFile: _usedFile, matchingChanged: _matchingChanged, ...response } = result;
+  return response;
 }
 
 module.exports = {

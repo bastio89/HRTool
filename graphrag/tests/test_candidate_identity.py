@@ -26,6 +26,7 @@ from services.candidate_identity import (
 	require_identity,
 )
 from services.candidate_persistence import create_candidate
+from services.candidate_privacy import CandidatePrivacyService
 from services.postgres_store import PostgresStore
 
 
@@ -74,10 +75,12 @@ def test_profile_normalizes_birth_date_and_only_the_name_is_required():
 async def store():
 	instance = PostgresStore(DATABASE_URL)
 	await instance.ensure_schema()
+	await instance.ensure_matching_pair_schema()
 	yield instance
 	async with await psycopg.AsyncConnection.connect(DATABASE_URL, autocommit=True) as connection:
 		ids = [row[0] for row in await (await connection.execute("SELECT id FROM candidates WHERE name LIKE %s", (f"%{MARKER}%",))).fetchall()]
 		for candidate_id in ids:
+			await connection.execute("DELETE FROM matching_runs WHERE entity_type = 'candidate' AND entity_id = %s", (candidate_id,))
 			await connection.execute("DELETE FROM candidate_texts WHERE candidate_id = %s", (str(candidate_id),))
 		await connection.execute("DELETE FROM candidates WHERE name LIKE %s", (f"%{MARKER}%",))
 
@@ -117,7 +120,7 @@ async def test_insert_candidate_blocks_the_same_person(store):
 async def test_create_candidate_uses_the_postgres_uuid_for_neo4j_and_keeps_birth_date_out(store):
 	db_service = SimpleNamespace(upsert_candidate=AsyncMock())
 	llm_service = SimpleNamespace(create_embedding=AsyncMock(return_value=[0.1, 0.2]))
-	privacy = SimpleNamespace(anonymize_candidate=AsyncMock())
+	privacy = CandidatePrivacyService(store)
 
 	stored = await create_candidate(
 		postgres_store=store,
@@ -143,26 +146,30 @@ async def test_create_candidate_uses_the_postgres_uuid_for_neo4j_and_keeps_birth
 
 
 @needs_db
-async def test_create_candidate_rolls_back_postgres_when_neo4j_fails(store):
+async def test_create_candidate_keeps_import_and_queue_when_neo4j_fails(store):
 	db_service = SimpleNamespace(upsert_candidate=AsyncMock(side_effect=RuntimeError("neo4j down")))
-	with pytest.raises(RuntimeError):
-		await create_candidate(
+	stored = await create_candidate(
 			postgres_store=store,
-			candidate_privacy_service=SimpleNamespace(anonymize_candidate=AsyncMock()),
+			candidate_privacy_service=CandidatePrivacyService(store),
 			db_service=db_service,
 			llm_service=SimpleNamespace(create_embedding=AsyncMock(return_value=[0.1])),
 			build_skill_embeddings=AsyncMock(return_value={}),
 			profile=_profile(f"Rolf Rueckbau {MARKER}"),
 			candidate_text="CV",
 			source="Test",
-		)
-	assert await store.find_candidate_by_identity(f"Rolf Rueckbau {MARKER}", "1990-02-14") is None
+	)
+	assert stored["preparationStatus"] == "required"
+	assert stored["preparationError"] == "graph_preparation_failed"
+	assert await store.find_candidate_by_identity(f"Rolf Rueckbau {MARKER}", "1990-02-14") is not None
+	run = await store.get_matching_run(stored["matchingRunId"])
+	assert run["entity_id"] == stored["id"] and run["error_code"] == "missing_actor"
 
 
 @needs_db
-async def test_ingest_candidate_route_blocks_duplicates_and_parses_without_storing(app_module, api_client, monkeypatch, store):
+async def test_ingest_candidate_route_blocks_duplicates_and_parses_without_storing(app_module, api_client, monkeypatch, store, matching_actor):
 	monkeypatch.setattr(app_module, "postgres_store", store)
 	monkeypatch.setattr(app_module.billing_service, "charge", AsyncMock())
+	monkeypatch.setattr(app_module.billing_service, "actor_for_request", AsyncMock(return_value=SimpleNamespace(user_id=matching_actor)))
 	monkeypatch.setattr(app_module.db_service, "upsert_candidate", AsyncMock())
 	monkeypatch.setattr(app_module.llm_service, "create_embedding", AsyncMock(return_value=[0.1]))
 	monkeypatch.setattr(app_module, "_build_skill_embeddings", AsyncMock(return_value={}))

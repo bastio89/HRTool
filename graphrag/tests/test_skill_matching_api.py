@@ -331,8 +331,8 @@ async def test_direct_external_and_both_graph_engines_have_identical_alias_cover
     real_match = SkillMatchingService.match
     calls = []
 
-    async def record_match(self, need_skills, has_skills):
-        result = await real_match(self, need_skills, has_skills)
+    async def record_match(self, need_skills, has_skills, **kwargs):
+        result = await real_match(self, need_skills, has_skills, **kwargs)
         calls.append(result)
         return result
 

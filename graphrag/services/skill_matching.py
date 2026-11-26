@@ -47,6 +47,7 @@ SkillPriority = Literal["mandatory", "nice_to_have"]
 class RequiredSkill:
     name: str
     priority: SkillPriority = "mandatory"
+    category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,8 @@ class SkillMatchingService:
         self,
         need_skills: Sequence[RequiredSkill],
         has_skills: Sequence[str],
+        *,
+        has_skill_categories: Sequence[str | None] | None = None,
     ) -> SkillMatchingResult:
         if not need_skills:
             raise ValueError("Mindestens ein Bedarfsskill ist erforderlich.")
@@ -186,38 +189,69 @@ class SkillMatchingService:
             raise ValueError("Skill-Namen dürfen nicht leer sein.")
         if any(skill.priority not in {"mandatory", "nice_to_have"} for skill in need_skills):
             raise ValueError("Skill-Priorität muss mandatory oder nice_to_have sein.")
+        candidate_categories = (
+            list(has_skill_categories)
+            if has_skill_categories is not None
+            else [None] * len(has_skills)
+        )
+        if len(candidate_categories) != len(has_skills):
+            raise ValueError("Für jeden Kandidaten-Skill muss genau eine Kategorie vorliegen.")
 
         profiles = await self.resolve_skills(
             [skill.name for skill in need_skills] + list(has_skills)
         )
         needs = profiles[: len(need_skills)]
         candidates = profiles[len(need_skills) :]
+        unique_candidates: list[ResolvedSkill] = []
+        unique_candidate_categories: list[str | None] = []
+        seen_candidates: set[tuple[str, str]] = set()
+        for candidate, category in zip(candidates, candidate_categories):
+            key = ("uri", candidate.esco_uri) if candidate.esco_uri else ("label", candidate.normalized_name)
+            if key in seen_candidates:
+                continue
+            seen_candidates.add(key)
+            unique_candidates.append(candidate)
+            unique_candidate_categories.append(category)
+        candidates = unique_candidates
+        candidate_categories = unique_candidate_categories
 
         matches: list[SkillMatchDetail] = []
         matrix: list[SkillMatchMatrixCell] = []
-        selected_matrix_indices: list[int | None] = []
+        similarity_rows: list[list[SkillSimilarity]] = []
+        category_compatibility: list[list[bool]] = []
+        assignment_weights: list[list[float | None]] = []
         weighted_sum = 0.0
-        total_weight = 0.0
+        total_weight = sum(2.0 if skill.priority == "mandatory" else 1.0 for skill in need_skills)
         for requirement, need in zip(need_skills, needs):
-            best_candidate: ResolvedSkill | None = None
-            best_matrix_index: int | None = None
-            best_similarity = SkillSimilarity(value=0.0, match_type="semantic")
+            row_similarities: list[SkillSimilarity] = []
+            row_category_compatibility: list[bool] = []
+            row_assignment_weights: list[float | None] = []
             for candidate in candidates:
                 similarity = compare_skills(need, candidate)
-                covered = similarity.value >= self.similarity_cutoff
+                category_matches = (
+                    requirement.category is None
+                    or candidate_categories[len(row_similarities)] is None
+                    or requirement.category == candidate_categories[len(row_similarities)]
+                )
+                eligible = category_matches and similarity.value >= self.similarity_cutoff
                 weighted_similarity = (
                     1.0
-                    if covered and similarity.value >= 0.90
+                    if eligible and similarity.value >= 0.90
                     else similarity.value
-                    if covered
+                    if eligible
                     else 0.0
                 )
-                if similarity.match_type == "canonical":
+                if not category_matches:
+                    cell_reason = (
+                        f"Skill-Kategorie {candidate_categories[len(row_similarities)]} "
+                        f"passt nicht zur Anforderungskategorie {requirement.category}."
+                    )
+                elif similarity.match_type == "canonical":
                     cell_reason = "Identische kanonische ESCO-URI."
                 elif need.normalized_name == candidate.normalized_name:
                     cell_reason = "Identische Skill-Bezeichnung nach Normalisierung."
                 else:
-                    comparison = "erreicht" if covered else "liegt unter"
+                    comparison = "erreicht" if eligible else "liegt unter"
                     cell_reason = (
                         f"Semantische Ähnlichkeit {similarity.value:.4f} "
                         f"{comparison} dem Cutoff {self.similarity_cutoff:.2f}."
@@ -233,15 +267,17 @@ class SkillMatchingService:
                         best_candidate=False,
                         score_contribution=0.0,
                         priority=requirement.priority,
-                        covered=covered,
+                        covered=False,
                         match_type=similarity.match_type,
                         reason=cell_reason,
                     )
                 )
-                if best_candidate is None or similarity.value > best_similarity.value:
-                    best_candidate = candidate
-                    best_similarity = similarity
-                    best_matrix_index = len(matrix) - 1
+                row_similarities.append(similarity)
+                row_category_compatibility.append(category_matches)
+                row_assignment_weights.append(
+                    (2.0 if requirement.priority == "mandatory" else 1.0) * weighted_similarity
+                    if eligible else None
+                )
 
             if not candidates:
                 matrix.append(
@@ -260,35 +296,77 @@ class SkillMatchingService:
                         reason="Keine Kandidaten-Skills angegeben.",
                     )
                 )
-            selected_matrix_indices.append(best_matrix_index)
+            similarity_rows.append(row_similarities)
+            category_compatibility.append(row_category_compatibility)
+            assignment_weights.append(row_assignment_weights)
 
-            covered = best_candidate is not None and best_similarity.value >= self.similarity_cutoff
-            weighted_similarity = (
-                1.0
-                if covered and best_similarity.value >= 0.90
-                else best_similarity.value
-                if covered
-                else 0.0
+        assignments = _maximum_weight_assignment(assignment_weights)
+        selected_matrix_indices: list[int | None] = []
+        for requirement_index, (requirement, need) in enumerate(zip(need_skills, needs)):
+            assigned_candidate_index = assignments[requirement_index]
+            row_similarities = similarity_rows[requirement_index]
+            row_category_compatibility = category_compatibility[requirement_index]
+            diagnostic_candidates = [
+                index for index, compatible in enumerate(row_category_compatibility) if compatible
+            ] or list(range(len(candidates)))
+            diagnostic_candidate_index = (
+                max(diagnostic_candidates, key=lambda index: row_similarities[index].value)
+                if diagnostic_candidates else None
             )
-            weight = 2.0 if requirement.priority == "mandatory" else 1.0
-            total_weight += weight
-            weighted_sum += weight * weighted_similarity
+            selected_candidate_index = (
+                assigned_candidate_index
+                if assigned_candidate_index is not None else diagnostic_candidate_index
+            )
+            selected_matrix_index = (
+                requirement_index * len(candidates) + selected_candidate_index
+                if selected_candidate_index is not None else None
+            )
+            selected_matrix_indices.append(selected_matrix_index)
 
-            if best_candidate is None:
-                match_type: Literal["canonical", "semantic", "none"] = "none"
+            if assigned_candidate_index is not None:
+                best_candidate = candidates[assigned_candidate_index]
+                best_similarity = row_similarities[assigned_candidate_index]
+                covered = True
+                weighted_similarity = (
+                    1.0 if best_similarity.value >= 0.90 else best_similarity.value
+                )
+                reason = matrix[selected_matrix_index].reason
+                weight = 2.0 if requirement.priority == "mandatory" else 1.0
+                weighted_sum += weight * weighted_similarity
+            elif selected_candidate_index is None:
+                best_candidate = None
+                best_similarity = SkillSimilarity(value=0.0, match_type="semantic")
+                covered = False
+                weighted_similarity = 0.0
                 reason = "Keine Kandidaten-Skills angegeben."
-            elif best_similarity.match_type == "canonical":
-                match_type = "canonical"
-                reason = "Identische kanonische ESCO-URI."
-            elif need.normalized_name == best_candidate.normalized_name:
-                match_type = "semantic"
-                reason = "Identische Skill-Bezeichnung nach Normalisierung."
             else:
-                match_type = "semantic"
-                comparison = "erreicht" if covered else "liegt unter"
-                reason = (
-                    f"Semantische Ähnlichkeit {best_similarity.value:.4f} "
-                    f"{comparison} dem Cutoff {self.similarity_cutoff:.2f}."
+                best_candidate = candidates[selected_candidate_index]
+                best_similarity = row_similarities[selected_candidate_index]
+                covered = False
+                weighted_similarity = 0.0
+                if not row_category_compatibility[selected_candidate_index]:
+                    reason = matrix[selected_matrix_index].reason
+                elif best_similarity.value < self.similarity_cutoff:
+                    reason = matrix[selected_matrix_index].reason
+                else:
+                    reason = "Nicht ausgewählt, weil die eindeutige Gesamtzuordnung andere Paare bevorzugt."
+
+            for candidate_index in range(len(row_similarities)):
+                matrix_index = requirement_index * len(candidates) + candidate_index
+                assigned = candidate_index == assigned_candidate_index
+                cell_reason = matrix[matrix_index].reason
+                if (
+                    row_category_compatibility[candidate_index]
+                    and assignment_weights[requirement_index][candidate_index] is not None
+                    and not assigned
+                ):
+                    cell_reason = "Nicht ausgewählt, weil die eindeutige Gesamtzuordnung andere Paare bevorzugt."
+                matrix[matrix_index] = replace(
+                    matrix[matrix_index],
+                    best_candidate=assigned,
+                    score_contribution=0.0,
+                    covered=assigned,
+                    reason=cell_reason,
                 )
 
             matches.append(
@@ -303,7 +381,7 @@ class SkillMatchingService:
                     weighted_similarity=round(weighted_similarity, 4),
                     priority=requirement.priority,
                     covered=covered,
-                    match_type=match_type,
+                    match_type=best_similarity.match_type if best_candidate else "none",
                     reason=reason,
                 )
             )
@@ -314,11 +392,10 @@ class SkillMatchingService:
             if match.priority == "mandatory"
         )
         if total_weight:
-            for match, matrix_index in zip(matches, selected_matrix_indices):
-                if matrix_index is not None:
+            for matrix_index, match in zip(selected_matrix_indices, matches):
+                if matrix_index is not None and match.covered:
                     matrix[matrix_index] = replace(
                         matrix[matrix_index],
-                        best_candidate=True,
                         score_contribution=round(
                             (
                                 (2.0 if match.priority == "mandatory" else 1.0)
@@ -343,6 +420,75 @@ class SkillMatchingService:
         if not values or any(not isfinite(value) for value in values):
             raise ValueError("Embedding muss mindestens einen endlichen Zahlenwert enthalten.")
         return values
+
+
+def _maximum_weight_assignment(weights: Sequence[Sequence[float | None]]) -> list[int | None]:
+    row_count = len(weights)
+    if row_count == 0:
+        return []
+    candidate_count = len(weights[0])
+    if any(len(row) != candidate_count for row in weights):
+        raise ValueError("Die Matching-Gewichtsmatrix muss rechteckig sein.")
+
+    column_count = candidate_count + row_count
+    costs = [
+        [
+            -(weight + 1e-9) if weight is not None else 1.0
+            for weight in row
+        ] + [0.0] * row_count
+        for row in weights
+    ]
+    row_potentials = [0.0] * (row_count + 1)
+    column_potentials = [0.0] * (column_count + 1)
+    column_rows = [0] * (column_count + 1)
+    previous_columns = [0] * (column_count + 1)
+
+    for row_number in range(1, row_count + 1):
+        column_rows[0] = row_number
+        current_column = 0
+        minimum_costs = [float("inf")] * (column_count + 1)
+        used_columns = [False] * (column_count + 1)
+        while True:
+            used_columns[current_column] = True
+            current_row = column_rows[current_column]
+            delta = float("inf")
+            next_column = 0
+            for column in range(1, column_count + 1):
+                if used_columns[column]:
+                    continue
+                reduced_cost = (
+                    costs[current_row - 1][column - 1]
+                    - row_potentials[current_row]
+                    - column_potentials[column]
+                )
+                if reduced_cost < minimum_costs[column]:
+                    minimum_costs[column] = reduced_cost
+                    previous_columns[column] = current_column
+                if minimum_costs[column] < delta:
+                    delta = minimum_costs[column]
+                    next_column = column
+            for column in range(column_count + 1):
+                if used_columns[column]:
+                    row_potentials[column_rows[column]] += delta
+                    column_potentials[column] -= delta
+                else:
+                    minimum_costs[column] -= delta
+            current_column = next_column
+            if column_rows[current_column] == 0:
+                break
+        while True:
+            previous = previous_columns[current_column]
+            column_rows[current_column] = column_rows[previous]
+            current_column = previous
+            if current_column == 0:
+                break
+
+    assignment: list[int | None] = [None] * row_count
+    for column in range(1, candidate_count + 1):
+        row = column_rows[column]
+        if row and weights[row - 1][column - 1] is not None:
+            assignment[row - 1] = column - 1
+    return assignment
 
 
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:

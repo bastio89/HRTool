@@ -122,11 +122,13 @@ class MatchingOrchestrator:
             raise ValueError("Job-Skills fehlen: strukturierte Anforderungen vor dem Matching aufbereiten.")
         candidates = normalize_skill_entries(candidate_skills, required=False)
         has_skills = [skill.name for skill in candidates]
+        has_skill_categories = [skill.category for skill in candidates]
 
         async def compare(skills: list[PreparedSkill]) -> SkillMatchingResult:
             return await self.skill_service.match(
-                [RequiredSkill(skill.name, skill.priority) for skill in skills],
+                [RequiredSkill(skill.name, skill.priority, skill.category) for skill in skills],
                 has_skills,
+                has_skill_categories=has_skill_categories,
             )
 
         result = await compare(requirements)

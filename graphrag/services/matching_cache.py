@@ -38,7 +38,7 @@ class MatchingEvaluationError(RuntimeError):
         self.status = status
 
 
-SCORING_VERSION = "weighted-coverage-v2-no-mandatory-gate"
+SCORING_VERSION = "weighted-coverage-v3-one-to-one-category-guard"
 _SECRETS = {
     "api_key", "apikey", "authorization", "access_token", "refresh_token",
     "jwt", "password", "password_hash", "secret", "token", "credentials",

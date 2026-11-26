@@ -8,7 +8,7 @@ import { matchingApi } from '../api'
 
 vi.mock('../api', async (importOriginal) => ({
   ...await importOriginal(),
-  matchingApi: { getResult: vi.fn(), getHistory: vi.fn() },
+  matchingApi: { getResult: vi.fn(), getHistory: vi.fn(), vectorMatchSelected: vi.fn() },
 }))
 
 const row = {
@@ -42,6 +42,7 @@ beforeEach(() => {
   localStorage.setItem('hr-locale', 'de')
   vi.clearAllMocks()
   sessionStorage.clear()
+  matchingApi.vectorMatchSelected.mockResolvedValue({ method: 'vector', results: [], failures: [] })
 })
 
 test.each(['matrix', 'vectormatch'])('zeigt IDs und Teilabdeckung trotz fehlender Muss-Skills in %s und Rankings', async (type) => {
@@ -61,18 +62,34 @@ test.each(['matrix', 'vectormatch'])('zeigt IDs und Teilabdeckung trotz fehlende
   expect(screen.queryByText('job-uuid')).not.toBeInTheDocument()
   expect(screen.getByText(/fehlende Muss-Skills setzen ihn nicht auf 0 %/)).toBeInTheDocument()
   expect(screen.getAllByText(/50%/).length).toBeGreaterThan(0)
+  if (type === 'vectormatch') {
+    expect(document.body.textContent).toContain('1 abgedeckt')
+    expect(document.body.textContent).toContain('nicht abgedeckt')
+  }
   expect(screen.getByText(row.weaknesses[0])).toBeInTheDocument()
   expect(screen.getByText(row.summary)).toBeInTheDocument()
 })
 
 test('zeigt beide IDs auch im AI-Ergebnis ohne das Skill-Gate anzuwenden', async () => {
+  matchingApi.vectorMatchSelected.mockResolvedValue({
+    method: 'vector',
+    results: [{ ...row, method: 'vector', score: 62, hardSkillScore: 0.8, softSkillScore: 0.4 }],
+    failures: [],
+  })
   renderResult({
     method: 'ai', results: [{ ...row, method: 'ai', score: 85, qualified: null, summary: 'AI-Gesamtbewertung' }],
   })
 
   expect(await screen.findByText(/Bewerber-ID:/)).toHaveTextContent('Bewerber-ID: 5 · Job-ID: 38')
+  expect(screen.getByText('Skill-Matching: 62%')).toBeInTheDocument()
+  expect(screen.getByText('HardSkill: 0.800')).toBeInTheDocument()
   expect(screen.queryByText(/fehlende Muss-Skills setzen ihn nicht auf 0 %/)).not.toBeInTheDocument()
   expect(screen.getAllByText('85%').length).toBeGreaterThan(0)
+  expect(matchingApi.vectorMatchSelected).toHaveBeenCalledWith(
+    [expect.objectContaining({ jobId: 38, candidateId: 5 })],
+    'python',
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  )
 })
 
 test.each([

@@ -597,6 +597,8 @@ export default {
   'matching.vector_start': 'Start vector matching',
   'matching.select_job': 'Please select a job first.',
   'matching.method_skill': 'Skill coverage',
+  'matching.skill_result': 'Skill matching',
+  'matching.skill_matching_error': 'Skill matching could not be loaded',
   'matching.method_ai': 'AI matching',
   'matching.score_missing': 'Not calculated',
   'matching.stored_selection_required': 'Explicitly select a stored job and profiles.',
@@ -1926,7 +1928,8 @@ export default {
   // Matching results & matrix stats
   'matching.hard_skill': 'Hard skill',
   'matching.soft_skill': 'Soft skill',
-  'matching.n_matches': '{count} matches',
+  'matching.n_matches': '{count} covered',
+  'matching.skill_uncovered': 'not covered',
   'matching.no_matches': 'no matches',
   'matching.stat_jobs': 'Jobs',
   'matching.stat_candidates': 'Candidates',

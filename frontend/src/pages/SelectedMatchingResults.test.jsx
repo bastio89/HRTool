@@ -29,6 +29,7 @@ function renderPage({ mode = 'vector', precomputed, preserveStorage = false } = 
 describe('SelectedMatchingResults – 3D-Matching', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    matchingApi.vectorMatchSelected.mockResolvedValue({ method: 'vector', results: [], failures: [] })
     vi.stubGlobal('scrollTo', vi.fn())
     sessionStorage.clear()
   })
@@ -89,7 +90,12 @@ describe('SelectedMatchingResults – 3D-Matching', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('AI-Modell nicht erreichbar')
   })
 
-  test('AI percentages including 1 remain percentages and missing AI scores never use the skill score', async () => {
+  test('AI percentages remain distinct from the skill score and each pair shows its skill result', async () => {
+    matchingApi.vectorMatchSelected.mockResolvedValue({
+      method: 'vector',
+      results: [{ ...pairs[0], score: 55, hardSkillScore: 0.6, softSkillScore: 0.4 }],
+      failures: [{ ...pairs[1], error: 'Skill-Daten nicht verfügbar' }],
+    })
     renderPage({ mode: 'ai', precomputed: {
       method: 'ai',
       results: [
@@ -99,6 +105,9 @@ describe('SelectedMatchingResults – 3D-Matching', () => {
     } })
     expect(await screen.findByText('AI-Matching: Auswahl')).toBeTruthy()
     expect(screen.getAllByText('1%').length).toBeGreaterThan(0)
+    expect(screen.getByText('Skill-Matching: 55%')).toBeInTheDocument()
+    expect(screen.getByText('HardSkill: 0.600')).toBeInTheDocument()
+    expect(screen.getByText('Skill-Daten nicht verfügbar')).toBeInTheDocument()
     expect(screen.getByText('Nicht berechnet')).toBeTruthy()
     expect(screen.queryByText('100%')).toBeNull()
     expect(screen.queryByText('85%')).toBeNull()
@@ -106,7 +115,11 @@ describe('SelectedMatchingResults – 3D-Matching', () => {
     expect(screen.queryByText(/fehlende Muss-Skills setzen ihn nicht auf 0 %/)).toBeNull()
     expect(screen.getAllByText('Bewerber-ID:').map(node => node.textContent)).toEqual(['Bewerber-ID: 7', 'Bewerber-ID: 9'])
     expect(matchingApi.runSelected).not.toHaveBeenCalled()
-    expect(matchingApi.vectorMatchSelected).not.toHaveBeenCalled()
+    expect(matchingApi.vectorMatchSelected).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ jobId: 2, candidateId: 7 })]),
+      'neo4j',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
   })
 
   test('rejects AI results received on a skill path instead of relabeling their score', async () => {
@@ -171,7 +184,7 @@ describe('SelectedMatchingResults – 3D-Matching', () => {
     expect(screen.queryByText('80%')).not.toBeInTheDocument()
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/matching/runs/${runId}`)
     expect(matchingApi.runSelected).toHaveBeenCalledTimes(1)
-    expect(matchingApi.vectorMatchSelected).not.toHaveBeenCalled()
+    expect(matchingApi.vectorMatchSelected).toHaveBeenCalledTimes(1)
     restored.unmount()
     await act(async () => { renderPage({ precomputed: skillResponse, preserveStorage: true }) })
     expect(screen.getAllByText('1%').length).toBeGreaterThan(0)

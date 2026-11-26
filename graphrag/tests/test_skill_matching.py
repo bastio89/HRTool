@@ -14,6 +14,7 @@ from services.llm import LLMService
 from services.skill_matching import (
     RequiredSkill,
     ResolvedSkill,
+    SkillSimilarity,
     SkillMatchingService,
     compare_skills,
     cosine_similarity,
@@ -104,6 +105,39 @@ async def test_orchestrator_preserves_partial_coverage_and_reports_missing_manda
 
 
 @pytest.mark.anyio
+async def test_orchestrator_prevents_candidate_skill_reuse_and_cross_category_matches() -> None:
+    embeddings = _MapEmbedding({
+        "Need A": [1.0, 0.0],
+        "Need B": [1.0, 0.0],
+        "Need": [1.0, 0.0],
+        "Candidate": [1.0, 0.0],
+    })
+    orchestrator = MatchingOrchestrator(SkillMatchingService(embeddings, _FakeCatalog([])))
+
+    reused = await orchestrator.match_skills(
+        [
+            {"name": "Need A", "category": "HardSkill"},
+            {"name": "Need B", "category": "HardSkill"},
+        ],
+        [
+            {"name": "Candidate", "category": "HardSkill"},
+            {"name": "Candidate", "category": "HardSkill"},
+        ],
+    )
+    wrong_category = await orchestrator.match_skills(
+        [{"name": "Need", "category": "HardSkill"}],
+        [{"name": "Need", "category": "SoftSkill"}],
+    )
+
+    assert reused.result.score == 50
+    assert sum(match.covered for match in reused.result.matches) == 1
+    assert reused.result.qualified is False
+    assert wrong_category.result.score == 0
+    assert wrong_category.result.matches[0].covered is False
+    assert "Kategorie" in wrong_category.result.matches[0].reason
+
+
+@pytest.mark.anyio
 async def test_stored_matrix_reuses_full_results_across_id_forms_and_only_computes_missing_pairs(
     stored_matching_pair, monkeypatch,
 ):
@@ -118,9 +152,9 @@ async def test_stored_matrix_reuses_full_results_across_id_forms_and_only_comput
 
     original_match = SkillMatchingService.match
 
-    async def tracked_match(self, need_skills, has_skills):
+    async def tracked_match(self, need_skills, has_skills, **kwargs):
         scoring_calls.append((need_skills, has_skills))
-        return await original_match(self, need_skills, has_skills)
+        return await original_match(self, need_skills, has_skills, **kwargs)
 
     monkeypatch.setattr(SkillMatchingService, "match", tracked_match)
     await service.client.aclose()
@@ -242,6 +276,39 @@ async def test_matching_result_contains_each_required_candidate_pair() -> None:
 
 
 @pytest.mark.anyio
+async def test_matching_uses_global_assignment_instead_of_greedy_skill_reuse(monkeypatch) -> None:
+    similarities = {
+        ("Need A", "Candidate X"): 0.90,
+        ("Need A", "Candidate Y"): 0.80,
+        ("Need B", "Candidate X"): 0.85,
+        ("Need B", "Candidate Y"): 0.74,
+    }
+
+    def compare(left, right):
+        return SkillSimilarity(similarities[(left.name, right.name)], "semantic")
+
+    monkeypatch.setattr("services.skill_matching.compare_skills", compare)
+    service = SkillMatchingService(
+        _MapEmbedding({
+            "Need A": [1.0, 0.0],
+            "Need B": [1.0, 0.0],
+            "Candidate X": [1.0, 0.0],
+            "Candidate Y": [1.0, 0.0],
+        }),
+        _FakeCatalog([]),
+    )
+
+    result = await service.match(
+        [RequiredSkill("Need A"), RequiredSkill("Need B")],
+        ["Candidate X", "Candidate Y"],
+    )
+
+    assert [match.has_skill for match in result.matches] == ["Candidate Y", "Candidate X"]
+    assert [match.covered for match in result.matches] == [True, True]
+    assert result.score == 82
+
+
+@pytest.mark.anyio
 async def test_score_contribution_remains_weighted_when_a_mandatory_skill_is_missing() -> None:
     service = SkillMatchingService(
         _MapEmbedding({
@@ -263,12 +330,14 @@ async def test_score_contribution_remains_weighted_when_a_mandatory_skill_is_mis
         ["Candidate"],
     )
 
-    assert qualified.score == 100
-    assert sum(cell.score_contribution for cell in qualified.matrix) == pytest.approx(100.0)
-    assert [cell.score_contribution for cell in qualified.matrix] == [66.6667, 33.3333]
+    assert qualified.score == 67
+    assert qualified.qualified is True
+    assert sum(cell.score_contribution for cell in qualified.matrix) == pytest.approx(66.6667)
+    assert [cell.score_contribution for cell in qualified.matrix] == [66.6667, 0.0]
+    assert [match.covered for match in qualified.matches] == [True, False]
     assert partial.score == 33
     assert partial.qualified is False
-    assert [cell.best_candidate for cell in partial.matrix] == [True, True]
+    assert [cell.best_candidate for cell in partial.matrix] == [False, True]
     assert [cell.score_contribution for cell in partial.matrix] == [0.0, 33.3333]
 
 

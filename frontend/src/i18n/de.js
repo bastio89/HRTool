@@ -597,6 +597,8 @@ export default {
   'matching.vector_start': 'Vector-Matching starten',
   'matching.select_job': 'Bitte zuerst eine Stelle auswählen.',
   'matching.method_skill': 'Skill-Abdeckung',
+  'matching.skill_result': 'Skill-Matching',
+  'matching.skill_matching_error': 'Skill-Matching konnte nicht geladen werden',
   'matching.method_ai': 'AI-Matching',
   'matching.score_missing': 'Nicht berechnet',
   'matching.stored_selection_required': 'Bitte eine gespeicherte Stelle und Profile explizit auswählen.',
@@ -1926,7 +1928,8 @@ export default {
   // Matching results & matrix stats
   'matching.hard_skill': 'HardSkill',
   'matching.soft_skill': 'SoftSkill',
-  'matching.n_matches': '{count} Matches',
+  'matching.n_matches': '{count} abgedeckt',
+  'matching.skill_uncovered': 'nicht abgedeckt',
   'matching.no_matches': 'keine Treffer',
   'matching.stat_jobs': 'Stellen',
   'matching.stat_candidates': 'Bewerber',

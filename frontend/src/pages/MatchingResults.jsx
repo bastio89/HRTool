@@ -7,6 +7,8 @@ import { KiDisclaimer, KiBadge } from '../components/KiBadge'
 import { useI18n } from '../I18nContext'
 import { localeTag } from '../utils/format'
 import MatchingResultMetadata, { MatchingRunNotice } from '../components/MatchingResultMetadata'
+import SkillMatchingResult from '../components/SkillMatchingResult'
+import { attachSkillMatchingResults } from '../utils/skillMatchingResults'
 
 export default function MatchingResults() {
   const { id } = useParams()
@@ -16,6 +18,7 @@ export default function MatchingResults() {
   const [loading, setLoading] = useState(true)
   const [expandedIdx, setExpandedIdx] = useState(null)
   const [error, setError] = useState('')
+  const [skillMatchingError, setSkillMatchingError] = useState('')
   const [reviewing, setReviewing] = useState(false)
   const [matchingRow, setMatchingRow] = useState(null)
   const [matchingError, setMatchingError] = useState('')
@@ -30,6 +33,7 @@ export default function MatchingResults() {
     const controller = new AbortController()
     setLoading(true)
     setError('')
+    setSkillMatchingError('')
     setProgress(null)
     const load = async () => {
       try {
@@ -55,6 +59,37 @@ export default function MatchingResults() {
           }
         }
         setData({ ...result, results: normalized })
+        if (details?.method === 'ai' && Array.isArray(details.results) && details.results.length > 0) {
+          const skillPairs = details.results
+            .filter(row => (row.jobId ?? row.sourceJobId) != null && (row.candidateId ?? row.sourceCandidateId) != null)
+            .map(row => ({
+              jobId: row.jobId ?? row.sourceJobId,
+              sourceJobId: row.sourceJobId,
+              jobTitle: row.jobTitle || result.job_title,
+              candidateId: row.candidateId ?? row.sourceCandidateId,
+              sourceCandidateId: row.sourceCandidateId,
+              candidateName: row.candidateName,
+            }))
+          if (skillPairs.length > 0) {
+            try {
+              const skillResponse = await matchingApi.vectorMatchSelected(skillPairs, details.engine || 'python', { signal: controller.signal })
+              if (!active) return
+              if (skillResponse?.method && skillResponse.method !== 'vector') {
+                throw new Error(t('matching.method_mismatch'))
+              }
+              setData(current => current && ({
+                ...current,
+                results: {
+                  ...current.results,
+                  results: attachSkillMatchingResults(current.results.results || [], skillResponse),
+                },
+              }))
+            } catch (failure) {
+              if (!active || failure.name === 'AbortError') return
+              setSkillMatchingError(failure.message)
+            }
+          }
+        }
       } catch (err) {
         if (active && err.name !== 'AbortError') setError(err.message)
       } finally {
@@ -217,7 +252,8 @@ export default function MatchingResults() {
       const jobSkill = skill?.jobSkill || 'Unbekannt'
       const candidateSkill = skill?.candidateSkill || 'Unbekannt'
       const category = resolveMatchedSkillCategory(skill)
-      return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity)})`
+      const coverage = skill?.covered ? '' : ` · ${t('matching.skill_uncovered')}`
+      return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity)})${coverage}`
     }
 
     const getCategoryMatches = (row, category) => (row?.matchedSkills || []).filter(
@@ -232,7 +268,7 @@ export default function MatchingResults() {
           <div className="rounded-[16px] bg-[#0071e3]/5 border border-[#0071e3]/10 p-3">
             <div className="font-semibold text-[#0071e3] mb-2 flex items-center justify-between gap-3">
               <span>{t('matching.hard_skill')}</span>
-              <span className="text-[11px] font-medium text-[#0071e3]/70">{t('matching.n_matches').replace('{count}', hardMatches.length)}</span>
+              <span className="text-[11px] font-medium text-[#0071e3]/70">{t('matching.n_matches').replace('{count}', hardMatches.filter(skill => skill.covered).length)}</span>
             </div>
             <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
               {hardMatches.length > 0 ? hardMatches.map((skill, index) => (
@@ -243,7 +279,7 @@ export default function MatchingResults() {
           <div className="rounded-[16px] bg-[#34c759]/5 border border-[#34c759]/10 p-3">
             <div className="font-semibold text-[#34c759] mb-2 flex items-center justify-between gap-3">
               <span>{t('matching.soft_skill')}</span>
-              <span className="text-[11px] font-medium text-[#34c759]/70">{t('matching.n_matches').replace('{count}', softMatches.length)}</span>
+              <span className="text-[11px] font-medium text-[#34c759]/70">{t('matching.n_matches').replace('{count}', softMatches.filter(skill => skill.covered).length)}</span>
             </div>
             <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
               {softMatches.length > 0 ? softMatches.map((skill, index) => (
@@ -638,6 +674,7 @@ export default function MatchingResults() {
 
       {/* AI Act Art. 13: KI-Transparenzhinweis */}
       <KiDisclaimer feature="matching" className="mb-6" />
+      {skillMatchingError && <div role="alert" className="mb-6 text-[#ff3b30]">{t('matching.skill_matching_error')}: {skillMatchingError}</div>}
 
       {/* AI Act Art. 14: Menschliche Aufsicht — Review-Status */}
       <Card className={`p-5 mb-10 border ${data?.human_reviewed ? 'border-[#34c759]/20 bg-[#34c759]/5' : 'border-[#ff9f0a]/20 bg-[#ff9f0a]/5'}`}>
@@ -764,6 +801,9 @@ export default function MatchingResults() {
                     {result.summary}
                   </p>
                   <MatchingResultMetadata result={result} historical />
+                  {data?.results?.method === 'ai' && (
+                    <SkillMatchingResult result={result.skillMatch} failure={result.skillMatchFailure} />
+                  )}
                 </div>
 
                 <div className="flex-shrink-0 w-14 h-14 rounded-full flex items-center justify-center hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors">

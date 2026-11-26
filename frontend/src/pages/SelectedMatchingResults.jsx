@@ -3,8 +3,10 @@ import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, BarChart3, CheckCircle, ChevronDown, Download, FileText, Target, User, UserCheck, XCircle, CheckSquare, Square } from 'lucide-react'
 import { matchingApi, matchingScorePercent, resolveMatchingResult } from '../api'
 import MatchingResultMetadata, { MatchingRunNotice } from '../components/MatchingResultMetadata'
+import SkillMatchingResult from '../components/SkillMatchingResult'
 import { Card, Button, ScoreBadge, ScoreRing, LoadingSpinner, PageContainer } from '../components/UI'
 import { useI18n } from '../I18nContext'
+import { attachSkillMatchingResults } from '../utils/skillMatchingResults'
 
 const STORAGE_KEY = 'hrtool:matching:selected-batch'
 
@@ -16,6 +18,7 @@ export default function SelectedMatchingResults() {
   const [loading, setLoading] = useState(true)
   const [loadingMode, setLoadingMode] = useState(location.state?.mode || null)
   const [error, setError] = useState('')
+  const [skillMatchingError, setSkillMatchingError] = useState('')
   const [selectedRowKeys, setSelectedRowKeys] = useState([])
   const [progress, setProgress] = useState(null)
   const requestRef = useRef(null)
@@ -25,6 +28,7 @@ export default function SelectedMatchingResults() {
     requestRef.current = controller
     let active = true
     setProgress(null)
+    setSkillMatchingError('')
     const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw && !location.state?.pairs) {
       setLoading(false)
@@ -65,7 +69,7 @@ export default function SelectedMatchingResults() {
             }))
           },
         }
-        const response = precomputed
+        let response = precomputed
           ? await resolveMatchingResult(precomputed, options)
           : mode === 'vector'
             ? await matchingApi.vectorMatchSelected(pairs, engine, options)
@@ -73,12 +77,44 @@ export default function SelectedMatchingResults() {
         if (!active) return
         if (!Array.isArray(response?.results)) throw new Error(t('matching.invalid_results'))
         if (response?.method && response.method !== method) throw new Error(t('matching.method_mismatch'))
-        const rows = (response?.results || []).map(row => {
+        let skillMatchResponse = response.skillMatchResults || null
+        if (method === 'ai' && !skillMatchResponse && response.results.length > 0) {
+          const skillPairs = response.results
+            .filter(row => (row.jobId ?? row.sourceJobId) != null && (row.candidateId ?? row.sourceCandidateId) != null)
+            .map(row => ({
+              jobId: row.jobId ?? row.sourceJobId,
+              sourceJobId: row.sourceJobId,
+              jobTitle: row.jobTitle,
+              candidateId: row.candidateId ?? row.sourceCandidateId,
+              sourceCandidateId: row.sourceCandidateId,
+              candidateName: row.candidateName,
+            }))
+          if (skillPairs.length > 0) {
+            try {
+              skillMatchResponse = await matchingApi.vectorMatchSelected(skillPairs, engine, { signal: controller.signal })
+              if (!active) return
+              if (skillMatchResponse?.method && skillMatchResponse.method !== 'vector') {
+                throw new Error(t('matching.method_mismatch'))
+              }
+            } catch (failure) {
+              if (!active || failure.name === 'AbortError') return
+              setSkillMatchingError(failure.message)
+            }
+          }
+        }
+        const aiRows = method === 'ai' && skillMatchResponse
+          ? attachSkillMatchingResults(response.results, skillMatchResponse)
+          : response.results
+        const rows = aiRows.map(row => {
           if (row.method && row.method !== method) throw new Error(t('matching.method_mismatch'))
           return { ...row, method, score: matchingScorePercent(row.score, method) }
         }).sort((left, right) => (right.score ?? -1) - (left.score ?? -1))
         const failures = response?.failures || []
-        const resultPayload = { ...response, results: rows, failures, selectedCount: pairs.length, mode, method }
+        const resultPayload = {
+          ...response,
+          ...(skillMatchResponse ? { skillMatchResults: skillMatchResponse } : {}),
+          results: rows, failures, selectedCount: pairs.length, mode, method,
+        }
 
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
           ...parsed,
@@ -158,6 +194,7 @@ export default function SelectedMatchingResults() {
       sourceCandidateId: row.sourceCandidateId || row.candidateId,
       candidateName: row.candidateName,
     }))
+    const engine = payload?.engine || 'python'
 
     const controller = new AbortController()
     requestRef.current = controller
@@ -169,6 +206,7 @@ export default function SelectedMatchingResults() {
           setProgress(current)
           sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
             pairs: batchPayload, mode: 'ai', navigationKey: location.key,
+            engine,
             sourceResultId: payload?.sourceResultId, sourceJobDescription: payload?.sourceJobDescription,
             response: { ...current, status: 'pending' },
           }))
@@ -178,12 +216,13 @@ export default function SelectedMatchingResults() {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         pairs: batchPayload,
         mode: 'ai',
+        engine,
         sourceResultId: payload?.sourceResultId || null,
         sourceLabel: t('matching.method_skill'),
         sourceJobDescription: payload?.sourceJobDescription || '',
         response,
       }))
-      navigate('/matching/results/selected', { state: { pairs: batchPayload, mode: 'ai', precomputed: response } })
+      navigate('/matching/results/selected', { state: { pairs: batchPayload, mode: 'ai', engine, precomputed: response } })
     } catch (err) {
       if (controller.signal.aborted || err.name === 'AbortError') return
       setError(err.message || 'KI-Matching konnte nicht gestartet werden.')
@@ -210,7 +249,8 @@ export default function SelectedMatchingResults() {
     const jobSkill = skill?.jobSkill || 'Unbekannt'
     const candidateSkill = skill?.candidateSkill || 'Unbekannt'
     const category = resolveMatchedSkillCategory(skill)
-    return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity)})`
+    const coverage = skill?.covered ? '' : ` · ${t('matching.skill_uncovered')}`
+    return `${jobSkill} ↔ ${candidateSkill} · ${category} (${formatVectorScore(skill?.similarity)})${coverage}`
   }
 
   const renderCategoryDebug = (row) => {
@@ -339,6 +379,7 @@ export default function SelectedMatchingResults() {
       </div>
 
       {error && <div role="alert" className="mb-6 text-[#ff3b30]">{error}</div>}
+      {skillMatchingError && <div role="alert" className="mb-6 text-[#ff3b30]">{t('matching.skill_matching_error')}: {skillMatchingError}</div>}
       <MatchingRunNotice progress={progress} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
         {metrics.map(({ label, value, color, icon: Icon }) => (
@@ -472,7 +513,7 @@ export default function SelectedMatchingResults() {
                       <div className="rounded-[16px] bg-[#0071e3]/5 border border-[#0071e3]/10 p-4">
                         <p className="font-semibold text-[#0071e3] mb-2 flex items-center justify-between gap-3">
                           <span>{t('matching.hard_skill')}</span>
-                          <span className="text-[11px] font-medium text-[#0071e3]/70">{t('matching.n_matches').replace('{count}', getCategoryMatches(result, 'HardSkill').length)}</span>
+                          <span className="text-[11px] font-medium text-[#0071e3]/70">{t('matching.n_matches').replace('{count}', getCategoryMatches(result, 'HardSkill').filter(skill => skill.covered).length)}</span>
                         </p>
                         <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
                           {getCategoryMatches(result, 'HardSkill').length > 0
@@ -485,7 +526,7 @@ export default function SelectedMatchingResults() {
                       <div className="rounded-[16px] bg-[#34c759]/5 border border-[#34c759]/10 p-4">
                         <p className="font-semibold text-[#34c759] mb-2 flex items-center justify-between gap-3">
                           <span>{t('matching.soft_skill')}</span>
-                          <span className="text-[11px] font-medium text-[#34c759]/70">{t('matching.n_matches').replace('{count}', getCategoryMatches(result, 'SoftSkill').length)}</span>
+                          <span className="text-[11px] font-medium text-[#34c759]/70">{t('matching.n_matches').replace('{count}', getCategoryMatches(result, 'SoftSkill').filter(skill => skill.covered).length)}</span>
                         </p>
                         <div className="space-y-1.5 text-gray-600 dark:text-gray-300">
                           {getCategoryMatches(result, 'SoftSkill').length > 0
@@ -498,6 +539,7 @@ export default function SelectedMatchingResults() {
                     </div>
                   ) : (
                     <>
+                      <SkillMatchingResult result={result.skillMatch} failure={result.skillMatchFailure} />
                       <p className="mt-3 text-[14px] text-gray-600 dark:text-gray-300 leading-relaxed">{result.summary}</p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-[13px]">
                         {result.strengths?.length > 0 && (

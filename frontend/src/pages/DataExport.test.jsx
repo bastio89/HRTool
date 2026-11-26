@@ -35,7 +35,7 @@ const schema = {
   }, {
     key: 'matching_vector',
     label: '3D-Matching (Bewerber × Stellen)',
-    description: 'N:N',
+    description: 'M x N',
     defaultFormat: 'csv',
     defaultFields: ['candidate_id', 'job_id', 'score'],
     filters: [
@@ -99,7 +99,7 @@ describe('DataExport', () => {
     expect(screen.getByText(/Fremdsysteme freigeben/)).toBeTruthy()
   })
 
-  it('exports N:N matching results above the entered threshold', async () => {
+  it('exports M x N matching results above the entered threshold', async () => {
     renderPage('/admin/export?entity=matching_vector&ids=4')
     await screen.findByText('Verfügbare Felder')
 

@@ -171,12 +171,20 @@ class MatchingPairCache:
     ) -> None:
         while True:
             await asyncio.sleep(20)
-            for plan in plans:
-                evaluation = plan.evaluation
-                if evaluation["id"] in waiting_evaluation_ids and plan.owns_computation:
-                    await self.store.heartbeat_matching_evaluation(
-                        evaluation["id"], plan.lease_owner, evaluation["fence"],
-                    )
+            leases = [
+                (plan.evaluation["id"], plan.lease_owner, plan.evaluation["fence"])
+                for plan in plans
+                if plan.owns_computation and plan.evaluation["id"] in waiting_evaluation_ids
+            ]
+            if not leases:
+                continue
+            renewed_ids = await self.store.heartbeat_matching_evaluations(leases)
+            lost_ids = [
+                evaluation_id for evaluation_id, _, _ in leases
+                if evaluation_id in waiting_evaluation_ids and evaluation_id not in renewed_ids
+            ]
+            if lost_ids:
+                raise MatchingLeaseLostError(f"Matching-Lease fuer Evaluation {lost_ids[0]} verloren.")
 
     async def execute(
         self,
@@ -228,9 +236,20 @@ class MatchingPairCache:
             return {**completed["result_payload"], "cacheStatus": "computed", "evaluationId": completed["id"]}
         except MatchingLeaseLostError:
             raise
-        except (Exception, asyncio.CancelledError):
+        except MatchingEvaluationError:
+            raise
+        except asyncio.CancelledError:
             await self.store.fail_matching_evaluation(evaluation["id"], plan.lease_owner, evaluation["fence"])
             raise
+        except Exception as error:
+            status = await self.store.fail_matching_evaluation(
+                evaluation["id"], plan.lease_owner, evaluation["fence"],
+            )
+            if status is None:
+                raise MatchingLeaseLostError(
+                    f"Matching-Lease fuer Evaluation {evaluation['id']} verloren."
+                ) from error
+            raise MatchingEvaluationError(evaluation["id"], status) from error
         finally:
             if keeper is not None:
                 keeper.cancel()

@@ -1,4 +1,4 @@
-// Matching-Ergebnisse je Paarung (Bewerber x Stelle) fuer den N:N-Export.
+// Matching-Ergebnisse je Paarung (Bewerber x Stelle) fuer den M x N-Export.
 //
 // matching_results haelt pro Lauf nur eine gekuerzte Zusammenfassung (die
 // besten 100 Paarungen), damit die Historie klein bleibt. Ein Export "alle

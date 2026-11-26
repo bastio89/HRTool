@@ -102,6 +102,13 @@ _MATCHING_RUN_TARGET_STATES = """
             THEN saved_error_code ELSE COALESCE(evaluation_error_code, saved_error_code) END AS error_code
     FROM raw
 """
+_RECOVERABLE_OPEN_PAIR = """
+    (
+        (p.disposition IN ('pending', 'running') AND (e.id IS NULL OR e.status IN ('queued', 'running')))
+        OR (p.disposition = 'failed' AND p.error_code = 'retry_not_selected'
+            AND (e.id IS NULL OR e.status = 'queued'))
+    )
+"""
 _MATCHING_BATCH_RUN_SELECT = """
     SELECT r.id AS "runId", r.source, r.request_kind AS "requestKind", r.method, r.stage,
         r.entity_type AS "entityType", r.entity_id AS "entityId",
@@ -571,7 +578,8 @@ class PostgresStore:
             )).fetchone()
 
     async def list_matching_batches(
-        self, *, status: str | None = None, source: str | None = None,
+        self, *, status: str | None = None, source: str | None = None, search: str | None = None,
+        method: Literal["vector", "ai"] | None = None, entity_type: Literal["candidate", "job"] | None = None,
         cursor: str | None = None, limit: int = 25,
     ) -> dict[str, Any]:
         if not 1 <= limit <= 100:
@@ -585,8 +593,20 @@ class PostgresStore:
                 if boundary is None:
                     raise ValueError("Unbekannter Lauf-Cursor.")
             query = _MATCHING_BATCH_RUN_SELECT + """
-                WHERE (%s::text IS NULL OR r.stage = %s) AND (%s::text IS NULL OR r.source = %s)"""
-            parameters: list[Any] = [status, status, source, source]
+                WHERE (%s::text IS NULL OR r.stage = %s) AND (%s::text IS NULL OR r.source = %s)
+                  AND (%s::text IS NULL OR (
+                      r.id::text ILIKE %s OR r.source ILIKE %s OR
+                      COALESCE(r.entity_id::text, '') ILIKE %s OR
+                      COALESCE(u.username, '') ILIKE %s OR COALESCE(u.display_name, '') ILIKE %s
+                  ))
+                  AND (%s::text IS NULL OR r.method = %s)
+                  AND (%s::text IS NULL OR r.entity_type = %s)"""
+            search_pattern = f"%{search}%" if search is not None else None
+            parameters: list[Any] = [
+                status, status, source, source,
+                search_pattern, search_pattern, search_pattern, search_pattern, search_pattern, search_pattern,
+                method, method, entity_type, entity_type,
+            ]
             if boundary is not None:
                 query += " AND (r.created_at, r.id) < (%s, %s)"
                 parameters.extend([boundary["created_at"], boundary["id"]])
@@ -597,6 +617,27 @@ class PostgresStore:
             "items": rows[:limit],
             "nextCursor": str(rows[limit - 1]["runId"]) if len(rows) > limit else None,
         }
+
+    async def delete_matching_batch(self, run_id: str) -> bool:
+        await self.ensure_matching_pair_schema()
+        async with await psycopg.AsyncConnection.connect(self.database_url, row_factory=dict_row) as connection:
+            async with connection.transaction():
+                run = await (await connection.execute(
+                    """
+                    SELECT r.stage, r.lease_until > clock_timestamp() AS lease_active,
+                        EXISTS (
+                            SELECT 1 FROM matching_pair_evaluations e
+                            WHERE e.owner_run_id = r.id AND e.status = 'running'
+                        ) AS has_running_evaluation
+                    FROM matching_runs r WHERE r.id = %s FOR UPDATE
+                    """, (run_id,),
+                )).fetchone()
+                if run is None:
+                    return False
+                if run["stage"] in {"preparing", "matching"} or run["lease_active"] or run["has_running_evaluation"]:
+                    raise ValueError("Aktive Matching-Auftraege koennen nicht geloescht werden.")
+                await connection.execute("DELETE FROM matching_runs WHERE id = %s", (run_id,))
+        return True
 
     async def get_matching_batch_summary(self) -> dict[str, int]:
         async with await psycopg.AsyncConnection.connect(self.database_url, row_factory=dict_row) as connection:
@@ -831,10 +872,19 @@ class PostgresStore:
     async def claim_matching_request(self, run_id: str, owner: str) -> dict[str, Any] | None:
         async with await psycopg.AsyncConnection.connect(self.database_url, row_factory=dict_row) as connection:
             return await (await connection.execute(
-                """UPDATE matching_runs SET lease_owner = %s,
+                f"""UPDATE matching_runs SET lease_owner = %s,
                        lease_until = clock_timestamp() + INTERVAL '60 seconds', updated_at = clock_timestamp()
                    WHERE id = %s AND request_kind IN ('interactive', 'interactive_selection')
-                     AND stage IN ('queued', 'preparing', 'matching')
+                     AND (
+                         stage IN ('queued', 'preparing', 'matching')
+                         OR (stage = 'needs_review' AND retry_pair_ids IS NULL AND EXISTS (
+                             SELECT 1 FROM matching_runs child
+                             JOIN matching_run_pairs p ON p.run_id = child.id
+                             LEFT JOIN matching_pair_evaluations e ON e.id = p.evaluation_id
+                             WHERE child.parent_run_id = matching_runs.id
+                             AND {_RECOVERABLE_OPEN_PAIR}
+                         ))
+                     )
                      AND request_payload->>'handler' IS NOT NULL
                      AND (lease_until IS NULL OR lease_until <= clock_timestamp())
                    RETURNING *""", (owner, run_id),
@@ -1011,16 +1061,17 @@ class PostgresStore:
             )
             result = await connection.execute(
                 """UPDATE matching_runs SET result_payload = %s, stage = CASE
-                       WHEN EXISTS (SELECT 1 FROM matching_run_pairs WHERE run_id = %s AND disposition = 'needs_review')
-                           THEN 'needs_review'
-                       WHEN %s OR EXISTS (SELECT 1 FROM matching_run_pairs WHERE run_id = %s
+                       WHEN EXISTS (SELECT 1 FROM matching_run_pairs WHERE run_id = %s
                            AND disposition IN ('failed', 'preparation_required'))
-                           THEN 'completed_with_errors' ELSE 'completed' END,
+                           THEN 'completed_with_errors'
+                       WHEN EXISTS (SELECT 1 FROM matching_run_pairs WHERE run_id = %s AND disposition = 'needs_review')
+                           THEN 'completed'
+                       WHEN %s THEN 'completed_with_errors' ELSE 'completed' END,
                        target_count = (SELECT COUNT(*) FROM matching_run_pairs WHERE run_id = %s),
                        error_code = NULL, lease_owner = NULL, lease_until = NULL, updated_at = clock_timestamp()
                    WHERE id = %s AND lease_owner = %s AND lease_until > clock_timestamp()
                      AND error_code IS DISTINCT FROM 'source_deleted'""",
-                (Jsonb(normalize_matching_data(payload)), run_id, has_errors, run_id, run_id, run_id, owner),
+                (Jsonb(normalize_matching_data(payload)), run_id, run_id, has_errors, run_id, run_id, owner),
             )
             if result.rowcount != 1:
                 raise MatchingLeaseLostError(f"Matching-Lauf {run_id} konnte nicht abgeschlossen werden.")
@@ -1092,8 +1143,18 @@ class PostgresStore:
         await self.ensure_matching_pair_schema()
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
             rows = await (await connection.execute(
-                """SELECT id::text FROM matching_runs WHERE request_kind IN ('interactive', 'interactive_selection')
-                   AND stage IN ('queued', 'preparing', 'matching') AND request_payload->>'handler' IS NOT NULL
+                f"""SELECT id::text FROM matching_runs WHERE request_kind IN ('interactive', 'interactive_selection')
+                   AND (
+                       stage IN ('queued', 'preparing', 'matching')
+                       OR (stage = 'needs_review' AND retry_pair_ids IS NULL AND EXISTS (
+                           SELECT 1 FROM matching_runs child
+                           JOIN matching_run_pairs p ON p.run_id = child.id
+                           LEFT JOIN matching_pair_evaluations e ON e.id = p.evaluation_id
+                           WHERE child.parent_run_id = matching_runs.id
+                               AND {_RECOVERABLE_OPEN_PAIR}
+                       ))
+                   )
+                   AND request_payload->>'handler' IS NOT NULL
                    AND (lease_until IS NULL OR lease_until <= clock_timestamp())
                    ORDER BY created_at, id LIMIT 5""",
             )).fetchall()
@@ -1300,6 +1361,26 @@ class PostgresStore:
                        ) WHERE id = %s""",
                     (row["id"], parent_run_id, parent["retry_pair_ids"], row["id"]),
                 )
+            await connection.execute(
+                f"""
+                UPDATE matching_runs child SET stage = 'queued', error_code = NULL,
+                    lease_owner = NULL, lease_until = NULL, updated_at = clock_timestamp()
+                WHERE child.id = %s AND child.stage = 'needs_review'
+                    AND (child.lease_until IS NULL OR child.lease_until <= clock_timestamp())
+                    AND EXISTS (
+                        SELECT 1 FROM matching_run_pairs p
+                        LEFT JOIN matching_pair_evaluations e ON e.id = p.evaluation_id
+                        WHERE p.run_id = child.id AND {_RECOVERABLE_OPEN_PAIR}
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM matching_run_pairs p
+                        JOIN matching_pair_evaluations e ON e.id = p.evaluation_id
+                        WHERE p.run_id = child.id AND e.status = 'running'
+                            AND e.lease_until > clock_timestamp()
+                    )
+                """,
+                (row["id"],),
+            )
             return row["id"]
 
     async def sync_matching_children(self, parent_run_id: str, owner: str) -> list[dict[str, Any]]:
@@ -1322,7 +1403,14 @@ class PostgresStore:
                    (parent_run_id, parent_run_id),
             )
             return await (await connection.execute(
-                   "SELECT * FROM matching_runs WHERE parent_run_id = %s ORDER BY child_key", (parent_run_id,),
+                   """SELECT child.*,
+                          ARRAY(
+                              SELECT p.candidate_id::text FROM matching_run_pairs p
+                              WHERE p.run_id = child.id AND p.disposition = 'needs_review'
+                              ORDER BY p.id
+                          ) AS needs_review_candidate_ids
+                      FROM matching_runs child WHERE child.parent_run_id = %s ORDER BY child_key""",
+                   (parent_run_id,),
             )).fetchall()
 
     async def release_unbilled_matching_claims(self, run_id: str) -> None:
@@ -1482,22 +1570,40 @@ class PostgresStore:
             assert claimed is not None
             return {**claimed, "disposition": "owned"}
 
+    async def heartbeat_matching_evaluations(
+        self, leases: list[tuple[int, str, int]], *, lease_seconds: int = 60,
+    ) -> set[int]:
+        if not 1 <= lease_seconds <= 3600:
+            raise ValueError("Matching-Lease muss zwischen 1 und 3600 Sekunden liegen.")
+        if not leases:
+            return set()
+        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
+            rows = await (await connection.execute(
+                """
+                UPDATE matching_pair_evaluations AS evaluation
+                SET lease_until = clock_timestamp() + %s * INTERVAL '1 second'
+                FROM unnest(%s::bigint[], %s::uuid[], %s::bigint[]) AS lease(id, owner, fence)
+                WHERE evaluation.id = lease.id AND evaluation.lease_owner = lease.owner
+                  AND evaluation.fence = lease.fence AND evaluation.status = 'running'
+                  AND evaluation.lease_until > clock_timestamp()
+                RETURNING evaluation.id
+                """, (
+                    lease_seconds,
+                    [evaluation_id for evaluation_id, _, _ in leases],
+                    [lease_owner for _, lease_owner, _ in leases],
+                    [fence for _, _, fence in leases],
+                ),
+            )).fetchall()
+            return {int(row[0]) for row in rows}
+
     async def heartbeat_matching_evaluation(
         self, evaluation_id: int, lease_owner: str, fence: int, *, lease_seconds: int = 60,
     ) -> None:
-        if not 1 <= lease_seconds <= 3600:
-            raise ValueError("Matching-Lease muss zwischen 1 und 3600 Sekunden liegen.")
-        async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
-            row = await (await connection.execute(
-                """
-                UPDATE matching_pair_evaluations
-                SET lease_until = clock_timestamp() + %s * INTERVAL '1 second'
-                WHERE id = %s AND lease_owner = %s AND fence = %s AND status = 'running'
-                  AND lease_until > clock_timestamp() RETURNING id
-                """, (lease_seconds, evaluation_id, lease_owner, fence),
-            )).fetchone()
-            if row is None:
-                raise MatchingLeaseLostError(f"Matching-Lease fuer Evaluation {evaluation_id} verloren.")
+        renewed = await self.heartbeat_matching_evaluations(
+            [(evaluation_id, lease_owner, fence)], lease_seconds=lease_seconds,
+        )
+        if evaluation_id not in renewed:
+            raise MatchingLeaseLostError(f"Matching-Lease fuer Evaluation {evaluation_id} verloren.")
 
     async def mark_matching_model_started(self, evaluation_id: int, lease_owner: str, fence: int) -> None:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
@@ -1511,9 +1617,11 @@ class PostgresStore:
             if row is None:
                 raise MatchingLeaseLostError(f"Matching-Lease fuer Evaluation {evaluation_id} verloren.")
 
-    async def fail_matching_evaluation(self, evaluation_id: int, lease_owner: str, fence: int) -> None:
+    async def fail_matching_evaluation(
+        self, evaluation_id: int, lease_owner: str, fence: int,
+    ) -> str | None:
         async with await psycopg.AsyncConnection.connect(self.database_url) as connection:
-            await connection.execute(
+            row = await (await connection.execute(
                 """
                 UPDATE matching_pair_evaluations
                 SET status = CASE WHEN call_started_at IS NULL THEN 'failed' ELSE 'needs_review' END,
@@ -1521,8 +1629,10 @@ class PostgresStore:
                         THEN 'evaluation_failed' ELSE 'uncertain_provider_result' END,
                     lease_owner = NULL, lease_until = NULL
                 WHERE id = %s AND lease_owner = %s AND fence = %s AND status = 'running'
+                RETURNING status
                 """, (evaluation_id, lease_owner, fence),
-            )
+            )).fetchone()
+            return row[0] if row is not None else None
 
     async def get_matching_pair_content(
         self, candidate_id: int, job_id: int, *,

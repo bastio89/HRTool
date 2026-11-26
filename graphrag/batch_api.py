@@ -69,6 +69,17 @@ def create_batch_router(postgres_store: PostgresStore) -> APIRouter:
             raise HTTPException(status_code=404, detail="Matching run not found")
         return result
 
+    @router.delete("/{run_id}")
+    async def batch_delete(run_id: UUID, request: Request):
+        await billing.require_matching_admin(request)
+        try:
+            deleted = await postgres_store.delete_matching_batch(str(run_id))
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Matching run not found")
+        return {"runId": str(run_id), "deleted": True}
+
     async def summary(run: dict[str, Any]) -> dict[str, Any]:
         run["errorCode"] = public_matching_error(run["errorCode"])
         counters = await postgres_store.get_matching_run_progress(str(run["runId"]))
@@ -79,12 +90,16 @@ def create_batch_router(postgres_store: PostgresStore) -> APIRouter:
     async def batch_list(
         request: Request, status: RunStage | None = None,
         source: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+        search: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
+        method: Literal["vector", "ai"] | None = None,
+        entity_type: Annotated[Literal["candidate", "job"] | None, Query(alias="entityType")] = None,
         cursor: UUID | None = None, limit: PageLimit = 25,
     ):
         await billing.require_matching_admin(request)
         try:
             page = await postgres_store.list_matching_batches(
-                status=status, source=source, cursor=str(cursor) if cursor is not None else None, limit=limit,
+                status=status, source=source, search=search, method=method, entity_type=entity_type,
+                cursor=str(cursor) if cursor is not None else None, limit=limit,
             )
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error

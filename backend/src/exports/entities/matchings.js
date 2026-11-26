@@ -1,4 +1,4 @@
-// Export-Entitaeten "KI-Matching" und "3D-Matching": N:N-Abzug aller
+// Export-Entitaeten "KI-Matching" und "3D-Matching": M x N-Abzug aller
 // gespeicherten Matching-Ergebnisse, eine Zeile je Paarung Bewerber x Stelle.
 // Grundlage ist matching_pair_results (letztes Ergebnis je Paarung, siehe
 // src/matchingPairs.js). Mit score_above landen nur Paarungen im Export,

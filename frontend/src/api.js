@@ -237,6 +237,8 @@ export const batchesApi = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== ''));
     return request(`/batches/${encodeURIComponent(runId)}${query.size ? `?${query}` : ''}`, options);
   },
+  delete: (runId, options = {}) =>
+    request(`/batches/${encodeURIComponent(runId)}`, { ...options, method: 'DELETE' }),
   retry: (runId, pairIds, confirmUncertain = false, options = {}) =>
     request(`/batches/${encodeURIComponent(runId)}/retry`, {
       ...options, method: 'POST', body: JSON.stringify({ pairIds, confirmUncertain }),

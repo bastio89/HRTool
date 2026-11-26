@@ -99,7 +99,7 @@
 - **Datenbank-Backup** — JSON-Backup der PostgreSQL-Daten als Download (Admin)
 - **Generische Export-Schnittstelle** — Bewerberdaten mit frei wählbaren Feldern, Zielfeld-Mapping und Filtern als CSV, JSON, NDJSON oder XML exportieren; als Profil speichern und optional per API-Key für Fremdsysteme freigeben (Administration → Datenexport, nur Admins)
 - **CRM-Austausch (Axessence)** — Kandidaten-ZIP aus dem CRM importieren (CRM-UUID bleibt die UUID des Bewerbers) und die Matching-Ergebnisse als Rückgabe-CSV im CRM-Format liefern (Administration → CRM-Austausch, siehe „CRM-Schnittstelle“)
-- **N:N-Matching-Export** — Ergebnisse von KI-Matching und 3D-Matching als Liste Bewerber × Stelle (eine Zeile je Paarung, letztes Ergebnis) exportieren, optional nur Paarungen mit einem Matchingwert größer X % (Administration → Datenexport → Datenquelle „KI-Matching“ bzw. „3D-Matching“)
+- **M x N-Matching-Export** — Ergebnisse von KI-Matching und 3D-Matching als Liste Bewerber × Stelle (eine Zeile je Paarung, letztes Ergebnis) exportieren, optional nur Paarungen mit einem Matchingwert größer X % (Administration → Datenexport → Datenquelle „KI-Matching“ bzw. „3D-Matching“)
 
 ### 🔐 Sicherheit & Compliance
 - **JWT-Authentifizierung** — Sichere Token-basierte Anmeldung
@@ -528,7 +528,7 @@ X-API-Key: ihr-externer-api-key
 
 Die Antwort trägt `X-Total-Count` für das seitenweise Abholen. Jeder Export – über die Oberfläche wie per API – wird mit Feldern, Filtern und Anzahl im Audit-Log protokolliert. Neue Entitäten (z. B. Stellen) werden in `backend/src/exports/index.js` registriert und nutzen dieselben Formate, Profile und Endpunkte.
 
-#### Matching-Ergebnisse (N:N)
+#### Matching-Ergebnisse (M x N)
 
 Neben `candidates` gibt es die Entitäten `matching_ai` (KI-Matching) und `matching_vector` (3D-Matching). Sie liefern eine Zeile je Paarung Bewerber × Stelle mit dem jeweils **letzten** Ergebnis – über alle Läufe hinweg (Matrix „Alle Kandidaten : Alle Stellen“, Stelle → Kandidaten, Kandidat → Stellen, KI-Matching selektierter Paarungen).
 

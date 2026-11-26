@@ -42,7 +42,7 @@ from models import (
 )
 from services.skill_matching import RequiredSkill, SkillMatchingService
 from services.matching_orchestrator import MatchingOrchestrator
-from services.matching_cache import MatchingPendingError
+from services.matching_cache import MatchingLeaseLostError, MatchingPendingError
 from services.matching_pipeline import MatchingRequestCoordinator
 
 SKILL_MATCHING_API_METHOD = "POST"
@@ -94,6 +94,8 @@ def create_matching_router(llm_service=None, db_service=None, *, matching_reques
 				run_id=request.state.matching_run_id, on_plan=request.state.matching_on_plan,
 			)
 		except MatchingPendingError:
+			raise
+		except MatchingLeaseLostError:
 			raise
 		except ValueError as error:
 			raise HTTPException(status_code=422, detail=str(error)) from error
@@ -777,16 +779,22 @@ def create_matching_router(llm_service=None, db_service=None, *, matching_reques
 				blocked |= child['stage'] == 'blocked_credits'
 				continue
 			result = child['result_payload']
-			if result is not None and child['stage'] in {'completed', 'completed_with_errors'}:
+			if result is not None and child['stage'] in {'completed', 'completed_with_errors', 'needs_review'}:
 				model = result.get('model') or model
-				for value in result['matrix']:
-					row = VectorMatchRow.model_validate(value)
+				child_rows = [VectorMatchRow.model_validate(value) for value in result['matrix']]
+				for row in child_rows:
 					rows[(row.jobId, row.candidateId)] = row
-				missing = set(map(str, result.get('missingCandidateIds', [])))
-				for candidate_id in missing:
+				missing_in_graph = set(map(str, result.get('missingCandidateIds', [])))
+				for candidate_id in missing_in_graph:
 					failures.append(KiMatchPairFailure(
 						jobId=str(job_id), candidateId=candidate_id, error='Kein Eintrag in Neo4j',
 					))
+				if child['needs_review_candidate_ids']:
+					for candidate_id in child['needs_review_candidate_ids']:
+						failures.append(KiMatchPairFailure(
+							jobId=str(job_id), candidateId=candidate_id,
+							error='Paarung benötigt manuelle Prüfung',
+						))
 			else:
 				for candidate_id in sorted(groups[job_id]):
 					failures.append(KiMatchPairFailure(

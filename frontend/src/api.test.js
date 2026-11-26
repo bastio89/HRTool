@@ -133,3 +133,13 @@ it('provides queue/detail/retry and own status clients with authentication and s
   await matchingApi.getRun(runId)
   expect(fetch.mock.calls[2][0]).toBe(`/api/matching/runs/${runId}`)
 })
+
+it('forwards additional queue filters and deletes a batch request with DELETE', async () => {
+  fetch.mockResolvedValue(response({ runId, deleted: true }))
+  await batchesApi.list({ search: '283', method: 'ai', entityType: 'job' })
+  expect(fetch.mock.calls[0][0]).toBe('/api/batches?search=283&method=ai&entityType=job')
+  expect(await batchesApi.delete(runId)).toEqual({ runId, deleted: true })
+  expect(fetch.mock.calls[1][0]).toBe(`/api/batches/${runId}`)
+  expect(fetch.mock.calls[1][1].method).toBe('DELETE')
+  expect(fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer actor-token')
+})

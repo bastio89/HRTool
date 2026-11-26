@@ -2,12 +2,12 @@ const { graphRagAuthHeaders } = require('./graphragAuth');
 
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function graphRagRequest(req, endpoint, payload) {
+async function graphRagRequest(req, endpoint, payload, method = payload === undefined ? 'GET' : 'POST') {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   let response;
   try {
     response = await fetch(`${baseUrl.replace(/\/+$/, '')}${endpoint}`, {
-      method: payload === undefined ? 'GET' : 'POST',
+      method,
       headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
       ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
     });

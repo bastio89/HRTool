@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
@@ -15,8 +16,12 @@ from services.postgres_store import PostgresStore
 from services.skill_matching import EmbeddingProvider, RequiredSkill, SkillMatchingResult, SkillMatchingService, SkillPriority
 from services.esco_catalog import normalize_alias
 from services.matching_cache import (
-    MatchingInputSnapshot, MatchingPairCache, MatchingPairPlan, MatchingPendingError, SCORING_VERSION,
+    MatchingEvaluationError, MatchingInputSnapshot, MatchingPairCache, MatchingPairPlan, MatchingPendingError,
+    SCORING_VERSION,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -182,61 +187,62 @@ class MatchingOrchestrator:
         planned: list[tuple[MatchingPairPlan, MatchingRuntimeProvider, str, str]] = []
         replayed: list[dict[str, Any]] = []
         replay_failed = False
-        for job in jobs:
-            for candidate in candidates:
-                if not selected(job, candidate):
-                    saved = retry_scope.get(("vector", candidate_ids[str(candidate.id)], job_ids[str(job.id)])) if retry_scope is not None else None
-                    if saved is not None:
-                        if saved["disposition"] in {"computed", "cached", "shared"}:
-                            replayed.append({
-                                **saved["result_payload"], "evaluationId": saved["evaluation_id"],
-                                "cacheStatus": "computed" if saved["disposition"] == "computed" else "hit",
-                                "jobId": str(job.id), "candidateId": str(candidate.id),
-                            })
-                        else:
-                            replay_failed = True
-                    continue
-                payload = {
-                    "job": {"title": job.title, "required_skills": [
-                        asdict(skill) for skill in normalize_skill_entries(job.required_skills)
-                    ]},
-                    "candidate": {"name": candidate.name, "skills": [
-                        asdict(skill) for skill in normalize_skill_entries(
-                            candidate.has_skill if candidate.has_skill is not None else candidate.skills,
-                            required=False,
-                        )
-                    ]},
-                }
-                frozen, config = await provider.freeze_matching("vector")
-                config.update(
-                    cutoff=self.skill_service.similarity_cutoff, scoring_version=SCORING_VERSION,
-                    esco_snapshot=await self._catalog_snapshot(payload),
-                )
-                pg_candidate_id = candidate_ids[str(candidate.id)]
-                pg_job_id = job_ids[str(job.id)]
-                stored_candidate, stored_job = await store.get_matching_pair_content(pg_candidate_id, pg_job_id)
-                snapshot = MatchingInputSnapshot.create(
-                    "vector", pg_candidate_id, pg_job_id, candidate=stored_candidate, job=stored_job,
-                    payload=payload, configuration=config,
-                )
-                planned.append((await cache.plan(snapshot, run_id=run_id), frozen, str(job.id), str(candidate.id)))
+        lease_plans: list[MatchingPairPlan] = []
+        waiting_evaluation_ids: set[int] = set()
+        lease_keeper = asyncio.create_task(cache.keep_planned_leases(lease_plans, waiting_evaluation_ids))
+        try:
+            for job in jobs:
+                for candidate in candidates:
+                    if not selected(job, candidate):
+                        saved = retry_scope.get(("vector", candidate_ids[str(candidate.id)], job_ids[str(job.id)])) if retry_scope is not None else None
+                        if saved is not None:
+                            if saved["disposition"] in {"computed", "cached", "shared"}:
+                                replayed.append({
+                                    **saved["result_payload"], "evaluationId": saved["evaluation_id"],
+                                    "cacheStatus": "computed" if saved["disposition"] == "computed" else "hit",
+                                    "jobId": str(job.id), "candidateId": str(candidate.id),
+                                })
+                            else:
+                                replay_failed = True
+                        continue
+                    payload = {
+                        "job": {"title": job.title, "required_skills": [
+                            asdict(skill) for skill in normalize_skill_entries(job.required_skills)
+                        ]},
+                        "candidate": {"name": candidate.name, "skills": [
+                            asdict(skill) for skill in normalize_skill_entries(
+                                candidate.has_skill if candidate.has_skill is not None else candidate.skills,
+                                required=False,
+                            )
+                        ]},
+                    }
+                    frozen, config = await provider.freeze_matching("vector")
+                    config.update(
+                        cutoff=self.skill_service.similarity_cutoff, scoring_version=SCORING_VERSION,
+                        esco_snapshot=await self._catalog_snapshot(payload),
+                    )
+                    pg_candidate_id = candidate_ids[str(candidate.id)]
+                    pg_job_id = job_ids[str(job.id)]
+                    stored_candidate, stored_job = await store.get_matching_pair_content(pg_candidate_id, pg_job_id)
+                    snapshot = MatchingInputSnapshot.create(
+                        "vector", pg_candidate_id, pg_job_id, candidate=stored_candidate, job=stored_job,
+                        payload=payload, configuration=config,
+                    )
+                    plan = await cache.plan(snapshot, run_id=run_id)
+                    planned.append((plan, frozen, str(job.id), str(candidate.id)))
+                    if plan.owns_computation:
+                        lease_plans.append(plan)
+                        waiting_evaluation_ids.add(plan.evaluation["id"])
+        except BaseException:
+            lease_keeper.cancel()
+            await asyncio.gather(lease_keeper, return_exceptions=True)
+            raise
 
         rows: list[dict[str, Any]] = replayed
         pending: list[int] = []
-        waiting_evaluation_ids = {
-            plan.evaluation["id"] for plan, _, _, _ in planned if plan.owns_computation
-        }
-        lease_keeper = (
-            asyncio.create_task(cache.keep_planned_leases(
-                [plan for plan, _, _, _ in planned], waiting_evaluation_ids,
-            ))
-            if waiting_evaluation_ids else None
-        )
 
         async def run_with_lease_keeper(awaitable: Awaitable[Any]) -> Any:
             task = asyncio.ensure_future(awaitable)
-            if lease_keeper is None:
-                return await task
             done, _ = await asyncio.wait((lease_keeper, task), return_when=asyncio.FIRST_COMPLETED)
             if lease_keeper in done:
                 keeper_error: Exception | None = None
@@ -297,6 +303,13 @@ class MatchingOrchestrator:
                     rows.append({**result_row, "jobId": requested_job_id, "candidateId": requested_candidate_id})
                 except MatchingPendingError as error:
                     pending.extend(error.evaluation_ids)
+                except MatchingEvaluationError as error:
+                    if error.status not in {"failed", "needs_review", "superseded"}:
+                        raise
+                    logger.warning(
+                        "Skipping terminal matching evaluation id=%s status=%s cause=%s",
+                        error.evaluation_id, error.status, error.__cause__ or error,
+                    )
         finally:
             if lease_keeper is not None:
                 lease_keeper.cancel()

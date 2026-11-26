@@ -66,6 +66,8 @@ test('batch APIs require a bearer and the current stored administrator role', as
     expect((await request(app).get(path).set('X-API-Key', 'not-admin')).status).toBe(401);
     expect((await request(app).get(path).auth(ownerToken, { type: 'bearer' })).status).toBe(403);
   }
+  expect((await request(app).delete(`/api/batches/${runId}`)).status).toBe(401);
+  expect((await request(app).delete(`/api/batches/${runId}`).auth(ownerToken, { type: 'bearer' })).status).toBe(403);
   expect((await request(app).post(`/api/batches/${runId}/retry`)
     .auth(ownerToken, { type: 'bearer' }).send({ pairIds: [1] })).status).toBe(403);
   expect((await request(app).get('/api/batches').auth(token(2147483647, 'admin'), { type: 'bearer' })).status).toBe(401);
@@ -85,11 +87,15 @@ test('queue filters and pair cursors are forwarded without dropping pagination m
   const list = { items: [{ run: { runId }, counters: { progressPercent: 75 } }], nextCursor: randomUUID() };
   const detail = { run: { runId }, counters: { progressPercent: 75 }, pairs: [{ pairId: 37 }], nextCursor: 37 };
   global.fetch.mockImplementation(async url => response(200, new URL(url).pathname.endsWith(runId) ? detail : list));
-  const page = await request(app).get('/api/batches').query({ status: 'matching', source: 'CV Import', limit: 3 })
+  const page = await request(app).get('/api/batches').query({
+    status: 'matching', source: 'CV Import', search: '283', method: 'ai', entityType: 'job', limit: 3,
+  })
     .auth(adminToken, { type: 'bearer' });
   expect(page.body).toEqual(list);
   const listUrl = new URL(global.fetch.mock.calls[0][0]);
-  expect(Object.fromEntries(listUrl.searchParams)).toEqual({ status: 'matching', source: 'CV Import', limit: '3' });
+  expect(Object.fromEntries(listUrl.searchParams)).toEqual({
+    status: 'matching', source: 'CV Import', search: '283', method: 'ai', entityType: 'job', limit: '3',
+  });
   const pairs = await request(app).get(`/api/batches/${runId}`).query({ pairStatus: 'failed', cursor: 15, limit: 2 })
     .auth(adminToken, { type: 'bearer' });
   expect(pairs.body).toEqual(detail);
@@ -116,6 +122,16 @@ test('retry forwards only the explicit request body and preserves its acknowledg
   expect(result.body).toEqual({ runId, stage: 'queued' });
   expect(global.fetch.mock.calls[0][0]).toMatch(`/admin/batches/${runId}/retry`);
   expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual(body);
+});
+
+test('delete forwards an authenticated DELETE and validates the acknowledgement', async () => {
+  global.fetch.mockResolvedValue(response(200, { runId, deleted: true }));
+  const result = await request(app).delete(`/api/batches/${runId}`).auth(adminToken, { type: 'bearer' });
+  expect(result.status).toBe(200);
+  expect(result.body).toEqual({ runId, deleted: true });
+  expect(global.fetch.mock.calls[0][0]).toMatch(`/admin/batches/${runId}`);
+  expect(global.fetch.mock.calls[0][1].method).toBe('DELETE');
+  expect(global.fetch.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${adminToken}`);
 });
 
 test('own imported runs do not require a Node matching context and foreign access stays private', async () => {

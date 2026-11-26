@@ -8,11 +8,11 @@ import BatchProcessing, { OwnMatchingRunStatus } from './BatchProcessing'
 
 const mocks = vi.hoisted(() => ({
   role: 'admin',
-  list: vi.fn(), get: vi.fn(), retry: vi.fn(), getRun: vi.fn(),
+  list: vi.fn(), get: vi.fn(), retry: vi.fn(), delete: vi.fn(), getRun: vi.fn(),
   confirm: vi.fn(),
 }))
 vi.mock('../api', () => ({
-  batchesApi: { list: mocks.list, get: mocks.get, retry: mocks.retry },
+  batchesApi: { list: mocks.list, get: mocks.get, retry: mocks.retry, delete: mocks.delete },
   matchingApi: { getRun: mocks.getRun },
   billingApi: { getMe: vi.fn().mockResolvedValue({ current_balance: 1 }) },
   subscribeCreditRefresh: () => () => {},
@@ -76,6 +76,7 @@ beforeEach(() => {
   mocks.list.mockResolvedValue({ items: [{ run, counters }], nextCursor: null })
   mocks.get.mockResolvedValue(detail)
   mocks.retry.mockResolvedValue({ runId, stage: 'queued' })
+  mocks.delete.mockResolvedValue({ runId, deleted: true })
   mocks.getRun.mockResolvedValue({ ...run, counters })
   mocks.confirm.mockResolvedValue(true)
 })
@@ -111,10 +112,46 @@ it('shows confirmed 6/8 and exactly 75 percent, target IDs and the original time
   expect(screen.queryByText('9001')).not.toBeInTheDocument()
   expect(screen.getByText('2025-01-01T10:00:00Z')).toBeInTheDocument()
   expect(screen.getByRole('checkbox', { name: 'Auswählen 102' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Löschen' })).toBeDisabled()
   expect(screen.getByText('Neu berechnet', { selector: 'dt' }).nextSibling).toHaveTextContent('3')
   expect(screen.getByText('Cache-Treffer', { selector: 'dt' }).nextSibling).toHaveTextContent('2')
   fireEvent.change(screen.getByRole('combobox', { name: /^Paarstatus/ }), { target: { value: 'failed' } })
   await waitFor(() => expect(mocks.get).toHaveBeenLastCalledWith(runId, { pairStatus: 'failed', cursor: null, limit: 25 }, expect.any(Object)))
+})
+
+it('filters the queue by search, method and entity type while resetting pagination', async () => {
+  const nextCursor = '00000000-0000-0000-0000-000000000002'
+  mocks.list.mockResolvedValue({ items: [{ run, counters }], nextCursor })
+  renderPage('/admin/batches')
+  await screen.findByRole('button', { name: runId })
+  fireEvent.click(screen.getByRole('button', { name: 'Nächste Seite' }))
+  await waitFor(() => expect(mocks.list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ cursor: nextCursor }), expect.any(Object),
+  ))
+
+  fireEvent.change(screen.getByRole('textbox', { name: /Auftragssuche/ }), { target: { value: '283' } })
+  fireEvent.change(screen.getByRole('combobox', { name: 'Methode' }), { target: { value: 'ai' } })
+  fireEvent.change(screen.getByRole('combobox', { name: 'Entitätstyp' }), { target: { value: 'job' } })
+  await waitFor(() => expect(mocks.list).toHaveBeenLastCalledWith({
+    status: '', source: '', search: '283', method: 'ai', entityType: 'job', cursor: null, limit: 25,
+  }, expect.objectContaining({ signal: expect.any(AbortSignal) })))
+})
+
+it('confirms deletion, removes the request and refreshes the queue', async () => {
+  mocks.list.mockResolvedValueOnce({
+    items: [{ run: { ...run, stage: 'completed' }, counters }], nextCursor: null,
+  }).mockResolvedValue({ items: [], nextCursor: null })
+  renderPage('/admin/batches')
+  const deleteButton = await screen.findByRole('button', { name: 'Löschen' })
+  expect(deleteButton).toBeEnabled()
+  fireEvent.click(deleteButton)
+  await waitFor(() => expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({
+    title: 'Löschen',
+    message: expect.stringContaining('Credit-Buchungen bleiben erhalten'),
+    tone: 'danger',
+  })))
+  await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith(runId))
+  await waitFor(() => expect(screen.queryByRole('button', { name: runId })).not.toBeInTheDocument())
 })
 
 it('keeps preparation without a fabricated percentage and lets non-admins read only their own status', async () => {

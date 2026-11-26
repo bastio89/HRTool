@@ -252,15 +252,17 @@ async def test_planned_evaluation_lease_is_renewed_until_execution(monkeypatch):
     store = Mock()
     heartbeat_called = asyncio.Event()
 
-    async def heartbeat(*_args):
+    async def heartbeat(leases):
         heartbeat_called.set()
+        return {evaluation_id for evaluation_id, _, _ in leases}
 
-    store.heartbeat_matching_evaluation = AsyncMock(side_effect=heartbeat)
+    store.heartbeat_matching_evaluations = AsyncMock(side_effect=heartbeat)
     cache = MatchingPairCache(store)
     plan = MatchingPairPlan(
         make_snapshot(), "lease-owner", {"id": 73, "fence": 2, "disposition": "owned"},
     )
-    waiting_ids = {73}
+    plans = []
+    waiting_ids = set()
     sleep_calls, ticks = asyncio.Queue(), asyncio.Queue()
 
     async def fake_sleep(_seconds):
@@ -268,21 +270,37 @@ async def test_planned_evaluation_lease_is_renewed_until_execution(monkeypatch):
         await ticks.get()
 
     monkeypatch.setattr("services.matching_cache.asyncio.sleep", fake_sleep)
-    keeper = asyncio.create_task(cache.keep_planned_leases([plan], waiting_ids))
+    keeper = asyncio.create_task(cache.keep_planned_leases(plans, waiting_ids))
     try:
         await sleep_calls.get()
+        plans.append(plan)
+        waiting_ids.add(73)
         await ticks.put(None)
         await heartbeat_called.wait()
-        assert store.heartbeat_matching_evaluation.await_args.args == (73, "lease-owner", 2)
+        assert store.heartbeat_matching_evaluations.await_args.args == ([(73, "lease-owner", 2)],)
 
         waiting_ids.clear()
         await sleep_calls.get()
         await ticks.put(None)
         await sleep_calls.get()
-        assert store.heartbeat_matching_evaluation.await_count == 1
+        assert store.heartbeat_matching_evaluations.await_count == 1
     finally:
         keeper.cancel()
         await asyncio.gather(keeper, return_exceptions=True)
+
+
+@pytest.mark.anyio
+async def test_batch_heartbeat_renews_only_current_lease_owner(stored_matching_pair):
+    store, candidate_id, job_id = stored_matching_pair
+    snapshot = make_snapshot(candidate_id=candidate_id, job_id=job_id)
+    owner = str(uuid4())
+    claim = await store.claim_matching_evaluation(snapshot, owner)
+
+    renewed = await store.heartbeat_matching_evaluations([(claim["id"], owner, claim["fence"])])
+    stale = await store.heartbeat_matching_evaluations([(claim["id"], str(uuid4()), claim["fence"])])
+
+    assert renewed == {claim["id"]}
+    assert stale == set()
 
 
 @pytest.mark.anyio

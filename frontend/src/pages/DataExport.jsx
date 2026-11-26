@@ -108,7 +108,7 @@ function previewCell(value) {
 const selectClass = 'w-full px-5 py-3 bg-[#f5f5f7] dark:bg-[#2c2c2e] border border-transparent rounded-[16px] text-black dark:text-white text-[15px] focus:outline-none focus:border-[#0071e3]/30 focus:ring-4 focus:ring-[#0071e3]/10'
 const labelClass = 'block text-[13px] font-medium text-gray-500 dark:text-gray-400 ml-1 mb-1.5'
 
-// Filter fuer die N:N-Matching-Abzuege, aus dem Schema gebaut. Der
+// Filter fuer die M x N-Matching-Abzuege, aus dem Schema gebaut. Der
 // Schwellwert ("nur Matchingwert groesser als X %") steht als Hauptfilter oben.
 function MatchingFilters({ entity, filters, onChange, t }) {
   const definitions = entity.filters || []

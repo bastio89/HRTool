@@ -1946,7 +1946,7 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
       candidates: [{ id: 12, name: 'Daniel Huber' }],
       matchingResults: [{
         id: 42,
-        job_title: 'N:N Matching',
+        job_title: 'M x N Matching',
         results: JSON.stringify({
           type: 'matrix',
           matrix: [{ jobId: '3', candidateId: '12', candidateName: 'copilot', score: 79 }],

@@ -13,7 +13,7 @@
 // erzeugen in JSON/XML verschachtelte Objekte. Weitere Entitaeten (z. B.
 // Stellen) werden in ENTITIES registriert und nutzen dieselbe Schnittstelle.
 //
-// Neben den Bewerbern gibt es die Matching-Ergebnisse als N:N-Abzug
+// Neben den Bewerbern gibt es die Matching-Ergebnisse als M x N-Abzug
 // (eine Zeile je Paarung Bewerber x Stelle), getrennt nach KI- und
 // 3D-Matching; siehe entities/matchings.js.
 

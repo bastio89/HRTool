@@ -10,7 +10,7 @@ const apiKeyAuth = require('../middleware/apiKey');
 const { getAiConfig, stripReasoningTags, resolveAiProvider, buildAiRequest, extractAiText, pingAiService } = require('../aiConfig');
 const { graphRagRequest, RUN_ID } = require('../graphragRequest');
 // Alle Paarungen eines Laufs landen zusaetzlich in matching_pair_results,
-// damit sie als N:N-Export (Administration -> Datenexport) abrufbar sind.
+// damit sie als M x N-Export (Administration -> Datenexport) abrufbar sind.
 // Produktive Schreibfehler werden gemeldet; GraphRAG bestaetigt eigene Writes.
 const { recordMatchingPairsSafely, rememberMatchingRequest, saveMatchingHistory } = require('../matchingPairs');
 // 3D-Matching ueber die UUID: vorher fehlende Neo4j-Eintraege nachholen.
@@ -1070,7 +1070,7 @@ router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (
       jobs, candidates, engine, mode,
       title: mode === 'candidate_to_jobs'
         ? `Bewerber → alle Stellen (${candidates.length} × ${jobs.length})`
-        : `N:N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber, ${engine === 'neo4j' ? 'Neo4j' : 'Python'})`,
+        : `M x N Matching (${jobs.length} Stellen × ${candidates.length} Bewerber, ${engine === 'neo4j' ? 'Neo4j' : 'Python'})`,
       description: `Matrix-Matching: ${jobs.length} Stellen × ${candidates.length} Bewerber`,
     });
     const graphRagResult = await callGraphRagMatching(req, engine === 'neo4j' ? '/match/external/matrix_neo4j' : '/match/external/matrix', {

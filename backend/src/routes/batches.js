@@ -26,7 +26,7 @@ async function proxy(req, res, kind) {
     if (req.params.runId) endpoint += `/${req.params.runId}`;
     if (kind === 'retry') endpoint += '/retry';
     const query = new URLSearchParams();
-    const queryKeys = kind === 'list' ? ['status', 'source', 'cursor', 'limit']
+    const queryKeys = kind === 'list' ? ['status', 'source', 'search', 'method', 'entityType', 'cursor', 'limit']
       : kind === 'detail' ? ['pairStatus', 'cursor', 'limit'] : [];
     for (const key of queryKeys) {
       if (req.query[key] !== undefined) {
@@ -35,13 +35,16 @@ async function proxy(req, res, kind) {
       }
     }
     if (kind !== 'retry' && query.size) endpoint += `?${query}`;
-    const { data, status } = await graphRagRequest(req, endpoint, kind === 'retry' ? req.body : undefined);
+    const { data, status } = await graphRagRequest(
+      req, endpoint, kind === 'retry' ? req.body : undefined, kind === 'delete' ? 'DELETE' : undefined,
+    );
     const valid = kind === 'list' ? Array.isArray(data.items)
       : kind === 'summary' ? Boolean(data) && [
         'queuedCount', 'runningCount', 'blockedCreditsCount', 'needsReviewCount', 'failedCount', 'completedWithErrorsCount',
       ].every(key => Number.isSafeInteger(data[key]) && data[key] >= 0)
         : kind === 'detail' ? data.run?.runId === req.params.runId && Array.isArray(data.pairs) && data.counters
-          : data.runId === req.params.runId && data.stage === 'queued';
+          : kind === 'delete' ? data.runId === req.params.runId && data.deleted === true
+            : data.runId === req.params.runId && data.stage === 'queued';
     if (!valid) throw Object.assign(new Error('Unvollstaendige GraphRAG-Batchantwort'), { status: 502 });
     res.status(status).json(data);
   } catch (error) {
@@ -61,6 +64,9 @@ async function proxy(req, res, kind) {
  *     parameters:
  *       - { in: query, name: status, schema: { type: string, enum: [queued, preparing, matching, blocked_credits, completed, completed_with_errors, needs_review, failed] } }
  *       - { in: query, name: source, schema: { type: string, minLength: 1, maxLength: 255 } }
+ *       - { in: query, name: search, description: Suche in Auftrags-ID, Quelle, Entitaets-ID und Benutzername, schema: { type: string, minLength: 1, maxLength: 255 } }
+ *       - { in: query, name: method, schema: { type: string, enum: [vector, ai] } }
+ *       - { in: query, name: entityType, schema: { type: string, enum: [candidate, job] } }
  *       - { in: query, name: cursor, schema: { type: string, format: uuid } }
  *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
  *     responses:
@@ -120,6 +126,21 @@ async function proxy(req, res, kind) {
  *       422: { description: Ungueltiger oder fremder Paar-Cursor oder Filter }
  *       502: { description: Ungueltige GraphRAG-Antwort }
  *       503: { description: GraphRAG nicht erreichbar }
+ *   delete:
+ *     summary: Inaktiven Auftrag und seine Paar-/Retry-Details entfernen
+ *     description: Stellen, Bewerber, Matching-Ergebnisse und Credit-Buchungen bleiben erhalten. Aktive Auftraege koennen nicht geloescht werden.
+ *     tags: [Batchverarbeitung]
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: runId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Auftrag geloescht }
+ *       401: { description: Authentifizierung erforderlich }
+ *       403: { description: Adminrolle erforderlich }
+ *       404: { description: Auftrag nicht gefunden }
+ *       409: { description: Aktiver Auftrag kann nicht geloescht werden }
+ *       502: { description: Ungueltige GraphRAG-Antwort }
+ *       503: { description: GraphRAG nicht erreichbar }
  * /batches/{runId}/retry:
  *   post:
  *     summary: Ausgewaehlte unvollstaendige Paarziele sicher freigeben
@@ -161,6 +182,7 @@ async function proxy(req, res, kind) {
 router.get('/summary', (req, res) => proxy(req, res, 'summary'));
 router.get('/', (req, res) => proxy(req, res, 'list'));
 router.get('/:runId', (req, res) => proxy(req, res, 'detail'));
+router.delete('/:runId', (req, res) => proxy(req, res, 'delete'));
 router.post('/:runId/retry', (req, res) => proxy(req, res, 'retry'));
 
 module.exports = router;

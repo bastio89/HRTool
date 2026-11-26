@@ -1,5 +1,5 @@
 /**
- * N:N-Export der Matching-Ergebnisse (KI- und 3D-Matching): Speicherung je
+ * M x N-Export der Matching-Ergebnisse (KI- und 3D-Matching): Speicherung je
  * Paarung, Zuordnung der GraphRAG-IDs auf PostgreSQL-IDs, Schwellwert
  * "Matchingwert groesser X %", CSV-Abzug und Uebernahme der Historie.
  * Laeuft gegen die echte Testdatenbank (DATABASE_URL), wie in CI.
@@ -190,7 +190,7 @@ describe('recording matching pairs', () => {
     }
   });
 
-  test('stores a 3D N:N run and resolves Neo4j job UUIDs and names', () => {
+  test('stores a 3D M x N run and resolves Neo4j job UUIDs and names', () => {
     const result = recordMatchingPairs(db, 'vector', [
       { candidateId: String(carla), jobId: String(backend), score: 82, hardSkillScore: 0.9, softSkillScore: 0.4, summary: 'passt' },
       { candidateId: String(carla), jobId: graphUuid, score: 50, strengths: ['Python ↔ Python'] },
@@ -268,7 +268,7 @@ describe('recording matching pairs', () => {
   });
 });
 
-describe('N:N export', () => {
+describe('M x N export', () => {
   test('lists both matching entities with the threshold filter', async () => {
     const res = await request(buildApp(admin)).get('/api/exports/schema');
     expect(res.status).toBe(200);
@@ -294,7 +294,7 @@ describe('N:N export', () => {
     ]);
   });
 
-  test('without threshold exports the full N:N list including the job UUID', async () => {
+  test('without threshold exports the full M x N list including the job UUID', async () => {
     const res = await exportCsv('matching_vector', {}, ['candidate_id', 'job_id', 'job_uuid', 'score']);
     expect(res.status).toBe(200);
     expect(res.headers['x-export-count']).toBe('4');
@@ -352,7 +352,7 @@ describe('matching routes record every pair', () => {
     `SELECT * FROM matching_pair_results WHERE method = ? AND job_id IN (${runJobs.map(() => '?').join(',')})`
   ).all(method, ...runJobs);
 
-  test('an N:N 3D run stores all pairs although the history keeps only the top 100', async () => {
+  test('an M x N 3D run stores all pairs although the history keeps only the top 100', async () => {
     global.fetch = jest.fn(async (url, options) => {
       expect(String(url)).toMatch(/\/match\/external\/matrix_neo4j$/);
       const body = JSON.parse(options.body);

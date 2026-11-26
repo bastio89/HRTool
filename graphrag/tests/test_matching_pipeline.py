@@ -92,6 +92,49 @@ async def test_batch_access_uses_stored_roles_and_own_status_remains_private(bat
 
 
 @pytest.mark.anyio
+async def test_batch_delete_blocks_active_runs_and_preserves_sources_and_credit_history(batch_admin):
+    env = batch_admin
+    candidate_id, = await env.add("candidate")
+    job_id, = await env.add("job")
+    run_id = await env.enqueue("candidate", candidate_id)
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        await connection.execute(
+            """UPDATE matching_runs SET stage = 'matching', lease_until = clock_timestamp() + INTERVAL '60 seconds'
+               WHERE id = %s""", (run_id,),
+        )
+    active = await env.client.delete(f"/admin/batches/{run_id}")
+    assert active.status_code == 409, active.text
+
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        await connection.execute(
+            "UPDATE matching_runs SET stage = 'failed', lease_owner = NULL, lease_until = NULL WHERE id = %s",
+            (run_id,),
+        )
+        await connection.execute(
+            """INSERT INTO matching_run_pairs (run_id, method, candidate_id, job_id, disposition)
+               VALUES (%s, 'vector', %s, %s, 'failed')""", (run_id, candidate_id, job_id),
+        )
+        await connection.execute(
+            """INSERT INTO credit_transactions (user_id, amount, action_type, balance_after, matching_run_id)
+               VALUES (1, -0.10, '3D_MATCH', 0, %s)""", (run_id,),
+        )
+
+    deleted = await env.client.delete(f"/admin/batches/{run_id}")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json() == {"runId": run_id, "deleted": True}
+    assert (await env.client.get(f"/admin/batches/{run_id}")).status_code == 404
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        assert await (await connection.execute(
+            "SELECT COUNT(*) FROM matching_run_pairs WHERE run_id = %s", (run_id,),
+        )).fetchone() == (0,)
+        assert await (await connection.execute(
+            "SELECT matching_run_id FROM credit_transactions WHERE action_type = '3D_MATCH' AND user_id = 1",
+        )).fetchone() == (None,)
+        assert await (await connection.execute("SELECT id FROM candidates WHERE id = %s", (candidate_id,))).fetchone() == (candidate_id,)
+        assert await (await connection.execute("SELECT id FROM jobs WHERE id = %s", (job_id,))).fetchone() == (job_id,)
+
+
+@pytest.mark.anyio
 async def test_batch_queue_filters_keyset_ties_and_sanitizes_persisted_errors(batch_admin):
     env = batch_admin
     candidate_id, = await env.add("candidate")
@@ -105,6 +148,7 @@ async def test_batch_queue_filters_keyset_ties_and_sanitizes_persisted_errors(ba
             """UPDATE matching_runs SET stage = 'failed', error_code = 'private-provider-secret',
                 request_payload = '{"private-profile": "not-public"}'::jsonb WHERE id = %s""", (runs[1],),
         )
+        await connection.execute("UPDATE matching_runs SET method = 'ai' WHERE id = %s", (runs[0],))
     first = await env.client.get("/admin/batches", params={"limit": 2})
     assert first.status_code == 200, first.text
     page = first.json()
@@ -129,7 +173,14 @@ async def test_batch_queue_filters_keyset_ties_and_sanitizes_persisted_errors(ba
     filtered = await env.client.get("/admin/batches", params={"status": "queued", "source": "expansion-test"})
     assert {item["run"]["runId"] for item in filtered.json()["items"]} == {runs[0], runs[2]}
     assert (await env.client.get("/admin/batches", params={"source": "unknown"})).json()["items"] == []
-    for params in ({"limit": 0}, {"limit": 101}, {"status": "made-up"}, {"cursor": "invalid"}, {"cursor": str(uuid4())}):
+    searched = await env.client.get("/admin/batches", params={
+        "search": str(candidate_id), "method": "ai", "entityType": "candidate",
+    })
+    assert [item["run"]["runId"] for item in searched.json()["items"]] == [runs[0]]
+    for params in (
+        {"limit": 0}, {"limit": 101}, {"status": "made-up"}, {"method": "made-up"},
+        {"entityType": "other"}, {"search": ""}, {"cursor": "invalid"}, {"cursor": str(uuid4())},
+    ):
         assert (await env.client.get("/admin/batches", params=params)).status_code == 422
 
 
@@ -562,7 +613,7 @@ async def test_import_worker_continues_other_pairs_after_uncertain_provider_fail
     await original.aclose()
     run_id = await env.enqueue("candidate", candidate_id)
     finished = await env.process(run_id)
-    assert finished["stage"] == "needs_review"
+    assert finished["stage"] == "completed"
     async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
         assert await (await connection.execute(
             "SELECT disposition, COUNT(*) FROM matching_run_pairs GROUP BY disposition ORDER BY disposition",
@@ -1309,6 +1360,166 @@ async def durable_requests(stored_matching_pair, matching_actor, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_selected_matching_continues_after_uncertain_pair_without_replaying_it(durable_requests, monkeypatch):
+    env = durable_requests
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        extra_candidates = await (await connection.execute(
+            "INSERT INTO candidates (name) VALUES (%s), (%s) RETURNING id",
+            (f"selection-extra-{uuid4()}", f"selection-extra-{uuid4()}"),
+        )).fetchall()
+    extra_candidate_ids = [int(row[0]) for row in extra_candidates]
+    candidate_ids = [env.candidate_id, *extra_candidate_ids]
+
+    original_execute = MatchingPairCache.execute
+
+    async def mark_first_pair_uncertain(self, plan, evaluate, refresh_snapshot, *, engine="python"):
+        if plan.snapshot.candidate_id == env.candidate_id:
+            async def fail_provider_call():
+                await self.store.mark_matching_model_started(
+                    plan.evaluation["id"], plan.lease_owner, plan.evaluation["fence"],
+                )
+                raise RuntimeError("Embedding provider unavailable")
+
+            return await original_execute(
+                self, plan, fail_provider_call, refresh_snapshot, engine=engine,
+            )
+        return await original_execute(
+            self, plan, evaluate, refresh_snapshot, engine=engine,
+        )
+
+    monkeypatch.setattr(MatchingPairCache, "execute", mark_first_pair_uncertain)
+    monkeypatch.setattr(env.catalog, "get_jobs_for_vectormatch", AsyncMock(side_effect=lambda ids, titles=None: [
+        {"id": value, "title": "Engineer", "required_skills": ["Python"]} for value in ids
+    ]), raising=False)
+    monkeypatch.setattr(env.catalog, "get_candidates_for_vectormatch", AsyncMock(side_effect=lambda ids, names=None: [
+        {"id": value, "name": "Ada" if value == env.candidate_id else f"Candidate {value}",
+         "has_skill": ["Python"]} for value in ids
+    ]), raising=False)
+
+    selected = await env.client.post("/match/vectormatch-selected", json={
+        "pairs": [{"jobId": env.job_id, "candidateId": candidate_id} for candidate_id in candidate_ids],
+        "selectedCount": len(candidate_ids),
+    })
+    assert selected.status_code == 202, selected.text
+    run_id = selected.json()["runId"]
+
+    async def wait_for_terminal():
+        while True:
+            run = await env.store.get_matching_run(run_id)
+            if run["stage"] not in {"queued", "preparing", "matching"}:
+                return run
+            await asyncio.sleep(0.01)
+
+    run = await asyncio.wait_for(wait_for_terminal(), timeout=5)
+    progress = await env.store.get_matching_run_progress(run_id)
+
+    assert run["stage"] == "completed"
+    assert (progress["computedCount"], progress["needsReviewCount"], progress["pendingCount"]) == (2, 1, 0)
+    assert (run["result_payload"]["matchedCount"], run["result_payload"]["failedCount"]) == (2, 1)
+    assert run["result_payload"]["failures"][0]["candidateId"] == str(env.candidate_id)
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        assert await (await connection.execute(
+            """SELECT status, attempt FROM matching_pair_evaluations
+               WHERE candidate_id = %s AND job_id = %s ORDER BY id DESC LIMIT 1""",
+            (env.candidate_id, env.job_id),
+        )).fetchone() == ("needs_review", 1)
+        await connection.execute("DELETE FROM candidates WHERE id = ANY(%s)", (extra_candidate_ids,))
+
+
+@pytest.mark.anyio
+async def test_ensure_matching_child_requeues_review_run_with_pending_pairs(durable_requests):
+    env = durable_requests
+    parent_id = await env.store.create_matching_run(
+        actor_user_id=env.actor,
+        source="/match/vectormatch-selected",
+        method="vector",
+        request_payload={"handler": "vector_match_selected", "arguments": {"payload": {"pairs": []}}},
+        request_kind="interactive_selection",
+    )
+    owner = str(uuid4())
+    assert await env.store.claim_matching_request(parent_id, owner) is not None
+    await env.store.prepare_matching_selection_targets(
+        parent_id, [(str(env.job_id), str(env.candidate_id))], run_owner=owner, method="vector",
+    )
+    payload = {"handler": "vector_match", "arguments": {"payload": {
+        "jobIds": [env.job_id], "cvIds": [env.candidate_id], "engine": "neo4j",
+    }}}
+    child_id = await env.store.ensure_matching_child(parent_id, owner, str(env.job_id), payload)
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        await connection.execute(
+            """INSERT INTO matching_run_pairs (run_id, method, candidate_id, job_id, disposition)
+               VALUES (%s, 'vector', %s, %s, 'pending')""",
+            (child_id, env.candidate_id, env.job_id),
+        )
+        await connection.execute(
+            "UPDATE matching_runs SET stage = 'needs_review', error_code = 'request_failed' WHERE id = %s",
+            (child_id,),
+        )
+
+    assert await env.store.ensure_matching_child(parent_id, owner, str(env.job_id), payload) == child_id
+    child = await env.store.get_matching_run(child_id)
+    assert child["stage"] == "queued"
+    assert child["error_code"] is None
+
+
+@pytest.mark.anyio
+async def test_needs_review_selection_recovers_when_child_has_unselected_open_pairs(durable_requests):
+    env = durable_requests
+    parent_id = await env.store.create_matching_run(
+        actor_user_id=env.actor,
+        source="/match/vectormatch-selected",
+        method="vector",
+        request_payload={"handler": "vector_match_selected", "arguments": {"payload": {"pairs": []}}},
+        request_kind="interactive_selection",
+    )
+    owner = str(uuid4())
+    assert await env.store.claim_matching_request(parent_id, owner) is not None
+    await env.store.prepare_matching_selection_targets(
+        parent_id, [(str(env.job_id), str(env.candidate_id))], run_owner=owner, method="vector",
+    )
+    child_id = await env.store.ensure_matching_child(
+        parent_id, owner, str(env.job_id),
+        {"handler": "vector_match", "arguments": {"payload": {
+            "jobIds": [env.job_id], "cvIds": [env.candidate_id], "engine": "neo4j",
+        }}},
+    )
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        await connection.execute(
+            """INSERT INTO matching_run_pairs (run_id, method, candidate_id, job_id, disposition)
+               VALUES (%s, 'vector', %s, %s, 'failed')""",
+            (child_id, env.candidate_id, env.job_id),
+        )
+        await connection.execute(
+            """UPDATE matching_run_pairs SET error_code = 'retry_not_selected'
+               WHERE run_id = %s AND candidate_id = %s AND job_id = %s""",
+            (child_id, env.candidate_id, env.job_id),
+        )
+        await connection.execute(
+            """UPDATE matching_runs SET stage = 'needs_review', lease_owner = NULL, lease_until = NULL
+               WHERE id = %s""",
+            (child_id,),
+        )
+        await connection.execute(
+            """UPDATE matching_runs SET stage = 'needs_review', lease_owner = NULL, lease_until = NULL,
+               retry_pair_ids = ARRAY(SELECT id FROM matching_run_pairs WHERE run_id = %s)
+               WHERE id = %s""",
+            (parent_id, parent_id),
+        )
+
+    assert parent_id not in await env.store.list_recoverable_matching_requests()
+    assert await env.store.claim_matching_request(parent_id, str(uuid4())) is None
+    async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
+        await connection.execute(
+            "UPDATE matching_runs SET retry_pair_ids = NULL WHERE id = %s",
+            (parent_id,),
+        )
+
+    assert parent_id in await env.store.list_recoverable_matching_requests()
+    resumed = await env.store.claim_matching_request(parent_id, str(uuid4()))
+    assert resumed is not None
+
+
+@pytest.mark.anyio
 async def test_unstarted_request_survives_restart_and_replans_current_version_without_second_debit(
     durable_requests, monkeypatch,
 ):
@@ -1359,6 +1570,32 @@ async def test_unstarted_request_survives_restart_and_replans_current_version_wi
         assert await (await connection.execute(
             "SELECT current_balance::text FROM users WHERE id = %s", (env.actor,),
         )).fetchone() == ("0.90",)
+
+
+@pytest.mark.anyio
+async def test_matrix_pair_lease_loss_requeues_request_for_recovery(durable_requests, monkeypatch):
+    env = durable_requests
+
+    async def lose_lease(*_args, **_kwargs):
+        raise MatchingLeaseLostError("Matching-Lease fuer Evaluation verloren.")
+
+    monkeypatch.setattr(MatchingPairCache, "execute", lose_lease)
+    response = await env.client.post("/match/external/matrix", json=env.payload)
+
+    assert response.status_code == 202, response.text
+    run_id = response.json()["runId"]
+
+    async def wait_for_recovery_state():
+        while True:
+            run = await env.store.get_matching_run(run_id)
+            if run["stage"] not in {"preparing", "matching"}:
+                return run
+            await asyncio.sleep(0.01)
+
+    run = await asyncio.wait_for(wait_for_recovery_state(), timeout=3)
+    assert run["stage"] == "queued"
+    assert run["error_code"] is None
+    assert run_id in await env.store.list_recoverable_matching_requests()
 
 
 @pytest.mark.anyio

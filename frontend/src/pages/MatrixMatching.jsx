@@ -16,6 +16,7 @@ export default function MatrixMatching() {
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [matching, setMatching] = useState(false)
+  const [matchingProgress, setMatchingProgress] = useState(null)
   const [error, setError] = useState('')
   const [weights, setWeights] = useState({
     skills: 0, experience: 0, education: 0, location: 0, languages: 0,
@@ -47,13 +48,14 @@ export default function MatrixMatching() {
       return
     }
     setError('')
+    setMatchingProgress(null)
     setMatching(true)
     try {
       const result = await matchingApi.runMatrix({
         mode: 'all_jobs_all_candidates',
         weights,
         engine: 'neo4j',
-      })
+      }, { onProgress: setMatchingProgress })
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
       setError(err.message)
@@ -137,7 +139,13 @@ export default function MatrixMatching() {
             )}
           </Button>
 
-          <MatchingProgress running={matching} totalPairs={pairCount} color="#8b5cf6" />
+          <MatchingProgress
+            running={matching}
+            totalPairs={pairCount}
+            color="#8b5cf6"
+            progress={matchingProgress}
+            showPairCounts
+          />
 
           {user?.role === 'admin' && (
             <Card className="p-8 space-y-4">

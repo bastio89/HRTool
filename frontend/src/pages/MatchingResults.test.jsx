@@ -62,6 +62,7 @@ test.each(['matrix', 'vectormatch'])('zeigt IDs und Teilabdeckung trotz fehlende
   expect(screen.queryByText('job-uuid')).not.toBeInTheDocument()
   expect(screen.getByText(/fehlende Muss-Skills setzen ihn nicht auf 0 %/)).toBeInTheDocument()
   expect(screen.getAllByText(/50%/).length).toBeGreaterThan(0)
+  expect(screen.getByRole('img', { name: 'Skill-Abdeckung: 50%' })).toBeInTheDocument()
   if (type === 'vectormatch') {
     expect(document.body.textContent).toContain('1 abgedeckt')
     expect(document.body.textContent).toContain('nicht abgedeckt')
@@ -81,7 +82,7 @@ test('zeigt beide IDs auch im AI-Ergebnis ohne das Skill-Gate anzuwenden', async
   })
 
   expect(await screen.findByText(/Bewerber-ID:/)).toHaveTextContent('Bewerber-ID: 5 · Job-ID: 38')
-  expect(screen.getByText('Skill-Matching: 62%')).toBeInTheDocument()
+  expect(screen.getByRole('img', { name: 'Skill-Matching: 62%' })).toBeInTheDocument()
   expect(screen.getByText('HardSkill: 0.800')).toBeInTheDocument()
   expect(screen.queryByText(/fehlende Muss-Skills setzen ihn nicht auf 0 %/)).not.toBeInTheDocument()
   expect(screen.getAllByText('85%').length).toBeGreaterThan(0)

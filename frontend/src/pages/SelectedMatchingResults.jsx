@@ -435,7 +435,7 @@ export default function SelectedMatchingResults() {
 
               return (
                 <div key={result.id || `${result.jobId}-${result.candidateId}-${index}`} className="rounded-[22px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-5 sm:p-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-[56px_64px_1fr_1fr_180px] gap-4 items-center">
+                  <div className="grid grid-cols-1 lg:grid-cols-[56px_64px_1fr_1fr_240px] gap-4 items-center">
                     <div className="flex items-center justify-center">
                       <button
                         type="button"
@@ -467,9 +467,14 @@ export default function SelectedMatchingResults() {
                     </div>
                     <div className="flex items-center justify-end gap-3">
                       {isVectorMode ? (
-                        <div className="flex items-end gap-3">
+                        <div className="flex items-center justify-end gap-3">
+                          {displayScore != null && (
+                            <div role="img" aria-label={`${t('matching.method_skill')}: ${displayScore}%`}>
+                              <ScoreRing score={displayScore / 100} size={64} strokeWidth={5} />
+                            </div>
+                          )}
                           <div className="flex flex-col items-end gap-1.5">
-                            <span>{t('matching.method_skill')}: {displayScore != null ? `${displayScore}%` : t('matching.score_missing')}</span>
+                            <span>{t('matching.method_skill')}{displayScore == null ? `: ${t('matching.score_missing')}` : ''}</span>
                             {typeof result.qualified === 'boolean' && <span>{t(result.qualified ? 'matching.qualified' : 'matching.not_qualified')}</span>}
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#0071e3]/10 text-[#0071e3]">
                               HardSkill {formatVectorScore(hardScore)}

@@ -162,7 +162,9 @@ export default function MatchingResults() {
     const matrixRows = matrixData.matrix || []
     const topRows = matrixRows.slice(0, 12)
     const bestScoreMatrix = topRows.find(row => Number.isFinite(row.score))?.score ?? null
-    const isVectorMatching = matrixData.type === 'vectormatch' || matrixData.type === 'vectormatch_neo4j'
+    const isVectorMatching = matrixData.method === 'vector'
+      || matrixData.type === 'vectormatch'
+      || matrixData.type === 'vectormatch_neo4j'
     const embeddingModelLabel = matrixData.embeddingModel || 'unbekannt'
     const pairCount = matrixRows.length
     const jobCount = matrixData.jobs?.length || matrixData.jobsRanked?.length || new Set(
@@ -409,7 +411,7 @@ export default function MatchingResults() {
               return (
                 <div
                   key={`${row.jobId}-${row.candidateId}-${idx}`}
-                  className={`w-full min-w-0 grid grid-cols-1 lg:grid-cols-[56px_64px_minmax(0,1fr)_minmax(0,1fr)_180px] gap-4 items-center p-5 rounded-[20px] transition-colors text-left ${isSelected ? 'bg-[#0071e3]/5 dark:bg-[#0071e3]/10 ring-1 ring-[#0071e3]/20' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c]'}`}
+                  className={`w-full min-w-0 grid grid-cols-1 lg:grid-cols-[56px_64px_minmax(0,1fr)_minmax(0,1fr)_240px] gap-4 items-center p-5 rounded-[20px] transition-colors text-left ${isSelected ? 'bg-[#0071e3]/5 dark:bg-[#0071e3]/10 ring-1 ring-[#0071e3]/20' : 'bg-[#f5f5f7] dark:bg-[#2c2c2e] hover:bg-gray-100 dark:hover:bg-[#3a3a3c]'}`}
                 >
                   <button
                     type="button"
@@ -449,17 +451,24 @@ export default function MatchingResults() {
                     {isLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin text-[#0071e3]" />
                     ) : (
-                      <div className="flex items-end gap-3">
+                      <div className="flex items-center justify-end gap-3">
                         {isVectorMatching ? (
-                          <div className="flex flex-col items-end gap-1.5">
-                            <span>{t('matching.method_skill')}: {row.score != null ? `${row.score}%` : t('matching.score_missing')}</span>
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#0071e3]/10 text-[#0071e3]">
-                              HardSkill {formatVectorScore(row.hardSkillScore)}
-                            </span>
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#34c759]/10 text-[#34c759]">
-                              SoftSkill {formatVectorScore(row.softSkillScore)}
-                            </span>
-                          </div>
+                          <>
+                            {row.score != null && (
+                              <div role="img" aria-label={`${t('matching.method_skill')}: ${row.score}%`}>
+                                <ScoreRing score={row.score / 100} size={64} strokeWidth={5} />
+                              </div>
+                            )}
+                            <div className="flex flex-col items-end gap-1.5">
+                              <span>{t('matching.method_skill')}{row.score == null ? `: ${t('matching.score_missing')}` : ''}</span>
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#0071e3]/10 text-[#0071e3]">
+                                HardSkill {formatVectorScore(row.hardSkillScore)}
+                              </span>
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold tracking-wide bg-[#34c759]/10 text-[#34c759]">
+                                SoftSkill {formatVectorScore(row.softSkillScore)}
+                              </span>
+                            </div>
+                          </>
                         ) : (
                           <div className="text-[26px] font-semibold text-[#0071e3]">{row.score != null ? `${row.score}%` : t('matching.score_missing')}</div>
                         )}

@@ -1,9 +1,8 @@
-"""Tests fuer den Batch-Import von Stellen-PDFs. 
+"""Tests fuer den Batch-Import von Stellen-PDFs.
 
 Der Importer orchestrierte frueher LLM, Neo4j und Postgres selbst. Inzwischen
-schickt er die Datei an /jobs/parse-description im Backend und verschiebt sie
-danach. Der alte Test prueft Verhalten, das es nicht mehr gibt - er liess sich
-nicht reparieren, nur ersetzen.
+schickt er die Datei an das Backend, das PDF-Parser und Qualitaetspruefung
+ausfuehrt und die Datei erst nach einem vollstaendigen Import verschiebt.
 """
 from __future__ import annotations
 
@@ -275,7 +274,14 @@ async def test_process_job_file_posts_to_the_backend_and_files_the_pdf(tmp_path,
 
     def fake_post(url, file_path, timeout_seconds, token, field_name="file"):
         calls.update(url=url, file_path=file_path, timeout_seconds=timeout_seconds, token=token)
-        return {"success": True, "job": {"id": "job-123", "title": "Senior Data Engineer"}, "matchingRunId": "job-run-123", "matchingStatus": "queued"}
+        return {
+            "success": True,
+            "job": {
+                "id": "job-123", "title": "Senior Data Engineer", "description": "Build data platforms.",
+                "skills": "Python, SQL",
+            },
+            "matchingRunId": "job-run-123", "matchingStatus": "queued",
+        }
 
     monkeypatch.setattr(importer, "post_multipart_file", fake_post)
 
@@ -327,13 +333,37 @@ async def test_process_job_file_reports_a_missing_job_id(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_process_job_file_keeps_pdf_when_the_returned_profile_is_incomplete(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "job.pdf"
+    pdf_path.write_bytes(b"fake pdf")
+    done_dir = tmp_path / "done"
+    monkeypatch.setattr(importer, "post_multipart_file", lambda *args, **kwargs: {
+        "success": True,
+        "job": {"id": "job-123", "title": "Senior Data Engineer"},
+        "matchingRunId": "job-run-123",
+        "matchingStatus": "queued",
+    })
+
+    ok, message = await _run(pdf_path, done_dir)
+
+    assert not ok
+    assert "incomplete profile" in message and "skills" in message
+    assert pdf_path.exists() and not done_dir.exists()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("matching_status", ["not_required", None])
 async def test_job_cli_requires_a_run_confirmation_unless_the_import_was_unchanged(tmp_path, monkeypatch, matching_status):
     pdf_path = tmp_path / "job.pdf"
     pdf_path.write_bytes(b"fake pdf")
     done_dir = tmp_path / "done"
     monkeypatch.setattr(importer, "post_multipart_file", lambda *args, **kwargs: {
-        "success": True, "job": {"id": "job-123"}, "matchingStatus": matching_status,
+        "success": True,
+        "job": {
+            "id": "job-123", "title": "Senior Data Engineer",
+            "description": "Build data platforms.", "skills": "Python, SQL",
+        },
+        "matchingStatus": matching_status,
     })
     ok, message = await _run(pdf_path, done_dir)
     if matching_status == "not_required":

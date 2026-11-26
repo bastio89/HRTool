@@ -24,7 +24,7 @@ describe('BatchJobImportDialog', () => {
   })
 
   test('shows GraphRAG sync error after job creation', async () => {
-    jobsApi.parseDescriptionFile.mockResolvedValue({
+    jobsApi.parseDescriptionFileLegacy.mockResolvedValue({
       filename: 'Senior Backend Engineer.pdf',
       title: 'Senior Backend Engineer',
       text: 'Senior Backend Engineer at ACME with Node.js APIs, 5+ years experience, Home Office.',
@@ -32,7 +32,7 @@ describe('BatchJobImportDialog', () => {
       requirements: '5+ Jahre Erfahrung',
       benefits: 'Home Office',
     })
-    jobsApi.parseDescriptionFile.mockResolvedValueOnce({
+    jobsApi.parseDescriptionFileLegacy.mockResolvedValueOnce({
       id: 'job-1',
       profile: { title: 'Senior Backend Engineer' },
       graphRag: { error: 'GraphRAG HTTP 503: service unavailable' },
@@ -45,6 +45,8 @@ describe('BatchJobImportDialog', () => {
         <BatchJobImportDialog onClose={onClose} onImported={onImported} />
       </I18nProvider>
     )
+    expect(screen.queryByRole('button', { name: de['batch_job_import.mode_fast'] })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: de['batch_job_import.mode_llm'] })).toHaveAttribute('aria-pressed', 'true')
 
     const file = new File(['job text'], 'Senior Backend Engineer.pdf', { type: 'application/pdf' })
     fireEvent.change(document.querySelector('input[type="file"]'), {
@@ -69,7 +71,7 @@ describe('BatchJobImportDialog', () => {
       expect(screen.getByText(syncError)).toBeInTheDocument()
     })
 
-    expect(jobsApi.parseDescriptionFile).toHaveBeenCalledWith(file, false, true)
+    expect(jobsApi.parseDescriptionFileLegacy).toHaveBeenCalledWith(file, false, true)
     expect(onImported).toHaveBeenCalledTimes(1)
   })
 
@@ -103,11 +105,13 @@ describe('BatchJobImportDialog', () => {
     localStorage.setItem('hr-locale', locale)
     const messages = locale === 'en' ? en : de
     const runId = '00000000-0000-0000-0000-000000000001'
-    jobsApi.parseDescriptionFile.mockResolvedValue({ id: 42, title: 'Saved Job', matchingRunId: runId, matchingStatus: 'queued' })
+    jobsApi.parseDescriptionFileLegacy.mockResolvedValue({ id: 42, title: 'Saved Job', matchingRunId: runId, matchingStatus: 'queued' })
     render(<MemoryRouter><I18nProvider><BatchJobImportDialog onClose={vi.fn()} /></I18nProvider></MemoryRouter>)
+    expect(screen.queryByRole('button', { name: messages['batch_job_import.mode_fast'] })).not.toBeInTheDocument()
     fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [new File(['pdf'], 'queued-job.pdf', { type: 'application/pdf' })] } })
     fireEvent.click(screen.getByRole('button', { name: messages['batch_job_import.start'].replace('{n}', '1') }))
     expect(await screen.findByText(messages['batches.import_queued'])).toBeInTheDocument()
+    expect(jobsApi.parseDescriptionFileLegacy).toHaveBeenCalled()
     expect(screen.getByRole('link', { name: new RegExp(runId) })).toHaveAttribute(
       'href', role === 'admin' ? `/admin/batches?runId=${runId}` : `/matching/runs/${runId}`,
     )

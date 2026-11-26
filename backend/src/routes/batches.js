@@ -22,11 +22,13 @@ async function proxy(req, res, kind) {
     if (req.params.runId && !RUN_ID.test(req.params.runId)) {
       return res.status(400).json({ error: 'Ungueltige Matching-Lauf-ID' });
     }
-    let endpoint = '/admin/batches';
+    let endpoint = kind === 'summary' ? '/admin/batches/summary' : '/admin/batches';
     if (req.params.runId) endpoint += `/${req.params.runId}`;
     if (kind === 'retry') endpoint += '/retry';
     const query = new URLSearchParams();
-    for (const key of kind === 'list' ? ['status', 'source', 'cursor', 'limit'] : ['pairStatus', 'cursor', 'limit']) {
+    const queryKeys = kind === 'list' ? ['status', 'source', 'cursor', 'limit']
+      : kind === 'detail' ? ['pairStatus', 'cursor', 'limit'] : [];
+    for (const key of queryKeys) {
       if (req.query[key] !== undefined) {
         if (typeof req.query[key] !== 'string') return res.status(400).json({ error: `Ungueltiger Parameter: ${key}` });
         query.set(key, req.query[key]);
@@ -35,8 +37,11 @@ async function proxy(req, res, kind) {
     if (kind !== 'retry' && query.size) endpoint += `?${query}`;
     const { data, status } = await graphRagRequest(req, endpoint, kind === 'retry' ? req.body : undefined);
     const valid = kind === 'list' ? Array.isArray(data.items)
-      : kind === 'detail' ? data.run?.runId === req.params.runId && Array.isArray(data.pairs) && data.counters
-        : data.runId === req.params.runId && data.stage === 'queued';
+      : kind === 'summary' ? Boolean(data) && [
+        'queuedCount', 'runningCount', 'blockedCreditsCount', 'needsReviewCount', 'failedCount', 'completedWithErrorsCount',
+      ].every(key => Number.isSafeInteger(data[key]) && data[key] >= 0)
+        : kind === 'detail' ? data.run?.runId === req.params.runId && Array.isArray(data.pairs) && data.counters
+          : data.runId === req.params.runId && data.stage === 'queued';
     if (!valid) throw Object.assign(new Error('Unvollstaendige GraphRAG-Batchantwort'), { status: 502 });
     res.status(status).json(data);
   } catch (error) {
@@ -73,6 +78,18 @@ async function proxy(req, res, kind) {
  *       400: { description: Mehrdeutiger Queryparameter }
  *       422: { description: Ungueltiger Filter, Cursor oder Seitenumfang }
  *       502: { description: Unvollstaendige oder ungueltige GraphRAG-Antwort }
+ *       503: { description: GraphRAG nicht erreichbar }
+ * /batches/summary:
+ *   get:
+ *     summary: Zusammenfassung der globalen Matching-Queue
+ *     description: Nur aktuell gespeicherte Administratoren; Anzahl wartender, aktiver, kreditblockierter, pruefbeduerftiger, fehlgeschlagener und mit Fehlern abgeschlossener Laeufe.
+ *     tags: [Batchverarbeitung]
+ *     security: [{ BearerAuth: [] }]
+ *     responses:
+ *       200: { description: Aktuelle Queue-Zahlen }
+ *       401: { description: Authentifizierung erforderlich }
+ *       403: { description: Adminrolle erforderlich }
+ *       502: { description: Unvollstaendige GraphRAG-Antwort }
  *       503: { description: GraphRAG nicht erreichbar }
  * /batches/{runId}:
  *   get:
@@ -141,6 +158,7 @@ async function proxy(req, res, kind) {
  *       502: { description: Ungueltige GraphRAG-Antwort }
  *       503: { description: GraphRAG nicht erreichbar }
  */
+router.get('/summary', (req, res) => proxy(req, res, 'summary'));
 router.get('/', (req, res) => proxy(req, res, 'list'));
 router.get('/:runId', (req, res) => proxy(req, res, 'detail'));
 router.post('/:runId/retry', (req, res) => proxy(req, res, 'retry'));

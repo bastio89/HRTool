@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useId } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, AlertTriangle, XCircle, Loader2, RefreshCw, ChevronRight, Activity } from 'lucide-react'
-import { healthApi, settingsApi } from '../api'
+import { batchesApi, healthApi, settingsApi } from '../api'
+import { useAuth } from '../AuthContext'
 import { useI18n } from '../I18nContext'
 import { localeTag } from '../utils/format'
 
@@ -34,7 +35,10 @@ export function SystemStatusProvider({ children }) {
     lastCheck: null,
     services: {},
     usage: { calls: 0, total_tokens: 0 },
+    batchSummary: null,
+    batchError: false,
   })
+  const { isAdmin } = useAuth()
   // The AI endpoint config barely changes; fetching it on every poll was one of
   // the four requests a minute for no gain.
   const aiConfigRef = useRef(null)
@@ -43,7 +47,12 @@ export function SystemStatusProvider({ children }) {
   const check = useCallback(async () => {
     setState(prev => ({ ...prev, checking: true }))
 
-    const health = await healthApi.check().catch(() => null)
+    const [health, batchResult] = await Promise.all([
+      healthApi.check().catch(() => null),
+      isAdmin
+        ? batchesApi.summary().then(data => ({ data }), error => ({ error }))
+        : Promise.resolve(null),
+    ])
 
     let ai = 'unknown'
     try {
@@ -56,7 +65,7 @@ export function SystemStatusProvider({ children }) {
     }
 
     if (!mountedRef.current) return
-    setState({
+    setState(prev => ({
       checking: false,
       lastCheck: new Date(),
       services: {
@@ -69,8 +78,10 @@ export function SystemStatusProvider({ children }) {
         calls: Number(health?.aiUsage?.calls) || 0,
         total_tokens: Number(health?.aiUsage?.total_tokens) || 0,
       },
-    })
-  }, [])
+      batchSummary: isAdmin ? (batchResult?.data ?? prev.batchSummary) : null,
+      batchError: isAdmin && Boolean(batchResult?.error),
+    }))
+  }, [isAdmin])
 
   useEffect(() => {
     mountedRef.current = true
@@ -94,7 +105,7 @@ export function SystemStatusProvider({ children }) {
 
 export const useSystemStatus = () => useContext(SystemStatusContext) || {
   checking: false, lastCheck: null, services: {}, usage: { calls: 0, total_tokens: 0 },
-  overall: 'unknown', downCount: 0, refresh: () => {},
+  batchSummary: null, batchError: false, overall: 'unknown', downCount: 0, refresh: () => {},
 }
 
 const TONE = {
@@ -130,7 +141,8 @@ function relativeTime(date, t, locale) {
  */
 export default function SystemStatusChip() {
   const { t, locale } = useI18n()
-  const { overall, downCount, services, lastCheck, checking, usage, refresh } = useSystemStatus()
+  const { isAdmin } = useAuth()
+  const { overall, downCount, services, lastCheck, checking, usage, batchSummary, batchError, refresh } = useSystemStatus()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef(null)
   const panelId = useId()
@@ -151,6 +163,31 @@ export default function SystemStatusChip() {
     : t('system.n_down').replace('{n}', downCount)
 
   const formatNumber = (v) => new Intl.NumberFormat(localeTag(locale), { notation: 'compact', maximumFractionDigits: 1 }).format(v || 0)
+  const batchStatus = batchError ? 'unavailable'
+    : !batchSummary ? (checking ? 'checking' : 'unavailable')
+      : batchSummary.blockedCreditsCount + batchSummary.needsReviewCount
+        + batchSummary.failedCount + batchSummary.completedWithErrorsCount > 0 ? 'attention'
+        : batchSummary.runningCount > 0 ? 'running'
+          : batchSummary.queuedCount > 0 ? 'queued' : 'idle'
+  const batchStatusTone = batchStatus === 'unavailable' ? TONE.down
+    : batchStatus === 'attention' || batchStatus === 'queued' ? TONE.degraded
+      : batchStatus === 'running' ? TONE.ok : TONE.unknown
+  const batchCounts = batchSummary ? [
+    [batchSummary.runningCount, 'system.batch_active'],
+    [batchSummary.queuedCount, 'system.batch_queued'],
+    [batchSummary.needsReviewCount, 'system.batch_review'],
+    [batchSummary.failedCount, 'system.batch_failed'],
+    [batchSummary.blockedCreditsCount, 'system.batch_blocked'],
+    [batchSummary.completedWithErrorsCount, 'system.batch_completed_with_errors'],
+  ].filter(([count]) => count > 0)
+    .map(([count, labelKey]) => `${formatNumber(count)} ${t(labelKey)}`)
+    .join(' · ') || t('system.batch_empty') : null
+  const batchDetail = batchError
+    ? batchSummary ? `${t('system.batch_stale')} · ${batchCounts}` : t('system.batch_unavailable')
+    : batchCounts || (checking ? t('system.batch_loading') : t('system.batch_unavailable'))
+  const batchLabel = batchStatus === 'unavailable' ? t('system.batch_state_unavailable')
+    : batchStatus === 'checking' ? t('system.checking')
+      : t(`system.batch_state_${batchStatus}`)
 
   return (
     <div className="relative" ref={wrapRef}>
@@ -178,6 +215,7 @@ export default function SystemStatusChip() {
           id={panelId}
           role="group"
           aria-label={t('system.title')}
+          onPointerDown={event => event.stopPropagation()}
           className="absolute right-0 top-full mt-2 w-[290px] layer-popover
             bg-white dark:bg-[#1c1c1e] rounded-[18px] shadow-[var(--shadow-overlay)]
             border border-gray-200/60 dark:border-gray-700/60 overflow-hidden animate-modal-in"
@@ -217,6 +255,24 @@ export default function SystemStatusChip() {
                 </li>
               )
             })}
+            {isAdmin && (
+              <li className="border-t border-gray-100 dark:border-gray-800 mt-1 pt-1">
+                <Link
+                  to="/admin/batches"
+                  onClick={() => setOpen(false)}
+                  aria-label={`${t('system.batch')}: ${batchLabel}. ${batchDetail}`}
+                  className="flex items-center gap-2.5 px-4 py-2 hover:bg-[#f5f5f7] dark:hover:bg-[#2c2c2e] transition-colors"
+                >
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${batchStatusTone.dot}`} aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-medium text-black dark:text-white">{t('system.batch')}</span>
+                    <span className="block text-[10px] leading-4 text-gray-500 dark:text-gray-400 whitespace-normal">{batchDetail}</span>
+                  </span>
+                  <span className={`text-[11px] font-semibold ${batchStatusTone.text}`}>{batchLabel}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                </Link>
+              </li>
+            )}
           </ul>
 
           {/* Usage stays available, but out of the toolbar and with its period

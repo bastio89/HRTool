@@ -45,7 +45,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
   const { t } = useI18n()
   const [isDragging, setIsDragging] = useState(false)
   const [files, setFiles] = useState([])
-  const [importMode, setImportMode] = useState('fast')
+  const [importMode, setImportMode] = useState('llm')
   const [running, setRunning] = useState(false)
   const fileInputRef = useRef(null)
   const timerRef = useRef(null)
@@ -206,7 +206,7 @@ export default function BatchJobImportDialog({ open = true, onClose, onImported 
           {t('batch_job_import.mode_label')}
         </p>
         <div role="group" aria-labelledby="batch-job-import-mode-label" className="inline-flex rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-1">
-          {['fast', 'llm'].map((mode) => (
+          {['llm'].map((mode) => (
             <button
               key={mode}
               type="button"

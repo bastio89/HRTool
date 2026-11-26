@@ -216,6 +216,17 @@ def _resolve_input_dir(args: argparse.Namespace) -> Path:
     return Path("job_input" if args.mode == "job" else "cv_input")
 
 
+def _job_profile_issues(job: dict[str, object]) -> list[str]:
+    issues = []
+    if not str(job.get("title") or "").strip():
+        issues.append("title")
+    if not str(job.get("skills") or "").strip():
+        issues.append("skills")
+    if not any(str(job.get(field) or "").strip() for field in ("description", "requirements", "about_us")):
+        issues.append("description/requirements")
+    return issues
+
+
 def _is_real_pdf_file(path: Path) -> bool:
     if not path.is_file():
         return False
@@ -390,6 +401,12 @@ async def process_job_file(
     created_id = job_payload.get("id") or parsed.get("id")
     if not created_id:
         return False, "backend job parsing response has no job id"
+    profile_issues = _job_profile_issues(job_payload)
+    if profile_issues:
+        return False, (
+            f"backend saved job id={created_id} but returned an incomplete profile "
+            f"(missing {', '.join(profile_issues)}); source PDF retained"
+        )
     run_id = parsed.get("matchingRunId") or job_payload.get("matchingRunId")
     matching_status = parsed.get("matchingStatus") or job_payload.get("matchingStatus")
     if not run_id and matching_status != "not_required":

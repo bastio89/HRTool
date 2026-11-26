@@ -35,7 +35,7 @@ const CANDIDATE_SEARCH_FIELDS = [
   'gender',
 ];
 
-const CANDIDATE_SEARCH_FIELD_WIDTH = CANDIDATE_SEARCH_FIELDS.length + 4;
+const CANDIDATE_SEARCH_FIELD_WIDTH = CANDIDATE_SEARCH_FIELDS.length + 5;
 const JOB_SEARCH_FIELDS = [
   'title',
   'company',
@@ -49,6 +49,7 @@ const JOB_SEARCH_FIELDS = [
   'status',
   'url',
   'source',
+  'id',
 ];
 const JOB_SEARCH_FIELD_WIDTH = JOB_SEARCH_FIELDS.length;
 const MATCHING_SEARCH_FIELDS = [
@@ -60,11 +61,12 @@ const MATCHING_SEARCH_FIELDS = [
 ];
 const MATCHING_SEARCH_FIELD_WIDTH = MATCHING_SEARCH_FIELDS.length;
 
-function matchesSearch(candidate, queryTerms, fullText = null, fields = CANDIDATE_SEARCH_FIELDS) {
+function matchesSearch(candidate, queryTerms, fullText = null, fields = CANDIDATE_SEARCH_FIELDS, includeId = false) {
   return queryTerms.every((term) => {
     const needle = term.toLowerCase();
     const values = [
       ...fields.map((field) => candidate[field]),
+      ...(includeId ? [candidate.id] : []),
       fullText?.candidate_name,
       fullText?.original_text,
       fullText?.anonymized_text,
@@ -133,6 +135,7 @@ function createMockDb(seed = {}) {
                   url: job.url,
                   skills: job.skills,
                   source: job.source,
+                  id: job.id,
                 },
                 queryTerms,
                 null,
@@ -148,7 +151,7 @@ function createMockDb(seed = {}) {
             return {
               count: state.candidates.filter((candidate) => {
                 const fullText = state.candidateTexts.find((row) => String(row.candidate_id) === String(candidate.id));
-                return matchesSearch(candidate, queryTerms, fullText);
+                return matchesSearch(candidate, queryTerms, fullText, CANDIDATE_SEARCH_FIELDS, true);
               }).length,
             };
           }
@@ -224,7 +227,8 @@ function createMockDb(seed = {}) {
                 status: job.status,
                 url: job.url,
                 skills: job.skills,
-                  source: job.source,
+                source: job.source,
+                id: job.id,
               },
               queryTerms,
               null,
@@ -234,12 +238,12 @@ function createMockDb(seed = {}) {
 
           if (q.includes('FROM candidates c LEFT JOIN candidate_texts ct')) {
             const queryTerms = [];
-            for (let i = 0; i < Math.max(0, args.length - 1); i += CANDIDATE_SEARCH_FIELDS.length + 4) {
+            for (let i = 0; i < Math.max(0, args.length - 1); i += CANDIDATE_SEARCH_FIELD_WIDTH) {
               queryTerms.push(String(args[i]).replace(/^%|%$/g, ''));
             }
             return state.candidates.filter((candidate) => {
               const fullText = state.candidateTexts.find((row) => String(row.candidate_id) === String(candidate.id));
-              return matchesSearch(candidate, queryTerms, fullText);
+              return matchesSearch(candidate, queryTerms, fullText, CANDIDATE_SEARCH_FIELDS, true);
             });
           }
 
@@ -827,6 +831,10 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     expect(fullTextOnlyResponse.status).toBe(200);
     expect(fullTextOnlyResponse.body.data).toHaveLength(1);
     expect(fullTextOnlyResponse.body.data[0].id).toBe(1);
+
+    const candidateIdResponse = await request(app).get('/api/candidates?search=2');
+    expect(candidateIdResponse.status).toBe(200);
+    expect(candidateIdResponse.body.data.map((candidate) => candidate.id)).toEqual([2]);
   });
 
   test('global search combines jobs and CV full text', async () => {
@@ -1218,6 +1226,10 @@ describe('Regression tests for CV upload, job upload and matching evaluation', (
     const fullTextResponse = await request(app).get('/api/jobs?search=Python%20experience');
     expect(fullTextResponse.status).toBe(200);
     expect(fullTextResponse.body.data.map((job) => job.id)).toEqual([3]);
+
+    const jobIdResponse = await request(app).get('/api/jobs?search=2');
+    expect(jobIdResponse.status).toBe(200);
+    expect(jobIdResponse.body.data.map((job) => job.id)).toEqual([2]);
   });
 
   test('Jobs endpoint stores uploaded job description payload', async () => {

@@ -30,7 +30,6 @@ export default function JobToCandidates() {
   const [jobSearch, setJobSearch] = useState('')
   const [pipelineCandidateIds, setPipelineCandidateIds] = useState([])
   const [pipelineLoading, setPipelineLoading] = useState(false)
-  const [vectorEngine, setVectorEngine] = useState('python')
   const [weights, setWeights] = useState({
     skills: 0, experience: 0, education: 0, location: 0, languages: 0,
     salary: 0, availability: 0, certificates: 0, cultural_fit: 0, mobility: 0
@@ -147,7 +146,7 @@ export default function JobToCandidates() {
           mode: 'vector',
           sourceJobDescription: jobDescription,
           sourceLabel: selectedJob?.title || jobTitle || 'Ausgewählte Stelle',
-          engine: vectorEngine,
+          engine: 'neo4j',
         }))
 
         navigate('/matching/results/selected', {
@@ -155,7 +154,7 @@ export default function JobToCandidates() {
             pairs: batchPairs,
             mode: 'vector',
             sourceJobDescription: jobDescription,
-            engine: vectorEngine,
+            engine: 'neo4j',
           },
         })
       } catch (err) {
@@ -259,36 +258,6 @@ export default function JobToCandidates() {
                     )}
                   </p>
                 )}
-              </div>
-            )}
-
-            {jobMode === 'existing' && (
-              <div className="mb-8 p-4 rounded-[20px] bg-[#f5f5f7] dark:bg-[#2c2c2e]">
-                <p className="text-[14px] font-semibold text-black dark:text-white mb-3">{t('matching.vector_engine')}</p>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setVectorEngine('python')}
-                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition ${
-                      vectorEngine === 'python'
-                        ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
-                    }`}
-                  >
-                    {t('matching.vector_python')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVectorEngine('neo4j')}
-                    className={`px-4 py-2 rounded-[14px] text-[14px] font-semibold transition ${
-                      vectorEngine === 'neo4j'
-                        ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
-                    }`}
-                  >
-                    {t('matching.vector_neo4j')}
-                  </button>
-                </div>
               </div>
             )}
 

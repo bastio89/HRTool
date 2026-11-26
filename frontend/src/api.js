@@ -228,6 +228,7 @@ async function matchingRequest(url, options, progressOptions = {}) {
 }
 
 export const batchesApi = {
+  summary: (options = {}) => request('/batches/summary', options),
   list: (params = {}, options = {}) => {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== ''));
     return request(`/batches${query.size ? `?${query}` : ''}`, options);
@@ -315,7 +316,7 @@ export const matchingApi = {
     notifyCreditRefresh({ source: 'matchingApi.run' });
     return result;
   },
-  runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null, engine = 'python' } = {}, options = {}) =>
+  runMatrix: ({ mode = 'all_jobs_all_candidates', jobIds = [], candidateIds = [], weights = null, engine = 'neo4j' } = {}, options = {}) =>
     matchingRequest('/matching/run-matrix', {
       method: 'POST',
       body: JSON.stringify({ mode, jobIds, candidateIds, weights, engine }),

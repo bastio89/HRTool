@@ -69,6 +69,7 @@ const TEXT_SEARCH_FIELDS = [
   'ct.original_text',
   'ct.anonymized_text',
   'ct.profile_json::text',
+  'CAST(c.id AS TEXT)',
 ];
 
 function buildSearchFilter(search) {

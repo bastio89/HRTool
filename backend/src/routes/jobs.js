@@ -1,4 +1,5 @@
 const { sourceUrlFromText } = require('../jobSourceUrl');
+const { Blob } = require('node:buffer');
 const express = require('express');
 const fs = require('fs');
 const os = require('os');
@@ -174,6 +175,111 @@ function serializeJobSkills(skills) {
   return '';
 }
 
+function fastParserJobProfile(profile) {
+  if (!profile || typeof profile !== 'object') return null;
+  const title = String(profile.job_title || '').trim();
+  const company = String(profile.company_name || '').trim();
+  return title || company ? { title, company } : null;
+}
+
+function fastParserJobSkills(profile) {
+  const categories = {
+    soft_skills: 'SoftSkill',
+    it_skills: 'HardSkill',
+    method_skills: 'HardSkill',
+    tool_skills: 'HardSkill',
+    language_skills: 'HardSkill',
+  };
+  const skills = [];
+  const seen = new Set();
+  for (const [field, category] of Object.entries(categories)) {
+    const values = profile?.required_skills?.[field];
+    if (!Array.isArray(values)) continue;
+    for (const value of values) {
+      const name = typeof value === 'string' ? value.trim() : '';
+      const key = name.toLocaleLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      skills.push({ name, category, priority: 'Mandatory' });
+    }
+  }
+  return skills;
+}
+
+function isCredibleJobTitle(value, company) {
+  const title = String(value || '').replace(/\s+/g, ' ').trim();
+  if (title.length < 3 || title.length > 120 || title.split(' ').length > 12 || !/\p{L}/u.test(title)) return false;
+  if (/^(unknown job|unknown|job|job description|stellenanzeige|stellenbeschreibung|stellenangebot|unbekannte stelle|stelle)$/i.test(title)) return false;
+  if (company && title.toLocaleLowerCase() === String(company).trim().toLocaleLowerCase()) return false;
+  return !/\b(?:mit sitz in|ist ein(?:e|en)?|sind ein(?:e)?|wir sind|wir suchen|suchen wir|bietet|with headquarters in|located in|headquartered in|we are|we're looking for|is a|are a)\b/i.test(title);
+}
+
+function explicitJobTitleFromText(text, company) {
+  const patterns = [
+    /\b(?:suchen\s+wir|wir\s+suchen)\b[\s\S]{0,180}?\bals\s+([^\n.!?;]{3,120})/iu,
+    /\b(?:we(?:'re| are)\s+looking\s+for|looking\s+for)\s+(?:an?\s+)?([^\n.!?;]{3,120})/iu,
+  ];
+  for (const pattern of patterns) {
+    const match = String(text || '').match(pattern);
+    const title = match?.[1]?.replace(/\s+/g, ' ').trim();
+    if (isCredibleJobTitle(title, company)) return title;
+  }
+  return '';
+}
+
+function validateImportedJob(profile, rawText) {
+  const issues = [];
+  if (!isCredibleJobTitle(profile.title, profile.company)) {
+    issues.push('Kein plausibler Stellentitel erkannt.');
+  }
+  if (!String(rawText || '').trim() || ![profile.description, profile.requirements, profile.about_us]
+    .some(value => String(value || '').trim())) {
+    issues.push('Kein verwertbarer Beschreibungstext erkannt.');
+  }
+  if (!serializeJobSkills(profile.required_skills)) {
+    issues.push('Keine erforderlichen Skills erkannt; das Skill-Matching kann nicht gestartet werden.');
+  }
+  return issues;
+}
+
+async function parseJobPdfWithFastParser(req, file) {
+  const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
+  const form = new FormData();
+  const pdf = await fs.promises.readFile(file.path);
+  form.append('file', new Blob([pdf], { type: 'application/pdf' }), file.originalname);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000);
+  try {
+    let response;
+    try {
+      response = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/v1/parse/job`, {
+        method: 'POST',
+        headers: graphRagAuthHeaders(req),
+        body: form,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      error.statusCode = 503;
+      throw error;
+    }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(`Fast-PDF-Parser HTTP ${response.status}: ${payload.detail || 'Unbekannter Fehler'}`);
+      error.statusCode = response.status === 503 ? 503 : response.status === 413 ? 413 : 502;
+      throw error;
+    }
+    if (!payload.profile || typeof payload.profile !== 'object' || typeof payload.raw_text !== 'string') {
+      const error = new Error('Fast-PDF-Parser lieferte kein vollständiges Profil und keinen Rohtext.');
+      error.statusCode = 502;
+      throw error;
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function persistLocalJob(job, { req, profile = {}, rawText, refreshExisting = false } = {}) {
   const value = (key, profileKey = key) => job[key] !== undefined ? job[key] : profile[profileKey];
   const identity = {
@@ -239,7 +345,9 @@ async function persistLocalJob(job, { req, profile = {}, rawText, refreshExistin
 
 // jobId: UUID der Stelle aus PostgreSQL. GraphRAG legt den Neo4j-Knoten
 // dann unter genau dieser ID an, damit beide Datenbanken dieselbe ID kennen.
-async function ingestIntoGraphRag(req, rawText, persist = true, profile = null, jobId = null) {
+async function ingestIntoGraphRag(
+  req, rawText, persist = true, profile = null, jobId = null, parseRawTextWithProfile = false,
+) {
   const baseUrl = process.env.GRAPHRAG_BASE_URL?.trim() || 'http://graphrag:8000';
   if (!baseUrl) return null;
 
@@ -252,7 +360,9 @@ async function ingestIntoGraphRag(req, rawText, persist = true, profile = null, 
     const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/ingest/job?persist=${encodeURIComponent(persistValue)}${jobIdParam}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...graphRagAuthHeaders(req) },
-      body: JSON.stringify(profile ? { profile } : { raw_text: rawText }),
+      body: JSON.stringify(profile
+        ? (parseRawTextWithProfile ? { raw_text: rawText, profile } : { profile })
+        : { raw_text: rawText }),
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
@@ -321,8 +431,9 @@ router.get('/', (req, res) => {
     ];
     const searchTerms = String(search || '').trim().split(/[\s,]+/).filter(Boolean);
     for (const term of searchTerms) {
-      conditions.push(`(${searchableFields.map((field) => `LOWER(COALESCE(${field}, '')) LIKE ?`).join(' OR ')})`);
-      params.push(...searchableFields.map(() => `%${term.toLowerCase()}%`));
+      const termFields = [...searchableFields, 'CAST(j.id AS TEXT)'];
+      conditions.push(`(${termFields.map((field) => `LOWER(COALESCE(${field}, '')) LIKE ?`).join(' OR ')})`);
+      params.push(...termFields.map(() => `%${term.toLowerCase()}%`));
     }
     // Fachbereich sieht nur die ihm zugewiesenen Stellen.
     if (req.user?.role === 'fachbereich') {
@@ -489,7 +600,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
 
   try {
     const text = await extractText(req.file.path, req.file.mimetype);
-    const trimmedText = String(text || '').trim();
+    let trimmedText = String(text || '').trim();
 
     if (!trimmedText) {
       return res.status(400).json({ error: 'Aus der Datei konnte kein Text extrahiert werden' });
@@ -521,45 +632,80 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   // GraphRAG laesst hier ein Sprachmodell auf den Stellentext los. Der Aufruf
   // gehoert deshalb ins KI-Protokoll (Art. 12 EU AI Act), genauso wie der
   // Generator weiter unten.
+  const isPdf = req.file.mimetype === 'application/pdf' || path.extname(req.file.originalname).toLowerCase() === '.pdf';
+  const fastParse = isPdf ? await parseJobPdfWithFastParser(req, req.file) : null;
+  const fastText = String(fastParse?.raw_text || '').trim();
+  if (fastText.length > trimmedText.length) trimmedText = fastText;
+  const fastProfile = fastParserJobProfile(fastParse?.profile);
+  const fastSkills = fastParserJobSkills(fastParse?.profile);
   const aiStartedAt = Date.now();
   // Erst nur auslesen; gespeichert wird nach der Dublettenpruefung, der
   // Neo4j-Knoten entsteht danach mit der UUID der Stelle.
   let graphRag = await ingestIntoGraphRag(req, trimmedText, false);
-    const profile = graphRag?.profile || {};
-    const extractedSkills = serializeJobSkills(profile.required_skills);
+  const modelProfile = graphRag?.profile || {};
+  const company = modelProfile.company || modelProfile.company_name || fastProfile?.company || '';
+  const filenameTitle = path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim();
+  const resolvedTitle = [explicitJobTitleFromText(trimmedText, company), modelProfile.title, fastProfile?.title, filenameTitle]
+    .find(title => isCredibleJobTitle(title, company)) || '';
+  const modelSkills = Array.isArray(modelProfile.required_skills) ? modelProfile.required_skills : [];
+  const requiredSkills = serializeJobSkills(modelSkills) ? modelSkills : fastSkills;
+  const sections = splitJobTextSections(trimmedText);
+  const profile = {
+    ...modelProfile,
+    title: resolvedTitle,
+    company: company || null,
+    location: modelProfile.location || null,
+    about_us: modelProfile.about_us || sections.about_us || '',
+    description: modelProfile.description || sections.description || trimmedText,
+    requirements: modelProfile.requirements || sections.requirements || '',
+    benefits: modelProfile.benefits || sections.benefits || '',
+    required_skills: requiredSkills,
+  };
+  const extractedSkills = serializeJobSkills(requiredSkills);
+  const qualityIssues = validateImportedJob(profile, trimmedText);
 
-    logAiCall({
-      userId: req.user?.id,
-      feature: 'job-import',
-      model: getAiConfig().model,
-      prompt: trimmedText,
-      response: graphRag,
-      parsedResult: profile,
-      skills: extractedSkills,
-      durationMs: Date.now() - aiStartedAt,
-      success: true,
+  logAiCall({
+    userId: req.user?.id,
+    feature: 'job-import',
+    model: getAiConfig().model,
+    prompt: trimmedText,
+    response: graphRag,
+    parsedResult: profile,
+    skills: extractedSkills,
+    durationMs: Date.now() - aiStartedAt,
+    success: qualityIssues.length === 0,
+    errorMessage: qualityIssues.length ? qualityIssues.join(' ') : null,
+  });
+
+  if (persist && qualityIssues.length) {
+    return res.status(422).json({
+      error: 'Import-Qualitätsprüfung fehlgeschlagen',
+      detail: qualityIssues.join(' '),
+      importSteps: {
+        aiParsed: { ok: false },
+        graphRagSaved: { ok: false },
+        dbSaved: { ok: false },
+      },
     });
-    const filenameTitle = path.basename(req.file.originalname, path.extname(req.file.originalname)).replace(/[-_]+/g, ' ').trim() || req.file.originalname;
-    const resolvedTitle = profile.title && String(profile.title).trim() && String(profile.title).trim() !== 'Unknown Job'
-      ? String(profile.title).trim()
-      : filenameTitle;
-    const parsedJob = persist
-      ? await persistLocalJob({
-        graph_job_id: null,
-        title: resolvedTitle,
-        company: profile.company || profile.company_name || '',
-        source: 'Job-LLM-Import',
-        about_us: profile.about_us || '',
-        description: profile.description || '',
-        requirements: profile.requirements || '',
-        skills: extractedSkills,
-        benefits: profile.benefits || '',
-        location: profile.location || null,
-        type: profile.employment_type || 'Vollzeit',
-        status: 'Offen',
-        url: sourceUrlFromText(trimmedText),
-      }, { req, profile, rawText: trimmedText, refreshExisting: true })
-      : null;
+  }
+
+  const parsedJob = persist
+    ? await persistLocalJob({
+      graph_job_id: null,
+      title: resolvedTitle,
+      company,
+      source: 'Job-LLM-Import',
+      about_us: profile.about_us,
+      description: profile.description,
+      requirements: profile.requirements,
+      skills: extractedSkills,
+      benefits: profile.benefits,
+      location: profile.location,
+      type: profile.employment_type || 'Vollzeit',
+      status: 'Offen',
+      url: sourceUrlFromText(trimmedText),
+    }, { req, profile, rawText: trimmedText, refreshExisting: true })
+    : null;
 
     if (parsedJob?.changed) {
       try {
@@ -574,7 +720,7 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
 
     const importSteps = {
       aiParsed: {
-        ok: Boolean(graphRag?.profile),
+        ok: qualityIssues.length === 0,
       },
       graphRagSaved: {
         ok: Boolean(parsedJob?.changed && graphRag?.preparationStatus === 'ready' && !graphRag.error),
@@ -591,11 +737,12 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
       job: parsedJob,
       text: trimmedText,
       title: parsedJob?.title || resolvedTitle,
-      about_us: parsedJob?.about_us || profile.about_us || '',
-      description: parsedJob?.description || profile.description || '',
-      requirements: parsedJob?.requirements || profile.requirements || '',
+      company: parsedJob?.company || profile.company || '',
+      about_us: parsedJob?.about_us || profile.about_us,
+      description: parsedJob?.description || profile.description,
+      requirements: parsedJob?.requirements || profile.requirements,
       skills: parsedJob?.skills || extractedSkills || '',
-      benefits: parsedJob?.benefits || profile.benefits || '',
+      benefits: parsedJob?.benefits || profile.benefits,
       importSteps,
       graphRag,
       matchingRunId: parsedJob?.matchingRunId || null,
@@ -608,6 +755,9 @@ router.post('/parse-description', descriptionUpload.single('file'), async (req, 
   } catch (err) {
     if (err instanceof DuplicateError) return res.status(409).json(err.toJSON());
     console.error('Job description upload error:', err);
+    if (Number.isInteger(err.statusCode) && err.statusCode >= 400 && err.statusCode <= 599) {
+      return res.status(err.statusCode).json({ error: 'Job-Import fehlgeschlagen', detail: err.message });
+    }
     const message = String(err?.message || '');
 
     // Auch der fehlgeschlagene Versuch ist aufzeichnungspflichtig.

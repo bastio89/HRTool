@@ -206,6 +206,7 @@ Die Cache-/Request-/Worker-Tests verwenden ausschließlich isoliertes PostgreSQL
 
 | GraphRAG-Batch-/Eigenstatus | Vertrag |
 |---|---|
+| `GET /admin/batches/summary` | Aktuell gespeicherter Admin; Queue-Zahlen für wartende, aktive, kreditblockierte, prüfbedürftige, fehlgeschlagene und mit Fehlern abgeschlossene Läufe |
 | `GET /admin/batches` | Aktuell gespeicherter Admin; Filter `status` und `source`; `limit` 1–100, Standard 25; UUID-`cursor`; `items` enthalten jeweils `run` und `counters`, dazu `nextCursor` |
 | `GET /admin/batches/{runId}` | Admin; `run`, ungefilterte `counters`, paginierte `pairs`, `nextCursor`; Filter `pairStatus`, positiver Paarziel-ID-`cursor` aus diesem Lauf, dieselben Seitengrenzen |
 | Eigener Lauf | Bestehendes `GET /matching/runs/{runId}` enthält zusätzlich `counters`; Originalergebnis bleibt unter `resultPayload`; Fremdzugriff 404, fehlender Benutzer/Bearer 401 |

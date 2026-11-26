@@ -1053,7 +1053,7 @@ router.post('/run-selected', matchingRateLimiter, promptGuard('matching'), async
  *       202: { $ref: '#/components/responses/MatchingPending' }
  */
 router.post('/run-matrix', matchingRateLimiter, promptGuard('matching'), async (req, res) => {
-  const { mode = 'all_jobs_all_candidates', jobIds, candidateIds, weights, engine = 'python' } = req.body;
+  const { mode = 'all_jobs_all_candidates', jobIds, candidateIds, weights, engine = 'neo4j' } = req.body;
 
   try {
     const jobs = getJobs(jobIds);

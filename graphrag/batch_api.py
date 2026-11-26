@@ -28,6 +28,15 @@ class BatchRetryRequest(BaseModel):
     confirmUncertain: StrictBool = False
 
 
+class BatchQueueSummary(BaseModel):
+    queuedCount: int
+    runningCount: int
+    blockedCreditsCount: int
+    needsReviewCount: int
+    failedCount: int
+    completedWithErrorsCount: int
+
+
 _PUBLIC_ERROR_CODES = frozenset({
     "source_deleted", "source_changed", "missing_actor", "insufficient_credits",
     "missing_job_skills", "graph_source_missing", "graph_preparation_failed", "preparation_failed",
@@ -80,6 +89,11 @@ def create_batch_router(postgres_store: PostgresStore) -> APIRouter:
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return {"items": [await summary(run) for run in page["items"]], "nextCursor": page["nextCursor"]}
+
+    @router.get("/summary", response_model=BatchQueueSummary)
+    async def batch_summary(request: Request):
+        await billing.require_matching_admin(request)
+        return await postgres_store.get_matching_batch_summary()
 
     @router.get("/{run_id}")
     async def batch_detail(

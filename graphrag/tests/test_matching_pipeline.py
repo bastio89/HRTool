@@ -64,6 +64,7 @@ async def test_batch_access_uses_stored_roles_and_own_status_remains_private(bat
         assert (await env.client.post(admin_url + "/retry", headers=headers, json={"pairIds": [1]})).status_code == 401
     owner = {"Authorization": "Bearer 1"}
     assert (await env.client.get(admin_url, headers=owner)).status_code == 403
+    assert (await env.client.get("/admin/batches/summary", headers=owner)).status_code == 403
     assert (await env.client.post(admin_url + "/retry", headers=owner, json={"pairIds": [1]})).status_code == 403
     own = await env.client.get(own_url, headers=owner)
     assert own.status_code == 200, own.text
@@ -83,6 +84,7 @@ async def test_batch_access_uses_stored_roles_and_own_status_remains_private(bat
     assert detail.json()["run"]["entityId"] == candidate_id
     assert detail.json()["run"]["creditStatus"] == "pending"
     assert all(key not in detail.text for key in ("request_payload", "client_context", "lease_owner"))
+    assert (await env.client.get("/admin/batches/summary", headers=other)).status_code == 200
     assert (await env.client.get(f"/admin/batches/{uuid4()}", headers=other)).status_code == 404
     async with await psycopg.AsyncConnection.connect(env.store.database_url) as connection:
         await connection.execute("DELETE FROM users WHERE id = 2")
@@ -118,6 +120,12 @@ async def test_batch_queue_filters_keyset_ties_and_sanitizes_persisted_errors(ba
     failed = await env.client.get("/admin/batches", params={"status": "failed"})
     assert [item["run"]["runId"] for item in failed.json()["items"]] == [runs[1]]
     assert failed.json()["items"][0]["run"]["errorCode"] == "matching_failed"
+    summary = await env.client.get("/admin/batches/summary")
+    assert summary.status_code == 200, summary.text
+    assert summary.json() == {
+        "queuedCount": 3, "runningCount": 0, "blockedCreditsCount": 0,
+        "needsReviewCount": 0, "failedCount": 1, "completedWithErrorsCount": 0,
+    }
     filtered = await env.client.get("/admin/batches", params={"status": "queued", "source": "expansion-test"})
     assert {item["run"]["runId"] for item in filtered.json()["items"]} == {runs[0], runs[2]}
     assert (await env.client.get("/admin/batches", params={"source": "unknown"})).json()["items"] == []

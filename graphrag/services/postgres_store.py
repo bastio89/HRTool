@@ -598,6 +598,24 @@ class PostgresStore:
             "nextCursor": str(rows[limit - 1]["runId"]) if len(rows) > limit else None,
         }
 
+    async def get_matching_batch_summary(self) -> dict[str, int]:
+        async with await psycopg.AsyncConnection.connect(self.database_url, row_factory=dict_row) as connection:
+            row = await (await connection.execute("""
+                SELECT
+                    COUNT(*) FILTER (WHERE stage = 'queued') AS "queuedCount",
+                    COUNT(*) FILTER (WHERE stage IN ('preparing', 'matching')) AS "runningCount",
+                    COUNT(*) FILTER (WHERE stage = 'blocked_credits') AS "blockedCreditsCount",
+                    COUNT(*) FILTER (WHERE stage = 'needs_review') AS "needsReviewCount",
+                    COUNT(*) FILTER (WHERE stage = 'failed') AS "failedCount",
+                    COUNT(*) FILTER (WHERE stage = 'completed_with_errors') AS "completedWithErrorsCount"
+                FROM matching_runs
+                WHERE stage IN (
+                    'queued', 'preparing', 'matching', 'blocked_credits',
+                    'needs_review', 'failed', 'completed_with_errors'
+                )
+            """)).fetchone()
+        return {key: int(value) for key, value in row.items()}
+
     async def list_matching_batch_pairs(
         self, run_id: str, *, status: str | None = None, cursor: int | None = None, limit: int = 25,
     ) -> dict[str, Any]:

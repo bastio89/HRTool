@@ -281,7 +281,6 @@ export default function JobsChPanel() {
           </p>
           <div role="group" aria-labelledby="jobs-ch-import-mode-label" className="inline-flex rounded-[14px] bg-[#f5f5f7] dark:bg-[#2c2c2e] p-1">
             {[
-              ['fast_import', 'batch_job_import.mode_fast'],
               ['llm_import', 'batch_job_import.mode_llm'],
             ].map(([mode, labelKey]) => (
               <button

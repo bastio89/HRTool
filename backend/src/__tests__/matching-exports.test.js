@@ -354,7 +354,7 @@ describe('matching routes record every pair', () => {
 
   test('an N:N 3D run stores all pairs although the history keeps only the top 100', async () => {
     global.fetch = jest.fn(async (url, options) => {
-      expect(String(url)).toMatch(/\/match\/external\/matrix$/);
+      expect(String(url)).toMatch(/\/match\/external\/matrix_neo4j$/);
       const body = JSON.parse(options.body);
       // Wie GraphRAG: IDs als Text, Score 0-100.
       const matrix = body.jobs.flatMap((job, j) => body.candidates.map((candidate, c) => ({
@@ -369,13 +369,12 @@ describe('matching routes record every pair', () => {
         summary: 'x',
         matchedSkills: [{ jobSkill: 'java', candidateSkill: 'java', similarity: 1 }],
       })));
-      return { ok: true, json: async () => ({ method: 'vector', matchedAt: '2026-01-05T00:00:00Z', embeddingModel: 'test-embedding', type: 'matrix', mode: body.mode, model: 'graph-rag-vector-matrix', matrix }) };
+      return { ok: true, json: async () => ({ method: 'vector', matchedAt: '2026-01-05T00:00:00Z', embeddingModel: 'test-embedding', type: 'matrix', mode: body.mode, model: 'graph-rag-neo4j-skill-vector-match', matrix }) };
     });
 
     const res = await request(buildApp(admin)).post('/api/matching/run-matrix').send({
       jobIds: runJobs,
       candidateIds: runCandidates,
-      engine: 'python',
     });
     expect(res.status).toBe(200);
     expect(res.body.pairCount).toBe(120);
@@ -387,11 +386,11 @@ describe('matching routes record every pair', () => {
     expect(stored).toMatchObject({ method: 'vector', matchedAt: '2026-01-05T00:00:00Z', embeddingModel: 'test-embedding' });
     expect(stored.matrix.every(row => row.method === 'vector' && row.qualified === true)).toBe(true);
     const history = await request(buildApp(admin)).get(`/api/matching/history/${res.body.id}`);
-    expect(history.body.results).toMatchObject({ method: 'vector', engine: 'python', embeddingModel: 'test-embedding' });
+    expect(history.body.results).toMatchObject({ method: 'vector', engine: 'neo4j', embeddingModel: 'test-embedding' });
 
     const rows = runPairs('vector');
     expect(rows).toHaveLength(120);
-    expect(rows.every(row => row.matching_result_id === res.body.id && row.engine === 'python')).toBe(true);
+    expect(rows.every(row => row.matching_result_id === res.body.id && row.engine === 'neo4j')).toBe(true);
 
     const expected = rows.filter(row => row.score > 80).length;
     const exported = await request(buildApp(admin)).post('/api/exports/run').send({

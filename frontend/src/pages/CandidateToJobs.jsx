@@ -17,7 +17,6 @@ export default function CandidateToJobs() {
   const [loading, setLoading] = useState(true)
   const [matching, setMatching] = useState(false)
   const [error, setError] = useState('')
-  const [vectorEngine, setVectorEngine] = useState('python')
   const [weights, setWeights] = useState({
     skills: 0, experience: 0, education: 0, location: 0, languages: 0,
     salary: 0, availability: 0, certificates: 0, cultural_fit: 0, mobility: 0
@@ -55,8 +54,8 @@ export default function CandidateToJobs() {
       const result = await matchingApi.vectorMatch({
         direction: 'candidate_to_jobs',
         candidateId: selectedId,
-          candidateName: selectedCandidate?.name || undefined,
-        engine: vectorEngine,
+        candidateName: selectedCandidate?.name || undefined,
+        engine: 'neo4j',
       })
       navigate(`/matching/results/${result.id}`)
     } catch (err) {
@@ -121,26 +120,6 @@ export default function CandidateToJobs() {
               <div>
                 <h2 className="text-[22px] font-semibold tracking-tight text-black dark:text-white">{t('matching.jobs_in_pool').replace('{count}', jobs.length)}</h2>
               </div>
-            </div>
-            <div className="flex gap-3 mb-6 p-1.5 bg-[#f5f5f7] dark:bg-[#2c2c2e] rounded-[20px] w-fit">
-              <button
-                type="button"
-                onClick={() => setVectorEngine('python')}
-                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-[16px] text-[14px] font-semibold transition cursor-pointer ${
-                  vectorEngine === 'python' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
-                }`}
-              >
-                Python
-              </button>
-              <button
-                type="button"
-                onClick={() => setVectorEngine('neo4j')}
-                className={`flex items-center gap-2.5 px-5 py-2.5 rounded-[16px] text-[14px] font-semibold transition cursor-pointer ${
-                  vectorEngine === 'neo4j' ? 'bg-white dark:bg-[#1c1c1e] text-black dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'
-                }`}
-              >
-                Neo4j
-              </button>
             </div>
             {selectedCandidate ? (
               <div className="px-5 py-4 rounded-[20px] bg-[#0071e3]/5 ring-1 ring-[#0071e3]/20">

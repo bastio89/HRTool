@@ -6,6 +6,7 @@ describe('jobs parse-description logging', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    jest.dontMock('../utils/documentText');
     global.fetch = nativeFetch;
   });
 
@@ -53,6 +54,7 @@ describe('jobs parse-description logging', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.title).toBe('Senior Backend Engineer');
+    expect(response.body.importSteps.aiParsed.ok).toBe(false);
     expect(response.body.importSteps.graphRagSaved.ok).toBe(false);
     expect(response.body.matchingRunId).toBeNull();
     expect(response.body.graphRag).toEqual({
@@ -64,7 +66,131 @@ describe('jobs parse-description logging', () => {
     expect(logAiCall).toHaveBeenCalledTimes(1);
     expect(logAiCall.mock.calls[0][0]).toEqual(expect.objectContaining({
       feature: 'job-import',
-      success: true,
+      success: false,
+    }));
+  });
+
+  test('prefers the parsed title and recovers company and skills from the PDF layout parser', async () => {
+    jest.resetModules();
+    const logAiCall = jest.fn();
+    jest.doMock('../aiLogger', () => ({ logAiCall }));
+    jest.doMock('../database', () => ({
+      prepare: () => ({ get: () => undefined, all: () => [], run: () => ({}) }),
+      exec: () => ({})
+    }));
+    const rawText = [
+      'HRM Systems AG ist ein erfolgreiches Familienunternehmen und Marktleader in ihrem Bereich.',
+      'Für die Weiterentwicklung von UKA Connect suchen wir im Rahmen eines Exklusivmandats dich als Senior Fullstack Software Engineer.',
+      'Deine Herausforderung: Node.js und SQL.',
+    ].join('\n');
+    jest.doMock('../utils/documentText', () => ({
+      tmpDir: require('node:os').tmpdir(),
+      extractText: jest.fn().mockResolvedValue(rawText),
+    }));
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    let jobsRouter;
+    jest.isolateModules(() => {
+      jobsRouter = require('../routes/jobs');
+    });
+    global.fetch = jest.fn(async (url, options) => {
+      if (String(url) === 'http://fake-graphrag/api/v1/parse/job') {
+        return {
+          ok: true,
+          json: async () => ({
+            profile: {
+              job_title: 'Marktleader',
+              company_name: 'HRM Systems AG',
+              location: 'Zurich',
+              required_skills: { it_skills: ['Node.js', 'SQL'] },
+            },
+            raw_text: rawText,
+          }),
+        };
+      }
+      expect(String(url)).toBe('http://fake-graphrag/ingest/job?persist=0');
+      expect(JSON.parse(options.body)).toEqual({ raw_text: rawText });
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'graph-job-1',
+          profile: {
+            title: 'Marktleader',
+            company: null,
+            description: '',
+            requirements: '',
+            required_skills: [],
+          },
+        }),
+      };
+    });
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const response = await request(app)
+      .post('/api/jobs/parse-description?persist=0')
+      .attach('file', Buffer.from('%PDF-test-only'), { filename: 'job.pdf', contentType: 'application/pdf' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.title).toBe('Senior Fullstack Software Engineer');
+    expect(response.body.company).toBe('HRM Systems AG');
+    expect(response.body.skills).toBe('Node.js, SQL');
+    expect(response.body.description).toBe(rawText);
+    expect(response.body.importSteps.aiParsed.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('rejects persisted imports with a company sentence instead of a job title and no skills', async () => {
+    jest.resetModules();
+    const logAiCall = jest.fn();
+    const run = jest.fn();
+    const prepare = jest.fn(() => ({ get: () => undefined, all: () => [], run }));
+    jest.doMock('../aiLogger', () => ({ logAiCall }));
+    jest.doMock('../database', () => ({
+      prepare,
+      exec: () => ({})
+    }));
+    process.env.GRAPHRAG_BASE_URL = 'http://fake-graphrag';
+    let jobsRouter;
+    jest.isolateModules(() => {
+      jobsRouter = require('../routes/jobs');
+    });
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        id: 'graph-job-1',
+        profile: {
+          title: 'HRM Systems AG mit Sitz in Winterthur ist ein erfolgreiches Familienunternehmen',
+          company: null,
+          description: '',
+          requirements: '',
+          required_skills: [],
+        },
+      }),
+    }));
+    const app = express();
+    app.use(express.json());
+    app.use('/api/jobs', jobsRouter);
+
+    const response = await request(app)
+      .post('/api/jobs/parse-description?persist=1')
+      .attach('file', Buffer.from('HRM Systems AG mit Sitz in Winterthur ist ein erfolgreiches Familienunternehmen. Java required.'), {
+        filename: 'job.txt',
+        contentType: 'text/plain',
+      });
+
+    expect(response.status).toBe(422);
+    expect(response.body.detail).toContain('Kein plausibler Stellentitel');
+    expect(response.body.detail).toContain('Keine erforderlichen Skills');
+    expect(response.body.importSteps).toEqual({
+      aiParsed: { ok: false },
+      graphRagSaved: { ok: false },
+      dbSaved: { ok: false },
+    });
+    expect(run).not.toHaveBeenCalled();
+    expect(logAiCall.mock.calls[0][0]).toEqual(expect.objectContaining({
+      feature: 'job-import',
+      success: false,
     }));
   });
 });

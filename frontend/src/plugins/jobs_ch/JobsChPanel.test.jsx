@@ -37,6 +37,7 @@ describe('JobsChPanel', () => {
     )
 
     expect(screen.getByRole('button', { name: /LLM-Import/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: /Fast-Import/i })).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText(/stellenangebote\/detail/i), {
       target: { value: 'https://www.jobs.ch/de/stellenangebote/detail/12345/' },

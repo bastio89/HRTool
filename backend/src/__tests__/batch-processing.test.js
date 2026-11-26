@@ -40,7 +40,14 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  global.fetch = jest.fn(async () => response(200, { items: [], nextCursor: null }));
+  global.fetch = jest.fn(async url => response(200,
+    new URL(url).pathname.endsWith('/summary')
+      ? {
+        queuedCount: 0, runningCount: 0, blockedCreditsCount: 0,
+        needsReviewCount: 0, failedCount: 0, completedWithErrorsCount: 0,
+      }
+      : { items: [], nextCursor: null },
+  ));
 });
 
 afterEach(() => {
@@ -54,7 +61,7 @@ afterAll(() => {
 });
 
 test('batch APIs require a bearer and the current stored administrator role', async () => {
-  for (const path of ['/api/batches', `/api/batches/${runId}`]) {
+  for (const path of ['/api/batches', '/api/batches/summary', `/api/batches/${runId}`]) {
     expect((await request(app).get(path)).status).toBe(401);
     expect((await request(app).get(path).set('X-API-Key', 'not-admin')).status).toBe(401);
     expect((await request(app).get(path).auth(ownerToken, { type: 'bearer' })).status).toBe(403);
@@ -65,6 +72,13 @@ test('batch APIs require a bearer and the current stored administrator role', as
   expect(global.fetch).not.toHaveBeenCalled();
   const allowed = await request(app).get('/api/batches').auth(adminToken, { type: 'bearer' });
   expect(allowed.status).toBe(200);
+  const summary = await request(app).get('/api/batches/summary').auth(adminToken, { type: 'bearer' });
+  expect(summary.status).toBe(200);
+  expect(summary.body).toEqual({
+    queuedCount: 0, runningCount: 0, blockedCreditsCount: 0,
+    needsReviewCount: 0, failedCount: 0, completedWithErrorsCount: 0,
+  });
+  expect(global.fetch.mock.calls.at(-1)[0]).toMatch('/admin/batches/summary');
 });
 
 test('queue filters and pair cursors are forwarded without dropping pagination metadata', async () => {
@@ -133,4 +147,9 @@ test('invalid upstream JSON, malformed success and connection errors stay explic
   }
   global.fetch.mockRejectedValue(new TypeError('Connection refused'));
   expect((await request(app).get('/api/batches').auth(adminToken, { type: 'bearer' })).status).toBe(503);
+  global.fetch.mockResolvedValue(response(200, {
+    queuedCount: -1, runningCount: 0, blockedCreditsCount: 0,
+    needsReviewCount: 0, failedCount: 0, completedWithErrorsCount: 0,
+  }));
+  expect((await request(app).get('/api/batches/summary').auth(adminToken, { type: 'bearer' })).status).toBe(502);
 });

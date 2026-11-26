@@ -13,7 +13,9 @@ from psycopg.types.json import Jsonb
 import pytest
 
 from services.postgres_store import PostgresStore
-from services.matching_cache import MatchingInputSnapshot, MatchingLeaseLostError, SCORING_VERSION
+from services.matching_cache import (
+    MatchingInputSnapshot, MatchingLeaseLostError, MatchingPairCache, MatchingPairPlan, SCORING_VERSION,
+)
 from services.llm import LLMService
 from services.model_config import ModelConfigService
 from services.prompt_service import PromptService
@@ -203,9 +205,26 @@ async def test_two_connections_share_one_claim_and_fence_expired_owners(stored_m
     snapshot = make_snapshot(candidate_id=candidate_id, job_id=job_id)
     other_store = PostgresStore(store.database_url)
     first_owner, second_owner = str(uuid4()), str(uuid4())
+    async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+        first_run = await (await connection.execute(
+            """INSERT INTO matching_runs (source, entity_type, entity_id)
+               VALUES ('lease-test', 'candidate', %s) RETURNING id""",
+            (candidate_id,),
+        )).fetchone()
+        second_run = await (await connection.execute(
+            """INSERT INTO matching_runs (source, entity_type, entity_id)
+               VALUES ('lease-test', 'candidate', %s) RETURNING id""",
+            (candidate_id,),
+        )).fetchone()
+        new_run = await (await connection.execute(
+            """INSERT INTO matching_runs (source, entity_type, entity_id)
+               VALUES ('lease-test', 'candidate', %s) RETURNING id""",
+            (candidate_id,),
+        )).fetchone()
+    first_run, second_run, new_run = str(first_run[0]), str(second_run[0]), str(new_run[0])
     first, second = await asyncio.gather(
-        store.claim_matching_evaluation(snapshot, first_owner),
-        other_store.claim_matching_evaluation(snapshot, second_owner),
+        store.claim_matching_evaluation(snapshot, first_owner, owner_run_id=first_run),
+        other_store.claim_matching_evaluation(snapshot, second_owner, owner_run_id=second_run),
     )
     assert sorted([first["disposition"], second["disposition"]]) == ["owned", "pending"]
     assert first["id"] == second["id"]
@@ -217,14 +236,123 @@ async def test_two_connections_share_one_claim_and_fence_expired_owners(stored_m
             (active["id"],),
         )
     new_owner = str(uuid4())
-    replacement = await other_store.claim_matching_evaluation(snapshot, new_owner)
+    replacement = await other_store.claim_matching_evaluation(snapshot, new_owner, owner_run_id=new_run)
     assert replacement["disposition"] == "owned"
     assert replacement["fence"] > active["fence"]
+    assert str(replacement["owner_run_id"]) == new_run
     with pytest.raises(MatchingLeaseLostError):
         await store.mark_matching_model_started(active["id"], active_owner, active["fence"])
     with pytest.raises(MatchingLeaseLostError):
         await store.heartbeat_matching_evaluation(active["id"], active_owner, active["fence"])
     await store.mark_matching_model_started(replacement["id"], new_owner, replacement["fence"])
+
+
+@pytest.mark.anyio
+async def test_planned_evaluation_lease_is_renewed_until_execution(monkeypatch):
+    store = Mock()
+    heartbeat_called = asyncio.Event()
+
+    async def heartbeat(*_args):
+        heartbeat_called.set()
+
+    store.heartbeat_matching_evaluation = AsyncMock(side_effect=heartbeat)
+    cache = MatchingPairCache(store)
+    plan = MatchingPairPlan(
+        make_snapshot(), "lease-owner", {"id": 73, "fence": 2, "disposition": "owned"},
+    )
+    waiting_ids = {73}
+    sleep_calls, ticks = asyncio.Queue(), asyncio.Queue()
+
+    async def fake_sleep(_seconds):
+        await sleep_calls.put(None)
+        await ticks.get()
+
+    monkeypatch.setattr("services.matching_cache.asyncio.sleep", fake_sleep)
+    keeper = asyncio.create_task(cache.keep_planned_leases([plan], waiting_ids))
+    try:
+        await sleep_calls.get()
+        await ticks.put(None)
+        await heartbeat_called.wait()
+        assert store.heartbeat_matching_evaluation.await_args.args == (73, "lease-owner", 2)
+
+        waiting_ids.clear()
+        await sleep_calls.get()
+        await ticks.put(None)
+        await sleep_calls.get()
+        assert store.heartbeat_matching_evaluation.await_count == 1
+    finally:
+        keeper.cancel()
+        await asyncio.gather(keeper, return_exceptions=True)
+
+
+@pytest.mark.anyio
+async def test_failed_run_releases_unstarted_evaluations_for_retry(stored_matching_pair):
+    store, candidate_id, job_id = stored_matching_pair
+    snapshot = make_snapshot(candidate_id=candidate_id, job_id=job_id)
+    run_owner, lease_owner = str(uuid4()), str(uuid4())
+    async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+        run = await (await connection.execute(
+            """INSERT INTO matching_runs (
+                   source, stage, entity_type, entity_id, lease_owner, lease_until
+               ) VALUES ('lease-test', 'matching', 'candidate', %s, %s, clock_timestamp() + INTERVAL '1 minute')
+               RETURNING id""",
+            (candidate_id, run_owner),
+        )).fetchone()
+    run_id = str(run[0])
+    evaluation = await store.claim_matching_evaluation(snapshot, lease_owner, owner_run_id=run_id)
+
+    await store.fail_matching_request(run_id, run_owner)
+
+    async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+        row = await (await connection.execute(
+            """SELECT status, owner_run_id, lease_owner, lease_until
+               FROM matching_pair_evaluations WHERE id = %s""",
+            (evaluation["id"],),
+        )).fetchone()
+    assert row == ("queued", None, None, None)
+
+    replacement = await store.claim_matching_evaluation(snapshot, str(uuid4()))
+    assert replacement["disposition"] == "owned"
+
+
+@pytest.mark.anyio
+async def test_failed_child_does_not_leave_parent_pairs_pending(stored_matching_pair):
+    store, candidate_id, job_id = stored_matching_pair
+    snapshot = make_snapshot(candidate_id=candidate_id, job_id=job_id)
+    async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+        parent = await (await connection.execute(
+            """INSERT INTO matching_runs (
+                   source, request_kind, method, stage, target_count, request_payload, entity_type, entity_id
+               ) VALUES (
+                   '/match/vectormatch-selected', 'interactive_selection', 'vector', 'matching', 1,
+                   %s, 'candidate', %s
+               ) RETURNING id""",
+            (Jsonb({"handler": "vector_match_selected"}), candidate_id),
+        )).fetchone()
+        child = await (await connection.execute(
+            """INSERT INTO matching_runs (
+                   source, request_kind, method, stage, parent_run_id, child_key, entity_type, entity_id
+               ) VALUES ('/match/vectormatch', 'interactive', 'vector', 'failed', %s, %s, 'candidate', %s)
+               RETURNING id""",
+            (parent[0], str(job_id), candidate_id),
+        )).fetchone()
+    evaluation = await store.claim_matching_evaluation(
+        snapshot, str(uuid4()), owner_run_id=str(child[0]),
+    )
+    async with await psycopg.AsyncConnection.connect(store.database_url) as connection:
+        async with connection.cursor() as cursor:
+            await cursor.executemany(
+                """INSERT INTO matching_run_pairs
+                       (run_id, method, candidate_id, job_id, evaluation_id, disposition)
+                   VALUES (%s, 'vector', %s, %s, %s, 'pending')""",
+                [(run_id, candidate_id, job_id, evaluation["id"]) for run_id in (parent[0], child[0])],
+            )
+
+    progress = await store.get_matching_run_progress(str(parent[0]))
+
+    assert progress["processedCount"] == 1
+    assert progress["failedCount"] == 1
+    assert progress["pendingCount"] == 0
 
 
 @pytest.mark.anyio

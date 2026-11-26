@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import re
+import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -220,51 +221,86 @@ class MatchingOrchestrator:
                 )
                 planned.append((await cache.plan(snapshot, run_id=run_id), frozen, str(job.id), str(candidate.id)))
 
-        if on_plan is not None and planned:
-            await on_plan([entry[0] for entry in planned])
-
         rows: list[dict[str, Any]] = replayed
         pending: list[int] = []
-        for plan, frozen, requested_job_id, requested_candidate_id in planned:
-            payload = plan.snapshot.payload
-            current_concepts = plan.snapshot.model_snapshot["esco_snapshot"]
+        waiting_evaluation_ids = {
+            plan.evaluation["id"] for plan, _, _, _ in planned if plan.owns_computation
+        }
+        lease_keeper = (
+            asyncio.create_task(cache.keep_planned_leases(
+                [plan for plan, _, _, _ in planned], waiting_evaluation_ids,
+            ))
+            if waiting_evaluation_ids else None
+        )
 
-            async def mark_started() -> None:
-                if before_model_call is not None:
-                    await before_model_call(plan)
-                await store.mark_matching_model_started(
-                    plan.evaluation["id"], plan.lease_owner, plan.evaluation["fence"],
-                )
-
-            frozen.before_model_call = mark_started
-
-            async def evaluate() -> dict[str, Any]:
-                nonlocal current_concepts
-                scorer = MatchingOrchestrator(SkillMatchingService(
-                    frozen, FrozenMatchingCatalog(json.dumps(plan.snapshot.model_snapshot["esco_snapshot"])),
-                    similarity_cutoff=plan.snapshot.model_snapshot["cutoff"],
-                ))
-                assessment = await scorer.match_skills(payload["job"]["required_skills"], payload["candidate"]["skills"])
-                result = self._skill_result_row(assessment, plan.snapshot, frozen.embedding_model)
-                current_concepts = await self._catalog_snapshot(payload)
+        async def run_with_lease_keeper(awaitable: Awaitable[Any]) -> Any:
+            task = asyncio.ensure_future(awaitable)
+            if lease_keeper is None:
+                return await task
+            done, _ = await asyncio.wait((lease_keeper, task), return_when=asyncio.FIRST_COMPLETED)
+            if lease_keeper in done:
+                keeper_error: Exception | None = None
+                try:
+                    await lease_keeper
+                except Exception as error:
+                    keeper_error = error
+                result = await task
+                if keeper_error is not None:
+                    raise keeper_error
                 return result
+            return await task
 
-            async def refresh(connection, current_candidate, current_job) -> MatchingInputSnapshot:
-                _, config = await provider.freeze_matching("vector", connection=connection)
-                config.update(
-                    cutoff=self.skill_service.similarity_cutoff, scoring_version=SCORING_VERSION,
-                    esco_snapshot=current_concepts,
-                )
-                return MatchingInputSnapshot.create(
-                    "vector", plan.snapshot.candidate_id, plan.snapshot.job_id, candidate=current_candidate,
-                    job=current_job, payload=payload, configuration=config,
-                )
+        try:
+            if on_plan is not None and planned:
+                await run_with_lease_keeper(on_plan([entry[0] for entry in planned]))
 
-            try:
-                result_row = await cache.execute(plan, evaluate, refresh, engine=engine)
-                rows.append({**result_row, "jobId": requested_job_id, "candidateId": requested_candidate_id})
-            except MatchingPendingError as error:
-                pending.extend(error.evaluation_ids)
+            for plan, frozen, requested_job_id, requested_candidate_id in planned:
+                payload = plan.snapshot.payload
+                current_concepts = plan.snapshot.model_snapshot["esco_snapshot"]
+                waiting_evaluation_ids.discard(plan.evaluation["id"])
+
+                async def mark_started() -> None:
+                    if before_model_call is not None:
+                        await before_model_call(plan)
+                    await store.mark_matching_model_started(
+                        plan.evaluation["id"], plan.lease_owner, plan.evaluation["fence"],
+                    )
+
+                frozen.before_model_call = mark_started
+
+                async def evaluate() -> dict[str, Any]:
+                    nonlocal current_concepts
+                    scorer = MatchingOrchestrator(SkillMatchingService(
+                        frozen, FrozenMatchingCatalog(json.dumps(plan.snapshot.model_snapshot["esco_snapshot"])),
+                        similarity_cutoff=plan.snapshot.model_snapshot["cutoff"],
+                    ))
+                    assessment = await scorer.match_skills(
+                        payload["job"]["required_skills"], payload["candidate"]["skills"],
+                    )
+                    result = self._skill_result_row(assessment, plan.snapshot, frozen.embedding_model)
+                    current_concepts = await self._catalog_snapshot(payload)
+                    return result
+
+                async def refresh(connection, current_candidate, current_job) -> MatchingInputSnapshot:
+                    _, config = await provider.freeze_matching("vector", connection=connection)
+                    config.update(
+                        cutoff=self.skill_service.similarity_cutoff, scoring_version=SCORING_VERSION,
+                        esco_snapshot=current_concepts,
+                    )
+                    return MatchingInputSnapshot.create(
+                        "vector", plan.snapshot.candidate_id, plan.snapshot.job_id, candidate=current_candidate,
+                        job=current_job, payload=payload, configuration=config,
+                    )
+
+                try:
+                    result_row = await run_with_lease_keeper(cache.execute(plan, evaluate, refresh, engine=engine))
+                    rows.append({**result_row, "jobId": requested_job_id, "candidateId": requested_candidate_id})
+                except MatchingPendingError as error:
+                    pending.extend(error.evaluation_ids)
+        finally:
+            if lease_keeper is not None:
+                lease_keeper.cancel()
+                await asyncio.gather(lease_keeper, return_exceptions=True)
         if pending:
             raise MatchingPendingError(pending, available_results=rows)
         if replay_failed:

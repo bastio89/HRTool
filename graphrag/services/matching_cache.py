@@ -164,6 +164,20 @@ class MatchingPairCache:
             snapshot, owner, await self.store.claim_matching_evaluation(snapshot, owner, owner_run_id=run_id),
         )
 
+    async def keep_planned_leases(
+        self,
+        plans: list[MatchingPairPlan],
+        waiting_evaluation_ids: set[int],
+    ) -> None:
+        while True:
+            await asyncio.sleep(20)
+            for plan in plans:
+                evaluation = plan.evaluation
+                if evaluation["id"] in waiting_evaluation_ids and plan.owns_computation:
+                    await self.store.heartbeat_matching_evaluation(
+                        evaluation["id"], plan.lease_owner, evaluation["fence"],
+                    )
+
     async def execute(
         self,
         plan: MatchingPairPlan,
@@ -175,8 +189,6 @@ class MatchingPairCache:
         engine: str = "python",
     ) -> dict[str, Any]:
         evaluation = plan.evaluation
-        if plan.owns_computation:
-            await self.store.heartbeat_matching_evaluation(evaluation["id"], plan.lease_owner, evaluation["fence"])
         if not plan.owns_computation:
             cached = evaluation if evaluation["disposition"] == "cached" else (
                 await self.store.get_cached_matching_evaluation(plan.snapshot)
@@ -187,16 +199,22 @@ class MatchingPairCache:
                 raise MatchingPendingError([evaluation["id"]])
             raise MatchingEvaluationError(evaluation["id"], evaluation["disposition"])
 
-        async def heartbeat() -> None:
-            while True:
-                await asyncio.sleep(20)
-                await self.store.heartbeat_matching_evaluation(
-                    evaluation["id"], plan.lease_owner, evaluation["fence"],
-                )
-
-        keeper = asyncio.create_task(heartbeat())
-        computation = asyncio.create_task(evaluate())
+        keeper: asyncio.Task | None = None
+        computation: asyncio.Task | None = None
         try:
+            await self.store.heartbeat_matching_evaluation(
+                evaluation["id"], plan.lease_owner, evaluation["fence"],
+            )
+
+            async def heartbeat() -> None:
+                while True:
+                    await asyncio.sleep(20)
+                    await self.store.heartbeat_matching_evaluation(
+                        evaluation["id"], plan.lease_owner, evaluation["fence"],
+                    )
+
+            keeper = asyncio.create_task(heartbeat())
+            computation = asyncio.create_task(evaluate())
             done, _ = await asyncio.wait((keeper, computation), return_when=asyncio.FIRST_COMPLETED)
             if keeper in done:
                 await keeper
@@ -208,10 +226,17 @@ class MatchingPairCache:
             if completed["status"] != "succeeded":
                 raise MatchingEvaluationError(evaluation["id"], completed["status"])
             return {**completed["result_payload"], "cacheStatus": "computed", "evaluationId": completed["id"]}
+        except MatchingLeaseLostError:
+            raise
         except (Exception, asyncio.CancelledError):
             await self.store.fail_matching_evaluation(evaluation["id"], plan.lease_owner, evaluation["fence"])
             raise
         finally:
-            keeper.cancel()
-            computation.cancel()
-            await asyncio.gather(keeper, computation, return_exceptions=True)
+            if keeper is not None:
+                keeper.cancel()
+            if computation is not None:
+                computation.cancel()
+            await asyncio.gather(
+                *(task for task in (keeper, computation) if task is not None),
+                return_exceptions=True,
+            )

@@ -69,7 +69,7 @@ _MATCHING_RUN_TARGET_STATES = """
             e.status, e.result_payload, e.owner_run_id, owner.parent_run_id,
             sub.child_run_id, sub.pair_id AS child_pair_id,
             GREATEST(p.updated_at, sub.updated_at, e.completed_at, e.created_at) AS updated_at,
-            e.error_code AS evaluation_error_code
+            e.error_code AS evaluation_error_code, sub.stage AS child_stage
         FROM matching_run_pairs p
         LEFT JOIN LATERAL (
             SELECT child.id AS child_run_id, cp.id AS pair_id, cp.evaluation_id, cp.disposition, child.stage,
@@ -94,6 +94,8 @@ _MATCHING_RUN_TARGET_STATES = """
         WHEN status = 'needs_review' THEN 'needs_review'
         WHEN saved_disposition = 'preparation_required' THEN 'preparation_required'
         WHEN status IN ('failed', 'superseded') THEN 'failed'
+        WHEN child_stage IN ('failed', 'completed_with_errors')
+            AND (status IS NULL OR status IN ('queued', 'running')) THEN 'failed'
         WHEN saved_disposition IN ('failed', 'needs_review') THEN saved_disposition
         WHEN status = 'running' THEN 'running' ELSE 'pending' END AS disposition,
         CASE WHEN saved_disposition IN ('skipped', 'preparation_required')
@@ -1015,6 +1017,16 @@ class PostgresStore:
                 logger.info("Ignoring failure from stale matching run owner: %s", run_id)
                 return
             await connection.execute(
+                """UPDATE matching_pair_evaluations SET
+                       status = CASE WHEN call_started_at IS NULL THEN 'queued' ELSE 'needs_review' END,
+                       error_code = CASE WHEN call_started_at IS NULL
+                           THEN NULL ELSE 'uncertain_provider_result' END,
+                       owner_run_id = CASE WHEN call_started_at IS NULL THEN NULL ELSE owner_run_id END,
+                       lease_owner = NULL, lease_until = NULL, fence = fence + 1
+                   WHERE owner_run_id = %s AND status = 'running'""",
+                (run_id,),
+            )
+            await connection.execute(
                 """UPDATE matching_run_pairs SET disposition = 'failed', error_code = 'preparation_failed',
                        updated_at = clock_timestamp()
                    WHERE run_id = %s AND evaluation_id IS NULL AND disposition = 'pending'
@@ -1046,6 +1058,7 @@ class PostgresStore:
                 """UPDATE matching_pair_evaluations SET status = CASE
                        WHEN call_started_at IS NULL THEN 'queued' ELSE 'needs_review' END,
                        error_code = CASE WHEN call_started_at IS NULL THEN NULL ELSE 'uncertain_provider_result' END,
+                       owner_run_id = CASE WHEN call_started_at IS NULL THEN NULL ELSE owner_run_id END,
                        lease_owner = NULL, lease_until = NULL, fence = fence + 1
                    WHERE owner_run_id = %s AND status IN ('running', 'failed')""", (run_id,),
             )
@@ -1410,6 +1423,7 @@ class PostgresStore:
                 raise RuntimeError("Matching-Evaluation wurde waehrend der Claim-Planung entfernt.")
             if row["status"] == "succeeded":
                 return {**row, "disposition": "cached"}
+            reclaim_expired_unstarted = False
             if row["status"] == "running":
                 if row["lease_valid"]:
                     return {**row, "disposition": "pending"}
@@ -1424,19 +1438,28 @@ class PostgresStore:
                     )).fetchone()
                     assert uncertain is not None
                     return {**uncertain, "disposition": "needs_review"}
+                reclaim_expired_unstarted = True
             elif row["status"] != "queued":
                 return {**row, "disposition": row["status"]}
-            if row["owner_run_id"] is not None and str(row["owner_run_id"]) != owner_run_id:
+            if (
+                not reclaim_expired_unstarted
+                and row["owner_run_id"] is not None
+                and str(row["owner_run_id"]) != owner_run_id
+            ):
                 return {**row, "disposition": "pending"}
             claimed = await (await connection.execute(
                 """
                 UPDATE matching_pair_evaluations SET status = 'running', lease_owner = %s,
                     lease_until = clock_timestamp() + %s * INTERVAL '1 second',
-                    owner_run_id = COALESCE(owner_run_id, %s), fence = fence + 1,
+                    owner_run_id = CASE WHEN %s THEN %s ELSE COALESCE(owner_run_id, %s) END,
+                    fence = fence + 1,
                     attempt = attempt + 1, call_started_at = NULL, error_code = NULL,
                     result_payload = NULL, completed_at = NULL
                 WHERE id = %s RETURNING *
-                """, (lease_owner, lease_seconds, owner_run_id, row["id"]),
+                """, (
+                    lease_owner, lease_seconds, reclaim_expired_unstarted, owner_run_id,
+                    owner_run_id, row["id"],
+                ),
             )).fetchone()
             assert claimed is not None
             return {**claimed, "disposition": "owned"}
